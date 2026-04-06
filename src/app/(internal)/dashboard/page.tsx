@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Package,
   Factory,
@@ -82,8 +82,20 @@ function getSeverityBadge(severity: string) {
 }
 
 export default function DashboardPage() {
-  const kpis = useMemo(() => getKPIs(), []);
-  const recentJobs = useMemo(() => demoJobs.slice(0, 8), []);
+  const [kpis, setKpis] = useState(() => getKPIs());
+  const [recentJobs, setRecentJobs] = useState(() => demoJobs.slice(0, 8));
+  const [alerts, setAlerts] = useState(() => demoAlerts);
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then(r => r.json())
+      .then(d => {
+        if (d.kpis) setKpis(d.kpis);
+        if (d.recentJobs?.length) setRecentJobs(d.recentJobs);
+        if (d.alerts?.length) setAlerts(d.alerts);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-8">

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RequireRole } from "@/components/auth/require-role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,7 @@ export default function AdminPage() {
   const closeModal = () => { setShowInviteModal(false); setInviteEmail(""); setInviteRole("CUSTOMER"); setInviteUrl(""); setInviteError(""); setCopied(false); };
 
   return (
+    <RequireRole allowed={["ADMIN", "PRODUCTION_MANAGER"]}>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -161,5 +163,6 @@ export default function AdminPage() {
         </>
       )}
     </div>
+    </RequireRole>
   );
 }

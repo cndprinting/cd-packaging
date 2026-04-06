@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { demoJobs, demoAlerts } from "@/lib/demo-data";
 import { formatDate, getStatusColor, getStatusLabel, formatNumber } from "@/lib/utils";
@@ -14,10 +14,17 @@ import {
   Package, Factory, Truck, CheckCircle, AlertTriangle, ArrowRight, Clock,
 } from "lucide-react";
 
-const CUSTOMER_COMPANY_ID = "co-1";
-
 export default function PortalDashboard() {
-  const myJobs = demoJobs.filter((j) => j.companyId === CUSTOMER_COMPANY_ID);
+  const [companyId, setCompanyId] = useState<string>("co-1");
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then(r => r.json())
+      .then(d => { if (d.user?.companyId) setCompanyId(d.user.companyId); })
+      .catch(() => {});
+  }, []);
+
+  const myJobs = demoJobs.filter((j) => j.companyId === companyId);
 
   const activeOrders = myJobs.filter(
     (j) => !["DELIVERED", "INVOICED"].includes(j.status)
@@ -44,7 +51,7 @@ export default function PortalDashboard() {
 
   const myAlerts = demoAlerts.filter((a) => {
     const job = demoJobs.find((j) => j.id === a.jobId);
-    return job && job.companyId === CUSTOMER_COMPANY_ID;
+    return job && job.companyId === companyId;
   });
 
   return (

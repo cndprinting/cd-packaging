@@ -65,8 +65,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         include: { order: { include: { company: true } } },
       });
 
-      // Also update the order status to match
       await prisma.order.update({ where: { id: updated.orderId }, data: { status: nextStatus } });
+      await prisma.activityLog.create({ data: { orderId: updated.orderId, userId: session.id, action: "STAGE_ADVANCED", details: `${updated.jobNumber} advanced to ${nextStatus}` } }).catch(() => {});
 
       return NextResponse.json({ job: updated });
     }

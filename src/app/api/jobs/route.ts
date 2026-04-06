@@ -119,6 +119,11 @@ export async function POST(request: NextRequest) {
       include: { order: { include: { company: true } } },
     });
 
+    // Activity log
+    await prisma.activityLog.create({
+      data: { orderId: order.id, userId: session.id, action: "JOB_CREATED", details: `Created job ${jobNumber}: ${name}` },
+    }).catch(() => {});
+
     return NextResponse.json({
       job: {
         id: job.id,
