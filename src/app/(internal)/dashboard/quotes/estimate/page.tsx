@@ -1215,7 +1215,7 @@ export default function EstimatePage() {
                     const warehousing = parseFloat(form.warehousingCost || "0") * months;
                     const printStrategy = form.printAndStore || "monthly";
                     const runsPerYear = printStrategy === "monthly" ? months : printStrategy === "quarterly" ? Math.ceil(months / 3) : 1;
-                    const setupSavings = (months - runsPerYear) * (parseFloat(form.makeReadySheets || "500") * (parseFloat(form.paperCostPer1000 || "50") / 1000));
+                    const setupSavings = (months - runsPerYear) * ((Number(form.makeReadySheets) || 500) * ((Number(form.paperCostPer1000) || 50) / 1000));
 
                     return (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
