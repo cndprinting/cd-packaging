@@ -2,11 +2,11 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft, CheckCircle, Calendar, MapPin, Users, Package,
   ClipboardList, Truck, MessageSquare, ShieldCheck, FileImage,
-  Loader2, ChevronRight, Pencil, X, Check,
+  Loader2, ChevronRight, Pencil, X, Check, Trash2,
 } from "lucide-react";
 import { demoJobs } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
@@ -22,21 +22,98 @@ const STAGES = [
   "PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
 
+interface JobData {
+  id: string;
+  jobNumber: string;
+  orderId: string;
+  orderNumber: string;
+  name: string;
+  description?: string;
+  companyId: string;
+  companyName: string;
+  status: string;
+  priority: string;
+  quantity: number;
+  dueDate: string;
+  csrName: string;
+  salesRepName: string;
+  productionOwnerName: string;
+  isLate: boolean;
+  isBlocked: boolean;
+  blockerReason?: string;
+  proofStatus?: string;
+}
+
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.id as string;
 
-  const initialJob = useMemo(() => {
-    const found = demoJobs.find((j) => j.id === jobId);
-    return found ? { ...found, status: found.status as string, priority: found.priority as string } : undefined;
-  }, [jobId]);
-  const [job, setJob] = useState(initialJob);
+  const [job, setJob] = useState<JobData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [advancing, setAdvancing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [editForm, setEditForm] = useState({ name: job?.name || "", description: job?.description || "", quantity: String(job?.quantity || ""), dueDate: job?.dueDate || "", priority: job?.priority || "NORMAL" });
+  const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
+
+  // Fetch job from API first, fall back to demo data
+  useEffect(() => {
+    async function fetchJob() {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        const data = await res.json();
+        if (res.ok && data.job) {
+          const j = data.job;
+          // Handle both DB format and demo format
+          const formatted: JobData = {
+            id: j.id,
+            jobNumber: j.jobNumber,
+            orderId: j.orderId || j.order?.id || "",
+            orderNumber: j.orderNumber || j.order?.orderNumber || "",
+            name: j.name,
+            description: j.description || "",
+            companyId: j.companyId || j.order?.companyId || "",
+            companyName: j.companyName || j.order?.company?.name || "",
+            status: j.status,
+            priority: j.priority,
+            quantity: j.quantity,
+            dueDate: j.dueDate ? (typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : new Date(j.dueDate).toISOString().split("T")[0]) : "",
+            csrName: j.csrName || j.csr?.name || "Unassigned",
+            salesRepName: j.salesRepName || j.salesRep?.name || "Unassigned",
+            productionOwnerName: j.productionOwnerName || j.productionOwner?.name || "Unassigned",
+            isLate: j.isLate || false,
+            isBlocked: j.isBlocked || false,
+            blockerReason: j.blockerReason,
+            proofStatus: j.proofStatus,
+          };
+          setJob(formatted);
+          setEditForm({ name: formatted.name, description: formatted.description || "", quantity: String(formatted.quantity), dueDate: formatted.dueDate, priority: formatted.priority });
+          setLoading(false);
+          return;
+        }
+      } catch { /* fall through to demo */ }
+
+      // Fallback to demo data
+      const found = demoJobs.find((j) => j.id === jobId);
+      if (found) {
+        setJob({ ...found, status: found.status as string, priority: found.priority as string });
+        setEditForm({ name: found.name, description: found.description || "", quantity: String(found.quantity), dueDate: found.dueDate, priority: found.priority });
+      }
+      setLoading(false);
+    }
+    fetchJob();
+  }, [jobId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+      </div>
+    );
+  }
 
   if (!job) {
     return (
@@ -53,22 +130,25 @@ export default function JobDetailPage() {
     setAdvancing(true);
     try {
       const res = await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "advance" }) });
-      const data = await res.json();
-      if (res.ok && data.job) {
-        const nextIndex = currentStageIndex + 1;
-        setJob({ ...job, status: STAGES[nextIndex] as string });
-        setFeedback({ msg: `Advanced to ${getStatusLabel(STAGES[nextIndex])}`, type: "success" });
+      if (res.ok) {
+        const nextStatus = STAGES[currentStageIndex + 1];
+        if (nextStatus) {
+          setJob({ ...job, status: nextStatus });
+          setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)}`, type: "success" });
+        }
       } else {
-        // Demo mode fallback — just update locally
-        if (currentStageIndex < STAGES.length - 1) {
-          setJob({ ...job, status: STAGES[currentStageIndex + 1] as string });
-          setFeedback({ msg: `Advanced to ${getStatusLabel(STAGES[currentStageIndex + 1])}`, type: "success" });
+        // Demo fallback
+        const nextStatus = STAGES[currentStageIndex + 1];
+        if (nextStatus) {
+          setJob({ ...job, status: nextStatus });
+          setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)} (demo)`, type: "success" });
         }
       }
     } catch {
-      if (currentStageIndex < STAGES.length - 1) {
-        setJob({ ...job, status: STAGES[currentStageIndex + 1] as string });
-        setFeedback({ msg: `Advanced to ${getStatusLabel(STAGES[currentStageIndex + 1])}`, type: "success" });
+      const nextStatus = STAGES[currentStageIndex + 1];
+      if (nextStatus) {
+        setJob({ ...job, status: nextStatus });
+        setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)} (demo)`, type: "success" });
       }
     }
     setAdvancing(false);
@@ -78,21 +158,22 @@ export default function JobDetailPage() {
   const handleSaveEdit = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) });
-      if (res.ok) {
-        setJob({ ...job, name: editForm.name, quantity: parseInt(editForm.quantity) || job.quantity, dueDate: editForm.dueDate || job.dueDate, priority: editForm.priority });
-        setFeedback({ msg: "Job updated", type: "success" });
-      } else {
-        setJob({ ...job, name: editForm.name, quantity: parseInt(editForm.quantity) || job.quantity, dueDate: editForm.dueDate || job.dueDate, priority: editForm.priority });
-        setFeedback({ msg: "Updated locally (demo mode)", type: "success" });
-      }
-    } catch {
-      setJob({ ...job, name: editForm.name, quantity: parseInt(editForm.quantity) || job.quantity, dueDate: editForm.dueDate || job.dueDate, priority: editForm.priority });
-      setFeedback({ msg: "Updated locally (demo mode)", type: "success" });
-    }
+      await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) });
+    } catch { /* ok */ }
+    setJob({ ...job, name: editForm.name, quantity: parseInt(editForm.quantity) || job.quantity, dueDate: editForm.dueDate || job.dueDate, priority: editForm.priority });
     setEditing(false);
     setSaving(false);
+    setFeedback({ msg: "Job updated", type: "success" });
     setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+    } catch { /* ok */ }
+    setDeleting(false);
+    router.push("/dashboard/jobs");
   };
 
   return (
@@ -115,13 +196,28 @@ export default function JobDetailPage() {
           <p className="text-sm text-gray-500 mt-1">{job.jobNumber} &middot; {job.companyName} &middot; Order <Link href={`/dashboard/orders/${job.orderId}`} className="text-green-700 hover:underline">{job.orderNumber}</Link></p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setEditing(!editing); setEditForm({ name: job.name, description: job.description || "", quantity: String(job.quantity), dueDate: job.dueDate, priority: job.priority }); }} className="gap-1.5">
-            {editing ? <><X className="h-4 w-4" />Cancel</> : <><Pencil className="h-4 w-4" />Edit</>}
-          </Button>
-          <Button onClick={handleAdvance} disabled={advancing || currentStageIndex >= STAGES.length - 1} className="gap-1.5">
-            {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
-            Advance Stage
-          </Button>
+          {!confirmDelete ? (
+            <>
+              <Button variant="outline" onClick={() => { setEditing(!editing); if (!editing) setEditForm({ name: job.name, description: job.description || "", quantity: String(job.quantity), dueDate: job.dueDate, priority: job.priority }); }} className="gap-1.5">
+                {editing ? <><X className="h-4 w-4" />Cancel</> : <><Pencil className="h-4 w-4" />Edit</>}
+              </Button>
+              <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-4 w-4" />Delete
+              </Button>
+              <Button onClick={handleAdvance} disabled={advancing || currentStageIndex >= STAGES.length - 1} className="gap-1.5">
+                {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                Advance Stage
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+              <span className="text-sm text-red-700">Delete this job?</span>
+              <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Delete"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -167,21 +263,21 @@ export default function JobDetailPage() {
       {/* Detail Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Package className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Quantity</span></div><p className="text-lg font-semibold">{formatNumber(job.quantity)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Calendar className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Due Date</span></div><p className="text-lg font-semibold">{formatDate(job.dueDate)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Truck className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Requested Ship</span></div><p className="text-lg font-semibold">{formatDate(job.dueDate)}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Calendar className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Due Date</span></div><p className="text-lg font-semibold">{job.dueDate ? formatDate(job.dueDate) : "Not set"}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Truck className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Requested Ship</span></div><p className="text-lg font-semibold">{job.dueDate ? formatDate(job.dueDate) : "Not set"}</p></CardContent></Card>
         <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><MapPin className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Plant</span></div><p className="text-lg font-semibold">Plant A - Main</p></CardContent></Card>
       </div>
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Assigned Team</CardTitle></CardHeader><CardContent><div className="space-y-3"><div><p className="text-xs text-gray-500 uppercase">CSR</p><p className="text-sm font-medium">{job.csrName}</p></div><div><p className="text-xs text-gray-500 uppercase">Sales Rep</p><p className="text-sm font-medium">{job.salesRepName}</p></div><div><p className="text-xs text-gray-500 uppercase">Production</p><p className="text-sm font-medium">{job.productionOwnerName}</p></div></div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />Materials</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Materials required for this job will be displayed here once assigned.</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proof History</CardTitle></CardHeader><CardContent>{job.proofStatus ? <div className="space-y-2"><div className="flex items-center justify-between"><span className="text-sm text-gray-600">Status</span><Badge className={job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" : job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}>{job.proofStatus}</Badge></div></div> : <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">No proofs uploaded yet.</div>}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />Materials</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Materials will appear once assigned.</div></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proof History</CardTitle></CardHeader><CardContent>{job.proofStatus ? <div className="flex items-center justify-between"><span className="text-sm text-gray-600">Status</span><Badge className={job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" : job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}>{job.proofStatus}</Badge></div> : <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">No proofs yet.</div>}</CardContent></Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA Status</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">QA details will appear when job reaches QA stage.</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Shipment Status</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Shipment tracking will be shown once shipped.</div></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA Status</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">QA details appear at QA stage.</div></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Shipment</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Tracking shown once shipped.</div></CardContent></Card>
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Comments</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">No comments yet.</div></CardContent></Card>
       </div>
     </div>
