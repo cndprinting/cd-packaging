@@ -16,10 +16,18 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { getStatusColor, getStatusLabel, getPriorityColor, formatDate, formatNumber } from "@/lib/utils";
 
-const STAGES = [
+import { PRODUCT_TYPES } from "@/lib/demo-data";
+
+const STAGES_FOLDING_CARTON = [
   "QUOTE","ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL",
   "PREPRESS","PLATING","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
   "PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
+];
+
+const STAGES_COMMERCIAL_PRINT = [
+  "QUOTE","ARTWORK_RECEIVED","PROOFING","CUSTOMER_APPROVAL",
+  "PREPRESS","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
+  "PRINTING","COATING_FINISHING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
 
 interface JobData {
@@ -42,6 +50,7 @@ interface JobData {
   isBlocked: boolean;
   blockerReason?: string;
   proofStatus?: string;
+  productType?: string;
 }
 
 export default function JobDetailPage() {
@@ -88,6 +97,7 @@ export default function JobDetailPage() {
             isBlocked: j.isBlocked || false,
             blockerReason: j.blockerReason,
             proofStatus: j.proofStatus,
+            productType: j.productType,
           };
           setJob(formatted);
           setEditForm({ name: formatted.name, description: formatted.description || "", quantity: String(formatted.quantity), dueDate: formatted.dueDate, priority: formatted.priority });
@@ -124,6 +134,7 @@ export default function JobDetailPage() {
     );
   }
 
+  const STAGES = job.productType === "COMMERCIAL_PRINT" ? STAGES_COMMERCIAL_PRINT : STAGES_FOLDING_CARTON;
   const currentStageIndex = STAGES.indexOf(job.status);
 
   const handleAdvance = async () => {
@@ -192,6 +203,7 @@ export default function JobDetailPage() {
             <Badge className={getPriorityColor(job.priority)}>{job.priority}</Badge>
             {job.isLate && <Badge className="bg-red-100 text-red-700">LATE</Badge>}
             {job.isBlocked && <Badge className="bg-orange-100 text-orange-700">BLOCKED</Badge>}
+            {job.productType && <Badge className={job.productType === "FOLDING_CARTON" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}>{job.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"}</Badge>}
           </div>
           <p className="text-sm text-gray-500 mt-1">{job.jobNumber} &middot; {job.companyName} &middot; Order <Link href={`/dashboard/orders/${job.orderId}`} className="text-green-700 hover:underline">{job.orderNumber}</Link></p>
         </div>

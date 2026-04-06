@@ -33,6 +33,7 @@ interface Job {
   isLate: boolean;
   isBlocked: boolean;
   blockerReason?: string;
+  productType?: string;
 }
 
 const STATUSES = [
@@ -48,6 +49,7 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
+  const [productTypeFilter, setProductTypeFilter] = useState("");
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -67,6 +69,7 @@ export default function JobsPage() {
       if (statusFilter && j.status !== statusFilter) return false;
       if (priorityFilter && j.priority !== priorityFilter) return false;
       if (customerFilter && j.companyName !== customerFilter) return false;
+      if (productTypeFilter && j.productType !== productTypeFilter) return false;
       return true;
     });
   }, [jobs, search, statusFilter, priorityFilter, customerFilter]);
@@ -127,6 +130,7 @@ export default function JobsPage() {
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} placeholder="All Statuses" options={[{ value: "", label: "All Statuses" }, ...STATUSES.map((s) => ({ value: s, label: getStatusLabel(s) }))]} className="w-40" />
           <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} placeholder="All Priorities" options={[{ value: "", label: "All Priorities" }, { value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} className="w-40" />
           <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="All Customers" options={[{ value: "", label: "All Customers" }, ...customers.map((c) => ({ value: c, label: c }))]} className="w-44" />
+          <Select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} className="w-40" />
         </div>
       </Card>
 
@@ -149,6 +153,7 @@ export default function JobsPage() {
                           <Badge className={getPriorityColor(job.priority)}>{job.priority}</Badge>
                           {job.isLate && <Badge className="bg-red-100 text-red-700">LATE</Badge>}
                           {job.isBlocked && <Badge className="bg-orange-100 text-orange-700">BLOCKED</Badge>}
+                          {job.productType && <Badge className={job.productType === "FOLDING_CARTON" ? "bg-emerald-50 text-emerald-600" : "bg-sky-50 text-sky-600"}>{job.productType === "FOLDING_CARTON" ? "Carton" : "Print"}</Badge>}
                         </div>
                         <p className="font-medium text-gray-900 mt-0.5">{job.name}</p>
                         <p className="text-sm text-gray-500">{job.companyName}</p>

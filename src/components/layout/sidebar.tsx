@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
-  Settings, ChevronDown, ChevronRight, Box, Shield,
+  Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
 } from "lucide-react";
 
 const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
   { label: "Jobs", href: "/dashboard/jobs", icon: Package },
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
@@ -22,6 +23,7 @@ const internalNav = [
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
   { label: "Customers", href: "/dashboard/customers", icon: Users },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
+  { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
   { label: "Admin", href: "/dashboard/admin", icon: Shield },
 ];
