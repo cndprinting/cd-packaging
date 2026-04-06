@@ -551,6 +551,11 @@ export default function JobDetailPage() {
               <Button variant="outline" onClick={() => { setEditing(!editing); if (!editing) setEditForm({ name: job.name, description: job.description || "", quantity: String(job.quantity), dueDate: job.dueDate, priority: job.priority }); }} className="gap-1.5">
                 {editing ? <><X className="h-4 w-4" />Cancel</> : <><Pencil className="h-4 w-4" />Edit</>}
               </Button>
+              <a href={`/dashboard/jobs/${jobId}/print`} target="_blank">
+                <Button variant="outline" className="gap-1.5">
+                  <Printer className="h-4 w-4" />Print Ticket
+                </Button>
+              </a>
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete
               </Button>
