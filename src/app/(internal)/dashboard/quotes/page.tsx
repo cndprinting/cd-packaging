@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { DollarSign, Plus, X, Loader2, Send, Package, Search, FileText } from "lucide-react";
+import { DollarSign, Plus, X, Loader2, Send, Package, Search, FileText, BarChart3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,7 @@ export default function QuotesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3"><DollarSign className="h-6 w-6 text-brand-600" /><div><h1 className="text-2xl font-bold text-gray-900">Quotes & Estimates</h1><p className="text-sm text-gray-500">{quotes.length} quotes</p></div></div>
-        <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button>
+        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
