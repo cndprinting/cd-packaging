@@ -307,6 +307,11 @@ model Job {
   enteredDate      DateTime?
   pressNotes       String?
 
+  // Labor Tracking
+  estimatedHours   Float?    // total estimated labor hours for this job
+  actualHours      Float?    // calculated from TimeEntry records
+  laborCostRate    Float?    // $/hour for labor cost calculation
+
   // Cover type
   softCover        Boolean   @default(false)
   plusCover         Boolean   @default(false)

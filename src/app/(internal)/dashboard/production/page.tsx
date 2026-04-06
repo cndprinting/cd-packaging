@@ -33,9 +33,11 @@ const PRODUCTION_STAGES = [
 
 const WORK_CENTER_STAGE_MAP: Record<string, string> = {
   prepress: "PREPRESS",
-  press: "PRINTING",
+  "offset-press": "PRINTING",
+  "digital-press": "PRINTING",
   "die-cutting": "DIE_CUTTING",
   gluing: "GLUING_FOLDING",
+  bindery: "COATING_FINISHING",
   qa: "QA",
   shipping: "PACKED",
 };

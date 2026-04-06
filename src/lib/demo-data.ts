@@ -39,9 +39,11 @@ export const demoUsers = [
 
 export const demoWorkCenters = [
   { id: "wc-1", name: "Prepress", code: "PP", type: "prepress", capacity: 15 },
-  { id: "wc-2", name: "Press Room", code: "PR", type: "press", capacity: 8 },
+  { id: "wc-2a", name: "Offset Press", code: "OP", type: "offset-press", capacity: 5 },
+  { id: "wc-2b", name: "Digital Press", code: "DP", type: "digital-press", capacity: 10 },
   { id: "wc-3", name: "Die Cutting", code: "DC", type: "die-cutting", capacity: 10 },
   { id: "wc-4", name: "Gluing & Folding", code: "GF", type: "gluing", capacity: 12 },
+  { id: "wc-7", name: "Bindery", code: "BN", type: "bindery", capacity: 15 },
   { id: "wc-5", name: "Quality Assurance", code: "QA", type: "qa", capacity: 20 },
   { id: "wc-6", name: "Shipping Dock", code: "SH", type: "shipping", capacity: 25 },
 ];

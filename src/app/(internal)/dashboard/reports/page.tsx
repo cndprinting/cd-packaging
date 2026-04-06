@@ -56,6 +56,22 @@ export default function ReportsPage() {
         </Card>
       </Link>
 
+      {/* Labor Report - Featured */}
+      <Link href="/dashboard/reports/labor">
+        <Card className="bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><Clock className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Labor Report</h2>
+                <p className="text-sm text-white/80">Track labor hours per job — estimated vs actual with red/green indicators and estimating insights</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTS.map((report) => {
           const Icon = report.icon;

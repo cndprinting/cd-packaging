@@ -11,10 +11,11 @@ import { cn } from "@/lib/utils";
 
 const DEPARTMENTS = [
   { id: "prepress", label: "Prepress", stages: ["PREPRESS"], color: "bg-indigo-600" },
-  { id: "press", label: "Press", stages: ["PRINTING"], color: "bg-blue-600" },
+  { id: "offset-press", label: "Offset Press", stages: ["PRINTING"], color: "bg-blue-600" },
+  { id: "digital-press", label: "Digital Press", stages: ["PRINTING"], color: "bg-sky-600" },
   { id: "die-cutting", label: "Die Cutting", stages: ["DIE_CUTTING"], color: "bg-pink-600" },
   { id: "gluing", label: "Gluing / Folding", stages: ["GLUING_FOLDING"], color: "bg-rose-600" },
-  { id: "coating", label: "Coating / Finishing", stages: ["COATING_FINISHING"], color: "bg-violet-600" },
+  { id: "bindery", label: "Bindery", stages: ["COATING_FINISHING"], color: "bg-orange-600" },
   { id: "qa", label: "QA", stages: ["QA"], color: "bg-yellow-600" },
   { id: "shipping", label: "Shipping", stages: ["PACKED", "SHIPPED"], color: "bg-emerald-600" },
 ];
