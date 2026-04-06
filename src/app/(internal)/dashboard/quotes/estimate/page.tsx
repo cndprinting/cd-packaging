@@ -100,6 +100,14 @@ interface FormState {
   setupTime: number;
   shippingCost: number;
   markupPercent: number;
+  // Volume Forecasting
+  monthlyVolume: string;
+  contractMonths: string;
+  volumeDiscount: string;
+  priceLock: string;
+  printAndStore: string;
+  warehousingCost: string;
+  [key: string]: string | number | boolean; // allow dynamic field access
 }
 
 const defaultForm: FormState = {
@@ -157,6 +165,12 @@ const defaultForm: FormState = {
   setupTime: 0,
   shippingCost: 0,
   markupPercent: 25,
+  monthlyVolume: "",
+  contractMonths: "12",
+  volumeDiscount: "0",
+  priceLock: "12",
+  printAndStore: "monthly",
+  warehousingCost: "",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1127,6 +1141,114 @@ export default function EstimatePage() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* VOLUME FORECASTING (for retail/recurring customers)   */}
+        {/* ══════════════════════════════════════════════════════ */}
+        {step >= 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-brand-600" />
+                Volume Forecasting (Retail / Recurring Customers)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-500">For customers like retail packaging clients who order monthly — calculate annual pricing with volume discounts.</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Volume</label>
+                  <Input type="number" placeholder="e.g. 25,000" value={form.monthlyVolume || ""} onChange={(e) => updateForm("monthlyVolume", e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Contract Length</label>
+                  <Select value={form.contractMonths || "12"} onChange={(e) => updateForm("contractMonths", e.target.value)} options={[
+                    { value: "6", label: "6 Months" },
+                    { value: "12", label: "12 Months (Annual)" },
+                    { value: "24", label: "24 Months" },
+                  ]} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Volume Discount %</label>
+                  <Input type="number" placeholder="e.g. 8" value={form.volumeDiscount || ""} onChange={(e) => updateForm("volumeDiscount", e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Price Lock Period</label>
+                  <Select value={form.priceLock || "12"} onChange={(e) => updateForm("priceLock", e.target.value)} options={[
+                    { value: "3", label: "3 Months" },
+                    { value: "6", label: "6 Months" },
+                    { value: "12", label: "12 Months" },
+                  ]} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Print & Store Option</label>
+                  <Select value={form.printAndStore || "monthly"} onChange={(e) => updateForm("printAndStore", e.target.value)} options={[
+                    { value: "monthly", label: "Print Monthly (standard)" },
+                    { value: "quarterly", label: "Print Quarterly (lower per-unit)" },
+                    { value: "annual", label: "Print Full Annual Run (lowest per-unit)" },
+                  ]} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Warehousing Cost ($/month)</label>
+                  <Input type="number" placeholder="e.g. 150" value={form.warehousingCost || ""} onChange={(e) => updateForm("warehousingCost", e.target.value)} />
+                </div>
+              </div>
+
+              {/* Forecasting Summary */}
+              {form.monthlyVolume && parseInt(form.monthlyVolume) > 0 && calc.total > 0 && (
+                <div className="mt-4 bg-brand-50 border border-brand-200 rounded-xl p-5">
+                  <h4 className="font-bold text-brand-800 mb-3">Annual Forecast</h4>
+                  {(() => {
+                    const monthly = parseInt(form.monthlyVolume) || 0;
+                    const months = parseInt(form.contractMonths || "12");
+                    const annualQty = monthly * months;
+                    const discountPct = parseFloat(form.volumeDiscount || "0") / 100;
+                    const costPerUnit = calc.total / (form.quantity || 1);
+                    const discountedPerUnit = costPerUnit * (1 - discountPct);
+                    const monthlyRevenue = monthly * discountedPerUnit;
+                    const annualRevenue = annualQty * discountedPerUnit;
+                    const warehousing = parseFloat(form.warehousingCost || "0") * months;
+                    const printStrategy = form.printAndStore || "monthly";
+                    const runsPerYear = printStrategy === "monthly" ? months : printStrategy === "quarterly" ? Math.ceil(months / 3) : 1;
+                    const setupSavings = (months - runsPerYear) * (parseFloat(form.makeReadySheets || "500") * (parseFloat(form.paperCostPer1000 || "50") / 1000));
+
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Annual Quantity</p><p className="text-xl font-bold text-gray-900">{annualQty.toLocaleString()}</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Discounted Per-Unit</p><p className="text-xl font-bold text-brand-700">{formatCurrency(discountedPerUnit)}</p><p className="text-xs text-gray-400">was {formatCurrency(costPerUnit)}</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Monthly Revenue</p><p className="text-xl font-bold text-gray-900">{formatCurrency(monthlyRevenue)}</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Annual Revenue</p><p className="text-xl font-bold text-emerald-700">{formatCurrency(annualRevenue)}</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Print Runs/Year</p><p className="text-xl font-bold text-gray-900">{runsPerYear}</p><p className="text-xs text-gray-400">{printStrategy} schedule</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Setup Savings</p><p className="text-xl font-bold text-emerald-700">{formatCurrency(setupSavings)}</p><p className="text-xs text-gray-400">fewer make-readies</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Warehousing Cost</p><p className="text-xl font-bold text-amber-700">{formatCurrency(warehousing)}</p><p className="text-xs text-gray-400">{months} months</p></div>
+                        <div className="bg-white rounded-lg p-3 border"><p className="text-xs text-gray-500">Net Annual Value</p><p className="text-xl font-bold text-brand-800">{formatCurrency(annualRevenue - warehousing)}</p></div>
+
+                        {/* Volume Discount Tiers */}
+                        <div className="col-span-full bg-white rounded-lg p-3 border">
+                          <p className="text-xs text-gray-500 font-medium mb-2">Volume Discount Tiers (suggested)</p>
+                          <div className="grid grid-cols-4 gap-2 text-xs">
+                            <div className="bg-gray-50 rounded p-2 text-center"><p className="font-bold">100K+/yr</p><p className="text-brand-600">5% off</p><p>{formatCurrency(costPerUnit * 0.95)}/unit</p></div>
+                            <div className="bg-gray-50 rounded p-2 text-center"><p className="font-bold">250K+/yr</p><p className="text-brand-600">8% off</p><p>{formatCurrency(costPerUnit * 0.92)}/unit</p></div>
+                            <div className="bg-gray-50 rounded p-2 text-center"><p className="font-bold">500K+/yr</p><p className="text-brand-600">12% off</p><p>{formatCurrency(costPerUnit * 0.88)}/unit</p></div>
+                            <div className="bg-emerald-50 rounded p-2 text-center"><p className="font-bold">1M+/yr</p><p className="text-emerald-600">15% off</p><p>{formatCurrency(costPerUnit * 0.85)}/unit</p></div>
+                          </div>
+                        </div>
+
+                        <div className="col-span-full bg-blue-50 rounded-lg p-3 border border-blue-200">
+                          <p className="text-xs font-medium text-blue-800">Price Lock: Pricing locked for {form.priceLock || "12"} months from contract start. Paper cost fluctuations absorbed by C&D during lock period.</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
