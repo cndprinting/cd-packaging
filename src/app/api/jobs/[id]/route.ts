@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const job = await prisma.job.findUnique({
       where: { id },
-      include: { order: { include: { company: true } }, stages: true, proofs: true },
+      include: { order: { include: { company: true } }, stages: true, proofs: true, lineItems: { orderBy: { sortOrder: "asc" } }, pressRuns: { orderBy: { sortOrder: "asc" } }, purchases: true },
     });
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
     return NextResponse.json({ job, source: "database" });

@@ -723,6 +723,29 @@ export default function JobDetailPage() {
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{job.description}</p>
               </div>
             )}
+
+            {/* Multi-row Job Line Items (versions/quantities) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <SectionLabel>Versions / Line Items</SectionLabel>
+                <Button variant="outline" size="sm" onClick={async () => {
+                  const desc = prompt("Description (e.g. MR-30200 #7346 / 9,750):");
+                  const qty = prompt("Quantity:");
+                  if (desc && qty) {
+                    await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", description: desc, quantity: qty }) }).catch(() => {});
+                    setFeedback({ msg: "Line item added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                  }
+                }}>+ Add Row</Button>
+              </div>
+              <div className="bg-gray-50 rounded-lg overflow-hidden border">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Qty</th><th className="p-2 text-left font-medium">Description</th><th className="p-2 text-left font-medium">Ink Spec</th></tr></thead>
+                  <tbody>
+                    <tr className="border-t"><td className="p-2 font-medium">{job.quantity?.toLocaleString()}</td><td className="p-2">{job.description || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1000,6 +1023,36 @@ export default function JobDetailPage() {
                 onBlur={(e) => updateJobField("pressmanInitials", e.target.value.toUpperCase())}
               />
             </div>
+          </div>
+
+          {/* Multi-row Press Runs */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <SectionLabel>Press Runs</SectionLabel>
+              <Button variant="outline" size="sm" onClick={async () => {
+                const press = prompt("Press (e.g. KOM, Offset #2):");
+                const form = prompt("Form # / Info:");
+                const finish = prompt("Finish Count:");
+                const makeReady = prompt("Make Ready:");
+                const runSize = prompt("Running Size (e.g. 23X29):");
+                const imp = prompt("Imposition (e.g. 1-Side):");
+                const nUp = prompt("# Up:");
+                const ink = prompt("Ink (e.g. 5/0):");
+                if (press) {
+                  await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "pressRun", press, formNumber: form, finishCount: finish, makeReady, runningSize: runSize, imposition: imp, numberUp: nUp, inkSpec: ink }) }).catch(() => {});
+                  setFeedback({ msg: "Press run added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                }
+              }}>+ Add Press Run</Button>
+            </div>
+            <div className="bg-gray-50 rounded-lg overflow-hidden border overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Press</th><th className="p-2 text-left font-medium">Form#</th><th className="p-2 text-right font-medium">Finish Ct</th><th className="p-2 text-right font-medium">Make Ready</th><th className="p-2 text-left font-medium">Size</th><th className="p-2 text-left font-medium">Imposition</th><th className="p-2 text-right font-medium">#Up</th><th className="p-2 text-left font-medium">Ink</th></tr></thead>
+                <tbody>
+                  <tr className="border-t"><td className="p-2">{job.pressAssignment || "—"}</td><td className="p-2">{job.pressFormat || "—"}</td><td className="p-2 text-right">{job.finalPressCount || "—"}</td><td className="p-2 text-right">{job.makeReadyCount || "—"}</td><td className="p-2">{job.runningSize || "—"}</td><td className="p-2">{job.imposition || "—"}</td><td className="p-2 text-right">{job.numberUp || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Click &quot;+ Add Press Run&quot; for additional press entries (multiple forms/passes)</p>
           </div>
 
           <div className="mt-4 pt-4 border-t border-gray-100">
