@@ -1,101 +1,60 @@
 "use client";
 
-import {
-  Clock,
-  AlertTriangle,
-  BarChart3,
-  Timer,
-  Layers,
-  Package,
-  Truck,
-} from "lucide-react";
+import { useState } from "react";
+import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const REPORTS = [
-  {
-    title: "On-Time Shipment",
-    description:
-      "Track shipment accuracy and on-time delivery percentage over time.",
-    icon: Truck,
-    color: "text-green-600 bg-green-50",
-  },
-  {
-    title: "Late Jobs",
-    description:
-      "Review all jobs that are currently past due or at risk of being late.",
-    icon: AlertTriangle,
-    color: "text-red-600 bg-red-50",
-  },
-  {
-    title: "Jobs by Customer",
-    description:
-      "Breakdown of active and completed jobs grouped by customer.",
-    icon: BarChart3,
-    color: "text-blue-600 bg-blue-50",
-  },
-  {
-    title: "Cycle Time",
-    description:
-      "Analyze average time from order creation to delivery across all jobs.",
-    icon: Timer,
-    color: "text-purple-600 bg-purple-50",
-  },
-  {
-    title: "Stage Delays",
-    description:
-      "Identify bottlenecks by analyzing time spent at each production stage.",
-    icon: Clock,
-    color: "text-amber-600 bg-amber-50",
-  },
-  {
-    title: "Blocked Jobs",
-    description:
-      "Summary of all currently blocked jobs with reasons and resolution status.",
-    icon: Layers,
-    color: "text-orange-600 bg-orange-50",
-  },
-  {
-    title: "Material Shortage",
-    description:
-      "Materials below reorder point or with shortages impacting production.",
-    icon: Package,
-    color: "text-rose-600 bg-rose-50",
-  },
+  { title: "On-Time Shipment", description: "Track shipment accuracy and on-time delivery percentage.", icon: Truck, color: "text-green-600 bg-green-50", type: "on-time-shipment" },
+  { title: "Late Jobs", description: "All jobs currently past due or at risk of being late.", icon: AlertTriangle, color: "text-red-600 bg-red-50", type: "late-jobs" },
+  { title: "Jobs by Customer", description: "Breakdown of jobs grouped by customer account.", icon: BarChart3, color: "text-blue-600 bg-blue-50", type: "jobs-by-customer" },
+  { title: "Cycle Time", description: "Average time from order creation to delivery.", icon: Timer, color: "text-purple-600 bg-purple-50", type: "cycle-time" },
+  { title: "Stage Delays", description: "Identify bottlenecks by time spent at each stage.", icon: Clock, color: "text-amber-600 bg-amber-50", type: "stage-delays" },
+  { title: "Blocked Jobs", description: "Currently blocked jobs with reasons and status.", icon: Layers, color: "text-orange-600 bg-orange-50", type: "blocked-jobs" },
+  { title: "Material Shortage", description: "Materials below reorder point impacting production.", icon: Package, color: "text-rose-600 bg-rose-50", type: "material-shortage" },
 ];
 
 export default function ReportsPage() {
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handleGenerate = async (type: string) => {
+    setLoading(type);
+    try {
+      const res = await fetch(`/api/reports?type=${type}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${type}-report.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch { /* silent */ }
+    setLoading(null);
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Generate and view production reports
-        </p>
-      </div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Reports</h1><p className="text-sm text-gray-500 mt-1">Generate and export production reports</p></div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTS.map((report) => {
           const Icon = report.icon;
           return (
-            <Card
-              key={report.title}
-              className="hover:shadow-md transition-shadow"
-            >
+            <Card key={report.title} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-center gap-3">
-                  <div className={`rounded-lg p-2.5 ${report.color}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
+                  <div className={`rounded-lg p-2.5 ${report.color}`}><Icon className="h-5 w-5" /></div>
                   <CardTitle className="text-base">{report.title}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="mb-4">
-                  {report.description}
-                </CardDescription>
-                <Button variant="outline" size="sm" className="w-full">
-                  Generate
+                <CardDescription className="mb-4">{report.description}</CardDescription>
+                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => handleGenerate(report.type)} disabled={loading === report.type}>
+                  {loading === report.type ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {loading === report.type ? "Generating..." : "Generate CSV"}
                 </Button>
               </CardContent>
             </Card>
