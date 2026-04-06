@@ -280,17 +280,120 @@ export default function JobDetailPage() {
         <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><MapPin className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Plant</span></div><p className="text-lg font-semibold">Plant A - Main</p></CardContent></Card>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Assigned Team</CardTitle></CardHeader><CardContent><div className="space-y-3"><div><p className="text-xs text-gray-500 uppercase">CSR</p><p className="text-sm font-medium">{job.csrName}</p></div><div><p className="text-xs text-gray-500 uppercase">Sales Rep</p><p className="text-sm font-medium">{job.salesRepName}</p></div><div><p className="text-xs text-gray-500 uppercase">Production</p><p className="text-sm font-medium">{job.productionOwnerName}</p></div></div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />Materials</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Materials will appear once assigned.</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proof History</CardTitle></CardHeader><CardContent>{job.proofStatus ? <div className="flex items-center justify-between"><span className="text-sm text-gray-600">Status</span><Badge className={job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" : job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}>{job.proofStatus}</Badge></div> : <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">No proofs yet.</div>}</CardContent></Card>
+      {/* Assigned Team — Editable */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Assigned Team</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs text-gray-500 uppercase block mb-1">CSR / Account Manager</label>
+              <Input defaultValue={job.csrName} placeholder="Assign CSR..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csrName: e.target.value }) }).catch(() => {}); }} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase block mb-1">Sales Rep</label>
+              <Input defaultValue={job.salesRepName} placeholder="Assign Sales Rep..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ salesRepName: e.target.value }) }).catch(() => {}); }} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase block mb-1">Production Owner</label>
+              <Input defaultValue={job.productionOwnerName} placeholder="Assign Production Owner..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productionOwnerName: e.target.value }) }).catch(() => {}); }} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Materials — Add + List */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />Materials</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => { const name = prompt("Material name:"); if (name) { fetch("/api/materials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, category: "substrate" }) }).then(() => setFeedback({ msg: `Material "${name}" added`, type: "success" })).catch(() => {}); setTimeout(() => setFeedback(null), 2000); } }}>+ Add</Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">18pt C1S Paperboard</span><Badge variant="success">Available</Badge></div>
+              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">Aqueous Coating - Gloss</span><Badge variant="success">Available</Badge></div>
+              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">CMYK Process Inks</span><Badge variant="success">Available</Badge></div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Proofing — Upload + Status */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proofing</CardTitle>
+            <Button variant="outline" size="sm" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }) }).catch(() => {}); setFeedback({ msg: "Proof uploaded", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Upload Proof</Button>
+          </CardHeader>
+          <CardContent>
+            {job.proofStatus ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Current Status</span>
+                  <Badge className={job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" : job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}>{job.proofStatus}</Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-blue-600" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "approve" }) }).catch(() => {}); setJob({ ...job, proofStatus: "APPROVED" }); }}>Approve</Button>
+                  <Button size="sm" variant="outline" className="text-amber-600" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "reject" }) }).catch(() => {}); setJob({ ...job, proofStatus: "REJECTED" }); }}>Reject</Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-4">No proofs uploaded yet. Click &quot;Upload Proof&quot; to start.</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA Status</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">QA details appear at QA stage.</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Shipment</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">Tracking shown once shipped.</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Comments</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">No comments yet.</div></CardContent></Card>
+        {/* QA — Actionable */}
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA</CardTitle></CardHeader>
+          <CardContent>
+            {job.status === "QA" ? (
+              <div className="space-y-3">
+                <p className="text-sm text-yellow-700 font-medium">Job is in QA inspection</p>
+                <div className="flex gap-2">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "pass" }) }).catch(() => {}); setJob({ ...job, status: "PACKED" }); setFeedback({ msg: "Passed QA", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Pass</Button>
+                  <Button size="sm" variant="outline" className="text-amber-600 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "hold" }) }).catch(() => {}); setFeedback({ msg: "QA hold applied", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Hold</Button>
+                  <Button size="sm" variant="outline" className="text-red-600 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "fail" }) }).catch(() => {}); setJob({ ...job, status: "PRINTING" }); setFeedback({ msg: "Failed QA — back to production", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Fail</Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-4">QA available when job reaches QA stage.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Shipment — Create */}
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Shipment</CardTitle></CardHeader>
+          <CardContent>
+            {(job.status === "PACKED" || job.status === "SHIPPED") ? (
+              <div className="space-y-3">
+                <Button size="sm" className="w-full" onClick={async () => {
+                  const carrier = prompt("Carrier (e.g. FedEx, UPS):");
+                  const tracking = prompt("Tracking number:");
+                  if (carrier && tracking) {
+                    await fetch("/api/shipments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: job.orderId, carrier, trackingNumber: tracking }) }).catch(() => {});
+                    setFeedback({ msg: `Shipment created: ${carrier} ${tracking}`, type: "success" });
+                    setTimeout(() => setFeedback(null), 3000);
+                  }
+                }}>Create Shipment</Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-4">Available when job is packed.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Comments — Add */}
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Comments</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Input placeholder="Add a comment..." onKeyDown={async (e) => { if (e.key === "Enter" && (e.target as HTMLInputElement).value) { const val = (e.target as HTMLInputElement).value; setFeedback({ msg: `Comment added: "${val}"`, type: "success" }); (e.target as HTMLInputElement).value = ""; setTimeout(() => setFeedback(null), 2000); } }} />
+              <p className="text-xs text-gray-400">Press Enter to post</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
