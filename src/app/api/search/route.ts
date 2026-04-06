@@ -37,16 +37,7 @@ export async function GET(request: NextRequest) {
     }
   } catch { /* fall through */ }
 
-  // Demo fallback
-  const jobResults = demoJobs
-    .filter(j => j.name.toLowerCase().includes(q) || j.jobNumber.toLowerCase().includes(q) || j.companyName.toLowerCase().includes(q))
-    .slice(0, 10)
-    .map(j => ({ type: "job" as const, id: j.id, title: j.name, subtitle: `${j.jobNumber} · ${j.companyName}`, href: `/dashboard/jobs/${j.id}`, status: j.status }));
-
-  const companyResults = demoCompanies
-    .filter(c => c.name.toLowerCase().includes(q))
-    .slice(0, 5)
-    .map(c => ({ type: "company" as const, id: c.id, title: c.name, subtitle: c.industry || "", href: `/dashboard/customers`, status: null }));
+  return NextResponse.json({ results: [] });
 
   return NextResponse.json({ results: [...jobResults, ...companyResults], source: "demo" });
 }

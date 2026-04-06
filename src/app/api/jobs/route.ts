@@ -8,7 +8,7 @@ export async function GET() {
     if (!prisma) {
       // Demo mode - return demo jobs
       const { demoJobs } = await import("@/lib/demo-data");
-      return NextResponse.json({ jobs: demoJobs, source: "demo" });
+      return NextResponse.json({ jobs: [], source: "empty" });
     }
 
     const jobs = await prisma.job.findMany({
@@ -40,7 +40,7 @@ export async function GET() {
   } catch (error) {
     console.error("Jobs GET error:", error);
     const { demoJobs } = await import("@/lib/demo-data");
-    return NextResponse.json({ jobs: demoJobs, source: "demo" });
+    return NextResponse.json({ jobs: [], source: "empty" });
   }
 }
 

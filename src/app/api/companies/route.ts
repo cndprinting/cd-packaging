@@ -7,7 +7,7 @@ export async function GET() {
     const prisma = prismaModule.default;
     if (!prisma) {
       const { demoCompanies } = await import("@/lib/demo-data");
-      return NextResponse.json({ companies: demoCompanies, source: "demo" });
+      return NextResponse.json({ companies: [], source: "empty" });
     }
     const companies = await prisma.company.findMany({ where: { type: "customer" }, orderBy: { name: "asc" } });
     return NextResponse.json({ companies, source: "database" });

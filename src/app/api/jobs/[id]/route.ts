@@ -15,10 +15,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const prisma = prismaModule.default;
 
     if (!prisma) {
-      const { demoJobs } = await import("@/lib/demo-data");
-      const job = demoJobs.find((j) => j.id === id);
-      if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-      return NextResponse.json({ job, source: "demo" });
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
     const job = await prisma.job.findUnique({

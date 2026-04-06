@@ -7,7 +7,7 @@ export async function GET() {
     const prisma = prismaModule.default;
     if (!prisma) {
       const { demoMaterials } = await import("@/lib/demo-data");
-      return NextResponse.json({ materials: demoMaterials, source: "demo" });
+      return NextResponse.json({ materials: [], source: "empty" });
     }
     const materials = await prisma.material.findMany({
       include: { lots: true },

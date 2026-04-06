@@ -8,8 +8,7 @@ export async function GET() {
     const prisma = prismaModule.default;
 
     if (!prisma) {
-      const { getKPIs, demoAlerts, demoJobs } = await import("@/lib/demo-data");
-      return NextResponse.json({ kpis: getKPIs(), alerts: demoAlerts, recentJobs: demoJobs.slice(0, 8), source: "demo" });
+      return NextResponse.json({ kpis: { openJobs: 0, inProduction: 0, dueThisWeek: 0, lateJobs: 0, blockedJobs: 0, proofsPending: 0, materialShortages: 0, readyToShip: 0, onTimeShipmentPct: 0, avgCycleTimeDays: 0 }, alerts: [], recentJobs: [], source: "empty" });
     }
 
     const now = new Date();
@@ -62,7 +61,6 @@ export async function GET() {
     return NextResponse.json({ kpis, alerts: formattedAlerts, recentJobs, source: "database" });
   } catch (error) {
     console.error("Dashboard API error:", error);
-    const { getKPIs, demoAlerts, demoJobs } = await import("@/lib/demo-data");
-    return NextResponse.json({ kpis: getKPIs(), alerts: demoAlerts, recentJobs: demoJobs.slice(0, 8), source: "demo" });
+    return NextResponse.json({ kpis: { openJobs: 0, inProduction: 0, dueThisWeek: 0, lateJobs: 0, blockedJobs: 0, proofsPending: 0, materialShortages: 0, readyToShip: 0, onTimeShipmentPct: 0, avgCycleTimeDays: 0 }, alerts: [], recentJobs: [], source: "error" });
   }
 }

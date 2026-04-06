@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
-const demoQuotes = [
-  { id: "q-1", quoteNumber: "QT-2026-001", customerName: "Fresh Foods Co.", contactName: "Tom Richards", contactEmail: "tom@freshfoods.com", productType: "FOLDING_CARTON", productName: "Cereal Box - 12oz", description: "Full color SBS folding carton", quantity: 25000, unitPrice: 0.18, totalPrice: 4500, status: "approved", validUntil: "2026-04-30", createdAt: "2026-03-15" },
-  { id: "q-2", quoteNumber: "QT-2026-002", customerName: "Luxe Cosmetics", contactName: "Nina Patel", contactEmail: "nina@luxecosmetics.com", productType: "FOLDING_CARTON", productName: "Foundation Box - Premium", description: "Rigid box with magnetic closure", quantity: 10000, unitPrice: 0.45, totalPrice: 4500, status: "sent", validUntil: "2026-04-20", createdAt: "2026-03-20" },
-  { id: "q-3", quoteNumber: "QT-2026-003", customerName: "GreenLeaf Supplements", contactName: "Amy Liu", contactEmail: "", productType: "COMMERCIAL_PRINT", productName: "Supplement Label - 60ct", description: "Pressure-sensitive label", quantity: 100000, unitPrice: 0.03, totalPrice: 3000, status: "approved", validUntil: "2026-05-01", createdAt: "2026-03-18" },
-  { id: "q-4", quoteNumber: "QT-2026-004", customerName: "TechGear Electronics", contactName: "James Park", contactEmail: "", productType: "COMMERCIAL_PRINT", productName: "Product Manual", description: "24-page saddle-stitch booklet", quantity: 20000, unitPrice: 0.12, totalPrice: 2400, status: "draft", validUntil: "2026-04-25", createdAt: "2026-04-01" },
-  { id: "q-5", quoteNumber: "QT-2026-005", customerName: "Artisan Spirits", contactName: "Mark Davis", contactEmail: "", productType: "COMMERCIAL_PRINT", productName: "Bottle Neck Tag", description: "Die-cut hang tag", quantity: 50000, unitPrice: 0.05, totalPrice: 2500, status: "sent", validUntil: "2026-04-15", createdAt: "2026-03-25" },
-];
+// No more demo quotes — real data only
 
 export async function GET() {
   try {
@@ -27,7 +21,7 @@ export async function GET() {
       }
     }
   } catch { /* fallback */ }
-  return NextResponse.json({ quotes: demoQuotes, source: "demo" });
+  return NextResponse.json({ quotes: [], source: "empty" });
 }
 
 export async function POST(request: NextRequest) {

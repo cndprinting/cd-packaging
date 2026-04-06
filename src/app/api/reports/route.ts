@@ -13,11 +13,7 @@ export async function GET(request: NextRequest) {
     const prisma = prismaModule.default;
 
     if (!prisma) {
-      // Demo mode CSV
-      const { demoJobs } = await import("@/lib/demo-data");
-      const headers = "Job Number,Name,Customer,Status,Priority,Quantity,Due Date,Late,Blocked\n";
-      const rows = demoJobs.map(j => `${j.jobNumber},${j.name},${j.companyName},${j.status},${j.priority},${j.quantity},${j.dueDate},${j.isLate},${j.isBlocked}`).join("\n");
-      return new NextResponse(headers + rows, {
+      return new NextResponse("No data available\n", {
         headers: { "Content-Type": "text/csv", "Content-Disposition": `attachment; filename="${type}-report.csv"` },
       });
     }

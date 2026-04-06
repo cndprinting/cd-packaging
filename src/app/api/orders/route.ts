@@ -6,18 +6,7 @@ export async function GET() {
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) {
-      const { demoJobs, demoCompanies } = await import("@/lib/demo-data");
-      // Group jobs by orderId to create orders
-      const orderMap: Record<string, { orderNumber: string; companyName: string; companyId: string; status: string; priority: string; dueDate: string; items: typeof demoJobs }> = {};
-      for (const j of demoJobs) {
-        if (!orderMap[j.orderId]) {
-          const company = demoCompanies.find(c => c.id === j.companyId);
-          orderMap[j.orderId] = { orderNumber: j.orderNumber, companyName: company?.name || j.companyName, companyId: j.companyId, status: j.status, priority: j.priority, dueDate: j.dueDate, items: [] };
-        }
-        orderMap[j.orderId].items.push(j);
-      }
-      const orders = Object.entries(orderMap).map(([id, o]) => ({ id, ...o, itemCount: o.items.length }));
-      return NextResponse.json({ orders, source: "demo" });
+      return NextResponse.json({ orders: [], source: "empty" });
     }
 
     const orders = await prisma.order.findMany({
