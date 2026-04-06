@@ -234,7 +234,84 @@ model Job {
   schedules        ProductionSchedule[]
   alerts           Alert[]
   timeEntries      TimeEntry[]
+  purchases        PurchaseFlag[]
   productType      ProductType @default(FOLDING_CARTON)
+
+  // ─── Job Ticket Fields (matching C&D physical form) ────
+  jobType          String?   // NEW_ORDER, EXACT_REPRINT, REPRINT_WITH_CHANGES, REPRINT_NEW_FILE
+  lastJobNumber    String?   // reference to previous job for reprints
+  customerPO       String?
+  estimateNumber   String?
+  repName          String?
+  contactName      String?
+  numPages         Int?
+
+  // Stock & Materials
+  stockDescription String?
+  fscCertified     Boolean   @default(false)
+  blanketNumber    String?
+  dieNumber        String?
+
+  // Size Specs
+  flatSizeWidth    Float?
+  flatSizeHeight   Float?
+  finishedWidth    Float?
+  finishedHeight   Float?
+  inkFront         String?   // e.g. "4" for CMYK, "4+1PMS"
+  inkBack          String?
+  varnish          String?   // e.g. "AQ Gloss", "UV Spot", "Soft Touch"
+  coating          String?
+
+  // Press Info
+  pressAssignment  String?   // which press machine
+  pressFormat      String?
+  imposition       String?
+  numberUp         Int?
+  runningSize      String?
+  makeReadyCount   Int?
+  firstPassCount   Int?
+  finalPressCount  Int?
+  pressmanInitials String?
+  pressCheck       Boolean   @default(false)
+  ledInk           Boolean   @default(false)
+
+  // Bindery Instructions (checkboxes from job ticket)
+  binderyScore     Boolean   @default(false)
+  binderyPerf      Boolean   @default(false)
+  binderyDrill     Boolean   @default(false)
+  binderyPad       Boolean   @default(false)
+  binderyFold      Boolean   @default(false)
+  binderyCount     Boolean   @default(false)
+  binderyStitch    Boolean   @default(false)
+  binderyCollate   Boolean   @default(false)
+  binderyPockets   Boolean   @default(false)
+  binderyGlue      Boolean   @default(false)
+  binderyWrap      Boolean   @default(false)
+  binderyOther     String?
+  binderyNotes     String?
+
+  // Delivery
+  deliveryQty      Int?
+  deliveryPackaging String?
+  deliveryTo       String?
+
+  // Samples
+  samplesRequired  Boolean   @default(false)
+  samplesTo        String?
+  samplesChecked   Boolean   @default(false)
+
+  // Tracking
+  aaCharges        Float?
+  vendorInfo       String?
+  proofDate        DateTime?
+  enteredDate      DateTime?
+  pressNotes       String?
+
+  // Cover type
+  softCover        Boolean   @default(false)
+  plusCover         Boolean   @default(false)
+  hasBleeds        Boolean   @default(false)
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -493,6 +570,28 @@ model ActivityLog {
   createdAt DateTime @default(now())
 
   @@index([orderId])
+}
+
+// ─── OUTSIDE PURCHASES ───────────────────────────────────
+
+model PurchaseFlag {
+  id           String   @id @default(cuid())
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  category     String   // paper, ink, cutting_die, foil_die, outside_service, other
+  description  String
+  vendor       String?
+  estimatedCost Float?
+  status       String   @default("needed") // needed, ordered, received
+  poNumber     String?
+  orderedDate  DateTime?
+  receivedDate DateTime?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([jobId])
+  @@index([status])
 }
 
 // ─── QUOTES ──────────────────────────────────────────────

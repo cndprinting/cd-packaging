@@ -105,9 +105,43 @@ export async function PUT(request: NextRequest) {
           companyId = company.id;
         }
 
-        const order = await prisma.order.create({ data: { orderNumber, companyId, status: "QUOTE", priority: "NORMAL", dueDate: quote.validUntil } });
-        const job = await prisma.job.create({ data: { jobNumber, orderId: order.id, name: quote.productName, description: quote.description, status: "QUOTE", priority: "NORMAL", quantity: quote.quantity, productType: quote.productType } });
+        const order = await prisma.order.create({ data: { orderNumber, companyId, status: "QUOTE", priority: "NORMAL", dueDate: quote.validUntil, poNumber: quote.contactEmail ? undefined : undefined } });
+
+        // Parse specs JSON if available
+        let specs: Record<string, string> = {};
+        if (quote.specs) { try { specs = JSON.parse(quote.specs); } catch {} }
+
+        const job = await prisma.job.create({
+          data: {
+            jobNumber, orderId: order.id,
+            name: quote.productName,
+            description: quote.description,
+            status: "QUOTE",
+            priority: "NORMAL",
+            quantity: quote.quantity,
+            productType: quote.productType,
+            jobType: "NEW_ORDER",
+            estimateNumber: quote.quoteNumber,
+            contactName: quote.contactName,
+            customerPO: "",
+            // Populate from quote specs
+            stockDescription: specs.paperStock || specs.paper || null,
+            finishedWidth: specs.dimensions ? parseFloat(specs.dimensions.split("x")[0]) || null : null,
+            finishedHeight: specs.dimensions ? parseFloat(specs.dimensions.split("x")[1]) || null : null,
+            inkFront: specs.colors || null,
+            varnish: specs.coating || null,
+            coating: specs.finishing || null,
+          },
+        });
         await prisma.quote.update({ where: { id }, data: { convertedJobId: job.id } });
+
+        // Auto-create purchase flags based on specs
+        const purchaseFlags = [];
+        if (specs.paperStock) purchaseFlags.push({ jobId: job.id, category: "paper", description: `${specs.paperStock} - ${quote.quantity} units`, status: "needed" });
+        if (specs.colors?.includes("PMS")) purchaseFlags.push({ jobId: job.id, category: "ink", description: `Spot color ink: ${specs.colors}`, status: "needed" });
+        if (specs.finishing?.includes("Die")) purchaseFlags.push({ jobId: job.id, category: "cutting_die", description: `Cutting die for ${quote.productName}`, status: "needed" });
+        if (specs.finishing?.includes("Foil")) purchaseFlags.push({ jobId: job.id, category: "foil_die", description: `Foil die for ${quote.productName}`, status: "needed" });
+        if (purchaseFlags.length > 0) await prisma.purchaseFlag.createMany({ data: purchaseFlags });
       }
     }
 

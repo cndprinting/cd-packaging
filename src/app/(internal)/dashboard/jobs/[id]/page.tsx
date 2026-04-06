@@ -2,34 +2,40 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  ArrowLeft, CheckCircle, Calendar, MapPin, Users, Package,
-  ClipboardList, Truck, MessageSquare, ShieldCheck, FileImage,
-  Loader2, ChevronRight, Pencil, X, Check, Trash2,
+  ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
+  ShieldCheck, FileImage, Loader2, ChevronRight, Pencil, X, Check,
+  Trash2, Users, Layers, Printer, Scissors,
+  DollarSign, Info, Plus, Send, CircleAlert,
 } from "lucide-react";
-import { demoJobs } from "@/lib/demo-data";
+import { demoJobs, PRODUCT_TYPES } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { getStatusColor, getStatusLabel, getPriorityColor, formatDate, formatNumber } from "@/lib/utils";
+import {
+  getStatusColor, getStatusLabel, getPriorityColor, formatDate, formatNumber,
+} from "@/lib/utils";
 
-import { PRODUCT_TYPES } from "@/lib/demo-data";
-
+// ---------------------------------------------------------------------------
+// Stage definitions
+// ---------------------------------------------------------------------------
 const STAGES_FOLDING_CARTON = [
   "QUOTE","ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL",
   "PREPRESS","PLATING","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
   "PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
-
 const STAGES_COMMERCIAL_PRINT = [
   "QUOTE","ARTWORK_RECEIVED","PROOFING","CUSTOMER_APPROVAL",
   "PREPRESS","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
   "PRINTING","COATING_FINISHING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 interface JobData {
   id: string;
   jobNumber: string;
@@ -51,8 +57,132 @@ interface JobData {
   blockerReason?: string;
   proofStatus?: string;
   productType?: string;
+  // Extended job-ticket fields
+  jobType?: string;
+  contactName?: string;
+  customerPO?: string;
+  estimateNumber?: string;
+  repName?: string;
+  numPages?: number;
+  proofDate?: string;
+  enteredDate?: string;
+  pressCheck?: boolean;
+  stockDescription?: string;
+  fscCertified?: boolean;
+  blanketNo?: string;
+  dieNumber?: string;
+  flatWidth?: number;
+  flatHeight?: number;
+  finishedWidth?: number;
+  finishedHeight?: number;
+  inkFront?: string;
+  inkBack?: string;
+  varnishCoating?: string;
+  softCover?: boolean;
+  plusCover?: boolean;
+  hasBleeds?: boolean;
+  pressAssignment?: string;
+  ledInk?: boolean;
+  pressFormat?: string;
+  imposition?: string;
+  numberUp?: number;
+  runningSize?: string;
+  makeReadyCount?: number;
+  firstPassCount?: number;
+  finalPressCount?: number;
+  pressmanInitials?: string;
+  pressNotes?: string;
+  binderyScore?: boolean;
+  binderyPerf?: boolean;
+  binderyDrill?: boolean;
+  binderyPad?: boolean;
+  binderyFold?: boolean;
+  binderyCount?: boolean;
+  binderyStitch?: boolean;
+  binderyCollate?: boolean;
+  binderyPockets?: boolean;
+  binderyGlue?: boolean;
+  binderyWrap?: boolean;
+  binderyOther?: boolean;
+  binderyNotes?: string;
+  deliveryQty?: number;
+  packaging?: string;
+  deliveryTo?: string;
+  samplesRequired?: boolean;
+  samplesTo?: string;
+  samplesChecked?: boolean;
+  aaCharges?: number;
+  vendorInfo?: string;
 }
 
+interface Purchase {
+  id: string;
+  jobId: string;
+  category: string;
+  description: string;
+  vendor: string;
+  estCost: number;
+  status: string;
+}
+
+// ---------------------------------------------------------------------------
+// Job type options
+// ---------------------------------------------------------------------------
+const JOB_TYPE_OPTIONS = [
+  { value: "NEW_ORDER", label: "New Order" },
+  { value: "EXACT_REPRINT", label: "Exact Reprint" },
+  { value: "REPRINT_WITH_CHANGES", label: "Reprint with Changes" },
+  { value: "REPRINT_NEW_FILE", label: "Reprint New File" },
+];
+
+const JOB_TYPE_COLORS: Record<string, string> = {
+  NEW_ORDER: "bg-blue-100 text-blue-700",
+  EXACT_REPRINT: "bg-green-100 text-green-700",
+  REPRINT_WITH_CHANGES: "bg-amber-100 text-amber-700",
+  REPRINT_NEW_FILE: "bg-purple-100 text-purple-700",
+};
+
+const PURCHASE_CATEGORIES = [
+  { value: "PAPER", label: "Paper" },
+  { value: "INK", label: "Ink" },
+  { value: "CUTTING_DIE", label: "Cutting Die" },
+  { value: "FOIL_DIE", label: "Foil Die" },
+  { value: "OUTSIDE_SERVICE", label: "Outside Service" },
+  { value: "OTHER", label: "Other" },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{children}</label>;
+}
+
+function Checkbox({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+      />
+      {label}
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page component
+// ---------------------------------------------------------------------------
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -68,7 +198,31 @@ export default function JobDetailPage() {
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
 
-  // Fetch job from API first, fall back to demo data
+  // Purchases state
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [addingPurchase, setAddingPurchase] = useState(false);
+  const [newPurchase, setNewPurchase] = useState({ category: "PAPER", description: "", vendor: "", estCost: "" });
+
+  // Save a single field to the API
+  const saveField = useCallback(
+    (field: string, value: unknown) =>
+      fetch(`/api/jobs/${jobId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      }).catch(() => {}),
+    [jobId],
+  );
+
+  // Flash a brief feedback message
+  const flash = useCallback((msg: string, type: "success" | "error" = "success") => {
+    setFeedback({ msg, type });
+    setTimeout(() => setFeedback(null), 3000);
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Fetch job
+  // -----------------------------------------------------------------------
   useEffect(() => {
     async function fetchJob() {
       try {
@@ -76,7 +230,6 @@ export default function JobDetailPage() {
         const data = await res.json();
         if (res.ok && data.job) {
           const j = data.job;
-          // Handle both DB format and demo format
           const formatted: JobData = {
             id: j.id,
             jobNumber: j.jobNumber,
@@ -98,6 +251,61 @@ export default function JobDetailPage() {
             blockerReason: j.blockerReason,
             proofStatus: j.proofStatus,
             productType: j.productType,
+            jobType: j.jobType || "NEW_ORDER",
+            contactName: j.contactName || "",
+            customerPO: j.customerPO || "",
+            estimateNumber: j.estimateNumber || "",
+            repName: j.repName || "",
+            numPages: j.numPages || 0,
+            proofDate: j.proofDate ? (typeof j.proofDate === "string" ? j.proofDate.split("T")[0] : new Date(j.proofDate).toISOString().split("T")[0]) : "",
+            enteredDate: j.enteredDate ? (typeof j.enteredDate === "string" ? j.enteredDate.split("T")[0] : new Date(j.enteredDate).toISOString().split("T")[0]) : j.createdAt ? new Date(j.createdAt).toISOString().split("T")[0] : "",
+            pressCheck: j.pressCheck || false,
+            stockDescription: j.stockDescription || "",
+            fscCertified: j.fscCertified || false,
+            blanketNo: j.blanketNo || "",
+            dieNumber: j.dieNumber || "",
+            flatWidth: j.flatWidth || 0,
+            flatHeight: j.flatHeight || 0,
+            finishedWidth: j.finishedWidth || 0,
+            finishedHeight: j.finishedHeight || 0,
+            inkFront: j.inkFront || "",
+            inkBack: j.inkBack || "",
+            varnishCoating: j.varnishCoating || "",
+            softCover: j.softCover || false,
+            plusCover: j.plusCover || false,
+            hasBleeds: j.hasBleeds || false,
+            pressAssignment: j.pressAssignment || "",
+            ledInk: j.ledInk || false,
+            pressFormat: j.pressFormat || "",
+            imposition: j.imposition || "",
+            numberUp: j.numberUp || 0,
+            runningSize: j.runningSize || "",
+            makeReadyCount: j.makeReadyCount || 0,
+            firstPassCount: j.firstPassCount || 0,
+            finalPressCount: j.finalPressCount || 0,
+            pressmanInitials: j.pressmanInitials || "",
+            pressNotes: j.pressNotes || "",
+            binderyScore: j.binderyScore || false,
+            binderyPerf: j.binderyPerf || false,
+            binderyDrill: j.binderyDrill || false,
+            binderyPad: j.binderyPad || false,
+            binderyFold: j.binderyFold || false,
+            binderyCount: j.binderyCount || false,
+            binderyStitch: j.binderyStitch || false,
+            binderyCollate: j.binderyCollate || false,
+            binderyPockets: j.binderyPockets || false,
+            binderyGlue: j.binderyGlue || false,
+            binderyWrap: j.binderyWrap || false,
+            binderyOther: j.binderyOther || false,
+            binderyNotes: j.binderyNotes || "",
+            deliveryQty: j.deliveryQty || j.quantity || 0,
+            packaging: j.packaging || "",
+            deliveryTo: j.deliveryTo || "",
+            samplesRequired: j.samplesRequired || false,
+            samplesTo: j.samplesTo || "",
+            samplesChecked: j.samplesChecked || false,
+            aaCharges: j.aaCharges || 0,
+            vendorInfo: j.vendorInfo || "",
           };
           setJob(formatted);
           setEditForm({ name: formatted.name, description: formatted.description || "", quantity: String(formatted.quantity), dueDate: formatted.dueDate, priority: formatted.priority });
@@ -109,7 +317,66 @@ export default function JobDetailPage() {
       // Fallback to demo data
       const found = demoJobs.find((j) => j.id === jobId);
       if (found) {
-        setJob({ ...found, status: found.status as string, priority: found.priority as string });
+        setJob({
+          ...found,
+          status: found.status as string,
+          priority: found.priority as string,
+          jobType: "NEW_ORDER",
+          contactName: "",
+          customerPO: "",
+          estimateNumber: "",
+          repName: "",
+          numPages: 0,
+          proofDate: "",
+          enteredDate: new Date().toISOString().split("T")[0],
+          pressCheck: false,
+          stockDescription: "",
+          fscCertified: false,
+          blanketNo: "",
+          dieNumber: "",
+          flatWidth: 0,
+          flatHeight: 0,
+          finishedWidth: 0,
+          finishedHeight: 0,
+          inkFront: "",
+          inkBack: "",
+          varnishCoating: "",
+          softCover: false,
+          plusCover: false,
+          hasBleeds: false,
+          pressAssignment: "",
+          ledInk: false,
+          pressFormat: "",
+          imposition: "",
+          numberUp: 0,
+          runningSize: "",
+          makeReadyCount: 0,
+          firstPassCount: 0,
+          finalPressCount: 0,
+          pressmanInitials: "",
+          pressNotes: "",
+          binderyScore: false,
+          binderyPerf: false,
+          binderyDrill: false,
+          binderyPad: false,
+          binderyFold: false,
+          binderyCount: false,
+          binderyStitch: false,
+          binderyCollate: false,
+          binderyPockets: false,
+          binderyGlue: false,
+          binderyWrap: false,
+          binderyOther: false,
+          binderyNotes: "",
+          deliveryQty: found.quantity,
+          packaging: "",
+          deliveryTo: "",
+          samplesRequired: false,
+          samplesTo: "",
+          samplesChecked: false,
+          aaCharges: 0,
+          vendorInfo: "",
+        });
         setEditForm({ name: found.name, description: found.description || "", quantity: String(found.quantity), dueDate: found.dueDate, priority: found.priority });
       }
       setLoading(false);
@@ -117,6 +384,25 @@ export default function JobDetailPage() {
     fetchJob();
   }, [jobId]);
 
+  // -----------------------------------------------------------------------
+  // Fetch purchases
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    async function fetchPurchases() {
+      try {
+        const res = await fetch(`/api/purchases?jobId=${jobId}`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.purchases)) {
+          setPurchases(data.purchases);
+        }
+      } catch { /* ok */ }
+    }
+    fetchPurchases();
+  }, [jobId]);
+
+  // -----------------------------------------------------------------------
+  // Loading / Not found
+  // -----------------------------------------------------------------------
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -129,41 +415,46 @@ export default function JobDetailPage() {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-gray-900">Job not found</h2>
-        <Link href="/dashboard/jobs"><Button variant="outline" className="mt-4"><ArrowLeft className="h-4 w-4 mr-2" />Back to Jobs</Button></Link>
+        <Link href="/dashboard/jobs">
+          <Button variant="outline" className="mt-4">
+            <ArrowLeft className="h-4 w-4 mr-2" />Back to Jobs
+          </Button>
+        </Link>
       </div>
     );
   }
 
+  // -----------------------------------------------------------------------
+  // Derived values
+  // -----------------------------------------------------------------------
   const STAGES = job.productType === "COMMERCIAL_PRINT" ? STAGES_COMMERCIAL_PRINT : STAGES_FOLDING_CARTON;
   const currentStageIndex = STAGES.indexOf(job.status);
 
+  // Helpers to update local state + persist
+  const updateJobField = (field: string, value: unknown) => {
+    setJob((prev) => (prev ? { ...prev, [field]: value } : prev));
+    saveField(field, value);
+  };
+
+  // -----------------------------------------------------------------------
+  // Handlers
+  // -----------------------------------------------------------------------
   const handleAdvance = async () => {
     setAdvancing(true);
     try {
       const res = await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "advance" }) });
       if (res.ok) {
         const nextStatus = STAGES[currentStageIndex + 1];
-        if (nextStatus) {
-          setJob({ ...job, status: nextStatus });
-          setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)}`, type: "success" });
-        }
+        if (nextStatus) { setJob({ ...job, status: nextStatus }); flash(`Advanced to ${getStatusLabel(nextStatus)}`); }
       } else {
-        // Demo fallback
         const nextStatus = STAGES[currentStageIndex + 1];
-        if (nextStatus) {
-          setJob({ ...job, status: nextStatus });
-          setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)} (demo)`, type: "success" });
-        }
+        if (nextStatus) { setJob({ ...job, status: nextStatus }); flash(`Advanced to ${getStatusLabel(nextStatus)} (demo)`); }
       }
     } catch {
       const nextStatus = STAGES[currentStageIndex + 1];
-      if (nextStatus) {
-        setJob({ ...job, status: nextStatus });
-        setFeedback({ msg: `Advanced to ${getStatusLabel(nextStatus)} (demo)`, type: "success" });
-      }
+      if (nextStatus) { setJob({ ...job, status: nextStatus }); flash(`Advanced to ${getStatusLabel(nextStatus)} (demo)`); }
     }
     setAdvancing(false);
-    setTimeout(() => setFeedback(null), 3000);
   };
 
   const handleSaveEdit = async () => {
@@ -174,40 +465,87 @@ export default function JobDetailPage() {
     setJob({ ...job, name: editForm.name, quantity: parseInt(editForm.quantity) || job.quantity, dueDate: editForm.dueDate || job.dueDate, priority: editForm.priority });
     setEditing(false);
     setSaving(false);
-    setFeedback({ msg: "Job updated", type: "success" });
-    setTimeout(() => setFeedback(null), 3000);
+    flash("Job updated");
   };
 
   const handleDelete = async () => {
     setDeleting(true);
-    try {
-      await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
-    } catch { /* ok */ }
+    try { await fetch(`/api/jobs/${jobId}`, { method: "DELETE" }); } catch { /* ok */ }
     setDeleting(false);
     router.push("/dashboard/jobs");
   };
 
+  const handleAddPurchase = async () => {
+    const payload = { jobId, category: newPurchase.category, description: newPurchase.description, vendor: newPurchase.vendor, estCost: parseFloat(newPurchase.estCost) || 0, status: "NEEDED" };
+    try {
+      const res = await fetch("/api/purchases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.ok && data.purchase) {
+        setPurchases((prev) => [...prev, data.purchase]);
+      } else {
+        // demo fallback
+        setPurchases((prev) => [...prev, { id: `p-${Date.now()}`, ...payload }]);
+      }
+    } catch {
+      setPurchases((prev) => [...prev, { id: `p-${Date.now()}`, ...payload }]);
+    }
+    setNewPurchase({ category: "PAPER", description: "", vendor: "", estCost: "" });
+    setAddingPurchase(false);
+    flash("Purchase added");
+  };
+
+  const handleUpdatePurchaseStatus = async (purchaseId: string, newStatus: string) => {
+    try {
+      await fetch("/api/purchases", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: purchaseId, status: newStatus }) });
+    } catch { /* ok */ }
+    setPurchases((prev) => prev.map((p) => (p.id === purchaseId ? { ...p, status: newStatus } : p)));
+  };
+
+  const jobTypeLabel = JOB_TYPE_OPTIONS.find((o) => o.value === job.jobType)?.label || "New Order";
+  const jobTypeColor = JOB_TYPE_COLORS[job.jobType || "NEW_ORDER"] || JOB_TYPE_COLORS.NEW_ORDER;
+
+  // =======================================================================
+  // RENDER
+  // =======================================================================
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      {/* Feedback toast */}
       {feedback && (
-        <div className={`p-3 rounded-lg text-sm ${feedback.type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>{feedback.msg}</div>
+        <div className={`p-3 rounded-lg text-sm ${feedback.type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {feedback.msg}
+        </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/jobs"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
+      {/* ================================================================= */}
+      {/* 1. HEADER                                                         */}
+      {/* ================================================================= */}
+      <div className="flex items-start gap-4">
+        <Link href="/dashboard/jobs">
+          <Button variant="ghost" size="icon" className="mt-1"><ArrowLeft className="h-5 w-5" /></Button>
+        </Link>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 truncate">{job.name}</h1>
             <Badge className={getStatusColor(job.status)}>{getStatusLabel(job.status)}</Badge>
             <Badge className={getPriorityColor(job.priority)}>{job.priority}</Badge>
+            {job.productType && (
+              <Badge className={job.productType === "FOLDING_CARTON" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}>
+                {job.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"}
+              </Badge>
+            )}
+            <Badge className={jobTypeColor}>{jobTypeLabel}</Badge>
             {job.isLate && <Badge className="bg-red-100 text-red-700">LATE</Badge>}
             {job.isBlocked && <Badge className="bg-orange-100 text-orange-700">BLOCKED</Badge>}
-            {job.productType && <Badge className={job.productType === "FOLDING_CARTON" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}>{job.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"}</Badge>}
           </div>
-          <p className="text-sm text-gray-500 mt-1">{job.jobNumber} &middot; {job.companyName} &middot; Order <Link href={`/dashboard/orders/${job.orderId}`} className="text-green-700 hover:underline">{job.orderNumber}</Link></p>
+          <p className="text-sm text-gray-500 mt-1">
+            <span className="font-mono font-medium text-gray-700">{job.jobNumber}</span>
+            {" "}&middot;{" "}
+            <span className="font-medium text-gray-700">{job.companyName}</span>
+            {" "}&middot; Order{" "}
+            <Link href={`/dashboard/orders/${job.orderId}`} className="text-green-700 hover:underline font-medium">{job.orderNumber}</Link>
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           {!confirmDelete ? (
             <>
               <Button variant="outline" onClick={() => { setEditing(!editing); if (!editing) setEditForm({ name: job.name, description: job.description || "", quantity: String(job.quantity), dueDate: job.dueDate, priority: job.priority }); }} className="gap-1.5">
@@ -237,16 +575,22 @@ export default function JobDetailPage() {
       {editing && (
         <Card className="p-4 border-brand-200 bg-brand-50/30">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Job Name</label><Input value={editForm.name} onChange={(e) => setEditForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label><Input type="number" value={editForm.quantity} onChange={(e) => setEditForm(p => ({ ...p, quantity: e.target.value }))} /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label><Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm(p => ({ ...p, dueDate: e.target.value }))} /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Priority</label><Select value={editForm.priority} onChange={(e) => setEditForm(p => ({ ...p, priority: e.target.value }))} options={[{ value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Job Name</label><Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label><Input type="number" value={editForm.quantity} onChange={(e) => setEditForm((p) => ({ ...p, quantity: e.target.value }))} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label><Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm((p) => ({ ...p, dueDate: e.target.value }))} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Priority</label><Select value={editForm.priority} onChange={(e) => setEditForm((p) => ({ ...p, priority: e.target.value }))} options={[{ value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} /></div>
           </div>
-          <div className="flex justify-end mt-3"><Button onClick={handleSaveEdit} disabled={saving} className="gap-1.5">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Save Changes</Button></div>
+          <div className="flex justify-end mt-3">
+            <Button onClick={handleSaveEdit} disabled={saving} className="gap-1.5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Save Changes
+            </Button>
+          </div>
         </Card>
       )}
 
-      {/* Stage Progress — Click any stage to jump directly */}
+      {/* ================================================================= */}
+      {/* 2. STAGE PROGRESS STEPPER                                         */}
+      {/* ================================================================= */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -268,17 +612,20 @@ export default function JobDetailPage() {
                           if (stage === job.status) return;
                           try { await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "setStatus", status: stage }) }); } catch {}
                           setJob({ ...job, status: stage });
-                          setFeedback({ msg: `Jumped to ${getStatusLabel(stage)}`, type: "success" });
-                          setTimeout(() => setFeedback(null), 2000);
+                          flash(`Jumped to ${getStatusLabel(stage)}`);
                         }}
                         className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-transform hover:scale-125 ${isCompleted ? "bg-green-600 text-white" : isCurrent ? "bg-green-600 text-white ring-4 ring-green-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
                         title={`Jump to: ${getStatusLabel(stage)}`}
                       >
                         {isCompleted ? <CheckCircle className="h-4 w-4" /> : <span>{i + 1}</span>}
                       </button>
-                      <span className={`text-[10px] mt-1 text-center leading-tight ${isCurrent ? "font-semibold text-green-700" : isCompleted ? "text-green-600" : "text-gray-400"}`}>{getStatusLabel(stage)}</span>
+                      <span className={`text-[10px] mt-1 text-center leading-tight ${isCurrent ? "font-semibold text-green-700" : isCompleted ? "text-green-600" : "text-gray-400"}`}>
+                        {getStatusLabel(stage)}
+                      </span>
                     </div>
-                    {i < STAGES.length - 1 && <div className={`h-0.5 w-full ${i < STAGES.indexOf(job.status) ? "bg-green-500" : "bg-gray-200"}`} />}
+                    {i < STAGES.length - 1 && (
+                      <div className={`h-0.5 w-full ${i < STAGES.indexOf(job.status) ? "bg-green-500" : "bg-gray-200"}`} />
+                    )}
                   </div>
                 );
               })}
@@ -287,67 +634,641 @@ export default function JobDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Detail Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Package className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Quantity</span></div><p className="text-lg font-semibold">{formatNumber(job.quantity)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Calendar className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Due Date</span></div><p className="text-lg font-semibold">{job.dueDate ? formatDate(job.dueDate) : "Not set"}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><Truck className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Requested Ship</span></div><p className="text-lg font-semibold">{job.dueDate ? formatDate(job.dueDate) : "Not set"}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-gray-500 mb-1"><MapPin className="h-4 w-4" /><span className="text-xs uppercase tracking-wide">Plant</span></div><p className="text-lg font-semibold">Plant A - Main</p></CardContent></Card>
+      {/* ================================================================= */}
+      {/* 3. JOB TICKET INFO — 2-column grid                               */}
+      {/* ================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Customer & Job Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Customer &amp; Job Info</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <SectionLabel>Customer</SectionLabel>
+                <p className="text-sm font-medium text-gray-900">{job.companyName}</p>
+              </div>
+              <div>
+                <SectionLabel>Contact Name</SectionLabel>
+                <Input
+                  defaultValue={job.contactName || ""}
+                  placeholder="Contact name..."
+                  onBlur={(e) => updateJobField("contactName", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Customer PO</SectionLabel>
+                <Input
+                  defaultValue={job.customerPO || ""}
+                  placeholder="PO #..."
+                  onBlur={(e) => updateJobField("customerPO", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Estimate #</SectionLabel>
+                <Input
+                  defaultValue={job.estimateNumber || ""}
+                  placeholder="Estimate #..."
+                  onBlur={(e) => updateJobField("estimateNumber", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Rep Name</SectionLabel>
+                <Input
+                  defaultValue={job.repName || ""}
+                  placeholder="Rep name..."
+                  onBlur={(e) => updateJobField("repName", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Quantity</SectionLabel>
+                <p className="text-sm font-medium text-gray-900">{formatNumber(job.quantity)}</p>
+              </div>
+            </div>
+
+            <div>
+              <SectionLabel>Job Title</SectionLabel>
+              <p className="text-sm font-medium text-gray-900">{job.name}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <SectionLabel># Pages</SectionLabel>
+                <Input
+                  type="number"
+                  defaultValue={job.numPages || ""}
+                  placeholder="0"
+                  onBlur={(e) => updateJobField("numPages", parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Job Type</SectionLabel>
+                <Select
+                  value={job.jobType || "NEW_ORDER"}
+                  onChange={(e) => updateJobField("jobType", e.target.value)}
+                  options={JOB_TYPE_OPTIONS}
+                />
+              </div>
+            </div>
+
+            {job.description && (
+              <div>
+                <SectionLabel>Job Description</SectionLabel>
+                <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{job.description}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Right: Dates & Assignment */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Calendar className="h-4 w-4" />Dates &amp; Assignment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <SectionLabel>CSR</SectionLabel>
+                <Input
+                  defaultValue={job.csrName}
+                  placeholder="Assign CSR..."
+                  onBlur={(e) => updateJobField("csrName", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Sales Rep</SectionLabel>
+                <Input
+                  defaultValue={job.salesRepName}
+                  placeholder="Assign Sales Rep..."
+                  onBlur={(e) => updateJobField("salesRepName", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Production Owner</SectionLabel>
+                <Input
+                  defaultValue={job.productionOwnerName}
+                  placeholder="Assign Production Owner..."
+                  onBlur={(e) => updateJobField("productionOwnerName", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Due Date</SectionLabel>
+                <p className="text-sm font-medium text-gray-900 py-2">{job.dueDate ? formatDate(job.dueDate) : "Not set"}</p>
+              </div>
+              <div>
+                <SectionLabel>Proof Date</SectionLabel>
+                <Input
+                  type="date"
+                  defaultValue={job.proofDate || ""}
+                  onBlur={(e) => updateJobField("proofDate", e.target.value)}
+                />
+              </div>
+              <div>
+                <SectionLabel>Entered Date</SectionLabel>
+                <p className="text-sm font-medium text-gray-900 py-2">{job.enteredDate ? formatDate(job.enteredDate) : "Not set"}</p>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4">
+              <Checkbox
+                label="Press Check Required"
+                checked={job.pressCheck || false}
+                onChange={(v) => updateJobField("pressCheck", v)}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Assigned Team — Editable */}
+      {/* ================================================================= */}
+      {/* 4. STOCK & SPECS                                                  */}
+      {/* ================================================================= */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Assigned Team</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Layers className="h-4 w-4" />Stock &amp; Specs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <SectionLabel>Stock Description</SectionLabel>
+              <Input
+                defaultValue={job.stockDescription || ""}
+                placeholder="e.g. 18pt C1S Paperboard"
+                onBlur={(e) => updateJobField("stockDescription", e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Checkbox
+                label="FSC Certified"
+                checked={job.fscCertified || false}
+                onChange={(v) => updateJobField("fscCertified", v)}
+              />
+            </div>
+
+            <div>
+              <SectionLabel>Blanket No.</SectionLabel>
+              <Input
+                defaultValue={job.blanketNo || ""}
+                placeholder="Blanket #..."
+                onBlur={(e) => updateJobField("blanketNo", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Die #</SectionLabel>
+              <Input
+                defaultValue={job.dieNumber || ""}
+                placeholder="Die #..."
+                onBlur={(e) => updateJobField("dieNumber", e.target.value)}
+              />
+            </div>
+            <div />
+
+            {/* Flat Size */}
+            <div>
+              <SectionLabel>Flat Size (W x H)</SectionLabel>
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="number"
+                  defaultValue={job.flatWidth || ""}
+                  placeholder="Width"
+                  className="flex-1"
+                  onBlur={(e) => updateJobField("flatWidth", parseFloat(e.target.value) || 0)}
+                />
+                <span className="text-gray-400 text-sm">x</span>
+                <Input
+                  type="number"
+                  defaultValue={job.flatHeight || ""}
+                  placeholder="Height"
+                  className="flex-1"
+                  onBlur={(e) => updateJobField("flatHeight", parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
+            {/* Finished Size */}
+            <div>
+              <SectionLabel>Finished Size (W x H)</SectionLabel>
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="number"
+                  defaultValue={job.finishedWidth || ""}
+                  placeholder="Width"
+                  className="flex-1"
+                  onBlur={(e) => updateJobField("finishedWidth", parseFloat(e.target.value) || 0)}
+                />
+                <span className="text-gray-400 text-sm">x</span>
+                <Input
+                  type="number"
+                  defaultValue={job.finishedHeight || ""}
+                  placeholder="Height"
+                  className="flex-1"
+                  onBlur={(e) => updateJobField("finishedHeight", parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+            <div />
+
+            <div>
+              <SectionLabel>Ink Front</SectionLabel>
+              <Input
+                defaultValue={job.inkFront || ""}
+                placeholder='e.g. 4/0 CMYK'
+                onBlur={(e) => updateJobField("inkFront", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Ink Back</SectionLabel>
+              <Input
+                defaultValue={job.inkBack || ""}
+                placeholder='e.g. 1/0 Black'
+                onBlur={(e) => updateJobField("inkBack", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Varnish / Coating</SectionLabel>
+              <Input
+                defaultValue={job.varnishCoating || ""}
+                placeholder="e.g. Aqueous Gloss"
+                onBlur={(e) => updateJobField("varnishCoating", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-6 mt-4 pt-4 border-t border-gray-100">
+            <Checkbox label="Soft Cover" checked={job.softCover || false} onChange={(v) => updateJobField("softCover", v)} />
+            <Checkbox label="Plus Cover" checked={job.plusCover || false} onChange={(v) => updateJobField("plusCover", v)} />
+            <Checkbox label="Has Bleeds" checked={job.hasBleeds || false} onChange={(v) => updateJobField("hasBleeds", v)} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 5. PRESS INFORMATION                                              */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Printer className="h-4 w-4" />Press Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <SectionLabel>Press Assignment</SectionLabel>
+              <Input
+                defaultValue={job.pressAssignment || ""}
+                placeholder="e.g. Heidelberg XL 106"
+                onBlur={(e) => updateJobField("pressAssignment", e.target.value)}
+              />
+            </div>
+            <div className="flex items-end pb-2">
+              <Checkbox label="LED Ink" checked={job.ledInk || false} onChange={(v) => updateJobField("ledInk", v)} />
+            </div>
+            <div>
+              <SectionLabel>Format / Info</SectionLabel>
+              <Input
+                defaultValue={job.pressFormat || ""}
+                placeholder="Format info..."
+                onBlur={(e) => updateJobField("pressFormat", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Imposition</SectionLabel>
+              <Input
+                defaultValue={job.imposition || ""}
+                placeholder="Imposition..."
+                onBlur={(e) => updateJobField("imposition", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel># Up</SectionLabel>
+              <Input
+                type="number"
+                defaultValue={job.numberUp || ""}
+                placeholder="0"
+                onBlur={(e) => updateJobField("numberUp", parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Running Size</SectionLabel>
+              <Input
+                defaultValue={job.runningSize || ""}
+                placeholder='e.g. 28" x 40"'
+                onBlur={(e) => updateJobField("runningSize", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
+            <div>
+              <SectionLabel>Make Ready Count</SectionLabel>
+              <Input
+                type="number"
+                defaultValue={job.makeReadyCount || ""}
+                placeholder="0"
+                onBlur={(e) => updateJobField("makeReadyCount", parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <SectionLabel>First Pass Count</SectionLabel>
+              <Input
+                type="number"
+                defaultValue={job.firstPassCount || ""}
+                placeholder="0"
+                onBlur={(e) => updateJobField("firstPassCount", parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Final Press Count</SectionLabel>
+              <Input
+                type="number"
+                defaultValue={job.finalPressCount || ""}
+                placeholder="0"
+                onBlur={(e) => updateJobField("finalPressCount", parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Pressman Initials</SectionLabel>
+              <Input
+                defaultValue={job.pressmanInitials || ""}
+                placeholder="Initials..."
+                className="uppercase"
+                onBlur={(e) => updateJobField("pressmanInitials", e.target.value.toUpperCase())}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <SectionLabel>Press Notes</SectionLabel>
+            <textarea
+              defaultValue={job.pressNotes || ""}
+              placeholder="Press notes, special instructions..."
+              rows={3}
+              className="flex w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-y"
+              onBlur={(e) => updateJobField("pressNotes", e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 6. BINDERY INSTRUCTIONS                                           */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Scissors className="h-4 w-4" />Bindery Instructions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-6 gap-y-3">
+            <Checkbox label="Score" checked={job.binderyScore || false} onChange={(v) => updateJobField("binderyScore", v)} />
+            <Checkbox label="Perf" checked={job.binderyPerf || false} onChange={(v) => updateJobField("binderyPerf", v)} />
+            <Checkbox label="Drill" checked={job.binderyDrill || false} onChange={(v) => updateJobField("binderyDrill", v)} />
+            <Checkbox label="Pad" checked={job.binderyPad || false} onChange={(v) => updateJobField("binderyPad", v)} />
+            <Checkbox label="Fold" checked={job.binderyFold || false} onChange={(v) => updateJobField("binderyFold", v)} />
+            <Checkbox label="Count" checked={job.binderyCount || false} onChange={(v) => updateJobField("binderyCount", v)} />
+            <Checkbox label="Stitch" checked={job.binderyStitch || false} onChange={(v) => updateJobField("binderyStitch", v)} />
+            <Checkbox label="Collate" checked={job.binderyCollate || false} onChange={(v) => updateJobField("binderyCollate", v)} />
+            <Checkbox label="Pockets" checked={job.binderyPockets || false} onChange={(v) => updateJobField("binderyPockets", v)} />
+            <Checkbox label="Glue" checked={job.binderyGlue || false} onChange={(v) => updateJobField("binderyGlue", v)} />
+            <Checkbox label="Wrap" checked={job.binderyWrap || false} onChange={(v) => updateJobField("binderyWrap", v)} />
+            <Checkbox label="Other" checked={job.binderyOther || false} onChange={(v) => updateJobField("binderyOther", v)} />
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <SectionLabel>Bindery Notes</SectionLabel>
+            <Input
+              defaultValue={job.binderyNotes || ""}
+              placeholder="Special bindery instructions..."
+              onBlur={(e) => updateJobField("binderyNotes", e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 7. OUTSIDE PURCHASES                                              */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Outside Purchases Required</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setAddingPurchase(true)} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" />Add Purchase
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {/* Add-purchase form */}
+          {addingPurchase && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <SectionLabel>Category</SectionLabel>
+                  <Select value={newPurchase.category} onChange={(e) => setNewPurchase((p) => ({ ...p, category: e.target.value }))} options={PURCHASE_CATEGORIES} />
+                </div>
+                <div>
+                  <SectionLabel>Description</SectionLabel>
+                  <Input value={newPurchase.description} onChange={(e) => setNewPurchase((p) => ({ ...p, description: e.target.value }))} placeholder="Description..." />
+                </div>
+                <div>
+                  <SectionLabel>Vendor</SectionLabel>
+                  <Input value={newPurchase.vendor} onChange={(e) => setNewPurchase((p) => ({ ...p, vendor: e.target.value }))} placeholder="Vendor..." />
+                </div>
+                <div>
+                  <SectionLabel>Est. Cost</SectionLabel>
+                  <Input type="number" value={newPurchase.estCost} onChange={(e) => setNewPurchase((p) => ({ ...p, estCost: e.target.value }))} placeholder="$0.00" />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setAddingPurchase(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleAddPurchase} className="gap-1.5"><Check className="h-3.5 w-3.5" />Save</Button>
+              </div>
+            </div>
+          )}
+
+          {purchases.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left">
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Description</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Vendor</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Est. Cost</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.map((p) => (
+                    <tr key={p.id} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2.5 pr-3">
+                        <Badge variant="secondary">{PURCHASE_CATEGORIES.find((c) => c.value === p.category)?.label || p.category}</Badge>
+                      </td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.description || "--"}</td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.vendor || "--"}</td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.estCost ? `$${Number(p.estCost).toFixed(2)}` : "--"}</td>
+                      <td className="py-2.5 pr-3">
+                        <Badge className={
+                          p.status === "RECEIVED" ? "bg-green-100 text-green-700" :
+                          p.status === "ORDERED" ? "bg-amber-100 text-amber-700" :
+                          "bg-red-100 text-red-700"
+                        }>
+                          {p.status === "RECEIVED" ? "Received" : p.status === "ORDERED" ? "Ordered" : "Needed"}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex gap-1">
+                          {p.status === "NEEDED" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => handleUpdatePurchaseStatus(p.id, "ORDERED")}>
+                              Mark Ordered
+                            </Button>
+                          )}
+                          {p.status === "ORDERED" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2 text-green-700" onClick={() => handleUpdatePurchaseStatus(p.id, "RECEIVED")}>
+                              Mark Received
+                            </Button>
+                          )}
+                          {p.status === "RECEIVED" && (
+                            <span className="text-xs text-gray-400 py-1">Complete</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-6">No outside purchases. Click &quot;Add Purchase&quot; to add one.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 8. DELIVERY & SAMPLES                                             */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Delivery &amp; Samples</CardTitle>
+        </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs text-gray-500 uppercase block mb-1">CSR / Account Manager</label>
-              <Input defaultValue={job.csrName} placeholder="Assign CSR..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csrName: e.target.value }) }).catch(() => {}); }} />
+              <SectionLabel>Delivery QTY</SectionLabel>
+              <Input
+                type="number"
+                defaultValue={job.deliveryQty || ""}
+                placeholder="0"
+                onBlur={(e) => updateJobField("deliveryQty", parseInt(e.target.value) || 0)}
+              />
             </div>
             <div>
-              <label className="text-xs text-gray-500 uppercase block mb-1">Sales Rep</label>
-              <Input defaultValue={job.salesRepName} placeholder="Assign Sales Rep..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ salesRepName: e.target.value }) }).catch(() => {}); }} />
+              <SectionLabel>Packaging</SectionLabel>
+              <Input
+                defaultValue={job.packaging || ""}
+                placeholder="e.g. Shrink wrap on skids"
+                onBlur={(e) => updateJobField("packaging", e.target.value)}
+              />
             </div>
             <div>
-              <label className="text-xs text-gray-500 uppercase block mb-1">Production Owner</label>
-              <Input defaultValue={job.productionOwnerName} placeholder="Assign Production Owner..." onBlur={(e) => { fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productionOwnerName: e.target.value }) }).catch(() => {}); }} />
+              <SectionLabel>Delivery To</SectionLabel>
+              <Input
+                defaultValue={job.deliveryTo || ""}
+                placeholder="Delivery address / instructions..."
+                onBlur={(e) => updateJobField("deliveryTo", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-6 mt-4 pt-4 border-t border-gray-100 items-end">
+            <Checkbox
+              label="Samples Required"
+              checked={job.samplesRequired || false}
+              onChange={(v) => updateJobField("samplesRequired", v)}
+            />
+            <div className="flex-1 min-w-[200px]">
+              <SectionLabel>Samples To</SectionLabel>
+              <Input
+                defaultValue={job.samplesTo || ""}
+                placeholder="Where to send samples..."
+                onBlur={(e) => updateJobField("samplesTo", e.target.value)}
+              />
+            </div>
+            <Checkbox
+              label="Samples Checked"
+              checked={job.samplesChecked || false}
+              onChange={(v) => updateJobField("samplesChecked", v)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 9. ADDITIONAL INFO                                                */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Info className="h-4 w-4" />Additional Info</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <SectionLabel>AA Charges</SectionLabel>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <Input
+                  type="number"
+                  defaultValue={job.aaCharges || ""}
+                  placeholder="0.00"
+                  className="pl-7"
+                  onBlur={(e) => updateJobField("aaCharges", parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+            <div>
+              <SectionLabel>Vendor Information</SectionLabel>
+              <textarea
+                defaultValue={job.vendorInfo || ""}
+                placeholder="Vendor notes, contact info..."
+                rows={3}
+                className="flex w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-y"
+                onBlur={(e) => updateJobField("vendorInfo", e.target.value)}
+              />
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* ================================================================= */}
+      {/* 10-13. PROOFING / QA / SHIPMENT / COMMENTS                       */}
+      {/* ================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Materials — Add + List */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />Materials</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => { const name = prompt("Material name:"); if (name) { fetch("/api/materials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, category: "substrate" }) }).then(() => setFeedback({ msg: `Material "${name}" added`, type: "success" })).catch(() => {}); setTimeout(() => setFeedback(null), 2000); } }}>+ Add</Button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">18pt C1S Paperboard</span><Badge variant="success">Available</Badge></div>
-              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">Aqueous Coating - Gloss</span><Badge variant="success">Available</Badge></div>
-              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded"><span className="text-sm">CMYK Process Inks</span><Badge variant="success">Available</Badge></div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Proofing — Upload + Status */}
+        {/* 10. Proofing */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proofing</CardTitle>
-            <Button variant="outline" size="sm" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }) }).catch(() => {}); setFeedback({ msg: "Proof uploaded", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Upload Proof</Button>
+            <Button variant="outline" size="sm" onClick={async () => {
+              await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }) }).catch(() => {});
+              flash("Proof uploaded");
+            }}>Upload Proof</Button>
           </CardHeader>
           <CardContent>
             {job.proofStatus ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Current Status</span>
-                  <Badge className={job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" : job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}>{job.proofStatus}</Badge>
+                  <Badge className={
+                    job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" :
+                    job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" :
+                    "bg-amber-100 text-amber-700"
+                  }>{job.proofStatus}</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-blue-600" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "approve" }) }).catch(() => {}); setJob({ ...job, proofStatus: "APPROVED" }); }}>Approve</Button>
-                  <Button size="sm" variant="outline" className="text-amber-600" onClick={async () => { await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "reject" }) }).catch(() => {}); setJob({ ...job, proofStatus: "REJECTED" }); }}>Reject</Button>
+                  <Button size="sm" variant="outline" className="text-blue-600" onClick={async () => {
+                    await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "approve" }) }).catch(() => {});
+                    setJob({ ...job, proofStatus: "APPROVED" });
+                  }}>Approve</Button>
+                  <Button size="sm" variant="outline" className="text-amber-600" onClick={async () => {
+                    await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "reject" }) }).catch(() => {});
+                    setJob({ ...job, proofStatus: "REJECTED" });
+                  }}>Reject</Button>
                 </div>
               </div>
             ) : (
@@ -355,20 +1276,33 @@ export default function JobDetailPage() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* QA — Actionable */}
+        {/* 11. QA */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA</CardTitle>
+          </CardHeader>
           <CardContent>
             {job.status === "QA" ? (
               <div className="space-y-3">
-                <p className="text-sm text-yellow-700 font-medium">Job is in QA inspection</p>
+                <p className="text-sm text-yellow-700 font-medium flex items-center gap-2">
+                  <CircleAlert className="h-4 w-4" />Job is in QA inspection
+                </p>
                 <div className="flex gap-2">
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "pass" }) }).catch(() => {}); setJob({ ...job, status: "PACKED" }); setFeedback({ msg: "Passed QA", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Pass</Button>
-                  <Button size="sm" variant="outline" className="text-amber-600 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "hold" }) }).catch(() => {}); setFeedback({ msg: "QA hold applied", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Hold</Button>
-                  <Button size="sm" variant="outline" className="text-red-600 flex-1" onClick={async () => { await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "fail" }) }).catch(() => {}); setJob({ ...job, status: "PRINTING" }); setFeedback({ msg: "Failed QA — back to production", type: "success" }); setTimeout(() => setFeedback(null), 2000); }}>Fail</Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 flex-1" onClick={async () => {
+                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "pass" }) }).catch(() => {});
+                    setJob({ ...job, status: "PACKED" });
+                    flash("Passed QA");
+                  }}>Pass</Button>
+                  <Button size="sm" variant="outline" className="text-amber-600 flex-1" onClick={async () => {
+                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "hold" }) }).catch(() => {});
+                    flash("QA hold applied");
+                  }}>Hold</Button>
+                  <Button size="sm" variant="outline" className="text-red-600 flex-1" onClick={async () => {
+                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "fail" }) }).catch(() => {});
+                    setJob({ ...job, status: "PRINTING" });
+                    flash("Failed QA -- back to production");
+                  }}>Fail</Button>
                 </div>
               </div>
             ) : (
@@ -376,10 +1310,14 @@ export default function JobDetailPage() {
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Shipment — Create */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 12. Shipment */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-4 w-4" />Shipment</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Send className="h-4 w-4" />Shipment</CardTitle>
+          </CardHeader>
           <CardContent>
             {(job.status === "PACKED" || job.status === "SHIPPED") ? (
               <div className="space-y-3">
@@ -388,8 +1326,7 @@ export default function JobDetailPage() {
                   const tracking = prompt("Tracking number:");
                   if (carrier && tracking) {
                     await fetch("/api/shipments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: job.orderId, carrier, trackingNumber: tracking }) }).catch(() => {});
-                    setFeedback({ msg: `Shipment created: ${carrier} ${tracking}`, type: "success" });
-                    setTimeout(() => setFeedback(null), 3000);
+                    flash(`Shipment created: ${carrier} ${tracking}`);
                   }
                 }}>Create Shipment</Button>
               </div>
@@ -399,12 +1336,20 @@ export default function JobDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Comments — Add */}
+        {/* 13. Comments */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Comments</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Comments</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Input placeholder="Add a comment..." onKeyDown={async (e) => { if (e.key === "Enter" && (e.target as HTMLInputElement).value) { const val = (e.target as HTMLInputElement).value; setFeedback({ msg: `Comment added: "${val}"`, type: "success" }); (e.target as HTMLInputElement).value = ""; setTimeout(() => setFeedback(null), 2000); } }} />
+              <Input placeholder="Add a comment..." onKeyDown={async (e) => {
+                if (e.key === "Enter" && (e.target as HTMLInputElement).value) {
+                  const val = (e.target as HTMLInputElement).value;
+                  flash(`Comment added: "${val}"`);
+                  (e.target as HTMLInputElement).value = "";
+                }
+              }} />
               <p className="text-xs text-gray-400">Press Enter to post</p>
             </div>
           </CardContent>

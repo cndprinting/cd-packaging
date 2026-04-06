@@ -82,13 +82,34 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ job: updated });
     }
 
-    // General update
+    // General update — supports all job ticket fields
     const updateData: Record<string, unknown> = {};
-    if (updates.name) updateData.name = updates.name;
-    if (updates.description !== undefined) updateData.description = updates.description;
+    const stringFields = [
+      "name", "description", "jobType", "lastJobNumber", "customerPO", "estimateNumber",
+      "repName", "contactName", "stockDescription", "blanketNumber", "dieNumber",
+      "inkFront", "inkBack", "varnish", "coating", "pressAssignment", "pressFormat",
+      "imposition", "runningSize", "pressmanInitials", "binderyOther", "binderyNotes",
+      "deliveryPackaging", "deliveryTo", "samplesTo", "vendorInfo", "pressNotes",
+      "plantLocation",
+    ];
+    const boolFields = [
+      "fscCertified", "pressCheck", "ledInk", "binderyScore", "binderyPerf",
+      "binderyDrill", "binderyPad", "binderyFold", "binderyCount", "binderyStitch",
+      "binderyCollate", "binderyPockets", "binderyGlue", "binderyWrap",
+      "samplesRequired", "samplesChecked", "softCover", "plusCover", "hasBleeds",
+    ];
+    const intFields = ["numPages", "numberUp", "makeReadyCount", "firstPassCount", "finalPressCount", "deliveryQty"];
+    const floatFields = ["flatSizeWidth", "flatSizeHeight", "finishedWidth", "finishedHeight", "aaCharges"];
+
+    for (const f of stringFields) { if (updates[f] !== undefined) updateData[f] = updates[f]; }
+    for (const f of boolFields) { if (updates[f] !== undefined) updateData[f] = Boolean(updates[f]); }
+    for (const f of intFields) { if (updates[f] !== undefined) updateData[f] = parseInt(updates[f]) || null; }
+    for (const f of floatFields) { if (updates[f] !== undefined) updateData[f] = parseFloat(updates[f]) || null; }
+
     if (updates.quantity) updateData.quantity = parseInt(updates.quantity);
     if (updates.dueDate) updateData.dueDate = new Date(updates.dueDate);
     if (updates.priority) updateData.priority = updates.priority;
+    if (updates.proofDate) updateData.proofDate = new Date(updates.proofDate);
 
     const updated = await prisma.job.update({
       where: { id },

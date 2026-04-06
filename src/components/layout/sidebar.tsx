@@ -8,12 +8,14 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
+  LayoutGrid,
 } from "lucide-react";
 
 const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
   { label: "Jobs", href: "/dashboard/jobs", icon: Package },
+  { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid },
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
