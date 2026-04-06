@@ -38,6 +38,4 @@ export async function GET(request: NextRequest) {
   } catch { /* fall through */ }
 
   return NextResponse.json({ results: [] });
-
-  return NextResponse.json({ results: [...jobResults, ...companyResults], source: "demo" });
 }
