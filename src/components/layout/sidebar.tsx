@@ -21,7 +21,7 @@ const internalNav = [
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
   { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck },
   { label: "Production", href: "/dashboard/production", icon: Factory },
-  { label: "QA", href: "/dashboard/qa", icon: ShieldCheck },
+  // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
   { label: "Customers", href: "/dashboard/customers", icon: Users },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
