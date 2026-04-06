@@ -26,7 +26,9 @@ const roleLabel: Record<string, string> = {
   CUSTOMER: "Customer",
 };
 
-const seedUsers = [
+interface UserRow { id?: string; name: string; email: string; role: string; company: string; isActive?: boolean; }
+
+const fallbackUsers: UserRow[] = [
   { name: "Sarah Johnson", email: "admin@cndpackaging.com", role: "ADMIN", company: "C&D Packaging" },
   { name: "Mike Torres", email: "mike@cndpackaging.com", role: "PRODUCTION_MANAGER", company: "C&D Packaging" },
   { name: "Rachel Kim", email: "rachel@cndpackaging.com", role: "CSR", company: "C&D Packaging" },
@@ -36,6 +38,15 @@ const seedUsers = [
 ];
 
 export default function AdminPage() {
+  const [users, setUsers] = React.useState<UserRow[]>(fallbackUsers);
+
+  React.useEffect(() => {
+    fetch("/api/users")
+      .then(r => r.json())
+      .then(d => { if (d.users?.length) setUsers(d.users); })
+      .catch(() => {});
+  }, []);
+
   const [showInviteModal, setShowInviteModal] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteRole, setInviteRole] = React.useState("CUSTOMER");
@@ -95,7 +106,7 @@ export default function AdminPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {seedUsers.map((u, i) => (
+            {users.map((u, i) => (
               <TableRow key={i}>
                 <TableCell className="font-medium">{u.name}</TableCell>
                 <TableCell className="text-gray-500">{u.email}</TableCell>
