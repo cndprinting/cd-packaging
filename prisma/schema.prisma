@@ -683,6 +683,176 @@ model Quote {
   @@index([quoteNumber])
 }
 
+// ─── PLANT STANDARDS ────────────────────────────────────
+
+model PlantStandard {
+  id                    String   @id @default(cuid())
+
+  // Pre-press rates ($/hr)
+  markupLayoutRate      Float    @default(55)
+  artworkRate           Float    @default(60)
+  typesettingRate       Float    @default(55)
+  proofingRate          Float    @default(38.50)
+  scanningRate          Float    @default(75)
+
+  // Plate making
+  plateMakingRate       Float    @default(22)
+  plateSetupMinutes     Float    @default(5)
+  plateExposureMinutes  Float    @default(3)
+
+  // Paper handling
+  paperCuttingRate      Float    @default(32)
+
+  // Ink costs ($/lb)
+  inkBlackPerLb         Float    @default(10.81)
+  inkColorPerLb         Float    @default(10.81)
+  inkPmsPerLb           Float    @default(19.50)
+  inkPmsBlackPerLb      Float    @default(39.50)
+  inkMetallicPerLb      Float    @default(19.50)
+  inkAqueousPerLb       Float    @default(18.00)
+  inkVarnishPerLb       Float    @default(5.50)
+
+  // Ink coverage (thousands of sq inches per lb)
+  coverageBlackUncoated Float    @default(275)
+  coverageBlackCoated   Float    @default(425)
+  coverageColorUncoated Float    @default(275)
+  coverageColorCoated   Float    @default(425)
+
+  // Ink usage on press (lbs)
+  inkBlackSetupLbs      Float    @default(0.50)
+  inkColorSetupLbs      Float    @default(0.50)
+
+  // Ink mixing
+  inkMixFirstLbMinutes  Float    @default(10)
+  inkMixAddlLbMinutes   Float    @default(3)
+  inkMixRate            Float    @default(16)
+
+  // Markup percentages
+  markupPaper           Float    @default(22)
+  markupMaterial        Float    @default(22)
+  markupLabor           Float    @default(63)
+  markupOutside         Float    @default(30)
+
+  // Bindery rates ($/hr)
+  trimmingRate          Float    @default(45)
+  trimmerSetupMinutes   Float    @default(13)
+  drillingRate          Float    @default(35)
+  drillingSetupMinutes  Float    @default(30)
+  handBinderyRate       Float    @default(22.50)
+  paddingRate           Float    @default(18)
+  wrappingRate          Float    @default(35)
+  handCollatingRate     Float    @default(22.50)
+
+  // Folders ($/hr)
+  folder1Name           String   @default("Baum-26x40")
+  folder1Rate           Float    @default(48)
+  folder1SetupMinutes   Float    @default(20)
+  folder2Name           String   @default("Small Baum")
+  folder2Rate           Float    @default(35)
+  folder2SetupMinutes   Float    @default(30)
+  folder3Name           String   @default("Stahl")
+  folder3Rate           Float    @default(48)
+  folder3SetupMinutes   Float    @default(20)
+
+  // Saddle stitching ($/hr)
+  saddleStitch1Name     String   @default("Mueller")
+  saddleStitch1Rate     Float    @default(95)
+  saddleStitch1Speed    Int      @default(8000)
+  saddleStitch1Pockets  Int      @default(7)
+  saddleStitch2Name     String   @default("Rosback")
+  saddleStitch2Rate     Float    @default(55)
+  saddleStitch2Speed    Int      @default(3500)
+  saddleStitch2Pockets  Int      @default(1)
+
+  // Score/Perf
+  scorePerfRate         Float    @default(37.50)
+  scorePerfPerHour      Int      @default(4500)
+  scorePerfSetupMinutes Float    @default(30)
+
+  // Delivery
+  deliveryRate          Float    @default(60)
+  deliveryAvgMinutes    Float    @default(30)
+
+  // Packing
+  packingRate           Float    @default(15)
+  skidCost              Float    @default(5.00)
+  carton1Name           String   @default("11.25x8.75x10")
+  carton1Cost           Float    @default(0.93)
+  carton1MaxLbs         Float    @default(25)
+  carton2Name           String   @default("11x9x10")
+  carton2Cost           Float    @default(0.75)
+  carton2MaxLbs         Float    @default(30)
+  carton3Name           String   @default("LTHD BOX")
+  carton3Cost           Float    @default(0.52)
+  carton3MaxLbs         Float    @default(5)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Press {
+  id                    String        @id @default(cuid())
+  pressNumber           Int           @unique
+  name                  String
+  pressType             String        @default("Sheet Fed Offset")
+  costPerHour           Float
+  helperCostPerHour     Float         @default(0)
+  blanketCost           Float         @default(0)
+  maxSheetWidth         Float
+  maxSheetHeight        Float
+  minSheetWidth         Float         @default(0)
+  minSheetHeight        Float         @default(0)
+  plateChangeMinutes    Float         @default(15)
+  inkChangeMinutes      Float         @default(10)
+  canPrintSolids        Boolean       @default(true)
+  minFormMinutes        Float         @default(10)
+  isActive              Boolean       @default(true)
+
+  configurations        PressConfig[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model PressConfig {
+  id                         String   @id @default(cuid())
+  pressId                    String
+  press                      Press    @relation(fields: [pressId], references: [id], onDelete: Cascade)
+  configNumber               Int
+  name                       String
+  setupMinutes               Float    @default(5)
+  speedUncoated              Int
+  speedCoated                Int
+  gripperEighths             Float    @default(3)
+  numColors                  Int
+  coatingType                String?
+  coatingCostPerLb           Float    @default(0)
+  perfectorColorsPerSide     Float    @default(0)
+  addToHourlyRate            Float    @default(0)
+  numHelpers                 Int      @default(0)
+
+  // Plate info
+  maxImpressions             Int      @default(0)
+  plateCost                  Float
+  plateDevelopMinutes        Float    @default(5)
+  strippingMaterialCost      Float    @default(2)
+
+  // Waste - setup sheets
+  setupWasteUncoated         Int      @default(200)
+  setupWasteCoated           Int      @default(200)
+  plateChangeWasteUncoated   Int      @default(100)
+  plateChangeWasteCoated     Int      @default(100)
+
+  // Waste curves as JSON: [{"min":1,"max":2500,"pctFirst":5.0,"pctAddl":0.0}, ...]
+  wasteCurveUncoated         String   @default("[]")
+  wasteCurveCoated           String   @default("[]")
+
+  isActive                   Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+
+  @@unique([pressId, configNumber])
+  @@index([pressId])
+}
+
 // ─── TIME TRACKING ───────────────────────────────────────
 
 model TimeEntry {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -37,6 +37,82 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 
 type ProductType = "FOLDING_CARTON" | "COMMERCIAL_PRINT";
 type PressType = "OFFSET" | "DIGITAL";
+
+interface WasteCurveEntry {
+  min: number;
+  max: number;
+  pctFirst: number;
+  pctAddl: number;
+}
+
+interface PressConfigData {
+  id: string;
+  configNumber: number;
+  name: string;
+  setupMinutes: number;
+  speedUncoated: number;
+  speedCoated: number;
+  numColors: number;
+  coatingType: string | null;
+  coatingCostPerLb: number;
+  addToHourlyRate: number;
+  plateCost: number;
+  setupWasteUncoated: number;
+  setupWasteCoated: number;
+  plateChangeWasteUncoated: number;
+  plateChangeWasteCoated: number;
+  wasteCurveUncoated: string;
+  wasteCurveCoated: string;
+  maxImpressions: number;
+  strippingMaterialCost: number;
+}
+
+interface PressData {
+  id: string;
+  pressNumber: number;
+  name: string;
+  costPerHour: number;
+  maxSheetWidth: number;
+  maxSheetHeight: number;
+  minSheetWidth: number;
+  minSheetHeight: number;
+  plateChangeMinutes: number;
+  inkChangeMinutes: number;
+  configurations: PressConfigData[];
+}
+
+interface PlantStandardsData {
+  markupLayoutRate: number;
+  artworkRate: number;
+  typesettingRate: number;
+  proofingRate: number;
+  scanningRate: number;
+  inkBlackPerLb: number;
+  inkColorPerLb: number;
+  inkPmsPerLb: number;
+  inkMetallicPerLb: number;
+  inkAqueousPerLb: number;
+  coverageBlackUncoated: number;
+  coverageBlackCoated: number;
+  coverageColorUncoated: number;
+  coverageColorCoated: number;
+  markupPaper: number;
+  markupMaterial: number;
+  markupLabor: number;
+  markupOutside: number;
+  trimmingRate: number;
+  drillingRate: number;
+  handBinderyRate: number;
+  folder1Rate: number;
+  folder2Rate: number;
+  folder3Rate: number;
+  saddleStitch1Rate: number;
+  saddleStitch2Rate: number;
+  deliveryRate: number;
+  deliveryAvgMinutes: number;
+  scorePerfRate: number;
+  [key: string]: number | string;
+}
 
 interface FormState {
   // Step 1
@@ -99,7 +175,14 @@ interface FormState {
   prepressTime: number;
   setupTime: number;
   shippingCost: number;
-  markupPercent: number;
+  markupPaper: number;
+  markupMaterial: number;
+  markupLabor: number;
+  markupOutside: number;
+  // Press selection (offset)
+  selectedPressId: string;
+  selectedConfigId: string;
+  stockType: "uncoated" | "coated";
   // Volume Forecasting
   monthlyVolume: string;
   contractMonths: string;
@@ -164,7 +247,13 @@ const defaultForm: FormState = {
   prepressTime: 0,
   setupTime: 0,
   shippingCost: 0,
-  markupPercent: 25,
+  markupPaper: 22,
+  markupMaterial: 22,
+  markupLabor: 63,
+  markupOutside: 30,
+  selectedPressId: "",
+  selectedConfigId: "",
+  stockType: "uncoated" as const,
   monthlyVolume: "",
   contractMonths: "12",
   volumeDiscount: "0",
@@ -249,6 +338,74 @@ export default function EstimatePage() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [plantStandards, setPlantStandards] = useState<PlantStandardsData | null>(null);
+  const [presses, setPresses] = useState<PressData[]>([]);
+  const [standardsLoaded, setStandardsLoaded] = useState(false);
+
+  // Load plant standards on mount
+  useEffect(() => {
+    fetch("/api/plant-standards")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.standards) {
+          setPlantStandards(data.standards);
+          // Override defaults with loaded standards
+          setForm((prev) => ({
+            ...prev,
+            prepressRate: data.standards.artworkRate || prev.prepressRate,
+            inkCostPerLb: data.standards.inkColorPerLb || prev.inkCostPerLb,
+            markupPaper: data.standards.markupPaper ?? prev.markupPaper,
+            markupMaterial: data.standards.markupMaterial ?? prev.markupMaterial,
+            markupLabor: data.standards.markupLabor ?? prev.markupLabor,
+            markupOutside: data.standards.markupOutside ?? prev.markupOutside,
+            binderyRate: data.standards.handBinderyRate || prev.binderyRate,
+          }));
+        }
+        if (data.presses) {
+          setPresses(data.presses);
+        }
+        setStandardsLoaded(true);
+      })
+      .catch(() => setStandardsLoaded(true));
+  }, []);
+
+  // Auto-fill from press/config selection
+  const selectedPress = useMemo(() => presses.find((p) => p.id === form.selectedPressId), [presses, form.selectedPressId]);
+  const selectedConfig = useMemo(
+    () => selectedPress?.configurations.find((c) => c.id === form.selectedConfigId),
+    [selectedPress, form.selectedConfigId]
+  );
+
+  // When press config changes, auto-fill related fields
+  useEffect(() => {
+    if (!selectedPress || !selectedConfig) return;
+    const effectiveRate = selectedPress.costPerHour + selectedConfig.addToHourlyRate;
+    const isCoated = form.stockType === "coated";
+    const setupWaste = isCoated ? selectedConfig.setupWasteCoated : selectedConfig.setupWasteUncoated;
+
+    setForm((prev) => ({
+      ...prev,
+      pressOperatorRate: effectiveRate,
+      plateCostEach: selectedConfig.plateCost,
+      makeReadySheets: setupWaste,
+      sheetWidth: selectedPress.maxSheetWidth,
+      sheetHeight: selectedPress.maxSheetHeight,
+      setupTime: selectedConfig.setupMinutes / 60,
+      inkColorsFront: Math.min(prev.inkColorsFront || 4, selectedConfig.numColors),
+    }));
+  }, [form.selectedPressId, form.selectedConfigId, form.stockType]);
+
+  // Auto-calculate press run time when quantity and press config are set
+  useEffect(() => {
+    if (!selectedConfig || !form.quantity) return;
+    const nUp = form.numberUp || 1;
+    const sheetsNeeded = Math.ceil((form.quantity * (form.versions || 1)) / nUp);
+    const speed = form.stockType === "coated" ? selectedConfig.speedCoated : selectedConfig.speedUncoated;
+    if (speed > 0) {
+      const runHours = sheetsNeeded / speed;
+      setForm((prev) => ({ ...prev, pressRunTime: Math.round(runHours * 100) / 100 }));
+    }
+  }, [form.quantity, form.versions, form.numberUp, form.stockType, selectedConfig]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((p) => ({ ...p, [key]: value }));
@@ -323,8 +480,32 @@ export default function EstimatePage() {
 
     const shippingCost = num("shippingCost");
 
+    // Auto-calculate waste from press config waste curve
+    let wasteSheets = 0;
+    if (selectedConfig && q > 0) {
+      const isCoated = form.stockType === "coated";
+      const curveStr = isCoated ? selectedConfig.wasteCurveCoated : selectedConfig.wasteCurveUncoated;
+      try {
+        const curve: WasteCurveEntry[] = JSON.parse(curveStr);
+        const entry = curve.find((w) => q >= w.min && q <= w.max);
+        if (entry) {
+          const totalColors = num("inkColorsFront") + num("inkColorsBack");
+          const runningWastePct = entry.pctFirst + Math.max(0, totalColors - 1) * entry.pctAddl;
+          wasteSheets = Math.ceil(q * (runningWastePct / 100));
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost;
-    const markupAmount = subtotal * (num("markupPercent") / 100);
+
+    // 4-category markup from plant standards
+    // Paper cost is approximated as materialsCost portion from paper
+    const paperMarkup = materialsCost * (num("markupPaper") / 100);
+    const materialMarkup = toolingCost * (num("markupMaterial") / 100);
+    const laborMarkup = laborCost * (num("markupLabor") / 100);
+    const outsideMarkup = shippingCost * (num("markupOutside") / 100);
+    const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
+
     const total = subtotal + markupAmount;
     const costPerUnit = q > 0 ? total / q : 0;
     const costPer1000 = q > 0 ? (total / q) * 1000 : 0;
@@ -338,11 +519,16 @@ export default function EstimatePage() {
       shippingCost,
       subtotal,
       markupAmount,
+      paperMarkup,
+      materialMarkup,
+      laborMarkup,
+      outsideMarkup,
+      wasteSheets,
       total,
       costPerUnit,
       costPer1000,
     };
-  }, [form]);
+  }, [form, selectedConfig]);
 
   // ─── Crossover Analysis ────────────────────────────────────────────────────
 
@@ -387,11 +573,21 @@ export default function EstimatePage() {
         customerName: form.customerName,
         productType: form.productType,
         productName: form.jobName,
-        description: `${form.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"} - ${form.pressType === "OFFSET" ? "Offset" : "Digital"} | ${form.finishedWidth}" x ${form.finishedHeight}"`,
+        description: `${form.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"} - ${form.pressType === "OFFSET" ? "Offset" : "Digital"}${selectedPress ? ` (${selectedPress.name})` : ""} | ${form.finishedWidth}" x ${form.finishedHeight}"`,
         quantity: String(form.quantity),
         unitPrice: String(calc.costPerUnit.toFixed(4)),
         estimateData: form,
         estimateTotals: calc,
+        specs: JSON.stringify({
+          dimensions: `${form.finishedWidth}x${form.finishedHeight}`,
+          sheetSize: `${form.sheetWidth}x${form.sheetHeight}`,
+          colors: `${form.inkColorsFront}F/${form.inkColorsBack}B`,
+          pressName: selectedPress?.name || "",
+          pressConfig: selectedConfig?.name || "",
+          stockType: form.stockType,
+          markups: { paper: form.markupPaper, material: form.markupMaterial, labor: form.markupLabor, outside: form.markupOutside },
+          costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount },
+        }),
       };
       const res = await fetch("/api/quotes", {
         method: "POST",
@@ -583,6 +779,74 @@ export default function EstimatePage() {
           )}
         </div>
       </Section>
+
+      {/* Press Selection (offset only) */}
+      {isOffset && presses.length > 0 && (
+        <Section title="Press Selection" icon={Printer} defaultOpen={true}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Press" hint="Select from C&D's presses">
+              <Select
+                value={form.selectedPressId}
+                onChange={(e) => {
+                  set("selectedPressId", e.target.value);
+                  set("selectedConfigId", "");
+                }}
+                options={[
+                  { value: "", label: "— Select Press —" },
+                  ...presses
+                    .filter((p) => p.configurations.length > 0)
+                    .map((p) => ({
+                      value: p.id,
+                      label: `${p.name} (${p.maxSheetWidth}x${p.maxSheetHeight}, $${p.costPerHour}/hr)`,
+                    })),
+                ]}
+              />
+            </Field>
+            {selectedPress && selectedPress.configurations.length > 0 && (
+              <Field label="Configuration" hint="Press color/coating setup">
+                <Select
+                  value={form.selectedConfigId}
+                  onChange={(e) => set("selectedConfigId", e.target.value)}
+                  options={[
+                    { value: "", label: "— Select Config —" },
+                    ...selectedPress.configurations.map((c) => ({
+                      value: c.id,
+                      label: `${c.name} (${c.numColors}C, $${(selectedPress.costPerHour + c.addToHourlyRate).toFixed(0)}/hr)`,
+                    })),
+                  ]}
+                />
+              </Field>
+            )}
+            <Field label="Stock Type" hint="Affects waste rates and ink coverage">
+              <Select
+                value={form.stockType}
+                onChange={(e) => set("stockType", e.target.value as "coated" | "uncoated")}
+                options={[
+                  { value: "uncoated", label: "Uncoated" },
+                  { value: "coated", label: "Coated" },
+                ]}
+              />
+            </Field>
+          </div>
+          {selectedConfig && (
+            <div className="mt-4 rounded-lg border border-brand-200 bg-brand-50/50 p-4">
+              <p className="text-sm font-medium text-brand-800 mb-2">Auto-filled from plant standards:</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div><span className="text-gray-500">Press Rate:</span> <span className="font-semibold">${(selectedPress!.costPerHour + selectedConfig.addToHourlyRate).toFixed(0)}/hr</span></div>
+                <div><span className="text-gray-500">Speed:</span> <span className="font-semibold">{(form.stockType === "coated" ? selectedConfig.speedCoated : selectedConfig.speedUncoated).toLocaleString()} sph</span></div>
+                <div><span className="text-gray-500">Plate Cost:</span> <span className="font-semibold">${selectedConfig.plateCost.toFixed(2)}</span></div>
+                <div><span className="text-gray-500">Setup Waste:</span> <span className="font-semibold">{form.stockType === "coated" ? selectedConfig.setupWasteCoated : selectedConfig.setupWasteUncoated} sheets</span></div>
+                <div><span className="text-gray-500">Max Sheet:</span> <span className="font-semibold">{selectedPress!.maxSheetWidth}&quot;x{selectedPress!.maxSheetHeight}&quot;</span></div>
+                <div><span className="text-gray-500">Colors:</span> <span className="font-semibold">{selectedConfig.numColors}C {selectedConfig.coatingType ? `+ ${selectedConfig.coatingType}` : ""}</span></div>
+                <div><span className="text-gray-500">Setup Time:</span> <span className="font-semibold">{selectedConfig.setupMinutes} min</span></div>
+                {selectedConfig.maxImpressions > 0 && (
+                  <div><span className="text-gray-500">Max Impressions:</span> <span className="font-semibold">{selectedConfig.maxImpressions.toLocaleString()}</span></div>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
     </div>
   );
 
@@ -833,9 +1097,23 @@ export default function EstimatePage() {
           <Field label="Shipping / Delivery ($)">
             <Input type="number" step="0.01" value={form.shippingCost || ""} onChange={(e) => set("shippingCost", Number(e.target.value))} />
           </Field>
-          <Field label="Markup / Profit Margin (%)">
-            <Input type="number" step="0.5" value={form.markupPercent || ""} onChange={(e) => set("markupPercent", Number(e.target.value))} min={0} max={200} />
-          </Field>
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-medium text-gray-700">Markup by Category (%)</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Paper" hint="Applied to paper/substrate">
+              <Input type="number" step="0.5" value={form.markupPaper || ""} onChange={(e) => set("markupPaper", Number(e.target.value))} min={0} max={200} />
+            </Field>
+            <Field label="Material" hint="Ink, plates, tooling">
+              <Input type="number" step="0.5" value={form.markupMaterial || ""} onChange={(e) => set("markupMaterial", Number(e.target.value))} min={0} max={200} />
+            </Field>
+            <Field label="Labor" hint="Press, prepress, setup">
+              <Input type="number" step="0.5" value={form.markupLabor || ""} onChange={(e) => set("markupLabor", Number(e.target.value))} min={0} max={200} />
+            </Field>
+            <Field label="Outside" hint="Shipping, services">
+              <Input type="number" step="0.5" value={form.markupOutside || ""} onChange={(e) => set("markupOutside", Number(e.target.value))} min={0} max={200} />
+            </Field>
+          </div>
         </div>
       </Section>
     </div>
@@ -860,6 +1138,11 @@ export default function EstimatePage() {
               </Badge>
               <p className="mt-2 text-sm text-gray-500">
                 {formatNumber(form.quantity)} units &times; {form.versions} version{form.versions !== 1 ? "s" : ""}
+                {selectedPress && selectedConfig && (
+                  <span className="block mt-1 text-xs text-brand-600">
+                    Press: {selectedPress.name} / {selectedConfig.name}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -888,11 +1171,27 @@ export default function EstimatePage() {
               <span className="font-medium text-gray-700">Subtotal</span>
               <span className="font-semibold text-gray-900">{fmtMoney(calc.subtotal)}</span>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-700">
-                Markup ({form.markupPercent}%)
-              </span>
-              <span className="font-semibold text-brand-600">+ {fmtMoney(calc.markupAmount)}</span>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 ml-11">Paper ({form.markupPaper}%)</span>
+                <span className="font-medium text-brand-600">+ {fmtMoney(calc.paperMarkup)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 ml-11">Material ({form.markupMaterial}%)</span>
+                <span className="font-medium text-brand-600">+ {fmtMoney(calc.materialMarkup)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 ml-11">Labor ({form.markupLabor}%)</span>
+                <span className="font-medium text-brand-600">+ {fmtMoney(calc.laborMarkup)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 ml-11">Outside ({form.markupOutside}%)</span>
+                <span className="font-medium text-brand-600">+ {fmtMoney(calc.outsideMarkup)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">Total Markup</span>
+                <span className="font-semibold text-brand-600">+ {fmtMoney(calc.markupAmount)}</span>
+              </div>
             </div>
 
             <div className="my-3 border-t-2 border-gray-900" />
@@ -1119,7 +1418,7 @@ export default function EstimatePage() {
                     <span className="font-semibold">{fmtMoney(calc.subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Markup ({form.markupPercent}%)</span>
+                    <span className="text-gray-500">Markup</span>
                     <span className="font-medium text-brand-600">+{fmtMoney(calc.markupAmount)}</span>
                   </div>
                   <div className="my-2 border-t-2 border-gray-900" />
