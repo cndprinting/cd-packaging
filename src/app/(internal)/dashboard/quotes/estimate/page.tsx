@@ -1160,11 +1160,11 @@ export default function EstimatePage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Volume</label>
-                  <Input type="number" placeholder="e.g. 25,000" value={form.monthlyVolume || ""} onChange={(e) => updateForm("monthlyVolume", e.target.value)} />
+                  <Input type="number" placeholder="e.g. 25,000" value={form.monthlyVolume || ""} onChange={(e) => set("monthlyVolume", e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Contract Length</label>
-                  <Select value={form.contractMonths || "12"} onChange={(e) => updateForm("contractMonths", e.target.value)} options={[
+                  <Select value={form.contractMonths || "12"} onChange={(e) => set("contractMonths", e.target.value)} options={[
                     { value: "6", label: "6 Months" },
                     { value: "12", label: "12 Months (Annual)" },
                     { value: "24", label: "24 Months" },
@@ -1172,11 +1172,11 @@ export default function EstimatePage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Volume Discount %</label>
-                  <Input type="number" placeholder="e.g. 8" value={form.volumeDiscount || ""} onChange={(e) => updateForm("volumeDiscount", e.target.value)} />
+                  <Input type="number" placeholder="e.g. 8" value={form.volumeDiscount || ""} onChange={(e) => set("volumeDiscount", e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Price Lock Period</label>
-                  <Select value={form.priceLock || "12"} onChange={(e) => updateForm("priceLock", e.target.value)} options={[
+                  <Select value={form.priceLock || "12"} onChange={(e) => set("priceLock", e.target.value)} options={[
                     { value: "3", label: "3 Months" },
                     { value: "6", label: "6 Months" },
                     { value: "12", label: "12 Months" },
@@ -1187,7 +1187,7 @@ export default function EstimatePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Print & Store Option</label>
-                  <Select value={form.printAndStore || "monthly"} onChange={(e) => updateForm("printAndStore", e.target.value)} options={[
+                  <Select value={form.printAndStore || "monthly"} onChange={(e) => set("printAndStore", e.target.value)} options={[
                     { value: "monthly", label: "Print Monthly (standard)" },
                     { value: "quarterly", label: "Print Quarterly (lower per-unit)" },
                     { value: "annual", label: "Print Full Annual Run (lowest per-unit)" },
@@ -1195,7 +1195,7 @@ export default function EstimatePage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Warehousing Cost ($/month)</label>
-                  <Input type="number" placeholder="e.g. 150" value={form.warehousingCost || ""} onChange={(e) => updateForm("warehousingCost", e.target.value)} />
+                  <Input type="number" placeholder="e.g. 150" value={form.warehousingCost || ""} onChange={(e) => set("warehousingCost", e.target.value)} />
                 </div>
               </div>
 
