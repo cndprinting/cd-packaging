@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
-  Settings, ChevronDown, ChevronRight, Box,
+  Settings, ChevronDown, ChevronRight, Box, Shield,
 } from "lucide-react";
 
 const internalNav = [
@@ -23,6 +23,7 @@ const internalNav = [
   { label: "Customers", href: "/dashboard/customers", icon: Users },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  { label: "Admin", href: "/dashboard/admin", icon: Shield },
 ];
 
 const customerNav = [
