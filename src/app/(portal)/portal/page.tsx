@@ -14,17 +14,25 @@ import {
   Package, Factory, Truck, CheckCircle, AlertTriangle, ArrowRight, Clock,
 } from "lucide-react";
 
+interface Job { id: string; jobNumber: string; name: string; companyId: string; companyName: string; status: string; priority: string; quantity: number; dueDate: string; orderId: string; orderNumber: string; isLate: boolean; isBlocked: boolean; }
+
 export default function PortalDashboard() {
   const [companyId, setCompanyId] = useState<string>("co-1");
+  const [allJobs, setAllJobs] = useState<Job[]>(demoJobs as unknown as Job[]);
 
   useEffect(() => {
     fetch("/api/auth/session")
       .then(r => r.json())
       .then(d => { if (d.user?.companyId) setCompanyId(d.user.companyId); })
       .catch(() => {});
+
+    fetch("/api/jobs")
+      .then(r => r.json())
+      .then(d => { if (d.jobs?.length) setAllJobs(d.jobs); })
+      .catch(() => {});
   }, []);
 
-  const myJobs = demoJobs.filter((j) => j.companyId === companyId);
+  const myJobs = allJobs.filter((j) => j.companyId === companyId);
 
   const activeOrders = myJobs.filter(
     (j) => !["DELIVERED", "INVOICED"].includes(j.status)

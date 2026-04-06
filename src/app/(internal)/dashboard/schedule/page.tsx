@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Calendar, Clock, Gauge } from "lucide-react";
+import { Calendar, Clock, Gauge, Loader2 } from "lucide-react";
 import { demoJobs, demoWorkCenters } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,29 +46,66 @@ function getWorkCenterStageMap(): Record<string, string> {
 }
 
 export default function SchedulePage() {
+  const [jobs, setJobs] = useState<any[]>(demoJobs);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadJobs() {
+      try {
+        const res = await fetch("/api/jobs");
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const apiJobs = data.jobs || [];
+          if (apiJobs.length > 0) {
+            setJobs(apiJobs);
+          } else {
+            setJobs(demoJobs);
+          }
+        }
+      } catch {
+        // Keep demo data on error
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadJobs();
+    return () => { cancelled = true; };
+  }, []);
+
   const weekDays = useMemo(() => getWeekDays(), []);
   const stageMap = getWorkCenterStageMap();
 
   const jobsByDay = useMemo(() => {
-    const map: Record<string, typeof demoJobs> = {};
+    const map: Record<string, typeof jobs> = {};
     for (const day of weekDays) {
-      map[day.iso] = demoJobs.filter((j) => {
-        const dueIso = j.dueDate;
+      map[day.iso] = jobs.filter((j) => {
+        const dueIso = typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : j.dueDate;
         return dueIso === day.iso;
       });
     }
     return map;
-  }, [weekDays]);
+  }, [weekDays, jobs]);
 
   const workCenterData = useMemo(() => {
     return demoWorkCenters.map((wc) => {
       const stage = stageMap[wc.type];
       const assignedJobs = stage
-        ? demoJobs.filter((j) => j.status === stage)
+        ? jobs.filter((j) => j.status === stage)
         : [];
       return { ...wc, assignedJobs, stage };
     });
-  }, []);
+  }, [jobs]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -113,7 +150,7 @@ export default function SchedulePage() {
             <CardContent className="p-3 pt-0">
               {jobsByDay[day.iso]?.length > 0 ? (
                 <div className="space-y-1.5">
-                  {jobsByDay[day.iso].map((job) => (
+                  {jobsByDay[day.iso].map((job: any) => (
                     <Link
                       key={job.id}
                       href={`/dashboard/jobs/${job.id}`}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Gauge, Wrench } from "lucide-react";
+import { Gauge, Wrench, Loader2, ArrowRight } from "lucide-react";
 import { demoJobs, demoWorkCenters } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,18 +41,82 @@ const WORK_CENTER_STAGE_MAP: Record<string, string> = {
 };
 
 export default function ProductionPage() {
+  const [allJobs, setAllJobs] = useState<any[]>(demoJobs);
+  const [loading, setLoading] = useState(true);
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadJobs() {
+      try {
+        const res = await fetch("/api/jobs");
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const apiJobs = data.jobs || [];
+          if (apiJobs.length > 0) {
+            setAllJobs(apiJobs);
+          } else {
+            setAllJobs(demoJobs);
+          }
+        }
+      } catch {
+        // Keep demo data on error
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadJobs();
+    return () => { cancelled = true; };
+  }, []);
+
   const productionJobs = useMemo(
-    () => demoJobs.filter((j) => PRODUCTION_STAGES.includes(j.status)),
-    []
+    () => allJobs.filter((j) => PRODUCTION_STAGES.includes(j.status)),
+    [allJobs]
   );
 
   const workCenterData = useMemo(() => {
     return demoWorkCenters.map((wc) => {
       const stage = WORK_CENTER_STAGE_MAP[wc.type];
-      const jobs = stage ? demoJobs.filter((j) => j.status === stage).length : 0;
+      const jobs = stage ? allJobs.filter((j) => j.status === stage).length : 0;
       return { ...wc, jobs, stage };
     });
-  }, []);
+  }, [allJobs]);
+
+  async function handleAdvanceStage(jobId: string) {
+    setAdvancingId(jobId);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "advance" }),
+      });
+      if (res.ok) {
+        // Refresh jobs list
+        const jobsRes = await fetch("/api/jobs");
+        if (jobsRes.ok) {
+          const data = await jobsRes.json();
+          const apiJobs = data.jobs || [];
+          if (apiJobs.length > 0) {
+            setAllJobs(apiJobs);
+          }
+        }
+      }
+    } catch {
+      // Silently fail - job stays in current stage
+    } finally {
+      setAdvancingId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -171,11 +235,28 @@ export default function ProductionPage() {
                   <TableCell>{formatNumber(job.quantity)}</TableCell>
                   <TableCell>{formatDate(job.dueDate)}</TableCell>
                   <TableCell>
-                    <Link href={`/dashboard/jobs/${job.id}`}>
-                      <Button variant="ghost" size="sm">
-                        View
+                    <div className="flex items-center gap-1">
+                      <Link href={`/dashboard/jobs/${job.id}`}>
+                        <Button variant="ghost" size="sm">
+                          View
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={advancingId === job.id}
+                        onClick={() => handleAdvanceStage(job.id)}
+                      >
+                        {advancingId === job.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                            Advance
+                          </>
+                        )}
                       </Button>
-                    </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

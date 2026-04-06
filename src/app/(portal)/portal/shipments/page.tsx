@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { demoJobs } from "@/lib/demo-data";
 import { cn, formatDate } from "@/lib/utils";
@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Truck, Package, MapPin, Clock, CheckCircle, Circle, Eye,
+  Truck, Package, MapPin, Clock, CheckCircle, Circle, Eye, Loader2,
 } from "lucide-react";
 
 const CUSTOMER_COMPANY_ID = "co-1";
@@ -28,7 +28,7 @@ interface Shipment {
   quantity: number;
 }
 
-function generateShipments(): Shipment[] {
+function generateDemoShipments(): Shipment[] {
   const myJobs = demoJobs.filter(
     (j) => j.companyId === CUSTOMER_COMPANY_ID && ["SHIPPED", "DELIVERED", "INVOICED", "PACKED"].includes(j.status)
   );
@@ -71,15 +71,79 @@ function getTimelineIndex(status: string): number {
     in_transit: 1,
     out_for_delivery: 2,
     delivered: 3,
+    // Map DB statuses
+    PREPARING: 0,
+    PICKED_UP: 0,
+    IN_TRANSIT: 1,
+    OUT_FOR_DELIVERY: 2,
+    DELIVERED: 3,
   };
   return map[status] ?? 0;
 }
 
+function normalizeApiShipment(s: any): Shipment {
+  return {
+    id: s.id,
+    jobId: s.orderId || s.jobId || "",
+    jobName: s.order?.company?.name || s.jobName || "Shipment",
+    jobNumber: s.shipmentNumber || s.jobNumber || "",
+    carrier: s.carrier || "Unknown Carrier",
+    trackingNumber: s.trackingNumber || "",
+    status: s.status === "DELIVERED" ? "delivered" : s.status === "OUT_FOR_DELIVERY" ? "out_for_delivery" : "in_transit",
+    shipDate: s.shippedAt || s.shipDate || s.createdAt || "",
+    estimatedDelivery: s.estimatedDelivery || s.estimatedArrival || "",
+    deliveredDate: s.deliveredAt || s.deliveredDate || undefined,
+    lastLocation: s.lastLocation || (s.status === "DELIVERED" ? "Delivered - Your Facility" : "In Transit"),
+    quantity: s.items?.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0) || s.quantity || 0,
+  };
+}
+
 export default function PortalShipmentsPage() {
-  const shipments = generateShipments();
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadShipments() {
+      try {
+        const res = await fetch("/api/shipments");
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const apiShipments = data.shipments || [];
+
+          if (apiShipments.length > 0) {
+            setShipments(apiShipments.map(normalizeApiShipment));
+          } else {
+            // No shipments from API, fall back to demo
+            setShipments(generateDemoShipments());
+          }
+        } else if (!cancelled) {
+          setShipments(generateDemoShipments());
+        }
+      } catch {
+        if (!cancelled) {
+          setShipments(generateDemoShipments());
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadShipments();
+    return () => { cancelled = true; };
+  }, []);
 
   const inTransit = shipments.filter((s) => s.status !== "delivered");
   const delivered = shipments.filter((s) => s.status === "delivered");
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

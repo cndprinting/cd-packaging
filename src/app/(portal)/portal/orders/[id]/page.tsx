@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { demoJobs } from "@/lib/demo-data";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Check, Circle, Clock, Package, Truck, FileCheck,
-  MapPin, CalendarDays, Hash,
+  MapPin, CalendarDays, Hash, Loader2,
 } from "lucide-react";
 
 /** Simplified stages the customer sees. */
@@ -54,9 +54,88 @@ function getCustomerStageIndex(status: string): number {
 export default function PortalOrderDetailPage() {
   const params = useParams();
   const jobId = params.id as string;
-  const job = demoJobs.find((j) => j.id === jobId);
 
-  if (!job) {
+  const [job, setJob] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchJob() {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          if (data.job) {
+            // Normalize DB job shape to match demo shape
+            const j = data.job;
+            const normalized = data.source === "database"
+              ? {
+                  id: j.id,
+                  jobNumber: j.jobNumber,
+                  orderNumber: j.order?.orderNumber || j.orderNumber || "",
+                  name: j.name,
+                  description: j.description || "",
+                  companyId: j.order?.companyId || j.companyId || "",
+                  companyName: j.order?.company?.name || j.companyName || "",
+                  status: j.status,
+                  priority: j.priority || "NORMAL",
+                  quantity: j.quantity || 0,
+                  dueDate: j.dueDate ? (typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : j.dueDate) : "",
+                  csrName: j.csrName || "",
+                  salesRepName: j.salesRepName || "",
+                  proofStatus: j.proofs?.[0]?.status || j.proofStatus || null,
+                  isLate: j.isLate ?? false,
+                  isBlocked: j.isBlocked ?? false,
+                }
+              : j;
+            setJob(normalized);
+          } else {
+            // API returned no job, try demo fallback
+            const demoJob = demoJobs.find((d) => d.id === jobId);
+            if (demoJob) {
+              setJob(demoJob);
+            } else {
+              setNotFound(true);
+            }
+          }
+        } else if (!cancelled) {
+          // API error - fall back to demo
+          const demoJob = demoJobs.find((d) => d.id === jobId);
+          if (demoJob) {
+            setJob(demoJob);
+          } else {
+            setNotFound(true);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          const demoJob = demoJobs.find((d) => d.id === jobId);
+          if (demoJob) {
+            setJob(demoJob);
+          } else {
+            setNotFound(true);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchJob();
+    return () => { cancelled = true; };
+  }, [jobId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (notFound || !job) {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-4">
         <Package className="h-12 w-12 text-gray-300" />
