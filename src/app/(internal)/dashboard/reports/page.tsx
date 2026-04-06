@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2, FileBarChart, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -38,6 +39,22 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div><h1 className="text-2xl font-bold text-gray-900">Reports</h1><p className="text-sm text-gray-500 mt-1">Generate and export production reports</p></div>
+
+      {/* Weekly Executive Report - Featured */}
+      <Link href="/dashboard/reports/weekly">
+        <Card className="bg-gradient-to-r from-brand-600 to-brand-700 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><FileBarChart className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Weekly Executive Report</h2>
+                <p className="text-sm text-white/80">KPIs, volumes, sales, costs, and trends — printable PDF with Excel backup</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTS.map((report) => {
