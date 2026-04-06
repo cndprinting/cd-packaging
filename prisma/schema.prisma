@@ -1,0 +1,512 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PRODUCTION_MANAGER
+  CSR
+  SALES_REP
+  CUSTOMER
+}
+
+enum JobStatus {
+  QUOTE
+  ARTWORK_RECEIVED
+  STRUCTURAL_DESIGN
+  PROOFING
+  CUSTOMER_APPROVAL
+  PREPRESS
+  PLATING
+  MATERIALS_ORDERED
+  MATERIALS_RECEIVED
+  SCHEDULED
+  PRINTING
+  COATING_FINISHING
+  DIE_CUTTING
+  GLUING_FOLDING
+  QA
+  PACKED
+  SHIPPED
+  DELIVERED
+  INVOICED
+}
+
+enum StageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETE
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ProofStatus {
+  PENDING
+  SENT
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum ShipmentStatus {
+  PREPARING
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  EXCEPTION
+}
+
+enum AlertType {
+  PROOF_OVERDUE
+  MATERIAL_SHORTAGE
+  JOB_PAST_DUE
+  STAGE_BLOCKED
+  QA_HOLD
+  SHIPMENT_DELAYED
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// ─── USERS & AUTH ────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           Role     @default(CUSTOMER)
+  avatarUrl      String?
+  companyId      String?
+  company        Company? @relation(fields: [companyId], references: [id])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  assignedJobsCsr    Job[]    @relation("JobCsr")
+  assignedJobsSales  Job[]    @relation("JobSales")
+  assignedJobsProd   Job[]    @relation("JobProduction")
+  stageUpdates       JobStageUpdate[]
+  proofApprovals     ProofApproval[]
+  comments           Comment[]
+  activityLogs       ActivityLog[]
+  alerts             Alert[]
+
+  @@index([email])
+  @@index([companyId])
+}
+
+model InviteToken {
+  id         String    @id @default(cuid())
+  email      String
+  token      String    @unique
+  role       Role      @default(CUSTOMER)
+  companyId  String?
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+
+  @@index([token])
+}
+
+// ─── COMPANIES & CUSTOMERS ───────────────────────────────
+
+model Company {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  type        String    @default("customer") // "internal" or "customer"
+  website     String?
+  address     String?
+  city        String?
+  state       String?
+  zip         String?
+  phone       String?
+  industry    String?
+  isActive    Boolean   @default(true)
+  users       User[]
+  contacts    Contact[]
+  orders      Order[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  email       String?
+  phone       String?
+  title       String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+}
+
+// ─── ORDERS & JOBS ───────────────────────────────────────
+
+model Order {
+  id              String    @id @default(cuid())
+  orderNumber     String    @unique
+  poNumber        String?
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  status          JobStatus @default(QUOTE)
+  priority        Priority  @default(NORMAL)
+  requestedShipDate DateTime?
+  dueDate         DateTime?
+  notes           String?
+  totalAmount     Float?
+  items           OrderItem[]
+  jobs            Job[]
+  shipments       Shipment[]
+  documents       Document[]
+  comments        Comment[]
+  activityLogs    ActivityLog[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([orderNumber])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sku         String?
+  description String
+  quantity    Int
+  unitPrice   Float?
+  job         Job?
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Job {
+  id               String    @id @default(cuid())
+  jobNumber        String    @unique
+  orderId          String
+  order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId      String?   @unique
+  orderItem        OrderItem? @relation(fields: [orderItemId], references: [id])
+  name             String
+  description      String?
+  status           JobStatus @default(QUOTE)
+  priority         Priority  @default(NORMAL)
+  quantity         Int
+  dueDate          DateTime?
+  requestedShipDate DateTime?
+  plantLocation    String?
+  csrId            String?
+  csr              User?     @relation("JobCsr", fields: [csrId], references: [id])
+  salesRepId       String?
+  salesRep         User?     @relation("JobSales", fields: [salesRepId], references: [id])
+  productionOwnerId String?
+  productionOwner  User?     @relation("JobProduction", fields: [productionOwnerId], references: [id])
+  stages           JobStage[]
+  proofs           Proof[]
+  materialReqs     MaterialRequirement[]
+  schedules        ProductionSchedule[]
+  alerts           Alert[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([jobNumber])
+}
+
+model JobStage {
+  id           String      @id @default(cuid())
+  jobId        String
+  job          Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stage        JobStatus
+  status       StageStatus @default(NOT_STARTED)
+  ownerId      String?
+  targetDate   DateTime?
+  actualDate   DateTime?
+  notes        String?
+  blockerReason String?
+  sortOrder    Int         @default(0)
+  updates      JobStageUpdate[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([jobId, stage])
+  @@index([jobId])
+}
+
+model JobStageUpdate {
+  id          String   @id @default(cuid())
+  stageId     String
+  stage       JobStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  fromStatus  StageStatus
+  toStatus    StageStatus
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── PROOFING ────────────────────────────────────────────
+
+model Proof {
+  id            String      @id @default(cuid())
+  jobId         String
+  job           Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  version       Int         @default(1)
+  fileUrl       String?
+  fileName      String?
+  status        ProofStatus @default(PENDING)
+  sentDate      DateTime?
+  notes         String?
+  approvals     ProofApproval[]
+  createdAt     DateTime    @default(now())
+
+  @@index([jobId])
+}
+
+model ProofApproval {
+  id          String      @id @default(cuid())
+  proofId     String
+  proof       Proof       @relation(fields: [proofId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      ProofStatus
+  comments    String?
+  createdAt   DateTime    @default(now())
+}
+
+// ─── MATERIALS & INVENTORY ───────────────────────────────
+
+model Material {
+  id           String    @id @default(cuid())
+  name         String
+  sku          String?   @unique
+  category     String?   // substrate, ink, coating, adhesive, etc.
+  description  String?
+  unit         String    @default("sheets") // sheets, lbs, gallons, etc.
+  reorderPoint Int       @default(0)
+  vendor       String?
+  lots         InventoryLot[]
+  requirements MaterialRequirement[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model InventoryLot {
+  id           String   @id @default(cuid())
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  lotNumber    String?
+  quantityOnHand Int    @default(0)
+  quantityAllocated Int @default(0)
+  quantityOrdered Int   @default(0)
+  expectedArrival DateTime?
+  vendor       String?
+  cost         Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([materialId])
+}
+
+model MaterialRequirement {
+  id           String   @id @default(cuid())
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantityNeeded Int
+  quantityAllocated Int @default(0)
+  isShort      Boolean  @default(false)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([jobId])
+  @@index([materialId])
+}
+
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  poNumber     String   @unique
+  vendor       String
+  status       String   @default("ordered") // ordered, partial, received, cancelled
+  orderDate    DateTime @default(now())
+  expectedDate DateTime?
+  receivedDate DateTime?
+  totalAmount  Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+}
+
+// ─── PRODUCTION ──────────────────────────────────────────
+
+model WorkCenter {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  type        String   // prepress, press, die-cutting, gluing, qa, shipping
+  capacity    Int?     // jobs per day
+  isActive    Boolean  @default(true)
+  machines    Machine[]
+  schedules   ProductionSchedule[]
+  createdAt   DateTime @default(now())
+}
+
+model Machine {
+  id           String     @id @default(cuid())
+  workCenterId String
+  workCenter   WorkCenter @relation(fields: [workCenterId], references: [id], onDelete: Cascade)
+  name         String
+  code         String     @unique
+  type         String?
+  isActive     Boolean    @default(true)
+  schedules    ProductionSchedule[]
+  createdAt    DateTime   @default(now())
+
+  @@index([workCenterId])
+}
+
+model ProductionSchedule {
+  id            String      @id @default(cuid())
+  jobId         String
+  job           Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workCenterId  String
+  workCenter    WorkCenter  @relation(fields: [workCenterId], references: [id])
+  machineId     String?
+  machine       Machine?    @relation(fields: [machineId], references: [id])
+  scheduledDate DateTime    @db.Date
+  estimatedHours Float?
+  actualHours   Float?
+  status        String      @default("scheduled") // scheduled, running, complete, delayed
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([jobId])
+  @@index([workCenterId])
+  @@index([scheduledDate])
+}
+
+// ─── SHIPPING ────────────────────────────────────────────
+
+model Shipment {
+  id            String         @id @default(cuid())
+  orderId       String
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shipmentNumber String        @unique
+  carrier       String?
+  trackingNumber String?
+  status        ShipmentStatus @default(PREPARING)
+  shipDate      DateTime?
+  estimatedDelivery DateTime?
+  actualDelivery DateTime?
+  destination   String?
+  cartons       Int?
+  pallets       Int?
+  weight        Float?
+  isPartial     Boolean        @default(false)
+  items         ShipmentItem[]
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([orderId])
+}
+
+model ShipmentItem {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int
+  createdAt   DateTime @default(now())
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────
+
+model Document {
+  id        String   @id @default(cuid())
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name      String
+  type      String   // artwork, dieline, proof, po, shipping, qa, invoice, photo
+  url       String
+  fileSize  Int?
+  uploadedBy String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// ─── COMMENTS & ACTIVITY ─────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  isInternal Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// ─── ALERTS ──────────────────────────────────────────────
+
+model Alert {
+  id         String        @id @default(cuid())
+  jobId      String?
+  job        Job?          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?         @relation(fields: [userId], references: [id])
+  type       AlertType
+  severity   AlertSeverity @default(WARNING)
+  message    String
+  isRead     Boolean       @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([jobId])
+  @@index([userId])
+}
