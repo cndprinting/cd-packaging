@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { FileImage, Send, Eye, Plus, X, Loader2 } from "lucide-react";
 import { demoJobs } from "@/lib/demo-data";
@@ -19,7 +19,9 @@ const proofStatusColors: Record<string, string> = {
 };
 
 export default function ProofingPage() {
-  const proofJobs = useMemo(() => demoJobs.filter((j) => j.proofStatus), []);
+  const [allJobs, setAllJobs] = useState(demoJobs);
+  useEffect(() => { fetch("/api/jobs").then(r => r.json()).then(d => { if (d.jobs?.length) setAllJobs(d.jobs); }).catch(() => {}); }, []);
+  const proofJobs = useMemo(() => allJobs.filter((j) => j.proofStatus), [allJobs]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadForm, setUploadForm] = useState({ jobId: "", notes: "" });

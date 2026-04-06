@@ -177,15 +177,9 @@ export default function OrderDetailPage() {
           <CardHeader><CardTitle className="flex items-center gap-2"><User className="h-4 w-4" />Team</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {jobs.length > 0 && demoJobs.find(j => j.id === jobs[0]?.id) ? (
-                <>
-                  <div><p className="text-xs text-gray-500 uppercase">CSR</p><p className="text-sm font-medium">{demoJobs.find(j => j.id === jobs[0]?.id)?.csrName || "Unassigned"}</p></div>
-                  <div><p className="text-xs text-gray-500 uppercase">Sales Rep</p><p className="text-sm font-medium">{demoJobs.find(j => j.id === jobs[0]?.id)?.salesRepName || "Unassigned"}</p></div>
-                  <div><p className="text-xs text-gray-500 uppercase">Production</p><p className="text-sm font-medium">{demoJobs.find(j => j.id === jobs[0]?.id)?.productionOwnerName || "Unassigned"}</p></div>
-                </>
-              ) : (
-                <p className="text-sm text-gray-400">Team assignments show on individual jobs</p>
-              )}
+                <div><p className="text-xs text-gray-500 uppercase">CSR</p><p className="text-sm font-medium">View on individual jobs</p></div>
+              <div><p className="text-xs text-gray-500 uppercase">Jobs</p><p className="text-sm font-medium">{jobs.length} job{jobs.length !== 1 ? "s" : ""} in this order</p></div>
+              <div><p className="text-xs text-gray-500 uppercase">Status</p><Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge></div>
             </div>
           </CardContent>
         </Card>

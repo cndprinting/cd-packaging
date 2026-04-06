@@ -198,7 +198,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {demoAlerts.map((alert) => (
+            {alerts.map((alert) => (
               <div
                 key={alert.id}
                 className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"

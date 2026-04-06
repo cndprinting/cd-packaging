@@ -23,11 +23,14 @@ export default function CustomersPage() {
     fetch("/api/companies").then(r => r.json()).then(d => { if (d.companies?.length) setCompanies(d.companies); }).catch(() => {});
   }, []);
 
+  const [allJobs, setAllJobs] = useState(demoJobs);
+  useEffect(() => { fetch("/api/jobs").then(r => r.json()).then(d => { if (d.jobs?.length) setAllJobs(d.jobs); }).catch(() => {}); }, []);
+
   const customerData = useMemo(() => companies.map((c) => {
-    const jobs = demoJobs.filter((j) => j.companyId === c.id);
+    const jobs = allJobs.filter((j) => j.companyId === c.id);
     const activeJobs = jobs.filter((j) => j.status !== "DELIVERED" && j.status !== "INVOICED").length;
     return { ...c, activeJobs, totalOrders: new Set(jobs.map((j) => j.orderId)).size };
-  }), [companies]);
+  }), [companies, allJobs]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

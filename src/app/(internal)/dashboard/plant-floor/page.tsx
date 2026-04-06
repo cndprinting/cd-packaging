@@ -28,15 +28,18 @@ function formatElapsed(seconds: number): string {
 
 export default function PlantFloorPage() {
   const [selectedDept, setSelectedDept] = useState(DEPARTMENTS[1].id);
+  const [allJobs, setAllJobs] = useState(demoJobs);
   const [runningJobs, setRunningJobs] = useState<Record<string, number>>({});
-  const [completedToday, setCompletedToday] = useState<{ jobNumber: string; jobName: string; department: string; duration: string }[]>([
-    { jobNumber: "PKG-2026-001", jobName: "Organic Cereal Box", department: "Press", duration: "2h 30m" },
-    { jobNumber: "PKG-2026-005", jobName: "Foundation Box", department: "QA", duration: "0h 45m" },
-  ]);
+  const [completedToday, setCompletedToday] = useState<{ jobNumber: string; jobName: string; department: string; duration: string }[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
+    fetch("/api/jobs").then(r => r.json()).then(d => { if (d.jobs?.length) setAllJobs(d.jobs); }).catch(() => {});
+    fetch("/api/timeclock").then(r => r.json()).then(d => { if (d.recentEntries?.length) setCompletedToday(d.recentEntries); }).catch(() => {});
+  }, []);
+
   const dept = DEPARTMENTS.find(d => d.id === selectedDept)!;
-  const deptJobs = demoJobs.filter(j => dept.stages.includes(j.status));
+  const deptJobs = allJobs.filter(j => dept.stages.includes(j.status));
 
   // Timer tick
   useEffect(() => {
@@ -59,7 +62,7 @@ export default function PlantFloorPage() {
     const elapsed = runningJobs[jobId] || 0;
     const h = Math.floor(elapsed / 3600);
     const m = Math.floor((elapsed % 3600) / 60);
-    const job = demoJobs.find(j => j.id === jobId);
+    const job = allJobs.find(j => j.id === jobId);
     setCompletedToday(prev => [{ jobNumber: job?.jobNumber || "", jobName: job?.name || "", department: dept.label, duration: `${h}h ${m}m` }, ...prev]);
     setRunningJobs(prev => { const next = { ...prev }; delete next[jobId]; return next; });
     try { await fetch("/api/timeclock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "stop", department: dept.label }) }); } catch {}
@@ -79,7 +82,7 @@ export default function PlantFloorPage() {
         {/* Department Selector */}
         <div className="flex flex-wrap gap-2">
           {DEPARTMENTS.map(d => {
-            const jobCount = demoJobs.filter(j => d.stages.includes(j.status)).length;
+            const jobCount = allJobs.filter(j => d.stages.includes(j.status)).length;
             return (
               <button
                 key={d.id}

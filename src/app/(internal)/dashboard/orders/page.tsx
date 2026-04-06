@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Search, ExternalLink, Plus, X, Loader2 } from "lucide-react";
 import { demoJobs } from "@/lib/demo-data";
@@ -45,6 +45,21 @@ const STATUSES = [
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
+
+  useEffect(() => {
+    fetch("/api/orders").then(r => r.json()).then(d => {
+      if (d.orders?.length) {
+        const apiOrders = d.orders.map((o: Record<string, unknown>) => ({
+          orderId: o.id as string, orderNumber: o.orderNumber as string, companyName: o.companyName as string,
+          jobs: [], status: o.status as string, priority: o.priority as string, dueDate: o.dueDate ? String(o.dueDate).split("T")[0] : "",
+        }));
+        // Merge: keep demo orders + add DB orders that aren't in demo
+        const demoIds = new Set(orders.map(o => o.orderNumber));
+        const newOrders = apiOrders.filter((o: Order) => !demoIds.has(o.orderNumber));
+        if (newOrders.length > 0) setOrders(prev => [...newOrders, ...prev]);
+      }
+    }).catch(() => {});
+  }, []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
