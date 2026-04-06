@@ -89,8 +89,8 @@ export default function QuotesPage() {
                 <TableCell className="text-gray-500">{formatDate(q.validUntil)}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={() => setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x))}><Send className="h-3.5 w-3.5" />Send</Button>}
-                    {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={() => setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x))}><Package className="h-3.5 w-3.5" />Convert</Button>}
+                    {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "sent" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x)); }}><Send className="h-3.5 w-3.5" />Send</Button>}
+                    {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}
                     <Button variant="ghost" size="sm"><FileText className="h-3.5 w-3.5" /></Button>
                   </div>
                 </TableCell>

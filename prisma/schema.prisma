@@ -107,6 +107,7 @@ model User {
   comments           Comment[]
   activityLogs       ActivityLog[]
   alerts             Alert[]
+  timeEntries        TimeEntry[]
 
   @@index([email])
   @@index([companyId])
@@ -232,6 +233,8 @@ model Job {
   materialReqs     MaterialRequirement[]
   schedules        ProductionSchedule[]
   alerts           Alert[]
+  timeEntries      TimeEntry[]
+  productType      ProductType @default(FOLDING_CARTON)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -490,6 +493,67 @@ model ActivityLog {
   createdAt DateTime @default(now())
 
   @@index([orderId])
+}
+
+// ─── QUOTES ──────────────────────────────────────────────
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  CONVERTED
+}
+
+enum ProductType {
+  FOLDING_CARTON
+  COMMERCIAL_PRINT
+}
+
+model Quote {
+  id            String      @id @default(cuid())
+  quoteNumber   String      @unique
+  companyId     String?
+  customerName  String
+  contactName   String?
+  contactEmail  String?
+  productType   ProductType @default(FOLDING_CARTON)
+  productName   String
+  description   String?
+  quantity      Int
+  unitPrice     Float       @default(0)
+  totalPrice    Float       @default(0)
+  status        QuoteStatus @default(DRAFT)
+  validUntil    DateTime?
+  notes         String?
+  specs         String?     // JSON string for dimensions, paper, colors, etc.
+  createdBy     String?
+  convertedJobId String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([status])
+  @@index([quoteNumber])
+}
+
+// ─── TIME TRACKING ───────────────────────────────────────
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  jobId       String
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  department  String
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?      // seconds
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([jobId])
+  @@index([userId])
+  @@index([department])
 }
 
 // ─── ALERTS ──────────────────────────────────────────────

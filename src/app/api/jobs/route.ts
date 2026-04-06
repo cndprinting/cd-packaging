@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, quantity, dueDate, priority, companyId, customerName } = body;
+    const { name, description, quantity, dueDate, priority, companyId, customerName, productType } = body;
 
     if (!name || !quantity) {
       return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
         priority: priority || "NORMAL",
         quantity: parseInt(quantity),
         dueDate: dueDate ? new Date(dueDate) : null,
+        productType: productType === "COMMERCIAL_PRINT" ? "COMMERCIAL_PRINT" : "FOLDING_CARTON",
       },
       include: { order: { include: { company: true } } },
     });
