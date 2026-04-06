@@ -19,20 +19,14 @@ export default function PrintJobTicketPage() {
         const data = await res.json();
         if (res.ok && data.job) {
           const j = data.job;
-          setJob({
-            ...j,
-            companyName: j.companyName || j.order?.company?.name || "",
-            orderNumber: j.orderNumber || j.order?.orderNumber || "",
-          });
+          setJob({ ...j, companyName: j.companyName || j.order?.company?.name || "", orderNumber: j.orderNumber || j.order?.orderNumber || "" });
           setLoading(false);
-          setTimeout(() => window.print(), 500);
           return;
         }
       } catch {}
       const found = demoJobs.find(j => j.id === jobId);
       if (found) setJob(found as unknown as Record<string, unknown>);
       setLoading(false);
-      setTimeout(() => window.print(), 500);
     }
     load();
   }, [jobId]);
@@ -42,212 +36,288 @@ export default function PrintJobTicketPage() {
 
   const f = (key: string) => (job[key] as string) || "";
   const b = (key: string) => Boolean(job[key]);
-  const n = (key: string) => job[key] as number || 0;
+  const n = (key: string) => (job[key] as number) || 0;
+  const check = (val: boolean) => val ? "☑" : "☐";
 
   return (
-    <div className="print-ticket max-w-[8.5in] mx-auto p-4 font-mono text-[11px] bg-white">
+    <div className="print-page">
       <style>{`
         @media print {
-          body { margin: 0; padding: 0; }
-          .print-ticket { padding: 0.25in; }
+          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
-          @page { size: letter; margin: 0.25in; }
+          @page { size: letter portrait; margin: 0.3in; }
         }
-        .ticket-grid { display: grid; gap: 1px; background: #000; }
-        .ticket-grid > div { background: #fff; padding: 2px 4px; }
-        .ticket-header { font-size: 14px; font-weight: bold; }
-        .field-label { font-size: 9px; color: #666; text-transform: uppercase; }
-        .field-value { font-size: 11px; font-weight: 600; min-height: 16px; }
-        .section-title { background: #1a1a1a; color: #fff; padding: 3px 8px; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-        .checkbox { display: inline-block; width: 12px; height: 12px; border: 1.5px solid #333; margin-right: 4px; vertical-align: middle; text-align: center; font-size: 9px; line-height: 10px; }
-        .checkbox.checked { background: #333; color: #fff; }
-        .tear-line { border-top: 2px dashed #999; margin: 8px 0; position: relative; }
-        .tear-line::after { content: "✂ TEAR HERE"; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: white; padding: 0 8px; font-size: 8px; color: #999; }
+        .print-page { width: 8in; margin: 0 auto; font-family: "Courier New", Courier, monospace; font-size: 10px; color: #000; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+        .label { font-size: 7.5px; text-transform: uppercase; color: #444; letter-spacing: 0.5px; font-weight: normal; display: block; margin-bottom: 1px; }
+        .val { font-size: 12px; font-weight: bold; min-height: 18px; display: block; }
+        .val-lg { font-size: 15px; font-weight: bold; min-height: 22px; }
+        .val-xl { font-size: 20px; font-weight: bold; }
+        .section-head { background: #000; color: #fff; font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 6px; }
+        .write-line { border-bottom: 1px solid #999; min-height: 20px; display: block; }
+        .write-box { border: 1px solid #999; min-height: 50px; width: 100%; display: block; }
+        .check { font-size: 13px; margin-right: 2px; }
+        .check-item { display: inline-block; margin-right: 12px; font-size: 11px; white-space: nowrap; }
+        .stamp { border: 3px solid #000; text-align: center; padding: 6px; font-size: 12px; font-weight: bold; letter-spacing: 1px; }
+        .tear { border-top: 2px dashed #666; margin: 10px 0; position: relative; }
+        .tear::after { content: "✂  CUT HERE — TEAR OFF FOR TRACKING BOARD"; position: absolute; top: -7px; left: 50%; transform: translateX(-50%); background: white; padding: 0 10px; font-size: 7px; color: #666; letter-spacing: 1px; }
+        .strip { border: 2px solid #000; padding: 8px 12px; }
+        .half { width: 50%; }
+        .third { width: 33.33%; }
+        .quarter { width: 25%; }
+        .fifth { width: 20%; }
+        .spacer { height: 6px; border: none; }
       `}</style>
 
-      {/* Back button - hidden on print */}
-      <div className="no-print mb-4 flex items-center justify-between">
-        <a href={`/dashboard/jobs/${jobId}`} className="text-blue-600 underline text-sm">← Back to Job</a>
-        <button onClick={() => window.print()} className="bg-green-700 text-white px-4 py-2 rounded text-sm font-bold">🖨 Print Job Ticket</button>
+      {/* Print button */}
+      <div className="no-print" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "sans-serif" }}>
+        <a href={`/dashboard/jobs/${jobId}`} style={{ color: "#15803d", fontSize: "14px" }}>← Back to Job</a>
+        <button onClick={() => window.print()} style={{ background: "#15803d", color: "#fff", padding: "10px 24px", borderRadius: "8px", fontSize: "14px", fontWeight: "bold", border: "none", cursor: "pointer" }}>🖨️ Print Job Ticket</button>
       </div>
 
-      {/* HEADER */}
-      <div className="border-2 border-black p-2 mb-1">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="ticket-header">{f("jobNumber")}</div>
-            <div className="text-[9px] text-gray-500">C&D Printing — Job Ticket</div>
-          </div>
-          <div className="text-right">
-            <div className="field-label">Job Type</div>
-            <div className="field-value">
-              <span className="checkbox {b('jobType') ? 'checked' : ''}">{f("jobType") === "NEW_ORDER" ? "✓" : ""}</span> New Order
-              <span className="checkbox ml-2">{f("jobType") === "EXACT_REPRINT" ? "✓" : ""}</span> Exact Reprint
-              <span className="checkbox ml-2">{f("jobType") === "REPRINT_WITH_CHANGES" ? "✓" : ""}</span> Reprint w/Changes
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* HEADER ROW */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table>
+        <tbody>
+          <tr>
+            <td style={{ width: "30%" }}>
+              <div className="val-xl">{f("jobNumber")}</div>
+              <div style={{ fontSize: "8px", color: "#666" }}>C&D PRINTING — JOB TICKET</div>
+            </td>
+            <td style={{ width: "25%" }}>
+              <span className="label">Job Type</span>
+              <div style={{ fontSize: "11px", lineHeight: "18px" }}>
+                <span className="check">{f("jobType") === "NEW_ORDER" ? "☑" : "☐"}</span> New Order<br/>
+                <span className="check">{f("jobType") === "EXACT_REPRINT" ? "☑" : "☐"}</span> Exact Reprint<br/>
+                <span className="check">{f("jobType") === "REPRINT_WITH_CHANGES" ? "☑" : "☐"}</span> Reprint With Changes<br/>
+                <span className="check">{f("jobType") === "REPRINT_NEW_FILE" ? "☑" : "☐"}</span> Reprint New File Supplied
+              </div>
+            </td>
+            <td style={{ width: "20%" }}>
+              <span className="label">Last Job #</span>
+              <span className="val">{f("lastJobNumber") || <span className="write-line">&nbsp;</span>}</span>
+              <span className="label" style={{ marginTop: "4px" }}>Estimate #</span>
+              <span className="val">{f("estimateNumber") || <span className="write-line">&nbsp;</span>}</span>
+            </td>
+            <td style={{ width: "25%" }}>
+              <span className="label">Due Date</span>
+              <span className="val-lg">{job.dueDate ? formatDate(String(job.dueDate)) : ""}</span>
+              <span className="label">Time</span>
+              <span className="write-line">&nbsp;</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      {/* CUSTOMER & JOB INFO */}
-      <div className="section-title">Customer & Job Information</div>
-      <div className="border border-black">
-        <table className="w-full border-collapse">
-          <tbody>
-            <tr>
-              <td className="border border-gray-300 p-1 w-1/4"><span className="field-label">Customer</span><br/><span className="field-value">{f("companyName")}</span></td>
-              <td className="border border-gray-300 p-1 w-1/4"><span className="field-label">Contact</span><br/><span className="field-value">{f("contactName")}</span></td>
-              <td className="border border-gray-300 p-1 w-1/4"><span className="field-label">Customer P.O.</span><br/><span className="field-value">{f("customerPO")}</span></td>
-              <td className="border border-gray-300 p-1 w-1/4"><span className="field-label">Estimate #</span><br/><span className="field-value">{f("estimateNumber")}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1" colSpan={2}><span className="field-label">Job Title</span><br/><span className="field-value text-[13px]">{f("name")}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Quantity</span><br/><span className="field-value text-[14px] font-bold">{n("quantity").toLocaleString()}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label"># Pages</span><br/><span className="field-value">{n("numPages") || "—"}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1" colSpan={4}><span className="field-label">Job Description</span><br/><span className="field-value">{f("description") || "—"}</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* CUSTOMER INFO */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={6} className="section-head">Customer Information</td></tr>
+          <tr>
+            <td className="half" colSpan={3}><span className="label">Customer</span><span className="val-lg">{f("companyName")}</span></td>
+            <td className="quarter"><span className="label">Customer #</span><span className="val"><span className="write-line">&nbsp;</span></span></td>
+            <td className="quarter"><span className="label">Customer P.O.</span><span className="val">{f("customerPO") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td colSpan={2}><span className="label">Address</span><span className="write-line">&nbsp;</span></td>
+            <td><span className="label">City</span><span className="write-line">&nbsp;</span></td>
+            <td><span className="label">State / Zip</span><span className="write-line">&nbsp;</span></td>
+            <td><span className="label">Phone / Fax</span><span className="write-line">&nbsp;</span></td>
+          </tr>
+          <tr>
+            <td colSpan={2}><span className="label">Contact</span><span className="val">{f("contactName") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Rep</span><span className="val">{f("repName") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">CSR</span><span className="val">{f("csrName") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Sales</span><span className="val">{f("salesRepName") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+        </tbody>
+      </table>
 
-      {/* DATES & ASSIGNMENT */}
-      <div className="section-title mt-1">Dates & Assignment</div>
-      <div className="border border-black">
-        <table className="w-full border-collapse">
-          <tbody>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">CSR</span><br/><span className="field-value">{f("csrName") || f("csr")}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Sales</span><br/><span className="field-value">{f("salesRepName") || f("salesRep")}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Rep</span><br/><span className="field-value">{f("repName")}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Due</span><br/><span className="field-value font-bold">{job.dueDate ? formatDate(String(job.dueDate)) : "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Status</span><br/><span className="field-value">{getStatusLabel(f("status"))}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">Proof Date</span><br/><span className="field-value">{job.proofDate ? formatDate(String(job.proofDate)) : "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Entered</span><br/><span className="field-value">{job.enteredDate ? formatDate(String(job.enteredDate)) : job.createdAt ? formatDate(String(job.createdAt)) : "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Est. Hours</span><br/><span className="field-value">{n("estimatedHours") || "—"}</span></td>
-              <td className="border border-gray-300 p-1" colSpan={2}>
-                <span className="checkbox {b('pressCheck') ? 'checked' : ''}">{b("pressCheck") ? "✓" : ""}</span> Press Check
-                <span className="checkbox ml-3 {b('ledInk') ? 'checked' : ''}">{b("ledInk") ? "✓" : ""}</span> LED Ink
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* JOB DESCRIPTION */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={5} className="section-head">Job Description</td></tr>
+          <tr>
+            <td colSpan={3}><span className="label">Job Title</span><span className="val-lg">{f("name")}</span></td>
+            <td><span className="label">Quantity</span><span className="val-xl">{n("quantity").toLocaleString()}</span></td>
+            <td><span className="label"># Pages</span><span className="val">{n("numPages") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td colSpan={5} style={{ minHeight: "40px" }}><span className="label">Description / Special Instructions</span><span className="val" style={{ minHeight: "30px" }}>{f("description") || ""}</span><span className="write-line">&nbsp;</span></td>
+          </tr>
+          <tr>
+            <td colSpan={3}>
+              <span className="check-item"><span className="check">{check(b("softCover"))}</span> Soft Cover</span>
+              <span className="check-item"><span className="check">{check(b("plusCover"))}</span> Plus Cover</span>
+              <span className="check-item"><span className="check">{check(b("hasBleeds"))}</span> Bleeds</span>
+              <span className="check-item"><span className="check">{check(b("fscCertified"))}</span> FSC</span>
+            </td>
+            <td><span className="label">Proof Date</span><span className="val">{job.proofDate ? formatDate(String(job.proofDate)) : <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Entered</span><span className="val">{job.createdAt ? formatDate(String(job.createdAt)) : <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+        </tbody>
+      </table>
 
-      {/* STOCK & SPECS */}
-      <div className="section-title mt-1">Stock & Specifications</div>
-      <div className="border border-black">
-        <table className="w-full border-collapse">
-          <tbody>
-            <tr>
-              <td className="border border-gray-300 p-1" colSpan={2}><span className="field-label">Stock Description</span><br/><span className="field-value">{f("stockDescription") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Blanket No.</span><br/><span className="field-value">{f("blanketNumber") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">DIE #</span><br/><span className="field-value">{f("dieNumber") || "—"}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">Flat Size</span><br/><span className="field-value">{n("flatSizeWidth") || "—"} x {n("flatSizeHeight") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Finished Size</span><br/><span className="field-value">{n("finishedWidth") || "—"} x {n("finishedHeight") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Ink - Front / Back</span><br/><span className="field-value">{f("inkFront") || "—"} / {f("inkBack") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Varnish / Coating</span><br/><span className="field-value">{f("varnish") || "—"} / {f("coating") || "—"}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1" colSpan={4}>
-                <span className="checkbox">{b("fscCertified") ? "✓" : ""}</span> FSC
-                <span className="checkbox ml-3">{b("softCover") ? "✓" : ""}</span> Soft Cover
-                <span className="checkbox ml-3">{b("plusCover") ? "✓" : ""}</span> Plus Cover
-                <span className="checkbox ml-3">{b("hasBleeds") ? "✓" : ""}</span> Bleeds
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* STOCK & SIZE */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={6} className="section-head">Stock & Size Specifications</td></tr>
+          <tr>
+            <td colSpan={3}><span className="label">Stock Description</span><span className="val">{f("stockDescription") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Blanket No.</span><span className="val">{f("blanketNumber") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td colSpan={2}><span className="label">DIE #</span><span className="val">{f("dieNumber") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td colSpan={2}><span className="label">Flat Size (W × H)</span><span className="val">{n("flatSizeWidth") ? `${n("flatSizeWidth")} × ${n("flatSizeHeight")}` : <span className="write-line">&nbsp;</span>}</span></td>
+            <td colSpan={2}><span className="label">Finished Size (W × H)</span><span className="val">{n("finishedWidth") ? `${n("finishedWidth")} × ${n("finishedHeight")}` : <span className="write-line">&nbsp;</span>}</span></td>
+            <td colSpan={2}><span className="label">Ink (Front / Back) — Varnish</span><span className="val">{f("inkFront") || "___"} / {f("inkBack") || "___"} — {f("varnish") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+        </tbody>
+      </table>
 
-      {/* PRESS INFO */}
-      <div className="section-title mt-1">Press Information</div>
-      <div className="border border-black">
-        <table className="w-full border-collapse">
-          <tbody>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">Press</span><br/><span className="field-value">{f("pressAssignment") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Format</span><br/><span className="field-value">{f("pressFormat") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Imposition</span><br/><span className="field-value">{f("imposition") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label"># Up</span><br/><span className="field-value">{n("numberUp") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Running Size</span><br/><span className="field-value">{f("runningSize") || "—"}</span></td>
-            </tr>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">Make Ready</span><br/><span className="field-value">{n("makeReadyCount") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">First Pass</span><br/><span className="field-value">{n("firstPassCount") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Final Count</span><br/><span className="field-value">{n("finalPressCount") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Pressman</span><br/><span className="field-value">{f("pressmanInitials") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Press Notes</span><br/><span className="field-value">{f("pressNotes") || "—"}</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* PRESS INFORMATION */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={6} className="section-head">Press Information</td></tr>
+          <tr>
+            <td><span className="label">Press</span><span className="val">{f("pressAssignment") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td>
+              <span className="check-item"><span className="check">{check(b("pressCheck"))}</span> Press Check</span><br/>
+              <span className="check-item"><span className="check">{check(b("ledInk"))}</span> LED Ink</span>
+            </td>
+            <td><span className="label">Format / Info</span><span className="val">{f("pressFormat") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Imposition</span><span className="val">{f("imposition") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label"># Up</span><span className="val">{n("numberUp") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Running Size</span><span className="val">{f("runningSize") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td><span className="label">Make Ready</span><span className="val">{n("makeReadyCount") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Finish Count</span><span className="write-line">&nbsp;</span></td>
+            <td><span className="label">First Pass Count</span><span className="val">{n("firstPassCount") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Final Press Count</span><span className="val">{n("finalPressCount") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td colSpan={2}><span className="label">Pressman Initials</span><span className="val">{f("pressmanInitials") || <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td colSpan={6}><span className="label">Press Instructions / Notes</span><span className="val" style={{ minHeight: "24px" }}>{f("pressNotes") || ""}</span><span className="write-line">&nbsp;</span></td>
+          </tr>
+        </tbody>
+      </table>
 
+      {/* ══════════════════════════════════════════════════════════ */}
       {/* BINDERY */}
-      <div className="section-title mt-1">Bindery Instructions</div>
-      <div className="border border-black p-2">
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <span><span className="checkbox">{b("binderyScore") ? "✓" : ""}</span> Score</span>
-          <span><span className="checkbox">{b("binderyPerf") ? "✓" : ""}</span> Perf</span>
-          <span><span className="checkbox">{b("binderyDrill") ? "✓" : ""}</span> Drill</span>
-          <span><span className="checkbox">{b("binderyPad") ? "✓" : ""}</span> Pad</span>
-          <span><span className="checkbox">{b("binderyFold") ? "✓" : ""}</span> Fold</span>
-          <span><span className="checkbox">{b("binderyCount") ? "✓" : ""}</span> Count</span>
-          <span><span className="checkbox">{b("binderyStitch") ? "✓" : ""}</span> Stitch</span>
-          <span><span className="checkbox">{b("binderyCollate") ? "✓" : ""}</span> Collate</span>
-          <span><span className="checkbox">{b("binderyPockets") ? "✓" : ""}</span> Pockets</span>
-          <span><span className="checkbox">{b("binderyGlue") ? "✓" : ""}</span> Glue</span>
-          <span><span className="checkbox">{b("binderyWrap") ? "✓" : ""}</span> Wrap</span>
-          <span><span className="checkbox">{b("binderyOther") ? "✓" : ""}</span> Other: {f("binderyOther")}</span>
-        </div>
-        {f("binderyNotes") && <div className="mt-1 text-[10px]"><strong>Notes:</strong> {f("binderyNotes")}</div>}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={2} className="section-head">Bindery Instructions</td></tr>
+          <tr>
+            <td style={{ width: "55%" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 0" }}>
+                <span className="check-item"><span className="check">{check(b("binderyScore"))}</span> Score</span>
+                <span className="check-item"><span className="check">{check(b("binderyPerf"))}</span> Perf</span>
+                <span className="check-item"><span className="check">{check(b("binderyDrill"))}</span> Drill</span>
+                <span className="check-item"><span className="check">{check(b("binderyPad"))}</span> Pad</span>
+                <span className="check-item"><span className="check">{check(b("binderyFold"))}</span> Fold</span>
+                <span className="check-item"><span className="check">{check(b("binderyCount"))}</span> Count</span>
+                <span className="check-item"><span className="check">{check(b("binderyStitch"))}</span> Stitch</span>
+                <span className="check-item"><span className="check">{check(b("binderyCollate"))}</span> Collates</span>
+                <span className="check-item"><span className="check">{check(b("binderyPockets"))}</span> Pockets</span>
+                <span className="check-item"><span className="check">{check(b("binderyGlue"))}</span> Glue</span>
+                <span className="check-item"><span className="check">{check(b("binderyWrap"))}</span> Wrap</span>
+                <span className="check-item"><span className="check">{check(!!f("binderyOther"))}</span> Other: {f("binderyOther") || "________"}</span>
+              </div>
+            </td>
+            <td><span className="label">Bindery Notes</span><span className="val" style={{ minHeight: "20px" }}>{f("binderyNotes") || ""}</span><span className="write-line">&nbsp;</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* TRACKING GRID — multiple Date/Time rows for production */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={8} className="section-head">Production Tracking</td></tr>
+          <tr style={{ fontSize: "8px", textAlign: "center" }}>
+            <td><b>Department</b></td>
+            <td><b>Date</b></td>
+            <td><b>Time In</b></td>
+            <td><b>Time Out</b></td>
+            <td><b>Operator</b></td>
+            <td><b>Qty Good</b></td>
+            <td><b>Qty Waste</b></td>
+            <td><b>Notes</b></td>
+          </tr>
+          {["Prepress", "Offset Press", "Digital Press", "Die Cutting", "Bindery", "Gluing/Folding", "QA", "Shipping"].map((dept) => (
+            <tr key={dept} style={{ height: "22px" }}>
+              <td style={{ fontSize: "9px", fontWeight: "bold" }}>{dept}</td>
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* DELIVERY & SAMPLES + AA CHARGES + VENDOR */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <table style={{ marginTop: "-1px" }}>
+        <tbody>
+          <tr><td colSpan={5} className="section-head">Delivery / Samples / Vendor</td></tr>
+          <tr>
+            <td><span className="label">Delivery QTY</span><span className="val">{n("deliveryQty") || n("quantity").toLocaleString()}</span></td>
+            <td><span className="label">Packaging</span><span className="val">{f("deliveryPackaging") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td><span className="label">Deliver To</span><span className="val">{f("deliveryTo") || <span className="write-line">&nbsp;</span>}</span></td>
+            <td>
+              <span className="check-item"><span className="check">{check(b("samplesRequired"))}</span> Samples Req&apos;d</span><br/>
+              <span className="label">To: {f("samplesTo") || "________"}</span>
+            </td>
+            <td><span className="label">AA Charges</span><span className="val">{n("aaCharges") ? `$${n("aaCharges")}` : <span className="write-line">&nbsp;</span>}</span></td>
+          </tr>
+          <tr>
+            <td colSpan={5}><span className="label">Vendor Information</span><span className="val" style={{ minHeight: "18px" }}>{f("vendorInfo") || ""}</span><span className="write-line">&nbsp;</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* STAMP */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <div className="stamp" style={{ marginTop: "6px" }}>
+        ⚠ MUST PUT SAMPLES IN THIS JOB TICKET ⚠
       </div>
 
-      {/* DELIVERY & SAMPLES */}
-      <div className="section-title mt-1">Delivery & Samples</div>
-      <div className="border border-black">
-        <table className="w-full border-collapse">
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* TEAR-OFF STRIP */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <div className="tear" style={{ marginTop: "12px" }}></div>
+
+      <div className="strip" style={{ marginTop: "8px", minHeight: "80px" }}>
+        <table style={{ border: "none" }}>
           <tbody>
-            <tr>
-              <td className="border border-gray-300 p-1"><span className="field-label">Delivery QTY</span><br/><span className="field-value">{n("deliveryQty") || n("quantity").toLocaleString()}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Packaging</span><br/><span className="field-value">{f("deliveryPackaging") || "—"}</span></td>
-              <td className="border border-gray-300 p-1"><span className="field-label">Deliver To</span><br/><span className="field-value">{f("deliveryTo") || "—"}</span></td>
-              <td className="border border-gray-300 p-1">
-                <span className="checkbox">{b("samplesRequired") ? "✓" : ""}</span> Samples Required<br/>
-                <span className="field-label">To:</span> {f("samplesTo") || "—"}
+            <tr style={{ border: "none" }}>
+              <td style={{ border: "none", width: "50%", verticalAlign: "top" }}>
+                <div className="val-xl">{f("jobNumber")}</div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", marginTop: "4px" }}>{f("name")}</div>
+                <div style={{ fontSize: "11px", marginTop: "2px" }}>{f("companyName")} — Qty: {n("quantity").toLocaleString()}</div>
+              </td>
+              <td style={{ border: "none", width: "50%", verticalAlign: "top", textAlign: "right" }}>
+                <div style={{ fontSize: "14px", fontWeight: "bold" }}>Due: {job.dueDate ? formatDate(String(job.dueDate)) : "________"}</div>
+                <div style={{ fontSize: "11px", marginTop: "2px" }}>{getStatusLabel(f("status"))}</div>
+                <div style={{ fontSize: "9px", marginTop: "8px", color: "#666" }}>Est. Hours: {n("estimatedHours") || "____"}</div>
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
-
-      {/* MUST PUT SAMPLES stamp */}
-      <div className="border-2 border-black mt-1 p-2 text-center">
-        <div className="font-bold text-[13px]">⚠ MUST PUT SAMPLES IN THIS JOB TICKET ⚠</div>
-      </div>
-
-      {/* ═══ TEAR LINE ═══ */}
-      <div className="tear-line mt-4"></div>
-
-      {/* TEAR-OFF STRIP for Darrin's board */}
-      <div className="border-2 border-black p-3 mt-2">
-        <div className="flex justify-between items-center">
-          <div>
-            <div className="text-[18px] font-bold">{f("jobNumber")}</div>
-            <div className="text-[12px]">{f("name")}</div>
-            <div className="text-[10px] text-gray-600">{f("companyName")} — Qty: {n("quantity").toLocaleString()}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[12px] font-bold">Due: {job.dueDate ? formatDate(String(job.dueDate)) : "—"}</div>
-            <div className="text-[10px]">{getStatusLabel(f("status"))}</div>
-          </div>
-        </div>
-        <div className="mt-2 text-[9px] text-gray-500 text-center">
+        <div style={{ textAlign: "center", fontSize: "8px", color: "#666", marginTop: "8px", letterSpacing: "1px" }}>
           STAMP HERE FOR NEW DIE — TEAR OFF AND PUT ON DARRIN&apos;S DESK AFTER APPROVAL
         </div>
       </div>
