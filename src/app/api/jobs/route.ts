@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, quantity, dueDate, priority, companyId, customerName, productType } = body;
+    const { name, description, quantity, dueDate, priority, companyId, customerName, productType, estimatedHours } = body;
 
     if (!name || !quantity) {
       return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
         quantity: parseInt(quantity),
         dueDate: dueDate ? new Date(dueDate) : null,
         productType: productType === "COMMERCIAL_PRINT" ? "COMMERCIAL_PRINT" : "FOLDING_CARTON",
+        estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
       },
       include: { order: { include: { company: true } } },
     });
@@ -124,6 +125,19 @@ export async function POST(request: NextRequest) {
     await prisma.activityLog.create({
       data: { orderId: order.id, userId: session.id, action: "JOB_CREATED", details: `Created job ${jobNumber}: ${name}` },
     }).catch(() => {});
+
+    // Auto-flag outside purchases based on job type
+    const autoFlags = [];
+    // Every job needs paper/substrate
+    autoFlags.push({ jobId: job.id, category: "paper", description: `Substrate for ${name} - ${quantity} units`, status: "needed" });
+    // Every job needs ink
+    autoFlags.push({ jobId: job.id, category: "ink", description: `Process inks for ${name}`, status: "needed" });
+    // Folding cartons need cutting dies
+    if (productType !== "COMMERCIAL_PRINT") {
+      autoFlags.push({ jobId: job.id, category: "cutting_die", description: `Cutting die for ${name}`, status: "needed" });
+    }
+    // Create all purchase flags
+    if (autoFlags.length > 0) await prisma.purchaseFlag.createMany({ data: autoFlags }).catch(() => {});
 
     return NextResponse.json({
       job: {

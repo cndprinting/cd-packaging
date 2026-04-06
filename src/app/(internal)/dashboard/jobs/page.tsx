@@ -34,6 +34,8 @@ interface Job {
   isBlocked: boolean;
   blockerReason?: string;
   productType?: string;
+  estimatedHours?: number;
+  actualHours?: number;
 }
 
 const STATUSES = [
@@ -53,7 +55,7 @@ export default function JobsPage() {
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [newJob, setNewJob] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL", customerName: "" });
+  const [newJob, setNewJob] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL", customerName: "", estimatedHours: "", productType: "FOLDING_CARTON" });
 
   // Fetch jobs from API (falls back to demo data)
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function JobsPage() {
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError("");
-    if (!newJob.name || !newJob.quantity) { setCreateError("Name and quantity are required"); return; }
+    if (!newJob.name || !newJob.quantity || !newJob.estimatedHours) { setCreateError("Name, quantity, and estimated hours are required"); return; }
     setCreating(true);
     try {
       const res = await fetch("/api/jobs", {
@@ -100,7 +102,7 @@ export default function JobsPage() {
       if (!res.ok) { setCreateError(data.error || "Failed to create job"); setCreating(false); return; }
       setJobs((prev) => [data.job, ...prev]);
       setShowNewJobModal(false);
-      setNewJob({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL", customerName: "" });
+      setNewJob({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL", customerName: "", estimatedHours: "", productType: "FOLDING_CARTON" });
       setCreating(false);
     } catch { setCreateError("Something went wrong"); setCreating(false); }
   };
@@ -159,9 +161,14 @@ export default function JobsPage() {
                         <p className="text-sm text-gray-500">{job.companyName}</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-0.5">
                       <p className="text-sm font-medium text-gray-700">{formatNumber(job.quantity)} <span className="text-gray-400 text-xs">qty</span></p>
-                      <p className="text-xs text-gray-400">{formatDate(job.dueDate)} <span className="text-gray-300">due date</span></p>
+                      <p className="text-xs text-gray-400">{formatDate(job.dueDate)} <span className="text-gray-300">due</span></p>
+                      {job.estimatedHours && (
+                        <p className={`text-xs font-medium ${job.actualHours && job.actualHours > job.estimatedHours ? "text-red-600" : "text-emerald-600"}`}>
+                          {job.actualHours ? `${job.actualHours}h` : "0h"} / {job.estimatedHours}h est
+                        </p>
+                      )}
                     </div>
                   </div>
                   {job.blockerReason && (
@@ -228,6 +235,20 @@ export default function JobsPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
                     <Input placeholder="Company name" value={newJob.customerName} onChange={(e) => updateNewJob("customerName", e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Hours *</label>
+                    <Input type="number" step="0.5" placeholder="e.g. 12" value={newJob.estimatedHours} onChange={(e) => updateNewJob("estimatedHours", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
+                    <Select value={newJob.productType} onChange={(e) => updateNewJob("productType", e.target.value)} options={[{ value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} />
+                  </div>
+                  <div className="flex items-end">
+                    <p className="text-xs text-gray-400 pb-2">Hours will be tracked against this estimate in the Labor Report</p>
                   </div>
                 </div>
 

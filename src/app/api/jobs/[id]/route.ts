@@ -117,6 +117,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       include: { order: { include: { company: true } } },
     });
 
+    // Audit trail — log what changed
+    const changedFields = Object.keys(updateData).join(", ");
+    await prisma.activityLog.create({
+      data: { orderId: updated.orderId, userId: session.id, action: "JOB_UPDATED", details: `${updated.jobNumber} updated: ${changedFields}` },
+    }).catch(() => {});
+
     return NextResponse.json({ job: updated });
   } catch (error) {
     console.error("Job PUT error:", error);
@@ -136,6 +142,10 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
 
+    const job = await prisma.job.findUnique({ where: { id } });
+    await prisma.activityLog.create({
+      data: { orderId: job?.orderId, userId: session.id, action: "JOB_DELETED", details: `Deleted job ${job?.jobNumber}: ${job?.name}` },
+    }).catch(() => {});
     await prisma.job.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {

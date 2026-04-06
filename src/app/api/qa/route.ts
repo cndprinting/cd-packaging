@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     await prisma.order.update({ where: { id: updated.orderId }, data: { status: JobStatus[statusEnum] } });
 
+    await prisma.activityLog.create({ data: { orderId: updated.orderId, userId: session.id, action: `QA_${action.toUpperCase()}`, details: `${updated.jobNumber} QA ${action}${notes ? ': ' + notes : ''}` } }).catch(() => {});
     return NextResponse.json({ job: updated, action, newStatus });
   } catch (error) {
     console.error("QA POST error:", error);

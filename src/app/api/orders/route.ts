@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await prisma.activityLog.create({ data: { orderId: order.id, userId: session.id, action: "ORDER_CREATED", details: `Created order ${order.orderNumber}` } }).catch(() => {});
     return NextResponse.json({ order: { id: order.id, orderNumber: order.orderNumber, companyName: order.company.name } });
   } catch (error) {
     console.error("Orders POST error:", error);
