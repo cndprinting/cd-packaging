@@ -246,9 +246,14 @@ export default function JobDetailPage() {
         </Card>
       )}
 
-      {/* Stage Progress */}
+      {/* Stage Progress — Click any stage to jump directly */}
       <Card>
-        <CardHeader><CardTitle>Stage Progress</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Stage Progress</CardTitle>
+            <span className="text-xs text-gray-400">Click any stage to jump to it</span>
+          </div>
+        </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <div className="flex items-center gap-0 min-w-[900px]">
@@ -258,9 +263,19 @@ export default function JobDetailPage() {
                 return (
                   <div key={stage} className="flex items-center flex-1">
                     <div className="flex flex-col items-center flex-1">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${isCompleted ? "bg-green-600 text-white" : isCurrent ? "bg-green-600 text-white ring-4 ring-green-100" : "bg-gray-200 text-gray-500"}`}>
+                      <button
+                        onClick={async () => {
+                          if (stage === job.status) return;
+                          try { await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "setStatus", status: stage }) }); } catch {}
+                          setJob({ ...job, status: stage });
+                          setFeedback({ msg: `Jumped to ${getStatusLabel(stage)}`, type: "success" });
+                          setTimeout(() => setFeedback(null), 2000);
+                        }}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-transform hover:scale-125 ${isCompleted ? "bg-green-600 text-white" : isCurrent ? "bg-green-600 text-white ring-4 ring-green-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                        title={`Jump to: ${getStatusLabel(stage)}`}
+                      >
                         {isCompleted ? <CheckCircle className="h-4 w-4" /> : <span>{i + 1}</span>}
-                      </div>
+                      </button>
                       <span className={`text-[10px] mt-1 text-center leading-tight ${isCurrent ? "font-semibold text-green-700" : isCompleted ? "text-green-600" : "text-gray-400"}`}>{getStatusLabel(stage)}</span>
                     </div>
                     {i < STAGES.length - 1 && <div className={`h-0.5 w-full ${i < STAGES.indexOf(job.status) ? "bg-green-500" : "bg-gray-200"}`} />}
