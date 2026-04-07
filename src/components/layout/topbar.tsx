@@ -108,7 +108,10 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
         <span className="hidden md:block text-sm font-medium text-gray-700">{companyName}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <img src="/logo.svg" alt="C&D Printing and Packaging" className="hidden md:block h-9" />
+        <img src="/logo-icon.svg" alt="C&D" className="block md:hidden h-8 w-8" />
+        <div className="h-6 w-px bg-gray-200 hidden md:block" />
         <a href="/dashboard/settings" className="flex items-center justify-center h-9 w-9 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
           <Settings className="h-5 w-5" />
         </a>

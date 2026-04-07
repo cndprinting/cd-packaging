@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <!-- Red square (top-left) -->
+  <rect x="0" y="0" width="36" height="36" rx="2" fill="#CC1E2D"/>
+  <!-- Yellow square (top-right) -->
+  <rect x="40" y="0" width="36" height="36" rx="2" fill="#F5C518"/>
+  <!-- Blue square (bottom-left) -->
+  <rect x="0" y="40" width="36" height="36" rx="2" fill="#3DB4E7"/>
+  <!-- Green square (bottom-right) -->
+  <rect x="40" y="40" width="36" height="36" rx="2" fill="#8DC63F"/>
+  <!-- White circle cutout -->
+  <circle cx="38" cy="38" r="20" fill="white"/>
+</svg>
