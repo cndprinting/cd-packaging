@@ -8,6 +8,7 @@ import {
   Layers,
   DollarSign,
   X,
+  Plus,
   FileText,
   Printer,
   ChevronDown,
@@ -344,10 +345,22 @@ export default function EstimatePage() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  interface QuoteProduct {
+    productName: string;
+    productType: string;
+    pressType: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+    tiers: { quantity: number; total: number; costPerUnit: number; costPer1000: number }[];
+    specs: Record<string, unknown>;
+  }
+  const [quoteProducts, setQuoteProducts] = useState<QuoteProduct[]>([]);
   const [plantStandards, setPlantStandards] = useState<PlantStandardsData | null>(null);
   const [presses, setPresses] = useState<PressData[]>([]);
   const [standardsLoaded, setStandardsLoaded] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string; industry?: string }[]>([]);
+  const [employees, setEmployees] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Load plant standards on mount
   useEffect(() => {
@@ -375,6 +388,7 @@ export default function EstimatePage() {
       })
       .catch(() => setStandardsLoaded(true));
     fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
+    fetch("/api/users").then(r => r.json()).then(d => { if (d.users) setEmployees(d.users.filter((u: { role: string }) => u.role !== "CUSTOMER")); }).catch(() => {});
   }, []);
 
   // Auto-fill from press/config selection
@@ -662,6 +676,7 @@ export default function EstimatePage() {
             ...tierCalcs,
           ] : undefined,
           costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount, commission: calc.commissionAmount },
+          additionalProducts: quoteProducts.length > 0 ? quoteProducts : undefined,
         }),
       };
       const res = await fetch("/api/quotes", {
@@ -809,6 +824,27 @@ export default function EstimatePage() {
             />
           </Field>
         </div>
+
+        {employees.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Sales Rep">
+              <Combobox
+                value={form.salesRepName as string || ""}
+                onChange={(_id, label) => set("salesRepName" as keyof FormState, label)}
+                options={employees.filter(e => e.role === "SALES_REP" || e.role === "ADMIN").map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
+                placeholder="Select sales rep..."
+              />
+            </Field>
+            <Field label="CSR">
+              <Combobox
+                value={form.csrName as string || ""}
+                onChange={(_id, label) => set("csrName" as keyof FormState, label)}
+                options={employees.filter(e => e.role === "CSR" || e.role === "ADMIN" || e.role === "PRODUCTION_MANAGER").map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
+                placeholder="Select CSR..."
+              />
+            </Field>
+          </div>
+        )}
 
         <div className="mt-4">
           <Field label="Quantity">
@@ -1420,8 +1456,66 @@ export default function EstimatePage() {
         </Card>
       )}
 
+      {/* Multi-Product Accumulator */}
+      {quoteProducts.length > 0 && (
+        <Card className="border-brand-200">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="h-5 w-5 text-brand-600" /> Products in This Quote ({quoteProducts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {quoteProducts.map((p, i) => (
+                <div key={i} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">{p.productName || `Product ${i + 1}`}</p>
+                    <p className="text-xs text-gray-500">{p.quantity.toLocaleString()} units - {p.productType === "FOLDING_CARTON" ? "Carton" : "Print"} / {p.pressType}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold">{fmtMoney(p.total)}</span>
+                    <button type="button" onClick={() => setQuoteProducts(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between pt-2 border-t border-gray-200">
+                <span className="text-sm font-medium text-gray-700">Combined Total</span>
+                <span className="text-lg font-bold text-brand-600">{fmtMoney(quoteProducts.reduce((s, p) => s + p.total, 0) + calc.total)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3 pt-2">
+        <Button
+          variant="outline"
+          className="gap-2 border-brand-200 text-brand-700 hover:bg-brand-50"
+          onClick={() => {
+            if (!form.jobName && !form.quantity) return;
+            const tierData = tierCalcs.length > 0
+              ? [{ quantity: form.quantity, total: calc.total, costPerUnit: calc.costPerUnit, costPer1000: calc.costPer1000 }, ...tierCalcs]
+              : [{ quantity: form.quantity, total: calc.total, costPerUnit: calc.costPerUnit, costPer1000: calc.costPer1000 }];
+            setQuoteProducts(prev => [...prev, {
+              productName: form.jobName,
+              productType: form.productType,
+              pressType: form.pressType,
+              quantity: form.quantity,
+              unitPrice: calc.costPerUnit,
+              total: calc.total,
+              tiers: tierData,
+              specs: { dimensions: `${form.finishedWidth}x${form.finishedHeight}`, pressName: selectedPress?.name, pressConfig: selectedConfig?.name, colors: `${form.inkColorsFront}F/${form.inkColorsBack}B`, stockType: form.stockType },
+            }]);
+            // Reset product-specific fields but keep customer and settings
+            setForm(prev => ({ ...prev, jobName: "", quantity: 0, finishedWidth: 0, finishedHeight: 0, quantityTiers: [], pressRunTime: 0, dieCuttingPlateCost: 0, strippingToolCost: 0, gluingSetup: 0, windowPatching: 0 }));
+            setStep(2);
+          }}
+        >
+          <Plus className="h-4 w-4" /> Add Product &amp; Continue
+        </Button>
         <Button onClick={handleSave} disabled={saving || saved} className="gap-2">
           {saved ? (
             <>

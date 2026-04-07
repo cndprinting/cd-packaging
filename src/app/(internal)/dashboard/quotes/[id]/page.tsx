@@ -11,6 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface QuoteData {
@@ -46,6 +47,8 @@ interface ParsedSpecs {
   finishing?: string;
   markups?: { paper: number; material: number; labor: number; outside: number };
   costBreakdown?: { materials: number; tooling: number; labor: number; finishing: number; waste: number; shipping: number; markup: number };
+  quantityTiers?: { quantity: number; total: number; costPerUnit: number; costPer1000: number }[];
+  additionalProducts?: { productName: string; quantity: number; total: number }[];
 }
 
 const statusColors: Record<string, string> = {
@@ -62,6 +65,8 @@ export default function QuoteDetailPage() {
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [selectedVolume, setSelectedVolume] = useState<number>(0);
 
   useEffect(() => {
     if (!params.id) return;
@@ -169,9 +174,15 @@ export default function QuoteDetailPage() {
           )}
           {quote.status === "approved" && (
             <>
-              <Button onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                <Package className="h-4 w-4" /> Convert to Job
-              </Button>
+              {specs.quantityTiers && specs.quantityTiers.length > 1 ? (
+                <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                  <Package className="h-4 w-4" /> Convert to Job...
+                </Button>
+              ) : (
+                <Button onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                  <Package className="h-4 w-4" /> Convert to Job
+                </Button>
+              )}
               <Button variant="outline" onClick={() => window.print()} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
@@ -323,6 +334,53 @@ export default function QuoteDetailPage() {
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{quote.notes}</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Volume Selection Modal for Conversion */}
+      {showConvertModal && specs.quantityTiers && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowConvertModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Select Volume for Job</h2>
+                <button onClick={() => setShowConvertModal(false)}><X className="h-5 w-5 text-gray-400" /></button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">This quote was estimated at multiple quantities. Select which volume to use for the job:</p>
+              <div className="space-y-2 mb-6">
+                {(specs.quantityTiers as { quantity: number; total: number; costPerUnit: number; costPer1000: number }[]).map((tier, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedVolume(tier.quantity)}
+                    className={`flex w-full items-center justify-between rounded-lg border-2 p-3 transition-all ${selectedVolume === tier.quantity ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-900">{tier.quantity.toLocaleString()} units</p>
+                      <p className="text-xs text-gray-500">{formatCurrency(tier.costPerUnit)}/unit</p>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">{formatCurrency(tier.total)}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setShowConvertModal(false)}>Cancel</Button>
+                <Button
+                  className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700"
+                  disabled={updating || !selectedVolume}
+                  onClick={async () => {
+                    setShowConvertModal(false);
+                    // Update quantity before converting
+                    await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, quantity: selectedVolume }) }).catch(() => {});
+                    updateStatus("converted");
+                  }}
+                >
+                  <Package className="h-4 w-4" /> Convert at {selectedVolume.toLocaleString()}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
