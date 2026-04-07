@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { DollarSign, Plus, X, Loader2, Send, Package, Search, FileText, BarChart3 } from "lucide-react";
+import { DollarSign, Plus, X, Loader2, Send, Package, Search, FileText, BarChart3, Mail, Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -97,8 +97,9 @@ export default function QuotesPage() {
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1">
                     {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "sent" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x)); }}><Send className="h-3.5 w-3.5" />Send</Button>}
+                    {(q.status === "draft" || q.status === "sent") && <Button variant="ghost" size="sm" className="gap-1 text-gray-600" onClick={() => alert("Send to CSR/Salesperson — email integration coming soon")}><Mail className="h-3.5 w-3.5" /></Button>}
                     {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}
-                    <Button variant="ghost" size="sm"><FileText className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => window.open(`/dashboard/quotes/${q.id}/print`, '_blank')}><Printer className="h-3.5 w-3.5" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
