@@ -157,7 +157,7 @@ export default function QuoteDetailPage() {
               <Button variant="outline" onClick={() => { /* TODO: Send internal email */ alert("Send to CSR/Salesperson — email integration coming soon"); }} className="gap-2">
                 <Mail className="h-4 w-4" /> Send Internal
               </Button>
-              <Button variant="outline" onClick={() => window.print()} className="gap-2">
+              <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
             </>
@@ -183,7 +183,7 @@ export default function QuoteDetailPage() {
                   <Package className="h-4 w-4" /> Convert to Job
                 </Button>
               )}
-              <Button variant="outline" onClick={() => window.print()} className="gap-2">
+              <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
             </>
