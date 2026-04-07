@@ -7,6 +7,7 @@ import {
   Package,
   Layers,
   DollarSign,
+  X,
   FileText,
   Printer,
   ChevronDown,
@@ -181,6 +182,7 @@ interface FormState {
   markupLabor: number;
   markupOutside: number;
   commissionPercent: number;
+  quantityTiers: number[];
   // Press selection (offset)
   selectedPressId: string;
   selectedConfigId: string;
@@ -192,7 +194,7 @@ interface FormState {
   priceLock: string;
   printAndStore: string;
   warehousingCost: string;
-  [key: string]: string | number | boolean; // allow dynamic field access
+  [key: string]: string | number | boolean | number[]; // allow dynamic field access
 }
 
 const defaultForm: FormState = {
@@ -254,6 +256,7 @@ const defaultForm: FormState = {
   markupLabor: 63,
   markupOutside: 30,
   commissionPercent: 10,
+  quantityTiers: [] as number[],
   selectedPressId: "",
   selectedConfigId: "",
   stockType: "uncoated" as const,
@@ -538,6 +541,65 @@ export default function EstimatePage() {
     };
   }, [form, selectedConfig]);
 
+  // ─── Quantity Tier Calculations ─────────────────────────────────────────────
+
+  const tierCalcs = useMemo(() => {
+    if (form.quantityTiers.length === 0) return [];
+    return form.quantityTiers.map((tierQty) => {
+      if (tierQty <= 0) return null;
+      const q = tierQty;
+      const v = num("versions") || 1;
+      let materialsCost = 0;
+      let toolingCost = 0;
+      let finishingCost = 0;
+      let makeReadyCost = 0;
+
+      if (isCartonOffset) {
+        const sheetsNeeded = Math.ceil((q * v) / (num("numberUp") || 1));
+        const paperCost = (sheetsNeeded / 1000) * num("paperCostPer1000");
+        const totalColors = num("inkColorsFront") + num("inkColorsBack");
+        const inkCost = totalColors * num("inkCostPerLb") * (sheetsNeeded / 5000);
+        const coatingCost = (sheetsNeeded / 1000) * num("coatingCostPer1000");
+        materialsCost = paperCost + inkCost + coatingCost;
+        toolingCost = num("dieCuttingPlateCost") + num("strippingToolCost");
+        finishingCost = num("gluingSetup") + num("windowPatching");
+        makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
+      } else if (isCartonDigital) {
+        materialsCost = q * v * num("substrateCostPerSheet") + q * v * num("clickCharge");
+        finishingCost = ((q * v * num("digitalDieCuttingTime")) / 60) * num("digitalCutterRate") + num("digitalCoatingCost");
+        if (form.variableData) finishingCost += num("vdpComplexitySurcharge");
+      } else if (isCommOffset) {
+        const totalColors = num("inkColorsFront") + num("inkColorsBack");
+        const sheetsNeeded = Math.ceil((q * v) / 1);
+        materialsCost = (sheetsNeeded / 1000) * num("commPaperCostPer1000") + num("commInkCost") * totalColors * (num("inkCoveragePercent") / 100);
+        toolingCost = num("plateCostEach") * totalColors;
+        finishingCost = num("foldingCost") + num("saddleStitchCost") + num("perfectBindingCost") + num("trimCost") + num("binderySetupHours") * num("binderyRate");
+        makeReadyCost = (500 / 1000) * num("commPaperCostPer1000");
+      } else if (isCommDigital) {
+        materialsCost = q * v * num("commDigitalClickCharge") + num("digitalPaperCost") * ((q * v) / 1000);
+        materialsCost *= 1 + num("rushSurchargePercent") / 100;
+        finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge");
+      }
+
+      // Recalc press run time for this tier quantity
+      let tierPressRunTime = num("pressRunTime");
+      if (selectedConfig && q > 0) {
+        const nUp = num("numberUp") || 1;
+        const sheetsNeeded = Math.ceil((q * v) / nUp);
+        const speed = form.stockType === "coated" ? selectedConfig.speedCoated : selectedConfig.speedUncoated;
+        if (speed > 0) tierPressRunTime = sheetsNeeded / speed;
+      }
+
+      const laborCost = tierPressRunTime * num("pressOperatorRate") + num("prepressTime") * num("prepressRate") + num("setupTime") * num("pressOperatorRate");
+      const shippingCost = num("shippingCost");
+      const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost;
+      const markupAmount = materialsCost * (num("markupPaper") / 100) + toolingCost * (num("markupMaterial") / 100) + laborCost * (num("markupLabor") / 100) + shippingCost * (num("markupOutside") / 100);
+      const commissionAmount = subtotal * (num("commissionPercent") / 100);
+      const total = subtotal + markupAmount + commissionAmount;
+      return { quantity: q, total, costPerUnit: total / q, costPer1000: (total / q) * 1000 };
+    }).filter(Boolean) as { quantity: number; total: number; costPerUnit: number; costPer1000: number }[];
+  }, [form, selectedConfig]);
+
   // ─── Crossover Analysis ────────────────────────────────────────────────────
 
   const crossover = useMemo(() => {
@@ -595,6 +657,10 @@ export default function EstimatePage() {
           stockType: form.stockType,
           markups: { paper: form.markupPaper, material: form.markupMaterial, labor: form.markupLabor, outside: form.markupOutside },
           commission: { percent: form.commissionPercent, amount: calc.commissionAmount },
+          quantityTiers: tierCalcs.length > 0 ? [
+            { quantity: form.quantity, total: calc.total, costPerUnit: calc.costPerUnit, costPer1000: calc.costPer1000 },
+            ...tierCalcs,
+          ] : undefined,
           costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount, commission: calc.commissionAmount },
         }),
       };
@@ -755,6 +821,49 @@ export default function EstimatePage() {
             />
             <p className="mt-1 text-xs text-brand-600 font-medium">The most important number -- everything calculates from this.</p>
           </Field>
+
+          {/* Quantity Tiers */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-700">Additional Quantity Tiers</p>
+              <button
+                type="button"
+                onClick={() => setForm(p => ({ ...p, quantityTiers: [...p.quantityTiers, 0] }))}
+                className="text-xs font-medium text-brand-600 hover:text-brand-800"
+              >
+                + Add Tier
+              </button>
+            </div>
+            {form.quantityTiers.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {form.quantityTiers.map((tier, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={tier || ""}
+                      onChange={(e) => {
+                        const newTiers = [...form.quantityTiers];
+                        newTiers[i] = Number(e.target.value);
+                        setForm(p => ({ ...p, quantityTiers: newTiers }));
+                      }}
+                      placeholder="Qty"
+                      className="w-28 h-9 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, quantityTiers: p.quantityTiers.filter((_, j) => j !== i) }))}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {form.quantityTiers.length === 0 && (
+              <p className="text-xs text-gray-400">Add tiers to compare pricing at different volumes.</p>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1247,6 +1356,48 @@ export default function EstimatePage() {
           <p className="mt-2 text-3xl font-bold text-gray-900">{fmtMoney(calc.costPer1000)}</p>
         </Card>
       </div>
+
+      {/* Quantity Tier Comparison */}
+      {tierCalcs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="h-5 w-5 text-brand-600" /> Volume Pricing Comparison
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 pr-4 font-medium text-gray-500">Quantity</th>
+                    <th className="text-right py-2 px-4 font-medium text-gray-500">Total</th>
+                    <th className="text-right py-2 px-4 font-medium text-gray-500">Per Unit</th>
+                    <th className="text-right py-2 pl-4 font-medium text-gray-500">Per 1,000</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Primary quantity */}
+                  <tr className="border-b border-gray-100 bg-brand-50/50">
+                    <td className="py-2.5 pr-4 font-semibold text-brand-700">{form.quantity.toLocaleString()} <span className="text-xs font-normal text-brand-500">(primary)</span></td>
+                    <td className="text-right py-2.5 px-4 font-semibold">{fmtMoney(calc.total)}</td>
+                    <td className="text-right py-2.5 px-4 font-semibold">{fmtMoney(calc.costPerUnit)}</td>
+                    <td className="text-right py-2.5 pl-4 font-semibold">{fmtMoney(calc.costPer1000)}</td>
+                  </tr>
+                  {tierCalcs.map((t, i) => (
+                    <tr key={i} className="border-b border-gray-50">
+                      <td className="py-2.5 pr-4 font-medium text-gray-900">{t.quantity.toLocaleString()}</td>
+                      <td className="text-right py-2.5 px-4">{fmtMoney(t.total)}</td>
+                      <td className="text-right py-2.5 px-4">{fmtMoney(t.costPerUnit)}</td>
+                      <td className="text-right py-2.5 pl-4">{fmtMoney(t.costPer1000)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Crossover Analysis */}
       {crossover !== null && crossover > 0 && (

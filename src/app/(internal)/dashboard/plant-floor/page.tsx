@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Timer, Play, Square, Clock, Package, Factory } from "lucide-react";
+import { Timer, Play, Square, Clock, Package, Factory, ChevronRight, Loader2 } from "lucide-react";
 import { RequireRole } from "@/components/auth/require-role";
 import { demoJobs } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
@@ -27,10 +27,27 @@ function formatElapsed(seconds: number): string {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+const ALL_STAGES = [
+  "QUOTE","ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL",
+  "PREPRESS","PLATING","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
+  "PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
+];
+
+function getNextStage(currentStatus: string): string | null {
+  const idx = ALL_STAGES.indexOf(currentStatus);
+  if (idx === -1 || idx >= ALL_STAGES.length - 1) return null;
+  return ALL_STAGES[idx + 1];
+}
+
+function getStageLabel(stage: string): string {
+  return stage.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function PlantFloorPage() {
   const [selectedDept, setSelectedDept] = useState(DEPARTMENTS[1].id);
   const [allJobs, setAllJobs] = useState(demoJobs);
   const [runningJobs, setRunningJobs] = useState<Record<string, number>>({});
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [completedToday, setCompletedToday] = useState<{ jobNumber: string; jobName: string; department: string; duration: string }[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -67,6 +84,19 @@ export default function PlantFloorPage() {
     setCompletedToday(prev => [{ jobNumber: job?.jobNumber || "", jobName: job?.name || "", department: dept.label, duration: `${h}h ${m}m` }, ...prev]);
     setRunningJobs(prev => { const next = { ...prev }; delete next[jobId]; return next; });
     try { await fetch("/api/timeclock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "stop", department: dept.label }) }); } catch {}
+  };
+
+  const handleAdvanceStage = async (jobId: string) => {
+    const job = allJobs.find(j => j.id === jobId);
+    if (!job) return;
+    const nextStage = getNextStage(job.status);
+    if (!nextStage) return;
+    setAdvancingId(jobId);
+    try {
+      await fetch(`/api/jobs/${jobId}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: nextStage }) });
+      setAllJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: nextStage as typeof j.status } : j));
+    } catch {}
+    setAdvancingId(null);
   };
 
   return (
@@ -133,6 +163,19 @@ export default function PlantFloorPage() {
                 ) : (
                   <Button size="lg" className="w-full h-14 text-lg bg-green-600 hover:bg-green-700 gap-2" onClick={() => handleStart(job.id)}>
                     <Play className="h-6 w-6" /> START
+                  </Button>
+                )}
+
+                {/* Advance Stage */}
+                {getNextStage(job.status) && !running && (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-2 gap-2 text-brand-700 border-brand-200 hover:bg-brand-50"
+                    onClick={() => handleAdvanceStage(job.id)}
+                    disabled={advancingId === job.id}
+                  >
+                    {advancingId === job.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                    Advance to {getStageLabel(getNextStage(job.status)!)}
                   </Button>
                 )}
               </Card>

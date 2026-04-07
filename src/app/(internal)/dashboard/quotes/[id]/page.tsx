@@ -143,11 +143,19 @@ export default function QuoteDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
-          {quote.status === "draft" && (
-            <Button onClick={() => updateStatus("sent")} disabled={updating} className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Send className="h-4 w-4" /> Send to Customer
-            </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {(quote.status === "draft" || quote.status === "sent") && (
+            <>
+              <Button onClick={() => updateStatus("sent")} disabled={updating || quote.status === "sent"} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                <Send className="h-4 w-4" /> Send to Customer
+              </Button>
+              <Button variant="outline" onClick={() => { /* TODO: Send internal email */ alert("Send to CSR/Salesperson — email integration coming soon"); }} className="gap-2">
+                <Mail className="h-4 w-4" /> Send Internal
+              </Button>
+              <Button variant="outline" onClick={() => window.print()} className="gap-2">
+                <Printer className="h-4 w-4" /> Print Quote
+              </Button>
+            </>
           )}
           {quote.status === "sent" && (
             <>
@@ -160,9 +168,14 @@ export default function QuoteDetailPage() {
             </>
           )}
           {quote.status === "approved" && (
-            <Button onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-              <Package className="h-4 w-4" /> Convert to Job
-            </Button>
+            <>
+              <Button onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                <Package className="h-4 w-4" /> Convert to Job
+              </Button>
+              <Button variant="outline" onClick={() => window.print()} className="gap-2">
+                <Printer className="h-4 w-4" /> Print Quote
+              </Button>
+            </>
           )}
           {quote.convertedJobId && (
             <Link href={`/dashboard/jobs/${quote.convertedJobId}`}>
