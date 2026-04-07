@@ -138,13 +138,39 @@ interface FormState {
   strippingToolCost: number;
   makeReadySheets: number;
   paperCostPer1000: number;
+  paperPricingMode: string; // "per1000" or "cwt"
+  paperBasisWeight: number;
+  paperPricePerCwt: number;
+  paperTotalSheets: number;
   inkColorsFront: number;
   inkColorsBack: number;
   inkCostPerLb: number;
+  inkBlackPct: number;
+  inkColorPct: number;
+  inkVarnishPct: number;
   specialtyCoating: string;
   coatingCostPer1000: number;
   gluingSetup: number;
   windowPatching: number;
+  // Proofs
+  proofSherpa2: number;
+  proofSherpa43: number;
+  proofDylux: number;
+  proofMatchprint: number;
+  // Bindery detail
+  cuttingDiff: number;
+  handBind1Name: string;
+  handBind1SpeedPerHour: number;
+  handBind1PctOfQty: number;
+  handBind2Name: string;
+  handBind2SpeedPerHour: number;
+  cartonType: number;
+  skidPack: boolean;
+  // Press extras
+  pressHelpers: number;
+  wasteFactor: number;
+  // Outside purchases
+  outsidePurchases: { description: string; cost: number }[];
   // Folding Carton + Digital
   clickCharge: number;
   digitalDieCuttingTime: number;
@@ -214,7 +240,7 @@ interface FormState {
   priceLock: string;
   printAndStore: string;
   warehousingCost: string;
-  [key: string]: string | number | boolean | number[]; // allow dynamic field access
+  [key: string]: string | number | boolean | number[] | { description: string; cost: number }[]; // allow dynamic field access
 }
 
 const defaultForm: FormState = {
@@ -235,13 +261,35 @@ const defaultForm: FormState = {
   strippingToolCost: 0,
   makeReadySheets: 500,
   paperCostPer1000: 0,
+  paperPricingMode: "per1000",
+  paperBasisWeight: 0,
+  paperPricePerCwt: 0,
+  paperTotalSheets: 0,
   inkColorsFront: 4,
   inkColorsBack: 0,
   inkCostPerLb: 0,
+  inkBlackPct: 6,
+  inkColorPct: 12,
+  inkVarnishPct: 12,
   specialtyCoating: "none",
   coatingCostPer1000: 0,
   gluingSetup: 0,
   windowPatching: 0,
+  proofSherpa2: 0,
+  proofSherpa43: 0,
+  proofDylux: 0,
+  proofMatchprint: 0,
+  cuttingDiff: 1.0,
+  handBind1Name: "",
+  handBind1SpeedPerHour: 0,
+  handBind1PctOfQty: 100,
+  handBind2Name: "",
+  handBind2SpeedPerHour: 0,
+  cartonType: 1,
+  skidPack: false,
+  pressHelpers: 0,
+  wasteFactor: 0,
+  outsidePurchases: [] as { description: string; cost: number }[],
   clickCharge: 0,
   digitalDieCuttingTime: 0,
   digitalCutterRate: 0,
@@ -580,7 +628,10 @@ export default function EstimatePage() {
       }
     }
 
-    const outsideCost = coatingCost + inserterCost + secapCost;
+    // Outside purchase line items
+    const outsidePurchaseTotal = (form.outsidePurchases as { description: string; cost: number }[]).reduce((sum, op) => sum + (op.cost || 0), 0);
+
+    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal;
 
     // Auto-calculate waste from press config waste curve
     let wasteSheets = 0;
@@ -1160,45 +1211,204 @@ export default function EstimatePage() {
 
           <Section title="Paper & Ink" icon={Droplets}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Paper Cost ($ per 1000 sheets)">
-                <Input type="number" step="0.01" value={form.paperCostPer1000 || ""} onChange={(e) => set("paperCostPer1000", Number(e.target.value))} />
-              </Field>
-              <Field label="Ink Colors (Front)">
-                <Input type="number" value={form.inkColorsFront || ""} onChange={(e) => set("inkColorsFront", Number(e.target.value))} min={0} max={8} />
-              </Field>
-              <Field label="Ink Colors (Back)">
-                <Input type="number" value={form.inkColorsBack || ""} onChange={(e) => set("inkColorsBack", Number(e.target.value))} min={0} max={8} />
-              </Field>
-              <Field label="Ink Cost ($ per lb)">
-                <Input type="number" step="0.01" value={form.inkCostPerLb || ""} onChange={(e) => set("inkCostPerLb", Number(e.target.value))} />
-              </Field>
-              <Field label="Specialty Coating">
+              <Field label="Paper Pricing">
                 <Select
-                  value={form.specialtyCoating}
-                  onChange={(e) => set("specialtyCoating", e.target.value)}
+                  value={form.paperPricingMode as string}
+                  onChange={(e) => set("paperPricingMode", e.target.value)}
                   options={[
-                    { value: "none", label: "None" },
-                    { value: "uv", label: "UV Coating" },
-                    { value: "aqueous", label: "Aqueous" },
-                    { value: "soft-touch", label: "Soft-Touch Laminate" },
-                    { value: "matte", label: "Matte Laminate" },
+                    { value: "per1000", label: "$ per 1,000 Sheets" },
+                    { value: "cwt", label: "$ per CWT (100 lbs)" },
                   ]}
                 />
               </Field>
-              <Field label="Coating Cost ($ per 1000 sheets)">
-                <Input type="number" step="0.01" value={form.coatingCostPer1000 || ""} onChange={(e) => set("coatingCostPer1000", Number(e.target.value))} />
-              </Field>
+              {form.paperPricingMode === "cwt" ? (
+                <>
+                  <Field label="Basis Weight (lbs)" hint="e.g. 180">
+                    <Input type="number" value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} />
+                  </Field>
+                  <Field label="Price per CWT ($)" hint="Per 100 lbs">
+                    <Input type="number" step="0.01" value={form.paperPricePerCwt || ""} onChange={(e) => set("paperPricePerCwt", Number(e.target.value))} />
+                  </Field>
+                </>
+              ) : (
+                <Field label="Paper Cost ($ per 1000 sheets)">
+                  <Input type="number" step="0.01" value={form.paperCostPer1000 || ""} onChange={(e) => set("paperCostPer1000", Number(e.target.value))} />
+                </Field>
+              )}
+            </div>
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Ink</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Field label="Colors (Front)">
+                  <Input type="number" value={form.inkColorsFront || ""} onChange={(e) => set("inkColorsFront", Number(e.target.value))} min={0} max={8} />
+                </Field>
+                <Field label="Colors (Back)">
+                  <Input type="number" value={form.inkColorsBack || ""} onChange={(e) => set("inkColorsBack", Number(e.target.value))} min={0} max={8} />
+                </Field>
+                <Field label="Ink Cost ($/lb)">
+                  <Input type="number" step="0.01" value={form.inkCostPerLb || ""} onChange={(e) => set("inkCostPerLb", Number(e.target.value))} />
+                </Field>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-4">
+                <Field label="Black Coverage %" hint="Typical 6%">
+                  <Input type="number" step="1" value={form.inkBlackPct || ""} onChange={(e) => set("inkBlackPct", Number(e.target.value))} min={0} max={100} />
+                </Field>
+                <Field label="Color Coverage %" hint="Typical 12%">
+                  <Input type="number" step="1" value={form.inkColorPct || ""} onChange={(e) => set("inkColorPct", Number(e.target.value))} min={0} max={100} />
+                </Field>
+                <Field label="Varnish Coverage %" hint="Typical 12%">
+                  <Input type="number" step="1" value={form.inkVarnishPct || ""} onChange={(e) => set("inkVarnishPct", Number(e.target.value))} min={0} max={100} />
+                </Field>
+              </div>
+            </div>
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Coating</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Specialty Coating">
+                  <Select
+                    value={form.specialtyCoating}
+                    onChange={(e) => set("specialtyCoating", e.target.value)}
+                    options={[
+                      { value: "none", label: "None" },
+                      { value: "uv", label: "UV Coating" },
+                      { value: "aqueous", label: "Aqueous" },
+                      { value: "soft-touch", label: "Soft-Touch Laminate" },
+                      { value: "matte", label: "Matte Laminate" },
+                    ]}
+                  />
+                </Field>
+                <Field label="Coating Cost ($ per 1000)">
+                  <Input type="number" step="0.01" value={form.coatingCostPer1000 || ""} onChange={(e) => set("coatingCostPer1000", Number(e.target.value))} />
+                </Field>
+              </div>
+            </div>
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Proofs</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Field label="Sherpa2">
+                  <Input type="number" value={form.proofSherpa2 || ""} onChange={(e) => set("proofSherpa2", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Sherpa43">
+                  <Input type="number" value={form.proofSherpa43 || ""} onChange={(e) => set("proofSherpa43", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Dylux">
+                  <Input type="number" value={form.proofDylux || ""} onChange={(e) => set("proofDylux", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Matchprint">
+                  <Input type="number" value={form.proofMatchprint || ""} onChange={(e) => set("proofMatchprint", Number(e.target.value))} min={0} />
+                </Field>
+              </div>
             </div>
           </Section>
 
-          <Section title="Finishing" icon={Scissors} defaultOpen={false}>
-            <div className="grid grid-cols-2 gap-4">
+          <Section title="Finishing & Bindery" icon={Scissors}>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Gluing Setup ($)">
                 <Input type="number" step="0.01" value={form.gluingSetup || ""} onChange={(e) => set("gluingSetup", Number(e.target.value))} />
               </Field>
-              <Field label="Window Patching ($)" hint="If applicable">
+              <Field label="Window Patching ($)">
                 <Input type="number" step="0.01" value={form.windowPatching || ""} onChange={(e) => set("windowPatching", Number(e.target.value))} />
               </Field>
+              <Field label="Cutting Difficulty" hint="1.0 = normal">
+                <Input type="number" step="0.1" value={form.cuttingDiff || ""} onChange={(e) => set("cuttingDiff", Number(e.target.value))} min={0} max={5} />
+              </Field>
+            </div>
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Hand Bindery Operations</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Hand Bind 1 Name" hint="e.g. Softtouch">
+                  <Input value={form.handBind1Name as string} onChange={(e) => set("handBind1Name", e.target.value)} placeholder="Operation name" />
+                </Field>
+                <Field label="Speed (per hour)">
+                  <Input type="number" value={form.handBind1SpeedPerHour || ""} onChange={(e) => set("handBind1SpeedPerHour", Number(e.target.value))} />
+                </Field>
+                <Field label="% of Quantity" hint="100 = all pieces">
+                  <Input type="number" value={form.handBind1PctOfQty || ""} onChange={(e) => set("handBind1PctOfQty", Number(e.target.value))} min={0} max={100} />
+                </Field>
+                <Field label="Hand Bind 2 Name" hint="e.g. DC/GL/Fold">
+                  <Input value={form.handBind2Name as string} onChange={(e) => set("handBind2Name", e.target.value)} placeholder="Operation name" />
+                </Field>
+                <Field label="Speed (per hour)">
+                  <Input type="number" value={form.handBind2SpeedPerHour || ""} onChange={(e) => set("handBind2SpeedPerHour", Number(e.target.value))} />
+                </Field>
+              </div>
+            </div>
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Packing</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Carton Type">
+                  <Select
+                    value={String(form.cartonType)}
+                    onChange={(e) => set("cartonType", Number(e.target.value))}
+                    options={[
+                      { value: "1", label: "11.25x8.75x10 ($0.93)" },
+                      { value: "2", label: "11x9x10 ($0.75)" },
+                      { value: "3", label: "LTHD BOX ($0.52)" },
+                    ]}
+                  />
+                </Field>
+                <Field label="Skid Pack">
+                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                    <input type="checkbox" checked={form.skidPack as boolean} onChange={(e) => set("skidPack", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+                    <span className="text-sm text-gray-700">Include skid ($5.00)</span>
+                  </label>
+                </Field>
+              </div>
+            </div>
+          </Section>
+
+          {/* Outside Purchases */}
+          <Section title="Outside Purchases" icon={Truck} defaultOpen={false}>
+            <div className="space-y-2">
+              {(form.outsidePurchases as { description: string; cost: number }[]).map((op, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={op.description}
+                    onChange={(e) => {
+                      const newOps = [...(form.outsidePurchases as { description: string; cost: number }[])];
+                      newOps[i] = { ...newOps[i], description: e.target.value };
+                      set("outsidePurchases" as keyof FormState, newOps as any);
+                    }}
+                    placeholder="Description (e.g. Softtouch)"
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={op.cost || ""}
+                    onChange={(e) => {
+                      const newOps = [...(form.outsidePurchases as { description: string; cost: number }[])];
+                      newOps[i] = { ...newOps[i], cost: Number(e.target.value) };
+                      set("outsidePurchases" as keyof FormState, newOps as any);
+                    }}
+                    placeholder="Cost ($)"
+                    className="w-32"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newOps = (form.outsidePurchases as { description: string; cost: number }[]).filter((_, j) => j !== i);
+                      set("outsidePurchases" as keyof FormState, newOps as any);
+                    }}
+                    className="text-gray-400 hover:text-red-500 p-1"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const newOps = [...(form.outsidePurchases as { description: string; cost: number }[]), { description: "", cost: 0 }];
+                  set("outsidePurchases" as keyof FormState, newOps as any);
+                }}
+                className="text-sm font-medium text-brand-600 hover:text-brand-800"
+              >
+                + Add Outside Purchase
+              </button>
             </div>
           </Section>
         </>
@@ -1363,6 +1573,16 @@ export default function EstimatePage() {
             <Input type="number" step="0.25" value={form.setupTime || ""} onChange={(e) => set("setupTime", Number(e.target.value))} />
           </Field>
         </div>
+        {isOffset && (
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Press Helpers" hint="Additional crew">
+              <Input type="number" value={form.pressHelpers || ""} onChange={(e) => set("pressHelpers", Number(e.target.value))} min={0} max={5} />
+            </Field>
+            <Field label="Waste Factor Override" hint="0 = auto from press config">
+              <Input type="number" step="0.1" value={form.wasteFactor || ""} onChange={(e) => set("wasteFactor", Number(e.target.value))} min={0} />
+            </Field>
+          </div>
+        )}
         {isOffset && (
           <div className="mt-4">
             <p className="mb-2 text-sm font-medium text-gray-700">Difficulty Factors</p>
