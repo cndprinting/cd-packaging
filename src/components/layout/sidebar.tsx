@@ -56,7 +56,7 @@ export function Sidebar({ isCustomer = false }: SidebarProps) {
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">C&D Packaging</p>
-            <p className="text-xs text-gray-500 truncate">{isCustomer ? "Customer Portal" : "Production Tracking"}</p>
+            <p className="text-xs text-gray-500 truncate">{isCustomer ? "Customer Portal" : "Godzilla"}</p>
           </div>
         )}
       </div>
