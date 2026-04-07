@@ -8,8 +8,16 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Truck, Package, MapPin, Clock, CheckCircle, Circle, Eye, Loader2,
+  Truck, Package, MapPin, Clock, CheckCircle, Circle, Eye, Loader2, ExternalLink,
 } from "lucide-react";
+
+function getTrackingUrl(carrier: string, tracking: string): string | null {
+  if (!tracking) return null;
+  const c = carrier.toLowerCase();
+  if (c.includes("fedex")) return `https://www.fedex.com/fedextrack/?trknbr=${tracking}`;
+  if (c.includes("ups")) return `https://www.ups.com/track?tracknum=${tracking}`;
+  return null;
+}
 
 const CUSTOMER_COMPANY_ID = "co-1";
 
@@ -230,7 +238,16 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
           </div>
           <div>
             <p className="text-xs text-gray-500">Tracking #</p>
-            <p className="text-sm font-medium text-brand-600">{shipment.trackingNumber}</p>
+            {(() => {
+              const url = getTrackingUrl(shipment.carrier, shipment.trackingNumber);
+              return url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+                  {shipment.trackingNumber} <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <p className="text-sm font-medium text-brand-600">{shipment.trackingNumber}</p>
+              );
+            })()}
           </div>
           <div>
             <p className="text-xs text-gray-500">Ship Date</p>

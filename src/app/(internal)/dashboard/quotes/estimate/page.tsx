@@ -1036,9 +1036,6 @@ export default function EstimatePage() {
               <Field label="Die-Cutting Plate Cost ($)">
                 <Input type="number" step="0.01" value={form.dieCuttingPlateCost || ""} onChange={(e) => set("dieCuttingPlateCost", Number(e.target.value))} />
               </Field>
-              <Field label="Stripping Tool Cost ($)">
-                <Input type="number" step="0.01" value={form.strippingToolCost || ""} onChange={(e) => set("strippingToolCost", Number(e.target.value))} />
-              </Field>
               <Field label="Make-Ready Sheets" hint="Waste for ink balance + die registration">
                 <Input type="number" value={form.makeReadySheets || ""} onChange={(e) => set("makeReadySheets", Number(e.target.value))} />
               </Field>
@@ -1324,7 +1321,7 @@ export default function EstimatePage() {
         <CardContent>
           <div className="space-y-3">
             <CostRow label="Materials" sublabel="Substrate + ink + coating" amount={calc.materialsCost} icon={Droplets} />
-            <CostRow label="Tooling" sublabel="Dies, plates, stripping tools" amount={calc.toolingCost} icon={Settings} />
+            <CostRow label="Tooling" sublabel="Dies, plates, tooling" amount={calc.toolingCost} icon={Settings} />
             <CostRow label="Labor" sublabel="Press + prepress + setup time" amount={calc.laborCost} icon={Users} />
             <CostRow label="Finishing" sublabel="Bindery, gluing, patching" amount={calc.finishingCost} icon={Scissors} />
             <CostRow label="Make-Ready / Waste" sublabel="Waste sheets at paper cost" amount={calc.makeReadyCost} icon={RotateCcw} />
