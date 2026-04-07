@@ -530,7 +530,9 @@ export default function EstimatePage() {
 
     const commissionAmount = subtotal * (num("commissionPercent") / 100);
 
-    const total = subtotal + markupAmount + commissionAmount;
+    const preTaxTotal = subtotal + markupAmount + commissionAmount;
+    const salesTax = preTaxTotal * 0.07; // 7% FL sales tax (Pinellas County)
+    const total = preTaxTotal + salesTax;
     const costPerUnit = q > 0 ? total / q : 0;
     const costPer1000 = q > 0 ? (total / q) * 1000 : 0;
 
@@ -548,6 +550,7 @@ export default function EstimatePage() {
       laborMarkup,
       outsideMarkup,
       commissionAmount,
+      salesTax,
       wasteSheets,
       total,
       costPerUnit,
@@ -1361,6 +1364,10 @@ export default function EstimatePage() {
                 <span className="font-semibold text-amber-600">+ {fmtMoney(calc.commissionAmount)}</span>
               </div>
             )}
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-gray-700">Sales Tax (7%)</span>
+              <span className="font-semibold text-gray-600">+ {fmtMoney(calc.salesTax)}</span>
+            </div>
 
             <div className="my-3 border-t-2 border-gray-900" />
 
@@ -1695,6 +1702,10 @@ export default function EstimatePage() {
                       <span className="font-medium text-amber-600">+{fmtMoney(calc.commissionAmount)}</span>
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Sales Tax (7%)</span>
+                    <span className="font-medium">+{fmtMoney(calc.salesTax)}</span>
+                  </div>
                   <div className="my-2 border-t-2 border-gray-900" />
                   <div className="flex justify-between">
                     <span className="font-bold text-gray-900">Total</span>

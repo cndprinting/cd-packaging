@@ -5,6 +5,8 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
+const SALES_TAX_RATE = 0.07; // 7% Pinellas County FL
+
 interface QuoteData {
   id: string;
   quoteNumber: string;
@@ -38,6 +40,10 @@ interface ParsedSpecs {
   costBreakdown?: Record<string, number>;
 }
 
+function fmtMoney(n: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
 export default function PrintQuotePage() {
   const params = useParams();
   const [quote, setQuote] = useState<QuoteData | null>(null);
@@ -52,7 +58,6 @@ export default function PrintQuotePage() {
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  // Auto-print when loaded
   useEffect(() => {
     if (quote && !loading) {
       setTimeout(() => window.print(), 500);
@@ -76,187 +81,220 @@ export default function PrintQuotePage() {
     try { specs = JSON.parse(quote.specs); } catch { /* ignore */ }
   }
 
-  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const createdDate = new Date(quote.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-
-  // Build quantity tiers for display
   const tiers = specs.quantityTiers || [{ quantity: quote.quantity, total: quote.totalPrice, costPerUnit: quote.unitPrice, costPer1000: 0 }];
-
-  // Parse job description parts from description field
   const descParts = quote.description?.split(" | ") || [];
   const productTypeLabel = descParts[0] || "";
-  const sizeLabel = descParts[1] || "";
-
-  // Derive press/paper/bindery info from specs
   const colorsDisplay = specs.colors || "";
   const pressDisplay = specs.pressName ? `${specs.pressName}${specs.pressConfig ? ` - ${specs.pressConfig}` : ""}` : "";
   const stockDisplay = specs.stockType ? (specs.stockType.charAt(0).toUpperCase() + specs.stockType.slice(1)) : "";
 
   return (
     <>
-      {/* Print-only styles */}
       <style>{`
         @media print {
-          body { margin: 0; padding: 0; }
+          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
-          .print-page { padding: 0.5in 0.75in; }
+          .print-page { padding: 0.4in 0.6in; }
         }
         @media screen {
-          .print-page { max-width: 8.5in; margin: 0 auto; padding: 0.5in 0.75in; background: white; min-height: 11in; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+          body { background: #e5e7eb; }
+          .print-page { max-width: 8.5in; margin: 20px auto; padding: 0.5in 0.7in; background: white; min-height: 11in; box-shadow: 0 4px 24px rgba(0,0,0,0.15); border-radius: 4px; }
         }
-        .print-page { font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 12px; line-height: 1.4; }
-        .print-page h1 { font-size: 14px; margin: 0; }
-        .print-page .header-title { font-size: 13px; font-weight: normal; text-align: center; margin-bottom: 4px; }
-        .print-page .company-name { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 2px; }
-        .print-page .company-address { text-align: center; font-size: 11px; line-height: 1.5; }
-        .print-page .divider { border-top: 3px double #000; margin: 12px 0; }
-        .print-page .divider-thin { border-top: 1px solid #000; margin: 8px 0; }
-        .print-page .section-label { font-weight: bold; font-size: 12px; margin: 10px 0 2px 0; }
-        .print-page .section-value { margin-left: 16px; font-size: 11px; }
-        .print-page .meta-row { display: flex; justify-content: space-between; margin: 4px 0; }
-        .print-page .qty-table { width: 100%; margin: 8px 0; }
-        .print-page .qty-table td { padding: 2px 8px; font-size: 12px; font-weight: bold; }
-        .print-page .signature-area { margin-top: 24px; }
-        .print-page .sig-line { border-bottom: 1px solid #000; width: 200px; display: inline-block; margin: 0 8px; }
+        .print-page { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 11px; line-height: 1.5; }
+
+        .header-bar { background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 2px 0; margin-bottom: 16px; }
+        .header-content { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+        .header-logo { display: flex; align-items: center; gap: 12px; }
+        .header-logo img { height: 48px; }
+        .header-company { text-align: right; font-size: 10px; color: #555; line-height: 1.6; }
+        .header-company .name { font-size: 16px; font-weight: bold; color: #1a1a1a; }
+
+        .estimate-badge { display: inline-block; background: #CC1E2D; color: white; font-size: 10px; font-weight: bold; letter-spacing: 2px; padding: 3px 12px; text-transform: uppercase; }
+
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin: 12px 0; }
+        .meta-label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
+        .meta-value { font-size: 12px; font-weight: 600; color: #1a1a1a; }
+
+        .section-divider { border: none; border-top: 2px solid #CC1E2D; margin: 14px 0 10px 0; }
+        .section-divider-light { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+
+        .spec-label { font-weight: bold; font-size: 11px; color: #CC1E2D; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 2px 0; }
+        .spec-value { margin-left: 16px; font-size: 11px; color: #333; }
+
+        .pricing-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        .pricing-table th { background: #f3f4f6; padding: 6px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; border-bottom: 2px solid #CC1E2D; }
+        .pricing-table td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 12px; }
+        .pricing-table tr:last-child td { border-bottom: 2px solid #CC1E2D; }
+        .pricing-table .amt { text-align: right; font-weight: bold; font-size: 13px; }
+        .pricing-table .tax-row td { font-size: 11px; color: #666; }
+        .pricing-table .total-row td { font-weight: bold; font-size: 14px; background: #fef2f2; }
+
+        .terms-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; margin: 14px 0; font-size: 10px; line-height: 1.7; }
+        .terms-box .terms-title { font-weight: bold; font-size: 11px; color: #CC1E2D; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+        .payment-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin: 10px 0; font-size: 10px; line-height: 1.7; }
+        .payment-box .payment-title { font-weight: bold; font-size: 11px; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+        .sig-area { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        .sig-block { border-top: 1px solid #000; padding-top: 4px; }
+        .sig-label { font-size: 9px; color: #888; text-transform: uppercase; }
+
+        .footer-bar { background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 2px 0; margin-top: 20px; }
+        .footer-text { text-align: center; font-size: 9px; color: #888; margin-top: 6px; }
       `}</style>
 
-      {/* Back button (screen only) */}
-      <div className="no-print p-4 text-center bg-gray-100">
-        <button
-          onClick={() => window.history.back()}
-          className="mr-4 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
-        >
-          Back
-        </button>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-        >
-          Print
-        </button>
+      {/* Screen toolbar */}
+      <div className="no-print p-4 text-center bg-gray-200 sticky top-0 z-10">
+        <button onClick={() => window.history.back()} className="mr-4 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">Back</button>
+        <button onClick={() => window.print()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Print</button>
       </div>
 
       <div className="print-page">
-        {/* Header */}
-        <div className="header-title">Estimate</div>
-        <div className="company-name">C&amp;D Printing Co.</div>
-        <div className="company-address">
-          12150 28th Street N.<br />
-          St. Petersburg, FL 33716<br />
-          727-572-9999 &nbsp;&nbsp;&nbsp; FX 727-573-5839
-        </div>
+        {/* Color bar */}
+        <div className="header-bar" />
 
-        <div className="divider" />
-
-        {/* Estimate Number + Customer */}
-        <div className="meta-row">
-          <div>{quote.customerName}</div>
-          <div>Estimate Number {quote.quoteNumber.replace("QT-", "")}</div>
-        </div>
-        <div className="meta-row">
-          <div />
-          <div>Date {createdDate}</div>
-        </div>
-
-        <div className="divider" />
-
-        {/* Job Description */}
-        <div className="section-label">JOB DESCRIPTION:</div>
-        <div className="section-value">
-          {quote.productName}
-          {productTypeLabel && <><br />{productTypeLabel}</>}
-        </div>
-        {quote.description && (
-          <div className="section-value" style={{ marginTop: 4 }}>
-            Estimated as: {quote.description}
+        {/* Header with logo */}
+        <div className="header-content">
+          <div className="header-logo">
+            <img src="/logo.svg" alt="C&D Printing and Packaging" />
           </div>
-        )}
+          <div className="header-company">
+            <div className="name">C&amp;D Printing Co.</div>
+            12150 28th Street N.<br />
+            St. Petersburg, FL 33716<br />
+            727-572-9999 | Fax 727-573-5839
+          </div>
+        </div>
 
-        {/* Final Trim Size */}
+        {/* Estimate badge + meta */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div className="estimate-badge">Estimate</div>
+        </div>
+
+        <div className="meta-grid" style={{ marginTop: 10 }}>
+          <div>
+            <div className="meta-label">Customer</div>
+            <div className="meta-value">{quote.customerName}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="meta-label">Estimate #</div>
+            <div className="meta-value">{quote.quoteNumber}</div>
+          </div>
+          <div>
+            <div className="meta-label">Contact</div>
+            <div className="meta-value">{quote.contactName || "—"}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="meta-label">Date</div>
+            <div className="meta-value">{createdDate}</div>
+          </div>
+        </div>
+
+        <hr className="section-divider" />
+
+        {/* Job Specs */}
+        <div className="spec-label">Job Description</div>
+        <div className="spec-value">
+          {quote.productName}
+          {productTypeLabel && <> &mdash; {productTypeLabel}</>}
+        </div>
+        {quote.description && <div className="spec-value" style={{ color: "#666", fontSize: 10 }}>{quote.description}</div>}
+
         {specs.dimensions && (
           <>
-            <div className="section-label">FINAL TRIM SIZE:</div>
-            <div className="section-value">{specs.dimensions.replace("x", " x ")}{" "}- with Bleeds</div>
+            <div className="spec-label">Final Trim Size</div>
+            <div className="spec-value">{specs.dimensions.replace("x", '" x ')}"{specs.dimensions ? " - with Bleeds" : ""}</div>
           </>
         )}
 
-        {/* Paper */}
         {stockDisplay && (
           <>
-            <div className="section-label">PAPER:</div>
-            <div className="section-value">
+            <div className="spec-label">Paper</div>
+            <div className="spec-value">
               {stockDisplay} Stock
-              {specs.paperStock && <><br />{specs.paperStock}</>}
+              {specs.paperStock && <> &mdash; {specs.paperStock}</>}
             </div>
           </>
         )}
 
-        {/* Press Work */}
         {(colorsDisplay || pressDisplay) && (
           <>
-            <div className="section-label">PRESS WORK:</div>
-            <div className="section-value">
+            <div className="spec-label">Press Work</div>
+            <div className="spec-value">
               {colorsDisplay && <>{colorsDisplay.replace("F/", " Front / ").replace("B", " Back")}</>}
-              {pressDisplay && <><br />Press: {pressDisplay}</>}
+              {pressDisplay && <> &mdash; {pressDisplay}</>}
             </div>
           </>
         )}
 
-        {/* Bindery */}
         {specs.finishing && (
           <>
-            <div className="section-label">BINDERY:</div>
-            <div className="section-value">{specs.finishing}</div>
+            <div className="spec-label">Bindery / Finishing</div>
+            <div className="spec-value">{specs.finishing}</div>
           </>
         )}
 
-        {/* Notes */}
         {quote.notes && (
           <>
-            <div className="section-label">NOTES:</div>
-            <div className="section-value" style={{ whiteSpace: "pre-wrap" }}>{quote.notes}</div>
+            <div className="spec-label">Notes</div>
+            <div className="spec-value" style={{ whiteSpace: "pre-wrap" }}>{quote.notes}</div>
           </>
         )}
 
-        {/* Delivery */}
-        <div className="section-label">DELIVERY:</div>
-        <div className="section-value">ST PETE/TAMPA</div>
+        <div className="spec-label">Delivery</div>
+        <div className="spec-value">ST PETE / TAMPA area</div>
 
-        <div style={{ height: 16 }} />
+        <hr className="section-divider" />
 
-        {/* Quantity / Price Table */}
-        <div className="divider" />
-        <table className="qty-table">
+        {/* Pricing Table */}
+        <table className="pricing-table">
+          <thead>
+            <tr>
+              <th>Quantity</th>
+              <th className="amt">Subtotal</th>
+              <th className="amt">Sales Tax (7%)</th>
+              <th className="amt">Total</th>
+            </tr>
+          </thead>
           <tbody>
-            {tiers.map((tier, i) => (
-              <tr key={i}>
-                <td style={{ width: 100 }}>QUANTITY:</td>
-                <td>{tier.quantity.toLocaleString()} - Price of {formatCurrency(tier.total)}</td>
-              </tr>
-            ))}
+            {tiers.map((tier, i) => {
+              const tax = tier.total * SALES_TAX_RATE;
+              const totalWithTax = tier.total + tax;
+              return (
+                <tr key={i}>
+                  <td><strong>{tier.quantity.toLocaleString()}</strong> units</td>
+                  <td className="amt">{fmtMoney(tier.total)}</td>
+                  <td className="amt" style={{ color: "#666" }}>{fmtMoney(tax)}</td>
+                  <td className="amt">{fmtMoney(totalWithTax)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
         {/* Additional Products */}
         {specs.additionalProducts && specs.additionalProducts.length > 0 && (
           <>
-            <div className="divider-thin" />
             {specs.additionalProducts.map((product, pi) => (
-              <div key={pi} style={{ marginBottom: 8 }}>
-                <div style={{ fontWeight: "bold", fontSize: 11 }}>{product.productName}:</div>
-                <table className="qty-table">
+              <div key={pi}>
+                <div style={{ fontWeight: "bold", fontSize: 11, marginTop: 8, color: "#CC1E2D" }}>{product.productName}</div>
+                <table className="pricing-table">
+                  <thead>
+                    <tr><th>Quantity</th><th className="amt">Subtotal</th><th className="amt">Tax (7%)</th><th className="amt">Total</th></tr>
+                  </thead>
                   <tbody>
-                    {product.tiers?.map((t, ti) => (
-                      <tr key={ti}>
-                        <td style={{ width: 100 }}>QUANTITY:</td>
-                        <td>{t.quantity.toLocaleString()} - Price of {formatCurrency(t.total)}</td>
-                      </tr>
-                    )) || (
-                      <tr>
-                        <td style={{ width: 100 }}>QUANTITY:</td>
-                        <td>{product.quantity.toLocaleString()} - Price of {formatCurrency(product.total)}</td>
-                      </tr>
-                    )}
+                    {(product.tiers || [{ quantity: product.quantity, total: product.total, costPerUnit: 0, costPer1000: 0 }]).map((t, ti) => {
+                      const tax = t.total * SALES_TAX_RATE;
+                      return (
+                        <tr key={ti}>
+                          <td><strong>{t.quantity.toLocaleString()}</strong> units</td>
+                          <td className="amt">{fmtMoney(t.total)}</td>
+                          <td className="amt" style={{ color: "#666" }}>{fmtMoney(tax)}</td>
+                          <td className="amt">{fmtMoney(t.total + tax)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -264,27 +302,54 @@ export default function PrintQuotePage() {
           </>
         )}
 
-        <div style={{ marginTop: 4, fontSize: 11 }}>
-          <strong>TERMS:</strong> UPON APPROVAL
+        {/* Terms */}
+        <div className="terms-box">
+          <div className="terms-title">Terms &amp; Conditions</div>
+          <strong>Payment Terms:</strong> 50% deposit required before production begins. Remaining balance due upon delivery.<br />
+          <strong>Credit Card Payments:</strong> A 3% processing surcharge applies to all credit card transactions.<br />
+          <strong>Sales Tax:</strong> Florida sales tax (7%) is included in the totals above.<br />
+          <strong>Quote Validity:</strong> This estimate is valid for 30 days from the date above. Prices are subject to change after expiration.<br />
+          <strong>Overruns/Underruns:</strong> Industry standard of +/- 10% on quantity. Billing adjusted accordingly.
         </div>
 
-        <div className="divider" />
+        {/* Payment Instructions */}
+        <div className="payment-box">
+          <div className="payment-title">Payment Instructions</div>
+          <strong>Check:</strong> Make payable to <em>C&amp;D Printing Co.</em> and mail to 12150 28th Street N., St. Petersburg, FL 33716<br />
+          <strong>Wire / ACH:</strong> Contact us at 727-572-9999 for wire transfer details.<br />
+          <strong>Credit Card:</strong> Call 727-572-9999 to pay by phone. A 3% surcharge applies.
+        </div>
+
+        <hr className="section-divider-light" />
 
         {/* Signature Area */}
-        <div className="signature-area">
+        <div className="sig-area">
           <div>
-            QUOTE ACCEPTED BY <span className="sig-line" /> DATE <span className="sig-line" style={{ width: 80 }} />
-          </div>
-          <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between" }}>
-            <div>
-              <span className="sig-line" /><br />
-              <span style={{ fontSize: 10, marginLeft: 40 }}>Accepted by</span>
+            <div className="sig-block">
+              <div className="sig-label">Customer Signature</div>
             </div>
-            <div style={{ textAlign: "center" }}>
-              <span className="sig-line" /><br />
-              <span style={{ fontSize: 10 }}>C&amp;D Printing Co.</span>
+            <div style={{ marginTop: 16 }}>
+              <div className="sig-block">
+                <div className="sig-label">Date</div>
+              </div>
             </div>
           </div>
+          <div>
+            <div className="sig-block">
+              <div className="sig-label">Authorized by &mdash; C&amp;D Printing Co.</div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div className="sig-block">
+                <div className="sig-label">Date</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="footer-bar" />
+        <div className="footer-text">
+          C&amp;D Printing Co. | 12150 28th Street N., St. Petersburg, FL 33716 | 727-572-9999 | www.cdprinting.com
         </div>
       </div>
     </>
