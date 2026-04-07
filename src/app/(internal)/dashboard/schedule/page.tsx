@@ -201,11 +201,12 @@ export default function SchedulePage() {
                 ? Math.round((wc.assignedJobs.length / wc.capacity) * 100)
                 : 0;
             return (
-              <Card key={wc.id}>
+              <Link key={wc.id} href={`/dashboard/schedule/${wc.id}`}>
+              <Card className="cursor-pointer hover:shadow-md hover:border-brand-200 transition-all">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{wc.name}</h3>
+                      <h3 className="font-semibold text-brand-700 hover:underline">{wc.name}</h3>
                       <p className="text-xs text-gray-500">Code: {wc.code}</p>
                     </div>
                     <Badge
@@ -247,6 +248,7 @@ export default function SchedulePage() {
                   </div>
                 </CardContent>
               </Card>
+              </Link>
             );
           })}
         </div>
