@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Building2, ExternalLink, Plus, X, Loader2 } from "lucide-react";
+import { Building2, ExternalLink, Plus, X, Loader2, Search, Phone, MapPin } from "lucide-react";
 import { demoCompanies, demoJobs } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
-interface Company { id: string; name: string; slug?: string; industry?: string; phone?: string; }
+interface Company { id: string; name: string; slug?: string; industry?: string; phone?: string; city?: string; state?: string; }
 
 export default function CustomersPage() {
   const [companies, setCompanies] = useState<Company[]>(demoCompanies);
@@ -48,25 +48,46 @@ export default function CustomersPage() {
     setCreating(false);
   };
 
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!search) return customerData;
+    const q = search.toLowerCase();
+    return customerData.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.industry || "").toLowerCase().includes(q) ||
+      (c.phone || "").includes(q)
+    );
+  }, [customerData, search]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-gray-900">Customers</h1><p className="text-sm text-gray-500 mt-1">{companies.length} companies</p></div>
+        <div><h1 className="text-2xl font-bold text-gray-900">Customers</h1><p className="text-sm text-gray-500 mt-1">{filtered.length} of {companies.length} companies</p></div>
         <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />Add Customer</Button>
       </div>
 
+      <Card className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input placeholder="Search customers by name, industry, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+      </Card>
+
       <Card>
         <Table>
-          <TableHeader><TableRow><TableHead>Company Name</TableHead><TableHead>Industry</TableHead><TableHead className="text-right">Active Jobs</TableHead><TableHead className="text-right">Total Orders</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Company Name</TableHead><TableHead>Phone</TableHead><TableHead>Industry</TableHead><TableHead className="text-right">Active Jobs</TableHead><TableHead className="text-right">Total Orders</TableHead></TableRow></TableHeader>
           <TableBody>
-            {customerData.map((c) => (
-              <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/orders?customer=${encodeURIComponent(c.name)}`}>
-                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p></div></TableCell>
+            {filtered.map((c) => (
+              <TableRow key={c.id} className="hover:bg-gray-50">
+                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-gray-900">{c.name}</p></div></TableCell>
+                <TableCell className="text-sm text-gray-600">{c.phone || "—"}</TableCell>
                 <TableCell><Badge className="bg-gray-100 text-gray-600">{c.industry || "—"}</Badge></TableCell>
                 <TableCell className="text-right"><span className={`font-medium ${c.activeJobs > 0 ? "text-green-700" : "text-gray-400"}`}>{c.activeJobs}</span></TableCell>
                 <TableCell className="text-right font-medium">{c.totalOrders}</TableCell>
               </TableRow>
             ))}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-400">{search ? `No customers matching "${search}"` : "No customers found"}</TableCell></TableRow>}
           </TableBody>
         </Table>
       </Card>

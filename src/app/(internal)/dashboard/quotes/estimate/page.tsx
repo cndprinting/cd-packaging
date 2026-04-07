@@ -184,10 +184,29 @@ interface FormState {
   markupOutside: number;
   commissionPercent: number;
   quantityTiers: number[];
+  // Job type
+  jobType: string;
   // Press selection (offset)
   selectedPressId: string;
   selectedConfigId: string;
   stockType: "uncoated" | "coated";
+  // Difficulty factors
+  makereadyDiff: number;
+  washupDiff: number;
+  runDiff: number;
+  // Mailing services
+  inserterPockets: number;
+  inserterMailType: string;
+  // Coatings (outside)
+  coatingType: string;
+  coatingSheetWidth: number;
+  coatingSheetHeight: number;
+  coatingImpressions: number;
+  coatingBlankets: number;
+  coatingCyrelPlates: number;
+  // Wafer seal / Inkjet
+  secapTabs: number;
+  secapInkjet: boolean;
   // Volume Forecasting
   monthlyVolume: string;
   contractMonths: string;
@@ -258,9 +277,23 @@ const defaultForm: FormState = {
   markupOutside: 30,
   commissionPercent: 10,
   quantityTiers: [] as number[],
+  jobType: "new_with_prepress",
   selectedPressId: "",
   selectedConfigId: "",
   stockType: "uncoated" as const,
+  makereadyDiff: 1.0,
+  washupDiff: 1.0,
+  runDiff: 1.0,
+  inserterPockets: 0,
+  inserterMailType: "regular",
+  coatingType: "none",
+  coatingSheetWidth: 0,
+  coatingSheetHeight: 0,
+  coatingImpressions: 0,
+  coatingBlankets: 0,
+  coatingCyrelPlates: 0,
+  secapTabs: 0,
+  secapInkjet: false,
   monthlyVolume: "",
   contractMonths: "12",
   volumeDiscount: "0",
@@ -502,6 +535,53 @@ export default function EstimatePage() {
 
     const shippingCost = num("shippingCost");
 
+    // Outside services: Coating
+    let coatingCost = 0;
+    const coatingType = form.coatingType as string;
+    if (coatingType && coatingType !== "none") {
+      const coatingRates: Record<string, number> = {
+        gloss_aq: 1.09, satin_aq: 1.09, matte_aq: 1.09,
+        soft_touch: 6.25, led_uv: 6.30, retic_coating: 11.25, retic_varnish: 25.30,
+      };
+      const usageRates: Record<string, number> = {
+        gloss_aq: 0.0000079, satin_aq: 0.0000079, matte_aq: 0.0000079,
+        soft_touch: 0.0000075, led_uv: 0.0000075, retic_coating: 0.0000079, retic_varnish: 0.00000094,
+      };
+      const sheetArea = num("coatingSheetWidth") * num("coatingSheetHeight");
+      const imps = num("coatingImpressions") || q;
+      const lbs = sheetArea * imps * (usageRates[coatingType] || 0.0000079);
+      coatingCost = lbs * (coatingRates[coatingType] || 1.09);
+      coatingCost += num("coatingBlankets") * 175;
+      coatingCost += num("coatingCyrelPlates") * 350; // $300 plate + $50 shipping
+    }
+
+    // Outside services: Inserter
+    let inserterCost = 0;
+    const pockets = num("inserterPockets");
+    if (pockets > 0) {
+      const setupCosts = [0, 70, 105, 140, 175, 185, 200];
+      const setup = setupCosts[Math.min(pockets, 6)] || 200;
+      const isMatch = (form.inserterMailType as string) === "match";
+      const speed = isMatch ? 1000 : 1600;
+      const rate = isMatch ? 50 : 35;
+      inserterCost = setup + (q / speed) * rate;
+    }
+
+    // Outside services: Secap (wafer seal + inkjet)
+    let secapCost = 0;
+    const tabs = num("secapTabs");
+    if (tabs > 0) {
+      const secapSetup = 70;
+      const tabCost = q * tabs * 0.002;
+      const runCost = (q / 1600) * 35;
+      secapCost = secapSetup + tabCost + runCost;
+      if (form.secapInkjet) {
+        secapCost += q * 0.005;
+      }
+    }
+
+    const outsideCost = coatingCost + inserterCost + secapCost;
+
     // Auto-calculate waste from press config waste curve
     let wasteSheets = 0;
     if (selectedConfig && q > 0) {
@@ -518,14 +598,13 @@ export default function EstimatePage() {
       } catch { /* ignore parse errors */ }
     }
 
-    const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost;
+    const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideCost;
 
     // 4-category markup from plant standards
-    // Paper cost is approximated as materialsCost portion from paper
     const paperMarkup = materialsCost * (num("markupPaper") / 100);
     const materialMarkup = toolingCost * (num("markupMaterial") / 100);
     const laborMarkup = laborCost * (num("markupLabor") / 100);
-    const outsideMarkup = shippingCost * (num("markupOutside") / 100);
+    const outsideMarkup = (shippingCost + outsideCost) * (num("markupOutside") / 100);
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
     const commissionAmount = subtotal * (num("commissionPercent") / 100);
@@ -551,6 +630,10 @@ export default function EstimatePage() {
       outsideMarkup,
       commissionAmount,
       salesTax,
+      outsideCost,
+      coatingCost,
+      inserterCost,
+      secapCost,
       wasteSheets,
       total,
       costPerUnit,
@@ -778,6 +861,36 @@ export default function EstimatePage() {
                   <Check className="h-4 w-4" />
                 </div>
               )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Job Type</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {([
+            { value: "new_with_prepress", label: "New w/ Pre-Press" },
+            { value: "new_no_prepress", label: "New w/o Pre-Press" },
+            { value: "exact_reprint", label: "Exact Reprint" },
+            { value: "reprint_changes", label: "Reprint w/ Changes" },
+            { value: "prepress_only", label: "Pre-Press Only" },
+            { value: "bindery_only", label: "Bindery Only" },
+            { value: "press_only", label: "Press Only" },
+            { value: "all_outside", label: "All Outside" },
+            { value: "digital_direct", label: "Digital Direct" },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => set("jobType", opt.value)}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                form.jobType === opt.value
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              {opt.label}
             </button>
           ))}
         </div>
@@ -1250,6 +1363,106 @@ export default function EstimatePage() {
             <Input type="number" step="0.25" value={form.setupTime || ""} onChange={(e) => set("setupTime", Number(e.target.value))} />
           </Field>
         </div>
+        {isOffset && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-medium text-gray-700">Difficulty Factors</p>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Makeready Diff" hint="1.0 = normal">
+                <Input type="number" step="0.1" value={form.makereadyDiff || ""} onChange={(e) => set("makereadyDiff", Number(e.target.value))} min={0} max={5} />
+              </Field>
+              <Field label="Washup Diff" hint="1.0 = normal">
+                <Input type="number" step="0.1" value={form.washupDiff || ""} onChange={(e) => set("washupDiff", Number(e.target.value))} min={0} max={5} />
+              </Field>
+              <Field label="Run Diff" hint="1.0 = normal">
+                <Input type="number" step="0.1" value={form.runDiff || ""} onChange={(e) => set("runDiff", Number(e.target.value))} min={0} max={5} />
+              </Field>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* ── Mailing & Coatings (Outside Services) ───────────────── */}
+      <Section title="Mailing & Coatings" icon={Truck} defaultOpen={false}>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Coating Type">
+            <Select
+              value={form.coatingType as string}
+              onChange={(e) => set("coatingType", e.target.value)}
+              options={[
+                { value: "none", label: "None" },
+                { value: "gloss_aq", label: "Gloss Aqueous ($1.09/lb)" },
+                { value: "satin_aq", label: "Satin Aqueous ($1.09/lb)" },
+                { value: "matte_aq", label: "Matte Aqueous ($1.09/lb)" },
+                { value: "soft_touch", label: "Soft Touch Aqueous ($6.25/lb)" },
+                { value: "led_uv", label: "Gloss LED UV ($6.30/lb)" },
+                { value: "retic_coating", label: "Reticulated Coating ($11.25/lb)" },
+                { value: "retic_varnish", label: "Reticulated Varnish ($25.30/lb)" },
+              ]}
+            />
+          </Field>
+          {form.coatingType !== "none" && (
+            <>
+              <Field label="Sheet Width (in)" hint="For coating coverage calc">
+                <Input type="number" step="0.5" value={form.coatingSheetWidth || ""} onChange={(e) => set("coatingSheetWidth", Number(e.target.value))} />
+              </Field>
+              <Field label="Sheet Height (in)">
+                <Input type="number" step="0.5" value={form.coatingSheetHeight || ""} onChange={(e) => set("coatingSheetHeight", Number(e.target.value))} />
+              </Field>
+              <Field label="Impressions" hint="Total sheets to coat">
+                <Input type="number" value={form.coatingImpressions || ""} onChange={(e) => set("coatingImpressions", Number(e.target.value))} />
+              </Field>
+              <Field label="Spot Coating Blankets" hint="$175 each">
+                <Input type="number" value={form.coatingBlankets || ""} onChange={(e) => set("coatingBlankets", Number(e.target.value))} min={0} />
+              </Field>
+              <Field label="Cyrel Plates" hint="$300 each + $50 shipping">
+                <Input type="number" value={form.coatingCyrelPlates || ""} onChange={(e) => set("coatingCyrelPlates", Number(e.target.value))} min={0} />
+              </Field>
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-3">Mail Inserting</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Inserter Pockets" hint="0 = no inserting">
+              <Input type="number" value={form.inserterPockets || ""} onChange={(e) => set("inserterPockets", Number(e.target.value))} min={0} max={6} />
+            </Field>
+            {(form.inserterPockets as number) > 0 && (
+              <Field label="Mail Type">
+                <Select
+                  value={form.inserterMailType as string}
+                  onChange={(e) => set("inserterMailType", e.target.value)}
+                  options={[
+                    { value: "regular", label: "Regular ($35/hr)" },
+                    { value: "match", label: "Match Mail ($50/hr)" },
+                  ]}
+                />
+              </Field>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-3">Wafer Sealing & Inkjet</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Wafer Seal Tabs" hint="0 = no sealing">
+              <Input type="number" value={form.secapTabs || ""} onChange={(e) => set("secapTabs", Number(e.target.value))} min={0} />
+            </Field>
+            {(form.secapTabs as number) > 0 && (
+              <Field label="Inkjet Addressing">
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.secapInkjet as boolean}
+                    onChange={(e) => set("secapInkjet", e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                  />
+                  <span className="text-sm text-gray-700">Add inkjet ($0.005/piece)</span>
+                </label>
+              </Field>
+            )}
+          </div>
+        </div>
       </Section>
 
       <Section title="Shipping & Markup" icon={Truck}>
@@ -1329,6 +1542,9 @@ export default function EstimatePage() {
             <CostRow label="Finishing" sublabel="Bindery, gluing, patching" amount={calc.finishingCost} icon={Scissors} />
             <CostRow label="Make-Ready / Waste" sublabel="Waste sheets at paper cost" amount={calc.makeReadyCost} icon={RotateCcw} />
             <CostRow label="Shipping" sublabel="Delivery cost" amount={calc.shippingCost} icon={Truck} />
+            {calc.outsideCost > 0 && (
+              <CostRow label="Outside Services" sublabel="Coatings, mailing, sealing" amount={calc.outsideCost} icon={Package} />
+            )}
 
             <div className="my-3 border-t border-gray-200" />
 
