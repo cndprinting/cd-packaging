@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Combobox } from "@/components/ui/combobox";
 
 interface Company { id: string; name: string; slug?: string; industry?: string; phone?: string; city?: string; state?: string; }
 
@@ -100,7 +101,7 @@ export default function CustomersPage() {
               <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Add Customer</h2><button onClick={() => setShowModal(false)}><X className="h-5 w-5 text-gray-400" /></button></div>
               <form onSubmit={handleCreate} className="space-y-4">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label><Input value={form.name} onChange={(e) => update("name", e.target.value)} autoFocus /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label><Combobox value={form.name} onChange={(_id, label) => update("name", label)} options={companies.map(c => ({ id: c.id, label: c.name, subtitle: c.industry }))} placeholder="Search or add new customer..." allowCreate duplicateCheck={(name) => { const match = companies.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && c.name.toLowerCase() !== name.toLowerCase()); return match ? { id: match.id, label: match.name, subtitle: match.industry } : null; }} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Industry</label><Input value={form.industry} onChange={(e) => update("industry", e.target.value)} placeholder="e.g. Food & Beverage" /></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><Input value={form.phone} onChange={(e) => update("phone", e.target.value)} /></div>
