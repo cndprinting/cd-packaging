@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Combobox } from "@/components/ui/combobox";
 import { formatDate, formatCurrency } from "@/lib/utils";
+
+interface Company { id: string; name: string; industry?: string; }
 
 interface Quote { id: string; quoteNumber: string; customerName: string; productType: string; productName: string; quantity: number; unitPrice: number; totalPrice: number; status: string; validUntil: string; createdAt: string; }
 
@@ -26,7 +29,11 @@ export default function QuotesPage() {
   const [form, setForm] = useState({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "" });
   const update = (f: string, v: string) => setForm(p => ({ ...p, [f]: v }));
 
-  useEffect(() => { fetch("/api/quotes").then(r => r.json()).then(d => setQuotes(d.quotes || [])).catch(() => {}); }, []);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  useEffect(() => {
+    fetch("/api/quotes").then(r => r.json()).then(d => setQuotes(d.quotes || [])).catch(() => {});
+    fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => quotes.filter(q => {
     if (search && !q.quoteNumber.toLowerCase().includes(search.toLowerCase()) && !q.customerName.toLowerCase().includes(search.toLowerCase()) && !q.productName.toLowerCase().includes(search.toLowerCase())) return false;
@@ -110,7 +117,7 @@ export default function QuotesPage() {
               <form onSubmit={handleCreate} className="space-y-4">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><Input value={form.customerName} onChange={(e) => update("customerName", e.target.value)} placeholder="Company name" autoFocus /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><Combobox value={form.customerName} onChange={(_id, label) => update("customerName", label)} options={companies.map(c => ({ id: c.id, label: c.name, subtitle: c.industry }))} placeholder="Select customer..." allowCreate duplicateCheck={(name) => { const match = companies.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && c.name.toLowerCase() !== name.toLowerCase()); return match ? { id: match.id, label: match.name, subtitle: match.industry } : null; }} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Product Type *</label><Select value={form.productType} onChange={(e) => update("productType", e.target.value)} options={[{ value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} /></div>
                 </div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label><Input value={form.productName} onChange={(e) => update("productName", e.target.value)} placeholder="e.g. Cereal Box - 12oz" /></div>

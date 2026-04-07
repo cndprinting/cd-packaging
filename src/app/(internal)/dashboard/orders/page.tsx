@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Combobox } from "@/components/ui/combobox";
 import { Card, CardContent } from "@/components/ui/card";
 import { getStatusColor, getStatusLabel, getPriorityColor, formatDate } from "@/lib/utils";
+
+interface Company { id: string; name: string; industry?: string; }
 
 interface Order {
   orderId: string;
@@ -60,6 +63,8 @@ export default function OrdersPage() {
       }
     }).catch(() => {});
   }, []);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  useEffect(() => { fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {}); }, []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -118,7 +123,7 @@ export default function OrdersPage() {
                 <TableCell><span className="font-mono font-medium text-gray-900">{order.orderNumber}</span></TableCell>
                 <TableCell>{order.companyName}</TableCell>
                 <TableCell><span className="text-gray-700">{order.jobs.length} job{order.jobs.length !== 1 ? "s" : ""}</span></TableCell>
-                <TableCell><div className="flex flex-wrap gap-1">{Array.from(new Set(order.jobs.map((j) => j.status))).map((s) => <Badge key={s} className={getStatusColor(s)}>{getStatusLabel(s)}</Badge>)}</div></TableCell>
+                <TableCell><div className="flex flex-wrap gap-1">{order.jobs.length > 0 ? Array.from(new Set(order.jobs.map((j) => j.status))).map((s) => <Badge key={s} className={getStatusColor(s)}>{getStatusLabel(s)}</Badge>) : <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>}</div></TableCell>
                 <TableCell><Badge className={getPriorityColor(order.priority)}>{order.priority}</Badge></TableCell>
                 <TableCell>{formatDate(order.dueDate)}</TableCell>
                 <TableCell><Link href={`/dashboard/orders/${order.orderId}`}><Button variant="ghost" size="sm"><ExternalLink className="h-4 w-4 mr-1" />View</Button></Link></TableCell>
@@ -138,7 +143,7 @@ export default function OrdersPage() {
               <form onSubmit={handleCreate} className="space-y-4">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><Input value={form.customerName} onChange={(e) => update("customerName", e.target.value)} placeholder="Company name" autoFocus /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><Combobox value={form.customerName} onChange={(_id, label) => update("customerName", label)} options={companies.map(c => ({ id: c.id, label: c.name, subtitle: c.industry }))} placeholder="Select customer..." allowCreate duplicateCheck={(name) => { const match = companies.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && c.name.toLowerCase() !== name.toLowerCase()); return match ? { id: match.id, label: match.name, subtitle: match.industry } : null; }} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">PO Number</label><Input value={form.poNumber} onChange={(e) => update("poNumber", e.target.value)} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">

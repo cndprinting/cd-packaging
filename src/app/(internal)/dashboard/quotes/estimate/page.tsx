@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -179,6 +180,7 @@ interface FormState {
   markupMaterial: number;
   markupLabor: number;
   markupOutside: number;
+  commissionPercent: number;
   // Press selection (offset)
   selectedPressId: string;
   selectedConfigId: string;
@@ -251,6 +253,7 @@ const defaultForm: FormState = {
   markupMaterial: 22,
   markupLabor: 63,
   markupOutside: 30,
+  commissionPercent: 10,
   selectedPressId: "",
   selectedConfigId: "",
   stockType: "uncoated" as const,
@@ -341,6 +344,7 @@ export default function EstimatePage() {
   const [plantStandards, setPlantStandards] = useState<PlantStandardsData | null>(null);
   const [presses, setPresses] = useState<PressData[]>([]);
   const [standardsLoaded, setStandardsLoaded] = useState(false);
+  const [companies, setCompanies] = useState<{ id: string; name: string; industry?: string }[]>([]);
 
   // Load plant standards on mount
   useEffect(() => {
@@ -367,6 +371,7 @@ export default function EstimatePage() {
         setStandardsLoaded(true);
       })
       .catch(() => setStandardsLoaded(true));
+    fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
   }, []);
 
   // Auto-fill from press/config selection
@@ -506,7 +511,9 @@ export default function EstimatePage() {
     const outsideMarkup = shippingCost * (num("markupOutside") / 100);
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
-    const total = subtotal + markupAmount;
+    const commissionAmount = subtotal * (num("commissionPercent") / 100);
+
+    const total = subtotal + markupAmount + commissionAmount;
     const costPerUnit = q > 0 ? total / q : 0;
     const costPer1000 = q > 0 ? (total / q) * 1000 : 0;
 
@@ -523,6 +530,7 @@ export default function EstimatePage() {
       materialMarkup,
       laborMarkup,
       outsideMarkup,
+      commissionAmount,
       wasteSheets,
       total,
       costPerUnit,
@@ -586,7 +594,8 @@ export default function EstimatePage() {
           pressConfig: selectedConfig?.name || "",
           stockType: form.stockType,
           markups: { paper: form.markupPaper, material: form.markupMaterial, labor: form.markupLabor, outside: form.markupOutside },
-          costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount },
+          commission: { percent: form.commissionPercent, amount: calc.commissionAmount },
+          costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount, commission: calc.commissionAmount },
         }),
       };
       const res = await fetch("/api/quotes", {
@@ -713,11 +722,17 @@ export default function EstimatePage() {
     <div className="space-y-5">
       <Section title="Job Details" icon={FileText}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Customer Name">
-            <Input
+          <Field label="Customer">
+            <Combobox
               value={form.customerName}
-              onChange={(e) => set("customerName", e.target.value)}
-              placeholder="Company name"
+              onChange={(_id, label) => set("customerName", label)}
+              options={companies.map(c => ({ id: c.id, label: c.name, subtitle: c.industry }))}
+              placeholder="Select customer..."
+              allowCreate
+              duplicateCheck={(name) => {
+                const match = companies.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && c.name.toLowerCase() !== name.toLowerCase());
+                return match ? { id: match.id, label: match.name, subtitle: match.industry } : null;
+              }}
             />
           </Field>
           <Field label="Job Name / Description">
@@ -1115,6 +1130,11 @@ export default function EstimatePage() {
             </Field>
           </div>
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Sales Commission (%)" hint="Applied to subtotal (default 10%)">
+            <Input type="number" step="0.5" value={form.commissionPercent || ""} onChange={(e) => set("commissionPercent", Number(e.target.value))} min={0} max={50} />
+          </Field>
+        </div>
       </Section>
     </div>
   );
@@ -1193,6 +1213,12 @@ export default function EstimatePage() {
                 <span className="font-semibold text-brand-600">+ {fmtMoney(calc.markupAmount)}</span>
               </div>
             </div>
+            {calc.commissionAmount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">Sales Commission ({form.commissionPercent}%)</span>
+                <span className="font-semibold text-amber-600">+ {fmtMoney(calc.commissionAmount)}</span>
+              </div>
+            )}
 
             <div className="my-3 border-t-2 border-gray-900" />
 
@@ -1421,6 +1447,12 @@ export default function EstimatePage() {
                     <span className="text-gray-500">Markup</span>
                     <span className="font-medium text-brand-600">+{fmtMoney(calc.markupAmount)}</span>
                   </div>
+                  {calc.commissionAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Commission ({form.commissionPercent}%)</span>
+                      <span className="font-medium text-amber-600">+{fmtMoney(calc.commissionAmount)}</span>
+                    </div>
+                  )}
                   <div className="my-2 border-t-2 border-gray-900" />
                   <div className="flex justify-between">
                     <span className="font-bold text-gray-900">Total</span>

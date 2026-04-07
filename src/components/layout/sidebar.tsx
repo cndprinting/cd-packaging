@@ -19,7 +19,7 @@ const internalNav = [
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
-  { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck },
+  // { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck }, // Archived — team doesn't need it (Apr 2026)
   { label: "Production", href: "/dashboard/production", icon: Factory },
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
@@ -52,9 +52,7 @@ export function Sidebar({ isCustomer = false }: SidebarProps) {
     <aside className={cn("flex flex-col bg-white border-r border-gray-200 transition-all duration-200 h-full", collapsed ? "w-16" : "w-60")}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-200 shrink-0">
-        <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-brand-600 text-white font-bold text-sm shrink-0">
-          <Box className="h-5 w-5" />
-        </div>
+        <img src="/logo-icon.svg" alt="C&D" className="h-9 w-9 shrink-0" />
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">C&D Packaging</p>
