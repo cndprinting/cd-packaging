@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type") || "customer";
+
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) {
-      const { demoCompanies } = await import("@/lib/demo-data");
       return NextResponse.json({ companies: [], source: "empty" });
     }
-    const companies = await prisma.company.findMany({ where: { type: "customer" }, orderBy: { name: "asc" } });
+    const companies = await prisma.company.findMany({
+      where: { type, isActive: true },
+      include: { contacts: { take: 1 } },
+      orderBy: { name: "asc" },
+    });
     return NextResponse.json({ companies, source: "database" });
   } catch (error) {
     console.error("Companies GET error:", error);

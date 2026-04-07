@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface QuoteData {
@@ -67,6 +68,11 @@ export default function QuoteDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedVolume, setSelectedVolume] = useState<number>(0);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailType, setEmailType] = useState<"customer" | "internal">("customer");
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   useEffect(() => {
     if (!params.id) return;
@@ -151,10 +157,10 @@ export default function QuoteDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {(quote.status === "draft" || quote.status === "sent") && (
             <>
-              <Button onClick={() => updateStatus("sent")} disabled={updating || quote.status === "sent"} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => { setEmailType("customer"); setEmailTo(quote.contactEmail || ""); setShowEmailModal(true); }} disabled={updating} className="gap-2 bg-blue-600 hover:bg-blue-700">
                 <Send className="h-4 w-4" /> Send to Customer
               </Button>
-              <Button variant="outline" onClick={() => { /* TODO: Send internal email */ alert("Send to CSR/Salesperson — email integration coming soon"); }} className="gap-2">
+              <Button variant="outline" onClick={() => { setEmailType("internal"); setEmailTo(""); setShowEmailModal(true); }} className="gap-2">
                 <Mail className="h-4 w-4" /> Send Internal
               </Button>
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
@@ -378,6 +384,115 @@ export default function QuoteDetailPage() {
                   <Package className="h-4 w-4" /> Convert at {selectedVolume.toLocaleString()}
                 </Button>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowEmailModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">
+                  {emailType === "customer" ? "Send Quote to Customer" : "Send Quote Internally"}
+                </h2>
+                <button onClick={() => { setShowEmailModal(false); setEmailSent(false); }}>
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              {emailSent ? (
+                <div className="text-center py-6">
+                  <Check className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+                  <p className="text-lg font-semibold text-gray-900">Email Sent</p>
+                  <p className="text-sm text-gray-500 mt-1">Quote {quote.quoteNumber} sent to {emailTo}</p>
+                  <Button className="mt-4" onClick={() => { setShowEmailModal(false); setEmailSent(false); }}>Done</Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To *</label>
+                    <Input
+                      type="email"
+                      value={emailTo}
+                      onChange={(e) => setEmailTo(e.target.value)}
+                      placeholder="recipient@company.com"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-gray-700 mb-1">Will send:</p>
+                    <p className="text-gray-500">Quote {quote.quoteNumber} for {quote.customerName}</p>
+                    <p className="text-gray-500">{quote.productName} - {quote.quantity.toLocaleString()} units</p>
+                    <p className="text-gray-500 font-semibold">Total: {formatCurrency(quote.totalPrice)}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setShowEmailModal(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 gap-2"
+                      disabled={emailSending || !emailTo}
+                      onClick={async () => {
+                        setEmailSending(true);
+                        try {
+                          const quoteUrl = `${window.location.origin}/dashboard/quotes/${quote.id}/print`;
+                          const res = await fetch("/api/email", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              to: emailTo,
+                              subject: `Estimate ${quote.quoteNumber} - ${quote.productName} | C&D Printing`,
+                              body: `
+                                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                                  <div style="background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 3px;"></div>
+                                  <div style="padding: 24px;">
+                                    <h2 style="margin: 0 0 4px;">Estimate from C&D Printing Co.</h2>
+                                    <p style="color: #666; margin: 0 0 20px;">12150 28th Street N., St. Petersburg, FL 33716</p>
+                                    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                                      <tr><td style="padding: 8px 0; color: #888;">Estimate #</td><td style="padding: 8px 0; font-weight: bold;">${quote.quoteNumber}</td></tr>
+                                      <tr><td style="padding: 8px 0; color: #888;">Product</td><td style="padding: 8px 0;">${quote.productName}</td></tr>
+                                      <tr><td style="padding: 8px 0; color: #888;">Quantity</td><td style="padding: 8px 0;">${quote.quantity.toLocaleString()}</td></tr>
+                                      <tr style="border-top: 2px solid #CC1E2D;"><td style="padding: 12px 0; color: #888; font-weight: bold;">Total</td><td style="padding: 12px 0; font-size: 20px; font-weight: bold; color: #CC1E2D;">${formatCurrency(quote.totalPrice)}</td></tr>
+                                    </table>
+                                    <p style="color: #666; font-size: 14px;">View the full estimate details and print a copy:</p>
+                                    <a href="${quoteUrl}" style="display: inline-block; background: #CC1E2D; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 8px;">View Estimate</a>
+                                    <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+                                    <p style="color: #999; font-size: 12px;">
+                                      <strong>Terms:</strong> 50% deposit before production. Balance due on delivery. 3% surcharge on credit card payments.<br/>
+                                      <strong>Contact:</strong> 727-572-9999 | C&D Printing Co.
+                                    </p>
+                                  </div>
+                                  <div style="background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 3px;"></div>
+                                </div>
+                              `,
+                              quoteId: quote.id,
+                            }),
+                          });
+                          if (res.ok) {
+                            setEmailSent(true);
+                            if (emailType === "customer" && quote.status === "draft") {
+                              updateStatus("sent");
+                            }
+                          } else {
+                            const data = await res.json();
+                            alert(data.error || "Failed to send email");
+                          }
+                        } catch {
+                          alert("Failed to send email");
+                        }
+                        setEmailSending(false);
+                      }}
+                    >
+                      {emailSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      Send Email
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>

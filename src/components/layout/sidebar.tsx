@@ -24,6 +24,7 @@ const internalNav = [
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
   { label: "Customers", href: "/dashboard/customers", icon: Users },
+  { label: "Vendors", href: "/dashboard/vendors", icon: Warehouse },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },

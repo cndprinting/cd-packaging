@@ -13,7 +13,9 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.1",
     "@hello-pangea/dnd": "^18.0.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
     "@radix-ui/react-avatar": "^1.1.11",
