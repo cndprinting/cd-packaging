@@ -78,8 +78,8 @@ export default function QuotesPage() {
           <TableHeader><TableRow><TableHead>Quote #</TableHead><TableHead>Customer</TableHead><TableHead>Product</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Status</TableHead><TableHead>Valid Until</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
           <TableBody>
             {filtered.map(q => (
-              <TableRow key={q.id}>
-                <TableCell className="font-mono font-medium">{q.quoteNumber}</TableCell>
+              <TableRow key={q.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/quotes/${q.id}`}>
+                <TableCell className="font-mono font-medium text-brand-600 hover:underline">{q.quoteNumber}</TableCell>
                 <TableCell>{q.customerName}</TableCell>
                 <TableCell className="font-medium">{q.productName}</TableCell>
                 <TableCell><Badge className={q.productType === "FOLDING_CARTON" ? "bg-emerald-50 text-emerald-600" : "bg-sky-50 text-sky-600"}>{q.productType === "FOLDING_CARTON" ? "Carton" : "Print"}</Badge></TableCell>
@@ -87,7 +87,7 @@ export default function QuotesPage() {
                 <TableCell className="text-right font-medium">{formatCurrency(q.totalPrice)}</TableCell>
                 <TableCell><Badge className={statusColors[q.status] || "bg-gray-100 text-gray-600"}>{q.status}</Badge></TableCell>
                 <TableCell className="text-gray-500">{formatDate(q.validUntil)}</TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1">
                     {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "sent" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x)); }}><Send className="h-3.5 w-3.5" />Send</Button>}
                     {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}

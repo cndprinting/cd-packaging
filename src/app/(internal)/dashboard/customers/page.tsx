@@ -60,8 +60,8 @@ export default function CustomersPage() {
           <TableHeader><TableRow><TableHead>Company Name</TableHead><TableHead>Industry</TableHead><TableHead className="text-right">Active Jobs</TableHead><TableHead className="text-right">Total Orders</TableHead></TableRow></TableHeader>
           <TableBody>
             {customerData.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-gray-900">{c.name}</p></div></TableCell>
+              <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/orders?customer=${encodeURIComponent(c.name)}`}>
+                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p></div></TableCell>
                 <TableCell><Badge className="bg-gray-100 text-gray-600">{c.industry || "—"}</Badge></TableCell>
                 <TableCell className="text-right"><span className={`font-medium ${c.activeJobs > 0 ? "text-green-700" : "text-gray-400"}`}>{c.activeJobs}</span></TableCell>
                 <TableCell className="text-right font-medium">{c.totalOrders}</TableCell>

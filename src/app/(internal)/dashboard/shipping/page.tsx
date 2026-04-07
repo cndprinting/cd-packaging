@@ -80,8 +80,8 @@ export default function ShippingPage() {
             <TableHeader><TableRow><TableHead>Job #</TableHead><TableHead>Customer</TableHead><TableHead>Carrier</TableHead><TableHead>Tracking</TableHead><TableHead>Ship Date</TableHead><TableHead>Status</TableHead><TableHead>Destination</TableHead></TableRow></TableHeader>
             <TableBody>
               {shipments.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.jobNumber}</TableCell>
+                <TableRow key={s.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/jobs?search=${encodeURIComponent(s.jobNumber)}`}>
+                  <TableCell className="font-mono font-medium text-brand-600 hover:underline">{s.jobNumber}</TableCell>
                   <TableCell>{s.customer}</TableCell>
                   <TableCell>{s.carrier}</TableCell>
                   <TableCell className="font-mono text-xs">{s.tracking}</TableCell>

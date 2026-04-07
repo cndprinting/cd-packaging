@@ -64,7 +64,7 @@ export default function InventoryPage() {
               const isShort = m.onHand < m.allocated;
               const isLow = !isShort && m.onHand < m.reorderPoint;
               return (
-                <TableRow key={m.id} className={isShort ? "bg-red-50" : isLow ? "bg-amber-50" : ""}>
+                <TableRow key={m.id} className={`hover:bg-gray-50 transition-colors ${isShort ? "bg-red-50 hover:bg-red-100" : isLow ? "bg-amber-50 hover:bg-amber-100" : ""}`}>
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell className="font-mono text-xs text-gray-500">{m.sku || "—"}</TableCell>
                   <TableCell><Badge className="bg-gray-100 text-gray-600">{m.category || "—"}</Badge></TableCell>

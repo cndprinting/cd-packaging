@@ -220,8 +220,8 @@ export default function ProductionPage() {
             </TableHeader>
             <TableBody>
               {productionJobs.map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell className="font-mono">{job.jobNumber}</TableCell>
+                <TableRow key={job.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/jobs/${job.id}`}>
+                  <TableCell className="font-mono text-brand-600 hover:underline">{job.jobNumber}</TableCell>
                   <TableCell className="font-medium">{job.name}</TableCell>
                   <TableCell>{job.companyName}</TableCell>
                   <TableCell>
@@ -236,7 +236,7 @@ export default function ProductionPage() {
                   </TableCell>
                   <TableCell>{formatNumber(job.quantity)}</TableCell>
                   <TableCell>{formatDate(job.dueDate)}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <Link href={`/dashboard/jobs/${job.id}`}>
                         <Button variant="ghost" size="sm">
