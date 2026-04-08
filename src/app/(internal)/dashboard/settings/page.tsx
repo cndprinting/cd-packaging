@@ -58,8 +58,14 @@ function PlantStandardsField({ label, value, onChange, hint }: { label: string; 
 }
 
 export default function SettingsPage() {
-  const [name, setName] = useState("Sarah Johnson");
-  const [email, setEmail] = useState("admin@cndpackaging.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/session").then(r => r.json()).then(d => {
+      if (d.user) { setName(d.user.name || ""); setEmail(d.user.email || ""); }
+    }).catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
