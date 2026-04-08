@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as "ADMIN" | "PRODUCTION_MANAGER" | "CSR" | "SALES_REP" | "CUSTOMER",
+      role: user.role as any,
       companyId: user.companyId,
       companyName: null,
     });

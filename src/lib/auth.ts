@@ -12,7 +12,7 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "PRODUCTION_MANAGER" | "CSR" | "SALES_REP" | "CUSTOMER";
+  role: "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "ACCOUNTING" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
   companyId: string | null;
   companyName: string | null;
 }

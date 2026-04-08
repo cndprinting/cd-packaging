@@ -42,12 +42,43 @@ const customerNav = [
 
 interface SidebarProps {
   isCustomer?: boolean;
+  userRole?: string;
 }
 
-export function Sidebar({ isCustomer = false }: SidebarProps) {
+export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
-  const nav = isCustomer ? customerNav : internalNav;
+
+  // Filter nav items by role
+  const filteredNav = React.useMemo(() => {
+    if (isCustomer) return customerNav;
+    if (!userRole) return internalNav;
+
+    const role = userRole as import("@/lib/permissions").AppRole;
+
+    // Operator only sees Plant Floor
+    if (role === "OPERATOR") return internalNav.filter(item => item.href === "/dashboard/plant-floor");
+
+    // Shipping only sees Shipping + Settings
+    if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings");
+
+    // Sales reps see limited nav
+    if (role === "SALES_REP" || role === "SALES_MANAGER") {
+      const allowed = ["/dashboard/quotes", "/dashboard/jobs", "/dashboard/orders", "/dashboard/customers", "/dashboard/settings"];
+      return internalNav.filter(item => allowed.includes(item.href));
+    }
+
+    // CSR sees most but not admin/reports
+    if (role === "CSR") {
+      const hidden = ["/dashboard/admin", "/dashboard/reports"];
+      return internalNav.filter(item => !hidden.includes(item.href));
+    }
+
+    // Full access roles see everything
+    return internalNav;
+  }, [isCustomer, userRole]);
+
+  const nav = filteredNav;
 
   return (
     <aside className={cn("flex flex-col bg-white border-r border-gray-200 transition-all duration-200 h-full", collapsed ? "w-16" : "w-60")}>

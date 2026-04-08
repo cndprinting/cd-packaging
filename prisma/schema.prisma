@@ -10,11 +10,17 @@ datasource db {
 // ─── ENUMS ───────────────────────────────────────────────
 
 enum Role {
-  ADMIN
-  PRODUCTION_MANAGER
-  CSR
-  SALES_REP
-  CUSTOMER
+  OWNER              // Benjy, Nitay — full access to everything
+  GM                 // Suzanne — full access
+  ADMIN              // Legacy admin role — full access
+  PRODUCTION_MANAGER // Darrin — full access
+  ACCOUNTING         // Full access
+  CSR                // Everything except accounting/dashboard/executive features
+  SALES_REP          // Quotes + their own customers only, job status tracking
+  SALES_MANAGER      // Same as SALES_REP but with team view
+  SHIPPING           // Shipping page only
+  OPERATOR           // Plant floor timer only — nothing else
+  CUSTOMER           // Customer portal only
 }
 
 enum JobStatus {
