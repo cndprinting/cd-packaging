@@ -86,6 +86,8 @@ export default function DashboardPage() {
   const [recentJobs, setRecentJobs] = useState(() => demoJobs.slice(0, 8));
   const [alerts, setAlerts] = useState(() => demoAlerts);
 
+  const [insights, setInsights] = useState<{ type: string; icon: string; title: string; description: string; action?: string; actionHref?: string }[]>([]);
+
   useEffect(() => {
     fetch("/api/dashboard")
       .then(r => r.json())
@@ -94,6 +96,10 @@ export default function DashboardPage() {
         if (d.recentJobs?.length) setRecentJobs(d.recentJobs);
         if (d.alerts?.length) setAlerts(d.alerts);
       })
+      .catch(() => {});
+    fetch("/api/insights")
+      .then(r => r.json())
+      .then(d => { if (d.insights?.length) setInsights(d.insights); })
       .catch(() => {});
   }, []);
 
@@ -104,6 +110,23 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">Plant overview and production status</p>
       </div>
+
+      {/* Smart Insights */}
+      {insights.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {insights.map((insight, i) => (
+            <Card key={i} className={`border-l-4 ${insight.type === "warning" ? "border-l-amber-500 bg-amber-50/50" : insight.type === "success" ? "border-l-emerald-500 bg-emerald-50/50" : "border-l-blue-500 bg-blue-50/50"}`}>
+              <CardContent className="p-4">
+                <p className={`text-sm font-semibold ${insight.type === "warning" ? "text-amber-800" : insight.type === "success" ? "text-emerald-800" : "text-blue-800"}`}>{insight.title}</p>
+                <p className="text-xs text-gray-600 mt-1">{insight.description}</p>
+                {insight.actionHref && (
+                  <a href={insight.actionHref} className="text-xs font-medium text-brand-600 hover:underline mt-2 inline-block">{insight.action} &rarr;</a>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* KPI Cards - Row 1 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

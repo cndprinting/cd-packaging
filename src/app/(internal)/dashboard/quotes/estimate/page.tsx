@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { recommendPress } from "@/lib/smart-features";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1110,6 +1111,39 @@ export default function EstimatePage() {
       {/* Press Selection (offset only) */}
       {isOffset && presses.length > 0 && (
         <Section title="Press Selection" icon={Printer} defaultOpen={true}>
+          {/* Smart Press Recommendation */}
+          {form.quantity > 0 && form.sheetWidth > 0 && form.inkColorsFront > 0 && !form.selectedPressId && (() => {
+            const recs = recommendPress(presses, {
+              sheetWidth: form.sheetWidth,
+              sheetHeight: form.sheetHeight,
+              colorsNeeded: form.inkColorsFront + form.inkColorsBack,
+              quantity: form.quantity,
+              needsAqueous: form.specialtyCoating === "aqueous",
+              stockType: form.stockType,
+            });
+            if (recs.length === 0) return null;
+            return (
+              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                <p className="text-xs font-semibold text-emerald-800 mb-2">Recommended Press</p>
+                <div className="flex flex-wrap gap-2">
+                  {recs.map((r, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { set("selectedPressId", r.pressId); set("selectedConfigId", r.configId); }}
+                      className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs hover:border-emerald-400 transition-colors"
+                    >
+                      <span className="font-semibold text-gray-900">{r.pressName}</span>
+                      <span className="text-gray-500">{r.configName}</span>
+                      <span className="text-emerald-700 font-medium">${r.effectiveRate}/hr</span>
+                      {i === 0 && <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Best</Badge>}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-emerald-600 mt-1">Based on sheet size, colors, and quantity. Click to select.</p>
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Press" hint="Select from C&D's presses">
               <Select
