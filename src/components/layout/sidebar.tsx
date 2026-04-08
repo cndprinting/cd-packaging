@@ -33,6 +33,7 @@ const internalNav = [
 
 const customerNav = [
   { label: "Dashboard", href: "/portal", icon: LayoutDashboard },
+  { label: "Quotes", href: "/portal/quotes", icon: Calculator },
   { label: "Orders", href: "/portal/orders", icon: ClipboardList },
   { label: "Proofs", href: "/portal/proofs", icon: FileCheck },
   { label: "Shipments", href: "/portal/shipments", icon: Truck },

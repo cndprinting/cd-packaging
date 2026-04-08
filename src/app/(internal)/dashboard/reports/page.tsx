@@ -72,6 +72,22 @@ export default function ReportsPage() {
         </Card>
       </Link>
 
+      {/* Job Costing */}
+      <Link href="/dashboard/reports/job-costing">
+        <Card className="bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><BarChart3 className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Job Costing</h2>
+                <p className="text-sm text-white/80">Estimated vs actual costs — find which jobs went over or under budget</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
       {/* Customers by Industry */}
       <Link href="/dashboard/reports/industry">
         <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
