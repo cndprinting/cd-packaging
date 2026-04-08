@@ -28,6 +28,28 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
   const [searchResults, setSearchResults] = React.useState<SearchResult[]>([]);
   const [searching, setSearching] = React.useState(false);
   const [profileOpen, setProfileOpen] = React.useState(false);
+  const [notifOpen, setNotifOpen] = React.useState(false);
+  const [notifications, setNotifications] = React.useState<{ message: string; time: string }[]>([]);
+
+  React.useEffect(() => {
+    fetch("/api/dashboard")
+      .then(r => r.json())
+      .then(d => {
+        const notifs: { message: string; time: string }[] = [];
+        if (d.alerts) {
+          d.alerts.forEach((a: { title?: string; message?: string; createdAt?: string }) => {
+            notifs.push({ message: a.title || a.message || "Alert", time: a.createdAt || "" });
+          });
+        }
+        if (d.recentActivity) {
+          d.recentActivity.slice(0, 5).forEach((a: { details?: string; action?: string; createdAt?: string }) => {
+            notifs.push({ message: a.details || a.action || "Activity", time: a.createdAt || "" });
+          });
+        }
+        setNotifications(notifs.slice(0, 10));
+      })
+      .catch(() => {});
+  }, []);
   const searchRef = React.useRef<HTMLDivElement>(null);
   const debounceRef = React.useRef<NodeJS.Timeout>(undefined);
 
@@ -115,10 +137,35 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
         <a href="/dashboard/settings" className="flex items-center justify-center h-9 w-9 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
           <Settings className="h-5 w-5" />
         </a>
-        <button className="relative flex items-center justify-center h-9 w-9 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setNotifOpen(!notifOpen)}
+            className="relative flex items-center justify-center h-9 w-9 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <Bell className="h-5 w-5" />
+            {notifications.length > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />}
+          </button>
+          {notifOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg z-50 max-h-96 overflow-y-auto">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">Notifications</p>
+                </div>
+                {notifications.length > 0 ? (
+                  notifications.map((n, i) => (
+                    <div key={i} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <p className="text-sm text-gray-900">{n.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">{n.time}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-8 text-center text-sm text-gray-400">No notifications</div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="relative">
           <button onClick={() => setProfileOpen(!profileOpen)} className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg hover:bg-gray-50 transition-colors">

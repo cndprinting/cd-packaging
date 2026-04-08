@@ -1,26 +1,31 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Warehouse, Plus, X, Loader2, AlertTriangle } from "lucide-react";
+import { Warehouse, Plus, X, Loader2, AlertTriangle, Search } from "lucide-react";
 import { demoMaterials } from "@/lib/demo-data";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
-interface Material { id: string; name: string; sku?: string | null; category?: string | null; unit: string; onHand: number; allocated: number; reorderPoint: number; }
+interface Vendor { id: string; name: string; }
+interface Material { id: string; name: string; sku?: string | null; category?: string | null; unit: string; onHand: number; allocated: number; reorderPoint: number; vendor?: string | null; }
 
 export default function InventoryPage() {
   const [materials, setMaterials] = useState<Material[]>(demoMaterials);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", sku: "", category: "", unit: "sheets" });
+  const [form, setForm] = useState({ name: "", sku: "", category: "", unit: "sheets", vendor: "" });
   const update = (f: string, v: string) => setForm((p) => ({ ...p, [f]: v }));
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetch("/api/materials").then(r => r.json()).then(d => { if (d.materials?.length) setMaterials(d.materials); }).catch(() => {});
+    fetch("/api/companies?type=vendor").then(r => r.json()).then(d => setVendors(d.companies || [])).catch(() => {});
   }, []);
 
   const shortages = materials.filter((m) => m.onHand < m.allocated);
@@ -37,7 +42,7 @@ export default function InventoryPage() {
       if (!res.ok) { setError(data.error || "Failed"); setCreating(false); return; }
       setMaterials((p) => [...p, { ...data.material, onHand: 0, allocated: 0, reorderPoint: 0 }]);
       setShowModal(false);
-      setForm({ name: "", sku: "", category: "", unit: "sheets" });
+      setForm({ name: "", sku: "", category: "", unit: "sheets", vendor: "" });
     } catch { setError("Something went wrong"); }
     setCreating(false);
   };
@@ -55,17 +60,25 @@ export default function InventoryPage() {
         <Card className="p-4 text-center"><p className="text-2xl font-bold text-amber-600">{lowStock.length}</p><p className="text-xs text-gray-500">Low Stock</p></Card>
       </div>
 
+      <Card className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input placeholder="Search materials..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+      </Card>
+
       <Card>
         <Table>
-          <TableHeader><TableRow><TableHead>Material</TableHead><TableHead>SKU</TableHead><TableHead>Category</TableHead><TableHead className="text-right">On Hand</TableHead><TableHead className="text-right">Allocated</TableHead><TableHead className="text-right">Available</TableHead><TableHead className="text-right">Reorder Pt</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Material</TableHead><TableHead>Vendor</TableHead><TableHead>SKU</TableHead><TableHead>Category</TableHead><TableHead className="text-right">On Hand</TableHead><TableHead className="text-right">Allocated</TableHead><TableHead className="text-right">Available</TableHead><TableHead className="text-right">Reorder Pt</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
           <TableBody>
-            {materials.map((m) => {
+            {materials.filter(m => !search || m.name.toLowerCase().includes(search.toLowerCase()) || (m.vendor || "").toLowerCase().includes(search.toLowerCase()) || (m.sku || "").toLowerCase().includes(search.toLowerCase())).map((m) => {
               const available = m.onHand - m.allocated;
               const isShort = m.onHand < m.allocated;
               const isLow = !isShort && m.onHand < m.reorderPoint;
               return (
                 <TableRow key={m.id} className={`hover:bg-gray-50 transition-colors ${isShort ? "bg-red-50 hover:bg-red-100" : isLow ? "bg-amber-50 hover:bg-amber-100" : ""}`}>
                   <TableCell className="font-medium">{m.name}</TableCell>
+                  <TableCell className="text-sm text-gray-600">{m.vendor || "—"}</TableCell>
                   <TableCell className="font-mono text-xs text-gray-500">{m.sku || "—"}</TableCell>
                   <TableCell><Badge className="bg-gray-100 text-gray-600">{m.category || "—"}</Badge></TableCell>
                   <TableCell className="text-right">{m.onHand.toLocaleString()}</TableCell>
@@ -97,7 +110,10 @@ export default function InventoryPage() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">SKU</label><Input value={form.sku} onChange={(e) => update("sku", e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Category</label><Input value={form.category} onChange={(e) => update("category", e.target.value)} placeholder="substrate, ink, coating" /></div>
                 </div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label><Input value={form.unit} onChange={(e) => update("unit", e.target.value)} placeholder="sheets, lbs, gallons" /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label><Input value={form.unit} onChange={(e) => update("unit", e.target.value)} placeholder="sheets, lbs, gallons" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label><Select value={form.vendor} onChange={(e) => update("vendor", e.target.value)} options={[{ value: "", label: "Select vendor..." }, ...vendors.map(v => ({ value: v.name, label: v.name }))]} /></div>
+                </div>
                 <div className="flex gap-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Material"}</Button></div>
               </form>
             </div>

@@ -142,6 +142,24 @@ export default function LoginPage() {
           </Button>
         </form>
 
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400">or</span></div>
+        </div>
+
+        <a
+          href="/api/auth/microsoft"
+          className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+        >
+          <svg width="20" height="20" viewBox="0 0 21 21" fill="none">
+            <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+            <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+            <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+            <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+          </svg>
+          Sign in with Microsoft
+        </a>
+
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-500">
             Don&apos;t have an account?{" "}
