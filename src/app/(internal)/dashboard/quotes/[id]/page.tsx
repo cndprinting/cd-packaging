@@ -457,7 +457,7 @@ export default function QuoteDetailPage() {
                               subject: `Estimate ${quote.quoteNumber} - ${quote.productName} | C&D Printing`,
                               body: `
                                 <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                                  <div style="background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 3px;"></div>
+                                  <div style="background: linear-gradient(135deg, #ED1C24, #27AAE1); padding: 3px;"></div>
                                   <div style="padding: 24px;">
                                     <h2 style="margin: 0 0 4px;">Estimate from C&D Printing Co.</h2>
                                     <p style="color: #666; margin: 0 0 20px;">12150 28th Street N., St. Petersburg, FL 33716</p>
@@ -465,17 +465,17 @@ export default function QuoteDetailPage() {
                                       <tr><td style="padding: 8px 0; color: #888;">Estimate #</td><td style="padding: 8px 0; font-weight: bold;">${quote.quoteNumber}</td></tr>
                                       <tr><td style="padding: 8px 0; color: #888;">Product</td><td style="padding: 8px 0;">${quote.productName}</td></tr>
                                       <tr><td style="padding: 8px 0; color: #888;">Quantity</td><td style="padding: 8px 0;">${quote.quantity.toLocaleString()}</td></tr>
-                                      <tr style="border-top: 2px solid #CC1E2D;"><td style="padding: 12px 0; color: #888; font-weight: bold;">Total</td><td style="padding: 12px 0; font-size: 20px; font-weight: bold; color: #CC1E2D;">${formatCurrency(quote.totalPrice)}</td></tr>
+                                      <tr style="border-top: 2px solid #ED1C24;"><td style="padding: 12px 0; color: #888; font-weight: bold;">Total</td><td style="padding: 12px 0; font-size: 20px; font-weight: bold; color: #ED1C24;">${formatCurrency(quote.totalPrice)}</td></tr>
                                     </table>
                                     <p style="color: #666; font-size: 14px;">View the full estimate details and print a copy:</p>
-                                    <a href="${quoteUrl}" style="display: inline-block; background: #CC1E2D; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 8px;">View Estimate</a>
+                                    <a href="${quoteUrl}" style="display: inline-block; background: #ED1C24; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 8px;">View Estimate</a>
                                     <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
                                     <p style="color: #999; font-size: 12px;">
                                       <strong>Terms:</strong> 50% deposit before production. Balance due on delivery. 3% surcharge on credit card payments.<br/>
                                       <strong>Contact:</strong> 727-572-9999 | C&D Printing Co.
                                     </p>
                                   </div>
-                                  <div style="background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 3px;"></div>
+                                  <div style="background: linear-gradient(135deg, #ED1C24, #27AAE1); padding: 3px;"></div>
                                 </div>
                               `,
                               quoteId: quote.id,

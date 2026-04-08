@@ -103,35 +103,35 @@ export default function PrintQuotePage() {
         }
         .print-page { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 11px; line-height: 1.5; }
 
-        .header-bar { background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 2px 0; margin-bottom: 16px; }
+        .header-bar { background: linear-gradient(135deg, #ED1C24, #27AAE1); padding: 2px 0; margin-bottom: 16px; }
         .header-content { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
         .header-logo { display: flex; align-items: center; gap: 12px; }
         .header-logo img { height: 48px; }
         .header-company { text-align: right; font-size: 10px; color: #555; line-height: 1.6; }
         .header-company .name { font-size: 16px; font-weight: bold; color: #1a1a1a; }
 
-        .estimate-badge { display: inline-block; background: #CC1E2D; color: white; font-size: 10px; font-weight: bold; letter-spacing: 2px; padding: 3px 12px; text-transform: uppercase; }
+        .estimate-badge { display: inline-block; background: #ED1C24; color: white; font-size: 10px; font-weight: bold; letter-spacing: 2px; padding: 3px 12px; text-transform: uppercase; }
 
         .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin: 12px 0; }
         .meta-label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
         .meta-value { font-size: 12px; font-weight: 600; color: #1a1a1a; }
 
-        .section-divider { border: none; border-top: 2px solid #CC1E2D; margin: 14px 0 10px 0; }
+        .section-divider { border: none; border-top: 2px solid #ED1C24; margin: 14px 0 10px 0; }
         .section-divider-light { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
 
-        .spec-label { font-weight: bold; font-size: 11px; color: #CC1E2D; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 2px 0; }
+        .spec-label { font-weight: bold; font-size: 11px; color: #ED1C24; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 2px 0; }
         .spec-value { margin-left: 16px; font-size: 11px; color: #333; }
 
         .pricing-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-        .pricing-table th { background: #f3f4f6; padding: 6px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; border-bottom: 2px solid #CC1E2D; }
+        .pricing-table th { background: #f3f4f6; padding: 6px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; border-bottom: 2px solid #ED1C24; }
         .pricing-table td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 12px; }
-        .pricing-table tr:last-child td { border-bottom: 2px solid #CC1E2D; }
+        .pricing-table tr:last-child td { border-bottom: 2px solid #ED1C24; }
         .pricing-table .amt { text-align: right; font-weight: bold; font-size: 13px; }
         .pricing-table .tax-row td { font-size: 11px; color: #666; }
         .pricing-table .total-row td { font-weight: bold; font-size: 14px; background: #fef2f2; }
 
         .terms-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; margin: 14px 0; font-size: 10px; line-height: 1.7; }
-        .terms-box .terms-title { font-weight: bold; font-size: 11px; color: #CC1E2D; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .terms-box .terms-title { font-weight: bold; font-size: 11px; color: #ED1C24; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
 
         .payment-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin: 10px 0; font-size: 10px; line-height: 1.7; }
         .payment-box .payment-title { font-weight: bold; font-size: 11px; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
@@ -140,7 +140,7 @@ export default function PrintQuotePage() {
         .sig-block { border-top: 1px solid #000; padding-top: 4px; }
         .sig-label { font-size: 9px; color: #888; text-transform: uppercase; }
 
-        .footer-bar { background: linear-gradient(135deg, #CC1E2D, #3DB4E7); padding: 2px 0; margin-top: 20px; }
+        .footer-bar { background: linear-gradient(135deg, #ED1C24, #27AAE1); padding: 2px 0; margin-top: 20px; }
         .footer-text { text-align: center; font-size: 9px; color: #888; margin-top: 6px; }
       `}</style>
 
@@ -278,7 +278,7 @@ export default function PrintQuotePage() {
           <>
             {specs.additionalProducts.map((product, pi) => (
               <div key={pi}>
-                <div style={{ fontWeight: "bold", fontSize: 11, marginTop: 8, color: "#CC1E2D" }}>{product.productName}</div>
+                <div style={{ fontWeight: "bold", fontSize: 11, marginTop: 8, color: "#ED1C24" }}>{product.productName}</div>
                 <table className="pricing-table">
                   <thead>
                     <tr><th>Quantity</th><th className="amt">Subtotal</th><th className="amt">Tax (7%)</th><th className="amt">Total</th></tr>
