@@ -166,6 +166,9 @@ export default function QuoteDetailPage() {
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
+              <Button variant="outline" onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
+                <Package className="h-4 w-4" /> Convert to Job
+              </Button>
             </>
           )}
           {quote.status === "sent" && (
