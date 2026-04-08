@@ -79,7 +79,7 @@ export default function AdminPage() {
   const closeModal = () => { setShowInviteModal(false); setInviteEmail(""); setInviteRole("CUSTOMER"); setInviteUrl(""); setInviteError(""); setCopied(false); };
 
   return (
-    <RequireRole allowed={["ADMIN", "PRODUCTION_MANAGER"]}>
+    <RequireRole allowed={["OWNER", "GM", "ADMIN"]}>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

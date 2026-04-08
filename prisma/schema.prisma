@@ -13,7 +13,8 @@ enum Role {
   OWNER              // Benjy, Nitay — full access to everything
   GM                 // Suzanne — full access
   ADMIN              // Legacy admin role — full access
-  PRODUCTION_MANAGER // Darrin — full access
+  PRODUCTION_MANAGER // Legacy — use SENIOR_PLANT_MANAGER
+  SENIOR_PLANT_MANAGER // Darrin — full access, separate from regular plant roles
   ACCOUNTING         // Full access
   CSR                // Everything except accounting/dashboard/executive features
   SALES_REP          // Quotes + their own customers only, job status tracking

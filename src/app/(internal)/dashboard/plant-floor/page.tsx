@@ -100,7 +100,7 @@ export default function PlantFloorPage() {
   };
 
   return (
-    <RequireRole allowed={["ADMIN", "PRODUCTION_MANAGER", "CSR"]}>
+    <RequireRole allowed={["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING", "CSR", "OPERATOR"]}>
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Factory className="h-7 w-7 text-brand-600" />
