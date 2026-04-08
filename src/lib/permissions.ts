@@ -1,7 +1,7 @@
 // Role-based permissions for Godzilla
 // Controls page visibility and action permissions per role
 
-export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
+export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
 
 // Full access roles — can see and do everything
 const FULL_ACCESS: AppRole[] = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING"];

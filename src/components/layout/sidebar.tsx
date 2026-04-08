@@ -56,6 +56,16 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
 
     const role = userRole as import("@/lib/permissions").AppRole;
 
+    // Full access roles see everything — check first
+    const fullAccessRoles = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING"];
+    if (fullAccessRoles.includes(role)) return internalNav;
+
+    // Estimator sees everything except dashboard
+    if (role === "ESTIMATOR") {
+      const hidden = ["/dashboard"];
+      return internalNav.filter(item => item.href !== "/dashboard");
+    }
+
     // Operator only sees Plant Floor
     if (role === "OPERATOR") return internalNav.filter(item => item.href === "/dashboard/plant-floor");
 
@@ -74,7 +84,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
       return internalNav.filter(item => !hidden.includes(item.href));
     }
 
-    // Full access roles see everything
+    // Default: show everything (safety fallback)
     return internalNav;
   }, [isCustomer, userRole]);
 
