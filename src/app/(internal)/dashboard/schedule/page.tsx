@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Calendar, Clock, Gauge, Loader2 } from "lucide-react";
-import { demoJobs, demoWorkCenters } from "@/lib/demo-data";
+import { demoJobs } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,38 +40,53 @@ function getWorkCenterStageMap(): Record<string, string> {
     press: "PRINTING",
     "die-cutting": "DIE_CUTTING",
     gluing: "GLUING_FOLDING",
+    bindery: "COATING_FINISHING",
     qa: "QA",
     shipping: "PACKED",
   };
 }
 
+interface WorkCenterData {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  capacity: number;
+  machines: { id: string; name: string; code: string }[];
+}
+
 export default function SchedulePage() {
   const [jobs, setJobs] = useState<any[]>(demoJobs);
+  const [workCenters, setWorkCenters] = useState<WorkCenterData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadJobs() {
+    async function loadData() {
       try {
-        const res = await fetch("/api/jobs");
-        if (!cancelled && res.ok) {
-          const data = await res.json();
-          const apiJobs = data.jobs || [];
-          if (apiJobs.length > 0) {
-            setJobs(apiJobs);
-          } else {
-            setJobs(demoJobs);
+        const [jobRes, wcRes] = await Promise.all([
+          fetch("/api/jobs"),
+          fetch("/api/schedule/work-centers"),
+        ]);
+        if (!cancelled) {
+          if (jobRes.ok) {
+            const jd = await jobRes.json();
+            if (jd.jobs?.length) setJobs(jd.jobs);
+          }
+          if (wcRes.ok) {
+            const wd = await wcRes.json();
+            if (wd.workCenters?.length) setWorkCenters(wd.workCenters);
           }
         }
       } catch {
-        // Keep demo data on error
+        // Keep defaults on error
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadJobs();
+    loadData();
     return () => { cancelled = true; };
   }, []);
 
@@ -90,14 +105,14 @@ export default function SchedulePage() {
   }, [weekDays, jobs]);
 
   const workCenterData = useMemo(() => {
-    return demoWorkCenters.map((wc) => {
+    return workCenters.map((wc) => {
       const stage = stageMap[wc.type];
       const assignedJobs = stage
         ? jobs.filter((j) => j.status === stage)
         : [];
       return { ...wc, assignedJobs, stage };
     });
-  }, [jobs]);
+  }, [jobs, workCenters]);
 
   if (loading) {
     return (
