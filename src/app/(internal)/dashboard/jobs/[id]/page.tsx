@@ -7,7 +7,7 @@ import {
   ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
   ShieldCheck, FileImage, Loader2, ChevronRight, Pencil, X, Check,
   Trash2, Users, Layers, Printer, Scissors,
-  DollarSign, Info, Plus, Send, CircleAlert,
+  DollarSign, Info, Plus, Send, CircleAlert, FileBarChart,
 } from "lucide-react";
 import { demoJobs, PRODUCT_TYPES } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
@@ -556,6 +556,34 @@ export default function JobDetailPage() {
                   <Printer className="h-4 w-4" />Print Ticket
                 </Button>
               </a>
+              <label className="cursor-pointer">
+                <Button variant="outline" className="gap-1.5" asChild>
+                  <span><FileBarChart className="h-4 w-4" />Import Order Form</span>
+                </Button>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    fd.append("jobId", jobId);
+                    try {
+                      const res = await fetch("/api/import", { method: "POST", body: fd });
+                      const data = await res.json();
+                      if (res.ok) {
+                        alert(`Imported ${data.imported} line items (${data.totalQuantity?.toLocaleString()} total units)`);
+                        window.location.reload();
+                      } else {
+                        alert(data.error || "Import failed");
+                      }
+                    } catch { alert("Import failed"); }
+                    e.target.value = "";
+                  }}
+                />
+              </label>
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete
               </Button>

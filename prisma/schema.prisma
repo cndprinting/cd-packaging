@@ -585,12 +585,15 @@ model JobLineItem {
   id              String   @id @default(cuid())
   jobId           String
   job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  productCode     String?  // e.g. "MR-30232"
+  batchNumber     String?  // e.g. "7001"
   quantity        Int
   description     String
   flatSize        String?
   finishedWidth   Float?
   finishedHeight  Float?
   inkSpec         String?  // e.g. "5/0 -PROCESS"
+  poNumber        String?  // e.g. "FLN-544"
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
 

@@ -73,8 +73,8 @@ export default function PrintJobTicketPage() {
     </span>
   );
 
-  // Pad line items and press runs to minimum rows for the form
-  const MIN_LINE_ROWS = 6;
+  // Pad line items and press runs — expand dynamically for large orders
+  const MIN_LINE_ROWS = lineItems.length > 6 ? 0 : 6; // No padding if many items
   const MIN_PRESS_ROWS = 6;
   const displayLineItems = [
     ...lineItems,
@@ -383,29 +383,37 @@ export default function PrintJobTicketPage() {
             </th>
           </tr>
           <tr>
-            <th style={{ width: "12%" }}>Quantity</th>
-            <th style={{ width: "30%" }}>Job Description</th>
-            <th style={{ width: "14%" }}>Flat Size</th>
-            <th style={{ width: "20%" }}>Finished Size (W x H)</th>
-            <th style={{ width: "8%" }}>X/X</th>
-            <th style={{ width: "16%" }}>Ink - Varnish</th>
+            <th style={{ width: "10%" }}>Product #</th>
+            <th style={{ width: "7%" }}>Batch</th>
+            <th style={{ width: "9%" }}>Quantity</th>
+            <th style={{ width: "26%" }}>Description</th>
+            <th style={{ width: "12%" }}>Flat Size</th>
+            <th style={{ width: "16%" }}>Finished Size</th>
+            <th style={{ width: "6%" }}>X/X</th>
+            <th style={{ width: "8%" }}>PO#</th>
           </tr>
         </thead>
         <tbody>
           {displayLineItems.map((item: any, idx: number) => (
-            <tr key={idx} style={{ height: "20px" }}>
-              <td style={{ textAlign: "center", fontWeight: "bold", fontSize: "11px" }}>
+            <tr key={idx} style={{ height: "18px" }}>
+              <td style={{ textAlign: "center", fontSize: "8px" }}>
+                {item ? item.productCode || "" : ""}
+              </td>
+              <td style={{ textAlign: "center", fontSize: "8px" }}>
+                {item ? item.batchNumber || "" : ""}
+              </td>
+              <td style={{ textAlign: "center", fontWeight: "bold", fontSize: "10px" }}>
                 {item ? item.quantity?.toLocaleString() : ""}
               </td>
-              <td style={{ fontSize: "9px" }}>{item ? item.description : ""}</td>
-              <td style={{ textAlign: "center" }}>{item ? item.flatSize || "" : ""}</td>
-              <td style={{ textAlign: "center" }}>
+              <td style={{ fontSize: "8px" }}>{item ? item.description : ""}</td>
+              <td style={{ textAlign: "center", fontSize: "8px" }}>{item ? item.flatSize || "" : ""}</td>
+              <td style={{ textAlign: "center", fontSize: "8px" }}>
                 {item && item.finishedWidth
                   ? `${item.finishedWidth} x ${item.finishedHeight || ""}`
                   : ""}
               </td>
-              <td style={{ textAlign: "center" }}>{item ? item.inkSpec || "" : ""}</td>
-              <td>{item ? (f("varnish") && idx === 0 ? f("varnish") : "") : ""}</td>
+              <td style={{ textAlign: "center", fontSize: "8px" }}>{item ? item.inkSpec || "" : ""}</td>
+              <td style={{ textAlign: "center", fontSize: "7px" }}>{item ? item.poNumber || "" : ""}</td>
             </tr>
           ))}
         </tbody>
