@@ -204,6 +204,12 @@ export default function QuoteDetailPage() {
               </Button>
             </Link>
           )}
+          {/* Print always available */}
+          {quote.status !== "draft" && quote.status !== "sent" && quote.status !== "approved" && (
+            <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
+              <Printer className="h-4 w-4" /> Print Quote
+            </Button>
+          )}
         </div>
       </div>
 
