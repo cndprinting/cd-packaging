@@ -11,34 +11,41 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Shield, UserPlus, X, Copy, Check, Loader2, Link as LinkIcon } from "lucide-react";
 
 const roleBadge: Record<string, string> = {
+  OWNER: "bg-red-100 text-red-700",
+  GM: "bg-purple-100 text-purple-700",
   ADMIN: "bg-purple-100 text-purple-700",
+  SENIOR_PLANT_MANAGER: "bg-blue-100 text-blue-700",
   PRODUCTION_MANAGER: "bg-blue-100 text-blue-700",
+  ACCOUNTING: "bg-emerald-100 text-emerald-700",
+  ESTIMATOR: "bg-amber-100 text-amber-700",
   CSR: "bg-teal-100 text-teal-700",
   SALES_REP: "bg-indigo-100 text-indigo-700",
+  SALES_MANAGER: "bg-indigo-100 text-indigo-700",
+  SHIPPING: "bg-sky-100 text-sky-700",
+  OPERATOR: "bg-gray-100 text-gray-700",
   CUSTOMER: "bg-gray-100 text-gray-700",
 };
 
 const roleLabel: Record<string, string> = {
+  OWNER: "Owner",
+  GM: "General Manager",
   ADMIN: "Admin",
+  SENIOR_PLANT_MANAGER: "Sr. Plant Manager",
   PRODUCTION_MANAGER: "Production Mgr",
+  ACCOUNTING: "Accounting",
+  ESTIMATOR: "Estimator",
   CSR: "CSR",
   SALES_REP: "Sales Rep",
+  SALES_MANAGER: "Sales Manager",
+  SHIPPING: "Shipping",
+  OPERATOR: "Operator",
   CUSTOMER: "Customer",
 };
 
 interface UserRow { id?: string; name: string; email: string; role: string; company: string; isActive?: boolean; }
 
-const fallbackUsers: UserRow[] = [
-  { name: "Sarah Johnson", email: "admin@cndpackaging.com", role: "ADMIN", company: "C&D Packaging" },
-  { name: "Mike Torres", email: "mike@cndpackaging.com", role: "PRODUCTION_MANAGER", company: "C&D Packaging" },
-  { name: "Rachel Kim", email: "rachel@cndpackaging.com", role: "CSR", company: "C&D Packaging" },
-  { name: "David Chen", email: "david@cndpackaging.com", role: "SALES_REP", company: "C&D Packaging" },
-  { name: "Tom Richards", email: "tom@freshfoods.com", role: "CUSTOMER", company: "Fresh Foods Co." },
-  { name: "Nina Patel", email: "nina@luxecosmetics.com", role: "CUSTOMER", company: "Luxe Cosmetics" },
-];
-
 export default function AdminPage() {
-  const [users, setUsers] = React.useState<UserRow[]>(fallbackUsers);
+  const [users, setUsers] = React.useState<UserRow[]>([]);
 
   React.useEffect(() => {
     fetch("/api/users")
