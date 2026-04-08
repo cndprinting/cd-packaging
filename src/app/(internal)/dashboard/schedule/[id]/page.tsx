@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Loader2, Printer, ChevronUp, ChevronDown,
-  GripVertical, Factory, Settings,
+  GripVertical, Factory, Settings, Calendar, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,8 @@ export default function WorkCenterDetailPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMachine, setSelectedMachine] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [showAllDays, setShowAllDays] = useState(true);
 
   useEffect(() => {
     if (!params.id) return;
@@ -79,6 +81,12 @@ export default function WorkCenterDetailPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [params.id]);
+
+  const filteredJobs = showAllDays ? jobs : jobs.filter(j => {
+    if (!j.dueDate) return false;
+    const due = typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : j.dueDate;
+    return due === selectedDate;
+  });
 
   const moveJob = (index: number, direction: "up" | "down") => {
     const newJobs = [...jobs];
@@ -168,20 +176,77 @@ export default function WorkCenterDetailPage() {
         </Card>
       )}
 
+      {/* Day Picker */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Filter by Day</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAllDays(!showAllDays)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showAllDays ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+              >
+                All Days
+              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() - 1);
+                    setSelectedDate(d.toISOString().split("T")[0]);
+                    setShowAllDays(false);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => { setSelectedDate(e.target.value); setShowAllDays(false); }}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                />
+                <button
+                  onClick={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() + 1);
+                    setSelectedDate(d.toISOString().split("T")[0]);
+                    setShowAllDays(false);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => { setSelectedDate(new Date().toISOString().split("T")[0]); setShowAllDays(false); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Job List — Orderable */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Factory className="h-5 w-5 text-brand-600" />
             Job Queue {selectedMachine ? `- ${workCenter.machines.find(m => m.id === selectedMachine)?.name}` : ""}
-            <span className="text-sm font-normal text-gray-500 ml-2">({jobs.length} jobs)</span>
+            {!showAllDays && <span className="text-sm font-normal text-gray-500">— {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>}
+            <span className="text-sm font-normal text-gray-500 ml-2">({filteredJobs.length} jobs)</span>
           </CardTitle>
-          <p className="text-xs text-gray-400 mt-1">Drag or use arrows to reorder priority. Top = runs first.</p>
+          <p className="text-xs text-gray-400 mt-1">Use arrows to reorder priority. Top = runs first.</p>
         </CardHeader>
         <CardContent>
-          {jobs.length > 0 ? (
+          {filteredJobs.length > 0 ? (
             <div className="space-y-2">
-              {jobs.map((job, index) => (
+              {filteredJobs.map((job, index) => (
                 <div
                   key={job.id}
                   className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 bg-white hover:shadow-sm transition-shadow"
@@ -198,7 +263,7 @@ export default function WorkCenterDetailPage() {
                     <span className="text-xs font-bold text-gray-400 w-5 text-center">{index + 1}</span>
                     <button
                       onClick={() => moveJob(index, "down")}
-                      disabled={index === jobs.length - 1}
+                      disabled={index === filteredJobs.length - 1}
                       className="text-gray-400 hover:text-gray-700 disabled:opacity-20"
                     >
                       <ChevronDown className="h-4 w-4" />
