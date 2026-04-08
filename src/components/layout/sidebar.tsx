@@ -36,6 +36,7 @@ const customerNav = [
   { label: "Quotes", href: "/portal/quotes", icon: Calculator },
   { label: "Orders", href: "/portal/orders", icon: ClipboardList },
   { label: "Proofs", href: "/portal/proofs", icon: FileCheck },
+  { label: "Payments", href: "/portal/payments", icon: ClipboardList },
   { label: "Shipments", href: "/portal/shipments", icon: Truck },
   { label: "Documents", href: "/portal/documents", icon: FileBarChart },
   { label: "Account", href: "/portal/account", icon: Settings },

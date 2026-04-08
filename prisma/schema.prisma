@@ -884,6 +884,41 @@ model TimeEntry {
   @@index([department])
 }
 
+// ─── INVOICES & PAYMENTS ─────────────────────────────────
+
+model Invoice {
+  id              String    @id @default(cuid())
+  invoiceNumber   String    @unique
+  orderId         String?
+  jobId           String?
+  companyId       String?
+  customerName    String
+  contactEmail    String?
+  description     String?
+  subtotal        Float
+  taxRate         Float     @default(7)
+  taxAmount       Float
+  total           Float
+  depositPercent  Float     @default(50)
+  depositAmount   Float
+  depositPaid     Boolean   @default(false)
+  depositPaidAt   DateTime?
+  balancePaid     Boolean   @default(false)
+  balancePaidAt   DateTime?
+  status          String    @default("pending") // pending, deposit_paid, paid, overdue, cancelled
+  stripeSessionId String?
+  stripePaymentId String?
+  dueDate         DateTime?
+  notes           String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([companyId])
+  @@index([invoiceNumber])
+}
+
 // ─── ALERTS ──────────────────────────────────────────────
 
 model Alert {
