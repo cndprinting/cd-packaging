@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2, FileBarChart, ArrowRight } from "lucide-react";
+import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2, FileBarChart, ArrowRight, Building2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -65,6 +65,22 @@ export default function ReportsPage() {
               <div>
                 <h2 className="text-lg font-bold">Labor Report</h2>
                 <p className="text-sm text-white/80">Track labor hours per job — estimated vs actual with red/green indicators and estimating insights</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
+      {/* Customers by Industry */}
+      <Link href="/dashboard/reports/industry">
+        <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><Building2 className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Customers by Industry</h2>
+                <p className="text-sm text-white/80">Breakdown of all customers grouped by industry — interactive chart and filterable list</p>
               </div>
             </div>
             <ArrowRight className="h-6 w-6 text-white/70" />
