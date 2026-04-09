@@ -17,6 +17,7 @@ const internalNav = [
   { label: "Jobs", href: "/dashboard/jobs", icon: Package },
   { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid },
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
+  { label: "Invoices", href: "/dashboard/invoices", icon: FileBarChart },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
   // { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck }, // Archived — team doesn't need it (Apr 2026)

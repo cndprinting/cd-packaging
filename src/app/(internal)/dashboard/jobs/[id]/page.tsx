@@ -756,6 +756,12 @@ export default function JobDetailPage() {
                 <SectionLabel>Quantity</SectionLabel>
                 <p className="text-sm font-medium text-gray-900">{formatNumber(job.quantity)}</p>
               </div>
+              {(job as any).quotedPrice > 0 && (
+                <div>
+                  <SectionLabel>Quoted Price</SectionLabel>
+                  <p className="text-lg font-bold text-brand-600">${((job as any).quotedPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              )}
             </div>
 
             <div>
