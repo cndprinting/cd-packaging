@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid,
+  LayoutGrid, HelpCircle,
 } from "lucide-react";
 
 const internalNav = [
@@ -28,6 +28,7 @@ const internalNav = [
   { label: "Vendors", href: "/dashboard/vendors", icon: Warehouse },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
+  { label: "Help Desk", href: "/dashboard/help-desk", icon: HelpCircle },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
   { label: "Admin", href: "/dashboard/admin", icon: Shield },
 ];

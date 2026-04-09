@@ -923,6 +923,30 @@ model Invoice {
   @@index([invoiceNumber])
 }
 
+// ─── HELP DESK ───────────────────────────────────────────
+
+model HelpTicket {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  category    String   @default("bug") // bug, feature, question, other
+  priority    String   @default("normal") // low, normal, high, urgent
+  status      String   @default("open") // open, in_progress, resolved, closed
+  page        String?  // which page the issue is on
+  screenshot  String?  // URL or description
+  submittedBy String
+  submittedByName String
+  submittedByRole String
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([submittedBy])
+}
+
 // ─── CUTTING DIES ────────────────────────────────────────
 
 model CuttingDie {
