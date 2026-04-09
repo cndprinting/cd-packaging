@@ -584,6 +584,36 @@ export default function JobDetailPage() {
                   }}
                 />
               </label>
+              <Button
+                variant="outline"
+                className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                onClick={async () => {
+                  if (!job) return;
+                  try {
+                    const res = await fetch("/api/payments", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "create_invoice",
+                        customerName: job.companyName || "",
+                        companyId: job.companyId || null,
+                        description: `${job.jobNumber} - ${job.name}`,
+                        subtotal: (job as any).totalPrice || (job as any).estimatedCost || 0,
+                        jobId: job.id,
+                        orderId: job.orderId,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      alert(`Invoice ${data.invoice.invoiceNumber} created! Total: $${data.invoice.total.toLocaleString()}`);
+                    } else {
+                      alert(data.error || "Failed to create invoice");
+                    }
+                  } catch { alert("Failed to create invoice"); }
+                }}
+              >
+                <DollarSign className="h-4 w-4" />Create Invoice
+              </Button>
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete
               </Button>

@@ -72,6 +72,22 @@ export default function ReportsPage() {
         </Card>
       </Link>
 
+      {/* Sales by Rep */}
+      <Link href="/dashboard/reports/sales">
+        <Card className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><Timer className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Sales by Rep</h2>
+                <p className="text-sm text-white/80">Quote volume, conversion rates, and revenue by team member</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
       {/* Job Costing */}
       <Link href="/dashboard/reports/job-costing">
         <Card className="bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
