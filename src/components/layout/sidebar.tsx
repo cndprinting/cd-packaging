@@ -74,16 +74,16 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
     // Shipping only sees Shipping + Settings
     if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings");
 
-    // Sales reps see limited nav
-    if (role === "SALES_REP" || role === "SALES_MANAGER") {
-      const allowed = ["/dashboard/quotes", "/dashboard/jobs", "/dashboard/orders", "/dashboard/customers", "/dashboard/settings"];
-      return internalNav.filter(item => allowed.includes(item.href));
-    }
-
-    // CSR sees most but not admin/reports
-    if (role === "CSR") {
-      const hidden = ["/dashboard/admin", "/dashboard/reports"];
-      return internalNav.filter(item => !hidden.includes(item.href));
+    // CSRs and Sales Reps — limited view, no estimating data
+    if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER") {
+      return [
+        { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
+        { label: "Jobs", href: "/dashboard/jobs", icon: Package },
+        { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
+        { label: "Customers", href: "/dashboard/customers", icon: Users },
+        { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
+        { label: "Settings", href: "/dashboard/settings", icon: Settings },
+      ];
     }
 
     // Default: show everything (safety fallback)

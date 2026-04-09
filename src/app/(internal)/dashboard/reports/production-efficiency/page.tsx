@@ -25,6 +25,7 @@ interface WorkCenter {
   id: string;
   name: string;
   code: string;
+  type: string;
   capacity: number;
 }
 
