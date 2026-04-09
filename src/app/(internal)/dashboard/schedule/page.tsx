@@ -59,6 +59,7 @@ export default function SchedulePage() {
   const [jobs, setJobs] = useState<any[]>(demoJobs);
   const [workCenters, setWorkCenters] = useState<WorkCenterData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"week" | "month">("week");
 
   useEffect(() => {
     let cancelled = false;
@@ -91,18 +92,33 @@ export default function SchedulePage() {
   }, []);
 
   const weekDays = useMemo(() => getWeekDays(), []);
+  const monthDays = useMemo(() => {
+    const days = [];
+    const today = new Date();
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      days.push({
+        date: d,
+        label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+        iso: d.toISOString().split("T")[0],
+      });
+    }
+    return days;
+  }, []);
+  const displayDays = view === "week" ? weekDays : monthDays;
   const stageMap = getWorkCenterStageMap();
 
   const jobsByDay = useMemo(() => {
     const map: Record<string, typeof jobs> = {};
-    for (const day of weekDays) {
+    for (const day of displayDays) {
       map[day.iso] = jobs.filter((j) => {
         const dueIso = typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : j.dueDate;
         return dueIso === day.iso;
       });
     }
     return map;
-  }, [weekDays, jobs]);
+  }, [displayDays, jobs]);
 
   const workCenterData = useMemo(() => {
     return workCenters.map((wc) => {
@@ -130,18 +146,18 @@ export default function SchedulePage() {
             Production Schedule
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Week view &middot; Next 7 days
+            {view === "week" ? "Week view \u00b7 Next 7 days" : "Month view \u00b7 Next 30 days"}
           </p>
         </div>
-        <Button variant="outline">
-          <Calendar className="h-4 w-4 mr-2" />
-          Change View
-        </Button>
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <button onClick={() => setView("week")} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>Week</button>
+          <button onClick={() => setView("month")} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>Month</button>
+        </div>
       </div>
 
       {/* Week View */}
-      <div className="grid grid-cols-7 gap-3">
-        {weekDays.map((day, i) => (
+      <div className={`grid gap-3 ${view === "week" ? "grid-cols-7" : "grid-cols-7"}`}>
+        {displayDays.map((day, i) => (
           <Card
             key={day.iso}
             className={i === 0 ? "ring-2 ring-green-500" : ""}
