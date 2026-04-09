@@ -385,7 +385,18 @@ export default function InventoryPage() {
               <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Add Material</h2><button onClick={() => setShowModal(false)}><X className="h-5 w-5 text-gray-400" /></button></div>
               <form onSubmit={handleCreate} className="space-y-4">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Description *</label><Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Stallion C/2/S White" autoFocus /></div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                  <Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Stallion C/2/S White" autoFocus />
+                  {form.name.length >= 3 && materials.some(m => m.name.toLowerCase().includes(form.name.toLowerCase())) && (
+                    <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 p-2">
+                      <p className="text-xs font-medium text-amber-800">Possible duplicate:</p>
+                      {materials.filter(m => m.name.toLowerCase().includes(form.name.toLowerCase())).slice(0, 3).map(m => (
+                        <p key={m.id} className="text-xs text-amber-700">{m.name} ({m.sku || "no SKU"})</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Weight</label><Input value={form.weight} onChange={(e) => update("weight", e.target.value)} placeholder="e.g. 18pt, 100lb" /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Coating</label><Select value={form.coating} onChange={(e) => update("coating", e.target.value)} options={[{ value: "", label: "Select..." }, { value: "C/1/S", label: "C/1/S" }, { value: "C/2/S", label: "C/2/S" }, { value: "Dull", label: "Dull" }, { value: "Gloss", label: "Gloss" }, { value: "Matte", label: "Matte" }, { value: "Uncoated", label: "Uncoated" }]} /></div>
