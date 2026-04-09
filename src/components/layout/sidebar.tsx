@@ -63,10 +63,9 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
     const fullAccessRoles = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING"];
     if (fullAccessRoles.includes(role)) return internalNav;
 
-    // Estimator sees everything except dashboard
+    // Estimator sees everything except dashboard and invoices
     if (role === "ESTIMATOR") {
-      const hidden = ["/dashboard"];
-      return internalNav.filter(item => item.href !== "/dashboard");
+      return internalNav.filter(item => item.href !== "/dashboard" && item.href !== "/dashboard/invoices");
     }
 
     // Operator only sees Plant Floor
