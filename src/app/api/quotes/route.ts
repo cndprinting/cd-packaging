@@ -93,9 +93,15 @@ export async function PUT(request: NextRequest) {
         // Find or create company
         let companyId = quote.companyId;
         if (!companyId) {
-          const slug = quote.customerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+          const slug = quote.customerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "") || `customer-${Date.now()}`;
           let company = await prisma.company.findUnique({ where: { slug } });
-          if (!company) company = await prisma.company.create({ data: { name: quote.customerName, slug } });
+          if (!company) {
+            try {
+              company = await prisma.company.create({ data: { name: quote.customerName, slug: `${slug}-${Date.now()}` } });
+            } catch {
+              company = await prisma.company.create({ data: { name: quote.customerName, slug: `cust-${Date.now()}` } });
+            }
+          }
           companyId = company.id;
         }
 
@@ -141,8 +147,8 @@ export async function PUT(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, status });
-  } catch (error) {
-    console.error("Quote PUT error:", error);
-    return NextResponse.json({ error: "Failed to update quote" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Quote PUT error:", error?.message || error);
+    return NextResponse.json({ error: `Failed to update quote: ${error?.message || "Unknown error"}` }, { status: 500 });
   }
 }
