@@ -235,6 +235,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
+      {/* Die Inventory */}
+      <DieInventory customerName={company.name} />
+
       {/* Empty state */}
       {company.orders.length === 0 && quotes.length === 0 && (
         <Card className="p-8 text-center">
@@ -244,5 +247,54 @@ export default function CustomerDetailPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+function DieInventory({ customerName }: { customerName: string }) {
+  const [dies, setDies] = useState<{ id: string; dieNumber: string; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null }[]>([]);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    fetch(`/api/dies?customer=${encodeURIComponent(customerName)}`)
+      .then(r => r.json())
+      .then(d => { setDies(d.dies || []); setTotal(d.total || 0); })
+      .catch(() => {});
+  }, [customerName]);
+
+  if (dies.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Loader2 className="h-4 w-4 text-brand-600" style={{ animation: "none" }} />
+          Cutting Dies ({total})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Die #</TableHead>
+              <TableHead>Item</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Size</TableHead>
+              <TableHead>Notes</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {dies.map((die) => (
+              <TableRow key={die.id}>
+                <TableCell className="font-mono font-medium">{die.dieNumber}</TableCell>
+                <TableCell>{die.item || "—"}</TableCell>
+                <TableCell className="text-sm text-gray-600">{die.description || "—"}</TableCell>
+                <TableCell className="text-sm">{die.length && die.width ? `${die.length} x ${die.width}` : "—"}</TableCell>
+                <TableCell className="text-xs text-gray-500">{die.notes || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

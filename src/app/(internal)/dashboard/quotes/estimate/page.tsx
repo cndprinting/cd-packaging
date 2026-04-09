@@ -234,6 +234,14 @@ interface FormState {
   // Wafer seal / Inkjet
   secapTabs: number;
   secapInkjet: boolean;
+  // Finishing (Todd's calculator)
+  finishingPressCode: string;
+  finishingQuantityM: number;
+  finishingRuns: number;
+  foilColor: string;
+  foilSizeSquareInches: number;
+  dieCostLinearInches: number;
+  diePlywoodSize: string;
   // Volume Forecasting
   monthlyVolume: string;
   contractMonths: string;
@@ -343,6 +351,13 @@ const defaultForm: FormState = {
   coatingCyrelPlates: 0,
   secapTabs: 0,
   secapInkjet: false,
+  finishingPressCode: "",
+  finishingQuantityM: 0,
+  finishingRuns: 1,
+  foilColor: "",
+  foilSizeSquareInches: 0,
+  dieCostLinearInches: 0,
+  diePlywoodSize: "",
   monthlyVolume: "",
   contractMonths: "12",
   volumeDiscount: "0",
@@ -583,6 +598,63 @@ export default function EstimatePage() {
       num("setupTime") * num("pressOperatorRate");
 
     const shippingCost = num("shippingCost");
+
+    // Print finishing (Todd's calculator)
+    let finishingOpCost = 0;
+    const pressCode = form.finishingPressCode as string;
+    if (pressCode) {
+      // Per-M pricing lookup (simplified from Todd's Run+MR sheet)
+      const perMRates: Record<string, { mr: number; rates: number[] }> = {
+        VC: { mr: 20, rates: [40, 20, 20, 20, 19, 19, 19, 19, 18, 18, 17.5, 17.5, 17.5, 17.5, 17.5, 17] },
+        SC: { mr: 25, rates: [45, 24, 23, 22.5, 22, 22, 22, 21, 21, 20, 20, 19, 19, 18, 18, 18] },
+        SF: { mr: 35, rates: [56, 30, 29.5, 29, 28, 27, 26, 25, 25, 24, 23.5, 23.6, 23, 22.7, 22.5, 22.1] },
+        MC: { mr: 45, rates: [58, 29, 28.5, 28, 27, 26, 26, 26, 26, 26, 26, 26, 26, 25.8, 25.5, 25.5] },
+        MF: { mr: 50, rates: [94, 47, 47, 46.5, 46, 46, 46, 46, 46, 45.6, 45.2, 44.7, 44.7, 44.3, 44, 44] },
+        LC: { mr: 55, rates: [64, 32, 32, 31, 29.5, 29, 28, 28, 27.5, 26, 25.5, 24.5, 24.5, 23.5, 23, 22.8] },
+        LS: { mr: 165, rates: [80, 40, 40, 38, 35.5, 33, 32.5, 32.5, 32, 30, 29, 28.5, 28.5, 27, 26, 26] },
+        LE: { mr: 55, rates: [90, 45, 45, 44.5, 44, 44, 42, 42, 42, 41.5, 41, 40, 40, 39, 38, 38] },
+        GA: { mr: 40, rates: [80, 40, 38, 36, 34, 35, 32, 32, 30, 27, 24, 22.8, 22.5, 22.2, 22, 21.8] },
+        GB: { mr: 70, rates: [120, 60, 58, 56, 54, 54, 52, 52, 50, 47, 44, 43.8, 42.5, 42.2, 42, 41.8] },
+        GC: { mr: 90, rates: [70, 35, 35, 33, 31, 29.5, 28, 28, 28, 26.5, 25, 23.5, 22, 21, 20.5, 19.5] },
+        GD: { mr: 90, rates: [160, 80, 80, 18, 15, 14, 13, 13, 13, 12, 11, 10, 9.5, 9, 8.8, 8.3] },
+        PF: { mr: 40, rates: [120, 60, 60, 57.5, 53.5, 51, 44, 43.8, 41.8, 38.5, 35.3, 33.8, 33.3, 32.7, 32.3, 31.7] },
+      };
+      const qtyTiers = [0.5, 1, 2.5, 5, 10, 15, 20, 25, 30, 50, 75, 100, 125, 150, 175, 225];
+      const rateData = perMRates[pressCode];
+      if (rateData) {
+        const qtyM = num("finishingQuantityM") || (q / 1000);
+        const runs = num("finishingRuns") || 1;
+        // Find the right tier
+        let tierIdx = 0;
+        for (let i = 0; i < qtyTiers.length; i++) {
+          if (qtyM >= qtyTiers[i]) tierIdx = i;
+        }
+        const perM = rateData.rates[tierIdx] || rateData.rates[rateData.rates.length - 1];
+        finishingOpCost = (rateData.mr + perM * qtyM) * runs;
+      }
+    }
+
+    // Foil cost
+    let foilCost = 0;
+    const foilColor = form.foilColor as string;
+    if (foilColor) {
+      const foilRates: Record<string, number> = { gold: 1.20, chart: 1.60, scratch: 3.00, custom: 1.95, pattern: 2.60 };
+      const siPerPiece = num("foilSizeSquareInches") || 4;
+      const totalSi = siPerPiece * q;
+      foilCost = Math.max(totalSi * (foilRates[foilColor] || 1.20) / 1000, 4); // min $4
+    }
+
+    // Die cost
+    let dieCost = 0;
+    const linearInches = num("dieCostLinearInches");
+    if (linearInches > 0) {
+      dieCost = linearInches * 1.45; // cutting/scoring rule
+      const plywoodPrices: Record<string, number> = { V: 25, S: 25, M: 45, L: 54 };
+      const plywood = form.diePlywoodSize as string;
+      if (plywood && plywoodPrices[plywood]) dieCost += plywoodPrices[plywood];
+    }
+
+    finishingCost += finishingOpCost + foilCost + dieCost;
 
     // Outside services: Coating
     let coatingCost = 0;
@@ -1633,6 +1705,91 @@ export default function EstimatePage() {
             </div>
           </div>
         )}
+      </Section>
+
+      {/* ── Print Finishing (Todd's Calculator) ──────────────────── */}
+      <Section title="Print Finishing" icon={Scissors} defaultOpen={false}>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Finishing Operation">
+            <Select
+              value={form.finishingPressCode as string}
+              onChange={(e) => set("finishingPressCode", e.target.value)}
+              options={[
+                { value: "", label: "None" },
+                { value: "VC", label: "Very Small Die Cut (10x15)" },
+                { value: "SC", label: "Small Die Cut (12x18)" },
+                { value: "MC", label: "Medium Die Cut (23x29)" },
+                { value: "LC", label: "Large Die Cut (28x40)" },
+                { value: "LS", label: "Large DC w/Waste Strip (28x40)" },
+                { value: "SF", label: "Small Foil/Emboss (12x18)" },
+                { value: "MF", label: "Medium Foil/Emboss (23x29)" },
+                { value: "LE", label: "Large Emboss (28x40)" },
+                { value: "GA", label: "Fold & Glue Economizer" },
+                { value: "GB", label: "Fold & Glue Unifold" },
+                { value: "GC", label: "Fold & Glue In Line" },
+                { value: "GD", label: "Fold & Glue Small" },
+                { value: "PF", label: "Pocket Folder Special" },
+              ]}
+            />
+          </Field>
+          {form.finishingPressCode && (
+            <>
+              <Field label="Quantity (thousands)" hint="e.g. 5 = 5,000">
+                <Input type="number" step="0.5" value={form.finishingQuantityM || ""} onChange={(e) => set("finishingQuantityM", Number(e.target.value))} />
+              </Field>
+              <Field label="Number of Runs" hint="Multiple passes">
+                <Input type="number" value={form.finishingRuns || ""} onChange={(e) => set("finishingRuns", Number(e.target.value))} min={1} />
+              </Field>
+            </>
+          )}
+        </div>
+
+        {(form.finishingPressCode === "SF" || form.finishingPressCode === "MF" || form.finishingPressCode === "LE") && (
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <p className="text-sm font-medium text-gray-700 mb-3">Foil Stamping</p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Field label="Foil Color">
+                <Select
+                  value={form.foilColor as string}
+                  onChange={(e) => set("foilColor", e.target.value)}
+                  options={[
+                    { value: "", label: "None" },
+                    { value: "gold", label: "Gold/Silver ($1.20/si)" },
+                    { value: "chart", label: "Chart Colors ($1.60/si)" },
+                    { value: "scratch", label: "Scratch Off ($3.00/si)" },
+                    { value: "custom", label: "Custom Colors ($1.95/si)" },
+                    { value: "pattern", label: "Special Pattern ($2.60/si)" },
+                  ]}
+                />
+              </Field>
+              <Field label="Foil Area (sq inches)" hint="Per piece">
+                <Input type="number" step="0.5" value={form.foilSizeSquareInches || ""} onChange={(e) => set("foilSizeSquareInches", Number(e.target.value))} />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-3">Cutting Die Cost</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Rule (linear inches)" hint="Cutting/scoring @ $1.45/in">
+              <Input type="number" step="1" value={form.dieCostLinearInches || ""} onChange={(e) => set("dieCostLinearInches", Number(e.target.value))} />
+            </Field>
+            <Field label="Plywood Base Size">
+              <Select
+                value={form.diePlywoodSize as string}
+                onChange={(e) => set("diePlywoodSize", e.target.value)}
+                options={[
+                  { value: "", label: "None" },
+                  { value: "V", label: "Very Small ($25)" },
+                  { value: "S", label: "Small ($25)" },
+                  { value: "M", label: "Medium ($45)" },
+                  { value: "L", label: "Large/Bobst ($54)" },
+                ]}
+              />
+            </Field>
+          </div>
+        </div>
       </Section>
 
       {/* ── Mailing & Coatings (Outside Services) ───────────────── */}

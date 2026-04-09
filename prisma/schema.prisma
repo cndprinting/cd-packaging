@@ -923,6 +923,26 @@ model Invoice {
   @@index([invoiceNumber])
 }
 
+// ─── CUTTING DIES ────────────────────────────────────────
+
+model CuttingDie {
+  id              String   @id @default(cuid())
+  dieNumber       String   @unique
+  originalJobNumber String?
+  customerName    String?
+  item            String?
+  description     String?
+  length          Float?
+  width           Float?
+  height          Float?
+  notes           String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([customerName])
+  @@index([dieNumber])
+}
+
 // ─── ALERTS ──────────────────────────────────────────────
 
 model Alert {
