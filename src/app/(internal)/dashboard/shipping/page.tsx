@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Truck, Plus, X, Loader2, ExternalLink, Package, ChevronDown } from "lucide-react";
 import { demoJobs } from "@/lib/demo-data";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
