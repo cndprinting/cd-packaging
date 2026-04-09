@@ -29,42 +29,48 @@ export default function JobCostingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/jobs")
-      .then((r) => r.json())
-      .then((d) => {
-        const allJobs = d.jobs || [];
-        // Show completed/invoiced jobs with cost data
-        const costData: JobCostData[] = allJobs
-          .filter((j: any) => ["DELIVERED", "INVOICED", "SHIPPED", "PACKED"].includes(j.status))
-          .map((j: any) => {
-            const estimatedCost = j.estimatedCost || j.totalPrice || 0;
-            // Simulate actual costs from time entries + materials (would be real in production)
-            const actualHours = j.actualHours || (j.estimatedHours || 0) * (0.8 + Math.random() * 0.4);
-            const laborRate = 65;
-            const actualLabor = actualHours * laborRate;
-            const materialCost = estimatedCost * 0.6; // Materials typically 60% of cost
-            const actualCost = actualLabor + materialCost;
-            const variance = estimatedCost - actualCost;
-            const variancePct = estimatedCost > 0 ? (variance / estimatedCost) * 100 : 0;
+    Promise.all([
+      fetch("/api/jobs").then(r => r.json()),
+      fetch("/api/paper-usage").then(r => r.json()),
+    ]).then(([jd, pd]) => {
+      const allJobs = jd.jobs || [];
+      const paperRecords = pd.records || [];
 
-            return {
-              id: j.id,
-              jobNumber: j.jobNumber,
-              name: j.name,
-              companyName: j.companyName || "",
-              quantity: j.quantity,
-              status: j.status,
-              estimatedCost: Math.round(estimatedCost * 100) / 100,
-              actualCost: Math.round(actualCost * 100) / 100,
-              variance: Math.round(variance * 100) / 100,
-              variancePct: Math.round(variancePct * 10) / 10,
-              dueDate: j.dueDate || "",
-              completedDate: j.deliveredAt || j.updatedAt || "",
-            };
-          });
-        setJobs(costData);
-      })
-      .catch(() => {})
+      // Build map of actual paper costs by job number
+      const paperCostByJob = new Map<string, number>();
+      for (const p of paperRecords) {
+        if (p.jobNumber && p.totalOut > 0) {
+          paperCostByJob.set(p.jobNumber, (paperCostByJob.get(p.jobNumber) || 0) + p.totalOut);
+        }
+      }
+
+      const costData: JobCostData[] = allJobs
+        .filter((j: any) => ["DELIVERED", "INVOICED", "SHIPPED", "PACKED"].includes(j.status))
+        .map((j: any) => {
+          const estimatedCost = j.quotedPrice || j.estimatedCost || 0;
+          // Actual cost from real paper usage data
+          const actualPaperCost = paperCostByJob.get(j.jobNumber) || 0;
+          const actualCost = actualPaperCost;
+          const variance = estimatedCost - actualCost;
+          const variancePct = estimatedCost > 0 ? (variance / estimatedCost) * 100 : 0;
+
+          return {
+            id: j.id,
+            jobNumber: j.jobNumber,
+            name: j.name,
+            companyName: j.companyName || "",
+            quantity: j.quantity,
+            status: j.status,
+            estimatedCost: Math.round(estimatedCost * 100) / 100,
+            actualCost: Math.round(actualCost * 100) / 100,
+            variance: Math.round(variance * 100) / 100,
+            variancePct: Math.round(variancePct * 10) / 10,
+            dueDate: j.dueDate || "",
+            completedDate: j.deliveredAt || j.updatedAt || "",
+          };
+        });
+      setJobs(costData);
+    }).catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
