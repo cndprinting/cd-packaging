@@ -46,7 +46,7 @@ const STATUSES = [
 ];
 
 export default function JobsPage() {
-  const [jobs, setJobs] = useState<Job[]>(demoJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");

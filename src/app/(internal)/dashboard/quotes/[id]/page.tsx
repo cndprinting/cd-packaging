@@ -95,13 +95,23 @@ export default function QuoteDetailPage() {
       if (res.ok) {
         setQuote((prev) => prev ? { ...prev, status: newStatus } : null);
         if (newStatus === "converted") {
-          // Reload to get the convertedJobId
+          // Reload to get the convertedJobId and redirect
           const r = await fetch(`/api/quotes/${quote.id}`);
           const d = await r.json();
-          if (d.quote) setQuote(d.quote);
+          if (d.quote) {
+            setQuote(d.quote);
+            if (d.quote.convertedJobId) {
+              alert(`Job created! Redirecting to job...`);
+              window.location.href = `/dashboard/jobs/${d.quote.convertedJobId}`;
+              return;
+            }
+          }
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to update quote");
       }
-    } catch { /* ignore */ }
+    } catch { alert("Something went wrong"); }
     setUpdating(false);
   };
 
@@ -167,7 +177,7 @@ export default function QuoteDetailPage() {
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
               <Button variant="outline" onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
-                <Package className="h-4 w-4" /> Convert to Job
+                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
               </Button>
             </>
           )}
