@@ -458,6 +458,7 @@ export default function EstimatePage() {
   const [standardsLoaded, setStandardsLoaded] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string; industry?: string }[]>([]);
   const [employees, setEmployees] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [materialsList, setMaterialsList] = useState<{ id: string; name: string; sku: string | null }[]>([]);
 
   // Load plant standards on mount
   useEffect(() => {
@@ -486,6 +487,7 @@ export default function EstimatePage() {
       .catch(() => setStandardsLoaded(true));
     fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
     fetch("/api/users").then(r => r.json()).then(d => { if (d.users) setEmployees(d.users.filter((u: { role: string }) => u.role !== "CUSTOMER")); }).catch(() => {});
+    fetch("/api/materials").then(r => r.json()).then(d => { if (d.materials) setMaterialsList(d.materials); }).catch(() => {});
   }, []);
 
   // Auto-fill from press/config selection
@@ -879,6 +881,8 @@ export default function EstimatePage() {
           pressName: selectedPress?.name || "",
           pressConfig: selectedConfig?.name || "",
           stockType: form.stockType,
+          salesRep: form.salesRepName || "",
+          csr: form.csrName || "",
           markups: { paper: form.markupPaper, material: form.markupMaterial, labor: form.markupLabor, outside: form.markupOutside },
           commission: { percent: form.commissionPercent, amount: calc.commissionAmount },
           quantityTiers: tierCalcs.length > 0 ? [
@@ -1258,6 +1262,15 @@ export default function EstimatePage() {
                   { value: "uncoated", label: "Uncoated" },
                   { value: "coated", label: "Coated" },
                 ]}
+              />
+            </Field>
+            <Field label="Paper Stock" hint="Search from inventory" className="sm:col-span-2">
+              <Combobox
+                value={form.stockDescription as string || ""}
+                onChange={(_id, label) => set("stockDescription" as keyof FormState, label)}
+                options={materialsList.map(m => ({ id: m.id, label: m.name, subtitle: m.sku || undefined }))}
+                placeholder="Search paper stock..."
+                allowCreate
               />
             </Field>
           </div>
