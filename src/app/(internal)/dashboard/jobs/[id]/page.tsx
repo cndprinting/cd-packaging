@@ -1384,83 +1384,12 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
-      {/* 10-13. PROOFING / QA / SHIPMENT / COMMENTS                       */}
+      {/* SHIPMENT / COMMENTS                                              */}
       {/* ================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 10. Proofing */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proofing</CardTitle>
-            <Button variant="outline" size="sm" onClick={async () => {
-              await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }) }).catch(() => {});
-              flash("Proof uploaded");
-            }}>Upload Proof</Button>
-          </CardHeader>
-          <CardContent>
-            {job.proofStatus ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Current Status</span>
-                  <Badge className={
-                    job.proofStatus === "APPROVED" ? "bg-green-100 text-green-700" :
-                    job.proofStatus === "SENT" ? "bg-blue-100 text-blue-700" :
-                    "bg-amber-100 text-amber-700"
-                  }>{job.proofStatus}</Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-blue-600" onClick={async () => {
-                    await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "approve" }) }).catch(() => {});
-                    setJob({ ...job, proofStatus: "APPROVED" });
-                  }}>Approve</Button>
-                  <Button size="sm" variant="outline" className="text-amber-600" onClick={async () => {
-                    await fetch("/api/proofs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proofId: jobId, action: "reject" }) }).catch(() => {});
-                    setJob({ ...job, proofStatus: "REJECTED" });
-                  }}>Reject</Button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-4">No proofs uploaded yet. Click &quot;Upload Proof&quot; to start.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 11. QA */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />QA</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {job.status === "QA" ? (
-              <div className="space-y-3">
-                <p className="text-sm text-yellow-700 font-medium flex items-center gap-2">
-                  <CircleAlert className="h-4 w-4" />Job is in QA inspection
-                </p>
-                <div className="flex gap-2">
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 flex-1" onClick={async () => {
-                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "pass" }) }).catch(() => {});
-                    setJob({ ...job, status: "PACKED" });
-                    flash("Passed QA");
-                  }}>Pass</Button>
-                  <Button size="sm" variant="outline" className="text-amber-600 flex-1" onClick={async () => {
-                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "hold" }) }).catch(() => {});
-                    flash("QA hold applied");
-                  }}>Hold</Button>
-                  <Button size="sm" variant="outline" className="text-red-600 flex-1" onClick={async () => {
-                    await fetch("/api/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, action: "fail" }) }).catch(() => {});
-                    setJob({ ...job, status: "PRINTING" });
-                    flash("Failed QA -- back to production");
-                  }}>Fail</Button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-4">QA available when job reaches QA stage.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Proofing and QA cards archived — team doesn't use them (Apr 2026) */}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 12. Shipment */}
+        {/* Shipment */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Send className="h-4 w-4" />Shipment</CardTitle>
