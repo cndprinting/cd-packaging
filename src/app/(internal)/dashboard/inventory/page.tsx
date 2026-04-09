@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Warehouse, Plus, X, Loader2, AlertTriangle, Search, Scissors } from "lucide-react";
+import { Warehouse, Plus, X, Loader2, AlertTriangle, Search, Scissors, ArrowDownUp, ShoppingCart } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,22 @@ interface Vendor { id: string; name: string; }
 interface Material { id: string; name: string; sku?: string | null; category?: string | null; unit: string; onHand: number; allocated: number; reorderPoint: number; vendor?: string | null; }
 interface Die { id: string; dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null; }
 
+interface PaperUsageRecord { id: string; itemNumber: string | null; jobNumber: string | null; wipStatus: string | null; date: string | null; source: string | null; direction: string | null; quantityOut: number; weight: string | null; size: string | null; description: string | null; pricePerM: number | null; totalOut: number | null; }
+interface VendorPurchaseRecord { id: string; jobNumber: string | null; date: string | null; vendor: string | null; quantity: number; weight: string | null; size: string | null; description: string | null; pricePerM: number | null; total: number | null; quotedPricePerM: number | null; savings: number | null; }
+
 export default function InventoryPage() {
-  const [tab, setTab] = useState<"materials" | "dies">("materials");
+  const [tab, setTab] = useState<"materials" | "dies" | "usage" | "purchases">("materials");
   const [materials, setMaterials] = useState<Material[]>([]);
   const [dies, setDies] = useState<Die[]>([]);
   const [dieTotal, setDieTotal] = useState(0);
+  const [paperUsage, setPaperUsage] = useState<PaperUsageRecord[]>([]);
+  const [usageTotal, setUsageTotal] = useState(0);
+  const [usageSearch, setUsageSearch] = useState("");
+  const [purchases, setPurchases] = useState<VendorPurchaseRecord[]>([]);
+  const [purchaseTotal, setPurchaseTotal] = useState(0);
+  const [purchaseSearch, setPurchaseSearch] = useState("");
+  const [purchaseVendors, setPurchaseVendors] = useState<string[]>([]);
+  const [vendorFilter, setVendorFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +42,8 @@ export default function InventoryPage() {
     fetch("/api/materials").then(r => r.json()).then(d => { if (d.materials?.length) setMaterials(d.materials); }).catch(() => {});
     fetch("/api/companies?type=vendor").then(r => r.json()).then(d => setVendors(d.companies || [])).catch(() => {});
     fetch("/api/dies").then(r => r.json()).then(d => { setDies(d.dies || []); setDieTotal(d.total || 0); }).catch(() => {});
+    fetch("/api/paper-usage").then(r => r.json()).then(d => { setPaperUsage(d.records || []); setUsageTotal(d.total || 0); }).catch(() => {});
+    fetch("/api/vendor-purchases").then(r => r.json()).then(d => { setPurchases(d.records || []); setPurchaseTotal(d.total || 0); setPurchaseVendors(d.vendors || []); }).catch(() => {});
   }, []);
 
   const searchDies = async (q: string) => {
@@ -89,6 +102,18 @@ export default function InventoryPage() {
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === "dies" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
         >
           <Scissors className="h-4 w-4 inline mr-2" />Cutting Dies ({dieTotal})
+        </button>
+        <button
+          onClick={() => setTab("usage")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === "usage" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+        >
+          <ArrowDownUp className="h-4 w-4 inline mr-2" />Paper Usage ({usageTotal})
+        </button>
+        <button
+          onClick={() => setTab("purchases")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === "purchases" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+        >
+          <ShoppingCart className="h-4 w-4 inline mr-2" />Purchases ({purchaseTotal})
         </button>
       </div>
 
@@ -204,6 +229,140 @@ export default function InventoryPage() {
             {dieTotal > 100 && dies.length === 100 && (
               <p className="text-xs text-gray-400 text-center py-3">Showing first 100 of {dieTotal} dies — use search to find specific dies</p>
             )}
+          </Card>
+        </>
+      )}
+
+      {/* Paper Usage Tab */}
+      {tab === "usage" && (
+        <>
+          <Card className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search by job number or description..."
+                value={usageSearch}
+                onChange={(e) => {
+                  setUsageSearch(e.target.value);
+                  const q = e.target.value;
+                  if (q.length >= 2) fetch(`/api/paper-usage?search=${encodeURIComponent(q)}`).then(r => r.json()).then(d => { setPaperUsage(d.records || []); setUsageTotal(d.total || 0); }).catch(() => {});
+                  else fetch("/api/paper-usage").then(r => r.json()).then(d => { setPaperUsage(d.records || []); setUsageTotal(d.total || 0); }).catch(() => {});
+                }}
+                className="pl-9"
+              />
+            </div>
+          </Card>
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job #</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Weight</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Direction</TableHead>
+                  <TableHead className="text-right">Qty Out</TableHead>
+                  <TableHead className="text-right">$/M</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paperUsage.map((r) => (
+                  <TableRow key={r.id} className="hover:bg-gray-50">
+                    <TableCell className="font-mono text-xs">{r.jobNumber || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.itemNumber || "—"}</TableCell>
+                    <TableCell className="text-sm">{r.description || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.weight || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.size || "—"}</TableCell>
+                    <TableCell><Badge className={r.direction === "OUT" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}>{r.direction || "—"}</Badge></TableCell>
+                    <TableCell className="text-right font-medium">{r.quantityOut > 0 ? r.quantityOut.toLocaleString() : "—"}</TableCell>
+                    <TableCell className="text-right text-xs">{r.pricePerM ? `$${r.pricePerM.toFixed(2)}` : "—"}</TableCell>
+                    <TableCell className="text-right font-medium">{r.totalOut ? `$${r.totalOut.toFixed(2)}` : "—"}</TableCell>
+                    <TableCell><Badge className="bg-gray-100 text-gray-600 text-xs">{r.wipStatus || "—"}</Badge></TableCell>
+                  </TableRow>
+                ))}
+                {paperUsage.length === 0 && (
+                  <TableRow><TableCell colSpan={10} className="text-center py-12 text-gray-400">No paper usage records found</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {usageTotal > 100 && <p className="text-xs text-gray-400 text-center py-3">Showing first 100 of {usageTotal} records — use search to filter</p>}
+          </Card>
+        </>
+      )}
+
+      {/* Vendor Purchases Tab */}
+      {tab === "purchases" && (
+        <>
+          <Card className="p-4">
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search purchases..."
+                  value={purchaseSearch}
+                  onChange={(e) => {
+                    setPurchaseSearch(e.target.value);
+                    const q = e.target.value;
+                    const vf = vendorFilter ? `&vendor=${encodeURIComponent(vendorFilter)}` : "";
+                    if (q.length >= 2) fetch(`/api/vendor-purchases?search=${encodeURIComponent(q)}${vf}`).then(r => r.json()).then(d => { setPurchases(d.records || []); setPurchaseTotal(d.total || 0); }).catch(() => {});
+                    else fetch(`/api/vendor-purchases${vf ? `?${vf.slice(1)}` : ""}`).then(r => r.json()).then(d => { setPurchases(d.records || []); setPurchaseTotal(d.total || 0); }).catch(() => {});
+                  }}
+                  className="pl-9"
+                />
+              </div>
+              <Select
+                value={vendorFilter}
+                onChange={(e) => {
+                  setVendorFilter(e.target.value);
+                  const v = e.target.value;
+                  const url = v ? `/api/vendor-purchases?vendor=${encodeURIComponent(v)}` : "/api/vendor-purchases";
+                  fetch(url).then(r => r.json()).then(d => { setPurchases(d.records || []); setPurchaseTotal(d.total || 0); }).catch(() => {});
+                }}
+                options={[{ value: "", label: "All Vendors" }, ...purchaseVendors.map(v => ({ value: v, label: v }))]}
+                className="w-44"
+              />
+            </div>
+          </Card>
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job #</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Weight</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">$/M</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Savings</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {purchases.map((r) => (
+                  <TableRow key={r.id} className="hover:bg-gray-50">
+                    <TableCell className="font-mono text-xs">{r.jobNumber || "—"}</TableCell>
+                    <TableCell className="text-sm font-medium">{r.vendor || "—"}</TableCell>
+                    <TableCell className="text-sm">{r.description || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.weight || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.size || "—"}</TableCell>
+                    <TableCell className="text-right">{r.quantity > 0 ? r.quantity.toLocaleString() : "—"}</TableCell>
+                    <TableCell className="text-right text-xs">{r.pricePerM ? `$${r.pricePerM.toFixed(2)}` : "—"}</TableCell>
+                    <TableCell className="text-right font-medium">{r.total ? `$${r.total.toFixed(2)}` : "—"}</TableCell>
+                    <TableCell className={`text-right font-medium ${(r.savings || 0) > 0 ? "text-emerald-600" : ""}`}>{r.savings ? `$${r.savings.toFixed(2)}` : "—"}</TableCell>
+                    <TableCell><Badge className="bg-gray-100 text-gray-600 text-xs">{(r as any).wipStatus || "—"}</Badge></TableCell>
+                  </TableRow>
+                ))}
+                {purchases.length === 0 && (
+                  <TableRow><TableCell colSpan={10} className="text-center py-12 text-gray-400">No purchase records found</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {purchaseTotal > 100 && <p className="text-xs text-gray-400 text-center py-3">Showing first 100 of {purchaseTotal} records — use search or vendor filter</p>}
           </Card>
         </>
       )}

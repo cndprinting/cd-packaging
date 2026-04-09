@@ -923,6 +923,55 @@ model Invoice {
   @@index([invoiceNumber])
 }
 
+// ─── PAPER USAGE & VENDOR PURCHASES ──────────────────────
+
+model PaperUsage {
+  id          String    @id @default(cuid())
+  itemNumber  String?
+  jobNumber   String?
+  wipStatus   String?
+  date        DateTime?
+  source      String?
+  direction   String?
+  quantityIn  Int       @default(0)
+  quantityOut Int       @default(0)
+  weight      String?
+  coating     String?
+  stockType   String?
+  size        String?
+  description String?
+  pricePerM   Float?
+  totalOut    Float?
+  totalIn     Float?
+  createdAt   DateTime  @default(now())
+
+  @@index([jobNumber])
+  @@index([date])
+}
+
+model VendorPurchase {
+  id              String    @id @default(cuid())
+  itemNumber      String?
+  jobNumber       String?
+  wipStatus       String?
+  date            DateTime?
+  vendor          String?
+  quantity        Int       @default(0)
+  weight          String?
+  size            String?
+  description     String?
+  pricePerM       Float?
+  total           Float?
+  quotedPricePerM Float?
+  quotedTotal     Float?
+  savings         Float?
+  createdAt       DateTime  @default(now())
+
+  @@index([vendor])
+  @@index([date])
+  @@index([jobNumber])
+}
+
 // ─── HELP DESK ───────────────────────────────────────────
 
 model HelpTicket {
