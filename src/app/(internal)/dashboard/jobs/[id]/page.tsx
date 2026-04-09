@@ -198,6 +198,17 @@ export default function JobDetailPage() {
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
 
+  // Lookup data for dropdowns
+  const [employees, setEmployees] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [dbPresses, setDbPresses] = useState<{ id: string; name: string; costPerHour: number }[]>([]);
+  const [dbMaterials, setDbMaterials] = useState<{ id: string; name: string; sku: string | null }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then(d => { if (d.users) setEmployees(d.users); }).catch(() => {});
+    fetch("/api/plant-standards").then(r => r.json()).then(d => { if (d.presses) setDbPresses(d.presses); }).catch(() => {});
+    fetch("/api/materials").then(r => r.json()).then(d => { if (d.materials) setDbMaterials(d.materials); }).catch(() => {});
+  }, []);
+
   // Purchases state
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [addingPurchase, setAddingPurchase] = useState(false);
@@ -866,26 +877,26 @@ export default function JobDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <SectionLabel>CSR</SectionLabel>
-                <Input
-                  defaultValue={job.csrName}
-                  placeholder="Assign CSR..."
-                  onBlur={(e) => updateJobField("csrName", e.target.value)}
+                <Select
+                  value={job.csrName || ""}
+                  onChange={(e) => updateJobField("csrName", e.target.value)}
+                  options={[{ value: "", label: "Unassigned" }, ...employees.filter(u => ["CSR", "ADMIN", "OWNER", "GM"].includes(u.role)).map(u => ({ value: u.name, label: u.name }))]}
                 />
               </div>
               <div>
                 <SectionLabel>Sales Rep</SectionLabel>
-                <Input
-                  defaultValue={job.salesRepName}
-                  placeholder="Assign Sales Rep..."
-                  onBlur={(e) => updateJobField("salesRepName", e.target.value)}
+                <Select
+                  value={job.salesRepName || ""}
+                  onChange={(e) => updateJobField("salesRepName", e.target.value)}
+                  options={[{ value: "", label: "Unassigned" }, ...employees.filter(u => ["SALES_REP", "SALES_MANAGER", "OWNER", "GM"].includes(u.role)).map(u => ({ value: u.name, label: u.name }))]}
                 />
               </div>
               <div>
                 <SectionLabel>Production Owner</SectionLabel>
-                <Input
-                  defaultValue={job.productionOwnerName}
-                  placeholder="Assign Production Owner..."
-                  onBlur={(e) => updateJobField("productionOwnerName", e.target.value)}
+                <Select
+                  value={job.productionOwnerName || ""}
+                  onChange={(e) => updateJobField("productionOwnerName", e.target.value)}
+                  options={[{ value: "", label: "Unassigned" }, ...employees.filter(u => ["PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ADMIN", "OWNER", "GM"].includes(u.role)).map(u => ({ value: u.name, label: u.name }))]}
                 />
               </div>
               <div>
@@ -928,10 +939,10 @@ export default function JobDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
               <SectionLabel>Stock Description</SectionLabel>
-              <Input
-                defaultValue={job.stockDescription || ""}
-                placeholder="e.g. 18pt C1S Paperboard"
-                onBlur={(e) => updateJobField("stockDescription", e.target.value)}
+              <Select
+                value={job.stockDescription || ""}
+                onChange={(e) => updateJobField("stockDescription", e.target.value)}
+                options={[{ value: "", label: "Select stock..." }, ...dbMaterials.map(m => ({ value: m.name, label: `${m.name}${m.sku ? ` (${m.sku})` : ""}` }))]}
               />
             </div>
             <div className="flex items-end">
@@ -1050,10 +1061,10 @@ export default function JobDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <SectionLabel>Press Assignment</SectionLabel>
-              <Input
-                defaultValue={job.pressAssignment || ""}
-                placeholder="e.g. Heidelberg XL 106"
-                onBlur={(e) => updateJobField("pressAssignment", e.target.value)}
+              <Select
+                value={job.pressAssignment || ""}
+                onChange={(e) => updateJobField("pressAssignment", e.target.value)}
+                options={[{ value: "", label: "Select press..." }, ...dbPresses.map(p => ({ value: p.name, label: `${p.name} ($${p.costPerHour}/hr)` }))]}
               />
             </div>
             <div className="flex items-end pb-2">
