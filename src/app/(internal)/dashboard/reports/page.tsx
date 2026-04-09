@@ -72,6 +72,38 @@ export default function ReportsPage() {
         </Card>
       </Link>
 
+      {/* Revenue Trends */}
+      <Link href="/dashboard/reports/revenue">
+        <Card className="bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><BarChart3 className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Revenue Trends</h2>
+                <p className="text-sm text-white/80">Monthly quote volume, win rates, top customers — with bar charts</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
+      {/* Production Efficiency */}
+      <Link href="/dashboard/reports/production-efficiency">
+        <Card className="bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><Layers className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">Production Efficiency</h2>
+                <p className="text-sm text-white/80">Throughput, cycle time, work center utilization, overdue jobs</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
       {/* Sales by Rep */}
       <Link href="/dashboard/reports/sales">
         <Card className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg transition-shadow cursor-pointer">
