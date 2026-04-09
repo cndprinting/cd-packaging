@@ -39,8 +39,15 @@ const initialShipments = [
 ];
 
 export default function ShippingPage() {
-  const packedJobs = demoJobs.filter((j) => j.status === "PACKED");
+  const [packedJobs, setPackedJobs] = useState<any[]>([]);
   const [shipments, setShipments] = useState(initialShipments);
+
+  useEffect(() => {
+    fetch("/api/jobs").then(r => r.json()).then(d => {
+      const jobs = d.jobs || [];
+      setPackedJobs(jobs.filter((j: any) => j.status === "PACKED" || j.status === "SHIPPED"));
+    }).catch(() => {});
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");

@@ -43,7 +43,7 @@ const WORK_CENTER_STAGE_MAP: Record<string, string> = {
 };
 
 export default function ProductionPage() {
-  const [allJobs, setAllJobs] = useState<any[]>(demoJobs);
+  const [allJobs, setAllJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
 

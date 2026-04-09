@@ -17,6 +17,7 @@ export async function GET() {
       id: o.id, orderNumber: o.orderNumber, companyName: o.company.name, companyId: o.companyId,
       status: o.status, priority: o.priority, dueDate: o.dueDate?.toISOString().split("T")[0] || "",
       itemCount: o.items.length, poNumber: o.poNumber, notes: o.notes,
+      jobs: o.jobs.map(j => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, status: j.status, quantity: j.quantity })),
     })), source: "database" });
   } catch (error) {
     console.error("Orders GET error:", error);
