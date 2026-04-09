@@ -44,7 +44,7 @@ export default function QuotesPage() {
     if (statusFilter && q.status !== statusFilter) return false;
     if (typeFilter && q.productType !== typeFilter) return false;
     return true;
-  }), [quotes, search, statusFilter, typeFilter]);
+  }), [quotes, search, statusFilter, typeFilter, showArchived]);
 
   const totalValue = quotes.reduce((s, q) => s + q.totalPrice, 0);
   const pending = quotes.filter(q => q.status === "sent").length;
