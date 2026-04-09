@@ -85,10 +85,12 @@ export async function PUT(request: NextRequest) {
     if (status === "converted") {
       const quote = await prisma.quote.findUnique({ where: { id } });
       if (quote) {
-        const jobCount = await prisma.job.count();
-        const jobNumber = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
-        const orderCount = await prisma.order.count();
-        const orderNumber = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
+        const lastJob = await prisma.job.findFirst({ orderBy: { jobNumber: "desc" }, select: { jobNumber: true } });
+        const lastNum = lastJob ? parseInt(lastJob.jobNumber.replace(/\D/g, "")) || 0 : 99;
+        const jobNumber = `PKG-2026-${String(lastNum + 1).padStart(3, "0")}`;
+        const lastOrder = await prisma.order.findFirst({ orderBy: { orderNumber: "desc" }, select: { orderNumber: true } });
+        const lastOrdNum = lastOrder ? parseInt(lastOrder.orderNumber.replace(/\D/g, "")) || 0 : 19999;
+        const orderNumber = `ORD-${String(lastOrdNum + 1).padStart(5, "0")}`;
 
         // Find or create company
         let companyId = quote.companyId;
