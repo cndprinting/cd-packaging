@@ -34,15 +34,15 @@ function getWeekDays(): { date: Date; label: string; iso: string }[] {
   return days;
 }
 
-function getWorkCenterStageMap(): Record<string, string> {
+function getWorkCenterStageMap(): Record<string, string[]> {
   return {
-    prepress: "PREPRESS",
-    press: "PRINTING",
-    "die-cutting": "DIE_CUTTING",
-    gluing: "GLUING_FOLDING",
-    bindery: "COATING_FINISHING",
-    qa: "QA",
-    shipping: "PACKED",
+    prepress: ["QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL", "PREPRESS", "PLATING", "MATERIALS_ORDERED", "MATERIALS_RECEIVED", "SCHEDULED"],
+    press: ["PRINTING"],
+    "die-cutting": ["DIE_CUTTING"],
+    gluing: ["GLUING_FOLDING"],
+    bindery: ["COATING_FINISHING"],
+    qa: ["QA"],
+    shipping: ["PACKED", "SHIPPED"],
   };
 }
 
@@ -122,11 +122,11 @@ export default function SchedulePage() {
 
   const workCenterData = useMemo(() => {
     return workCenters.map((wc) => {
-      const stage = stageMap[wc.type];
-      const assignedJobs = stage
-        ? jobs.filter((j) => j.status === stage)
+      const stages = stageMap[wc.type] || [];
+      const assignedJobs = stages.length > 0
+        ? jobs.filter((j) => stages.includes(j.status))
         : [];
-      return { ...wc, assignedJobs, stage };
+      return { ...wc, assignedJobs, stages };
     });
   }, [jobs, workCenters]);
 
