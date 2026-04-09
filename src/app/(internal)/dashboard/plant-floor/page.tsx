@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const DEPARTMENTS = [
-  { id: "prepress", label: "Prepress", stages: ["PREPRESS"], color: "bg-indigo-600" },
+  { id: "prepress", label: "Prepress", stages: ["QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL", "PREPRESS", "PLATING", "MATERIALS_ORDERED", "MATERIALS_RECEIVED", "SCHEDULED"], color: "bg-indigo-600" },
   { id: "offset-press", label: "Offset Press", stages: ["PRINTING"], color: "bg-blue-600" },
   { id: "digital-press", label: "Digital Press", stages: ["PRINTING"], color: "bg-sky-600" },
   { id: "die-cutting", label: "Die Cutting", stages: ["DIE_CUTTING"], color: "bg-pink-600" },
@@ -45,7 +45,7 @@ function getStageLabel(stage: string): string {
 
 export default function PlantFloorPage() {
   const [selectedDept, setSelectedDept] = useState(DEPARTMENTS[1].id);
-  const [allJobs, setAllJobs] = useState(demoJobs);
+  const [allJobs, setAllJobs] = useState<typeof demoJobs>([]);
   const [runningJobs, setRunningJobs] = useState<Record<string, number>>({});
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [completedToday, setCompletedToday] = useState<{ jobNumber: string; jobName: string; department: string; duration: string }[]>([]);
