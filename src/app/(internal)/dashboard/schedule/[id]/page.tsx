@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Loader2, Printer, ChevronUp, ChevronDown,
@@ -41,7 +41,7 @@ interface Job {
 }
 
 const STAGE_MAP: Record<string, string[]> = {
-  prepress: ["PREPRESS", "PLATING"],
+  prepress: ["QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL", "PREPRESS", "PLATING", "MATERIALS_ORDERED", "MATERIALS_RECEIVED", "SCHEDULED"],
   press: ["PRINTING"],
   "die-cutting": ["DIE_CUTTING"],
   gluing: ["GLUING_FOLDING"],
@@ -75,18 +75,23 @@ export default function WorkCenterDetailPage() {
           const stages = STAGE_MAP[wc.type] || [];
           const allJobs: Job[] = jobData.jobs || [];
           const filtered = allJobs.filter((j) => stages.includes(j.status));
-          setJobs(filtered);
+          // Deduplicate by job ID
+          const unique = filtered.filter((j, i, arr) => arr.findIndex(x => x.id === j.id) === i);
+          setJobs(unique);
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  const filteredJobs = showAllDays ? jobs : jobs.filter(j => {
-    if (!j.dueDate) return false;
-    const due = typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : j.dueDate;
-    return due === selectedDate;
-  });
+  const filteredJobs = useMemo(() => {
+    if (showAllDays) return jobs;
+    return jobs.filter(j => {
+      if (!j.dueDate) return true; // Show jobs without due date on any day
+      const due = typeof j.dueDate === "string" ? j.dueDate.split("T")[0] : String(j.dueDate);
+      return due === selectedDate;
+    });
+  }, [jobs, showAllDays, selectedDate]);
 
   const moveJob = (index: number, direction: "up" | "down") => {
     const newJobs = [...jobs];

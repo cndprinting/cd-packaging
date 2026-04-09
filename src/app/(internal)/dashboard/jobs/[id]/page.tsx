@@ -589,14 +589,38 @@ export default function JobDetailPage() {
                 className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
                 onClick={async () => {
                   if (!job) return;
+                  // Check for existing invoices on this job
+                  let existingInvoices: any[] = [];
+                  try {
+                    const invRes = await fetch("/api/payments");
+                    const invData = await invRes.json();
+                    existingInvoices = (invData.invoices || []).filter((inv: any) => inv.jobId === job.id);
+                  } catch {}
+
                   const quotedPrice = (job as any).quotedPrice || 0;
+                  const totalInvoiced = existingInvoices.reduce((s: number, inv: any) => s + inv.total, 0);
+                  const totalPaid = existingInvoices.reduce((s: number, inv: any) => {
+                    let paid = 0;
+                    if (inv.depositPaid) paid += inv.depositAmount;
+                    if (inv.balancePaid) paid += (inv.total - inv.depositAmount);
+                    return s + paid;
+                  }, 0);
+                  const outstanding = quotedPrice - totalPaid;
+
                   let amount = quotedPrice;
-                  if (!amount) {
-                    const input = prompt("Enter invoice amount ($):", "0");
-                    if (!input || input === "0") return;
-                    amount = parseFloat(input);
-                    if (isNaN(amount) || amount <= 0) { alert("Invalid amount"); return; }
+                  let message = `Quoted Price: $${quotedPrice.toLocaleString()}`;
+                  if (existingInvoices.length > 0) {
+                    message += `\nAlready Invoiced: $${totalInvoiced.toLocaleString()}`;
+                    message += `\nPaid So Far: $${totalPaid.toLocaleString()}`;
+                    message += `\nStill Owed: $${outstanding.toLocaleString()}`;
+                    amount = outstanding > 0 ? outstanding : quotedPrice;
                   }
+
+                  const input = prompt(`${message}\n\nEnter invoice amount ($):`, String(amount > 0 ? amount : ""));
+                  if (!input) return;
+                  amount = parseFloat(input);
+                  if (isNaN(amount) || amount <= 0) { alert("Invalid amount"); return; }
+
                   try {
                     const res = await fetch("/api/payments", {
                       method: "POST",
@@ -613,7 +637,7 @@ export default function JobDetailPage() {
                     });
                     const data = await res.json();
                     if (res.ok) {
-                      alert(`Invoice ${data.invoice.invoiceNumber} created! Total: $${data.invoice.total.toLocaleString()}`);
+                      alert(`Invoice ${data.invoice.invoiceNumber} created!\nTotal (with tax): $${data.invoice.total.toLocaleString()}`);
                     } else {
                       alert(data.error || "Failed to create invoice");
                     }
