@@ -37,8 +37,9 @@ export default function QuotesPage() {
   }, []);
 
   const filtered = useMemo(() => quotes.filter(q => {
-    if (!showArchived && q.status === "archived") return false;
-    if (showArchived && q.status !== "archived") return false;
+    const isArchived = q.status.toLowerCase() === "archived";
+    if (!showArchived && isArchived) return false;
+    if (showArchived && !isArchived) return false;
     if (search && !q.quoteNumber.toLowerCase().includes(search.toLowerCase()) && !q.customerName.toLowerCase().includes(search.toLowerCase()) && !q.productName.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter && q.status !== statusFilter) return false;
     if (typeFilter && q.productType !== typeFilter) return false;

@@ -76,7 +76,7 @@ export async function PUT(request: NextRequest) {
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ ok: true, status });
 
-    const statusMap: Record<string, string> = { draft: "DRAFT", sent: "SENT", approved: "APPROVED", rejected: "REJECTED", converted: "CONVERTED" };
+    const statusMap: Record<string, string> = { draft: "DRAFT", sent: "SENT", approved: "APPROVED", rejected: "REJECTED", converted: "CONVERTED", archived: "ARCHIVED" };
     const dbStatus = statusMap[status] || status;
 
     await prisma.quote.update({ where: { id }, data: { status: dbStatus as "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" } });
