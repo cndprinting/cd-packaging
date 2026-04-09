@@ -14,7 +14,7 @@ interface Vendor { id: string; name: string; }
 interface Material { id: string; name: string; sku?: string | null; category?: string | null; unit: string; onHand: number; allocated: number; reorderPoint: number; vendor?: string | null; }
 
 export default function InventoryPage() {
-  const [materials, setMaterials] = useState<Material[]>(demoMaterials);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
