@@ -246,6 +246,9 @@ model Job {
   lineItems        JobLineItem[]
   pressRuns        PressRun[]
   productType      ProductType @default(FOLDING_CARTON)
+  quotedPrice      Float?    // price from the approved quote
+  estimatedCost    Float?    // internal cost estimate
+  actualCost       Float?    // actual cost after completion
 
   // ─── Job Ticket Fields (matching C&D physical form) ────
   jobType          String?   // NEW_ORDER, EXACT_REPRINT, REPRINT_WITH_CHANGES, REPRINT_NEW_FILE

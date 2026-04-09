@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest) {
     const statusMap: Record<string, string> = { draft: "DRAFT", sent: "SENT", approved: "APPROVED", rejected: "REJECTED", converted: "CONVERTED", archived: "ARCHIVED" };
     const dbStatus = statusMap[status] || status;
 
-    await prisma.quote.update({ where: { id }, data: { status: dbStatus as "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" } });
+    await prisma.quote.update({ where: { id }, data: { status: dbStatus as "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" | "ARCHIVED" } });
 
     // If converting to job, create the job
     if (status === "converted") {
@@ -113,6 +113,7 @@ export async function PUT(request: NextRequest) {
             status: "QUOTE",
             priority: "NORMAL",
             quantity: quote.quantity,
+            quotedPrice: quote.totalPrice,
             productType: quote.productType,
             jobType: "NEW_ORDER",
             estimateNumber: quote.quoteNumber,

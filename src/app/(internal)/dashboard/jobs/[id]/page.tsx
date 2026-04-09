@@ -589,6 +589,14 @@ export default function JobDetailPage() {
                 className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
                 onClick={async () => {
                   if (!job) return;
+                  const quotedPrice = (job as any).quotedPrice || 0;
+                  let amount = quotedPrice;
+                  if (!amount) {
+                    const input = prompt("Enter invoice amount ($):", "0");
+                    if (!input || input === "0") return;
+                    amount = parseFloat(input);
+                    if (isNaN(amount) || amount <= 0) { alert("Invalid amount"); return; }
+                  }
                   try {
                     const res = await fetch("/api/payments", {
                       method: "POST",
@@ -598,7 +606,7 @@ export default function JobDetailPage() {
                         customerName: job.companyName || "",
                         companyId: job.companyId || null,
                         description: `${job.jobNumber} - ${job.name}`,
-                        subtotal: (job as any).totalPrice || (job as any).estimatedCost || 0,
+                        subtotal: amount,
                         jobId: job.id,
                         orderId: job.orderId,
                       }),
@@ -790,8 +798,14 @@ export default function JobDetailPage() {
                   const desc = prompt("Description (e.g. MR-30200 #7346 / 9,750):");
                   const qty = prompt("Quantity:");
                   if (desc && qty) {
-                    await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", description: desc, quantity: qty }) }).catch(() => {});
-                    setFeedback({ msg: "Line item added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                    const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", description: desc, quantity: parseInt(qty) || 1 }) });
+                    if (res.ok) {
+                      setFeedback({ msg: "Line item added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                      // Reload line items
+                      const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                      const ld = await lr.json();
+                      if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
+                    }
                   }
                 }}>+ Add Row</Button>
               </div>
@@ -799,7 +813,13 @@ export default function JobDetailPage() {
                 <table className="w-full text-xs">
                   <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Qty</th><th className="p-2 text-left font-medium">Description</th><th className="p-2 text-left font-medium">Ink Spec</th></tr></thead>
                   <tbody>
-                    <tr className="border-t"><td className="p-2 font-medium">{job.quantity?.toLocaleString()}</td><td className="p-2">{job.description || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                    {((job as any).lineItems && (job as any).lineItems.length > 0) ? (
+                      (job as any).lineItems.map((li: any, i: number) => (
+                        <tr key={li.id || i} className="border-t"><td className="p-2 font-medium">{li.quantity?.toLocaleString()}</td><td className="p-2">{li.description || "—"}</td><td className="p-2">{li.inkSpec || "—"}</td></tr>
+                      ))
+                    ) : (
+                      <tr className="border-t"><td className="p-2 font-medium">{job.quantity?.toLocaleString()}</td><td className="p-2">{job.description || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1097,8 +1117,13 @@ export default function JobDetailPage() {
                 const nUp = prompt("# Up:");
                 const ink = prompt("Ink (e.g. 5/0):");
                 if (press) {
-                  await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "pressRun", press, formNumber: form, finishCount: finish, makeReady, runningSize: runSize, imposition: imp, numberUp: nUp, inkSpec: ink }) }).catch(() => {});
-                  setFeedback({ msg: "Press run added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                  const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "pressRun", press, formNumber: form, finishCount: finish, makeReady, runningSize: runSize, imposition: imp, numberUp: nUp, inkSpec: ink }) });
+                  if (res.ok) {
+                    setFeedback({ msg: "Press run added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                    const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                    const ld = await lr.json();
+                    if (ld.pressRuns) setJob((prev: any) => prev ? { ...prev, pressRuns: ld.pressRuns } : prev);
+                  }
                 }
               }}>+ Add Press Run</Button>
             </div>
@@ -1106,7 +1131,13 @@ export default function JobDetailPage() {
               <table className="w-full text-xs">
                 <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Press</th><th className="p-2 text-left font-medium">Form#</th><th className="p-2 text-right font-medium">Finish Ct</th><th className="p-2 text-right font-medium">Make Ready</th><th className="p-2 text-left font-medium">Size</th><th className="p-2 text-left font-medium">Imposition</th><th className="p-2 text-right font-medium">#Up</th><th className="p-2 text-left font-medium">Ink</th></tr></thead>
                 <tbody>
-                  <tr className="border-t"><td className="p-2">{job.pressAssignment || "—"}</td><td className="p-2">{job.pressFormat || "—"}</td><td className="p-2 text-right">{job.finalPressCount || "—"}</td><td className="p-2 text-right">{job.makeReadyCount || "—"}</td><td className="p-2">{job.runningSize || "—"}</td><td className="p-2">{job.imposition || "—"}</td><td className="p-2 text-right">{job.numberUp || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                  {((job as any).pressRuns && (job as any).pressRuns.length > 0) ? (
+                    (job as any).pressRuns.map((pr: any, i: number) => (
+                      <tr key={pr.id || i} className="border-t"><td className="p-2">{pr.press || "—"}</td><td className="p-2">{pr.formNumber || "—"}</td><td className="p-2 text-right">{pr.finishCount?.toLocaleString() || "—"}</td><td className="p-2 text-right">{pr.makeReady?.toLocaleString() || "—"}</td><td className="p-2">{pr.runningSize || "—"}</td><td className="p-2">{pr.imposition || "—"}</td><td className="p-2 text-right">{pr.numberUp || "—"}</td><td className="p-2">{pr.inkSpec || "—"}</td></tr>
+                    ))
+                  ) : (
+                    <tr className="border-t"><td className="p-2">{job.pressAssignment || "—"}</td><td className="p-2">{job.pressFormat || "—"}</td><td className="p-2 text-right">{job.finalPressCount || "—"}</td><td className="p-2 text-right">{job.makeReadyCount || "—"}</td><td className="p-2">{job.runningSize || "—"}</td><td className="p-2">{job.imposition || "—"}</td><td className="p-2 text-right">{job.numberUp || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
