@@ -32,8 +32,13 @@ export default function InventoryPage() {
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", sku: "", category: "", unit: "sheets", vendor: "" });
+  const [form, setForm] = useState({ name: "", sku: "", category: "board", unit: "sheets", vendor: "", weight: "", coating: "", size: "", pricePerM: "", initialQty: "" });
   const update = (f: string, v: string) => setForm((p) => ({ ...p, [f]: v }));
+  const [showDieModal, setShowDieModal] = useState(false);
+  const [creatingDie, setCreatingDie] = useState(false);
+  const [dieError, setDieError] = useState("");
+  const [dieForm, setDieForm] = useState({ dieNumber: "", customerName: "", item: "", description: "", length: "", width: "", height: "", notes: "" });
+  const updateDie = (f: string, v: string) => setDieForm((p) => ({ ...p, [f]: v }));
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [search, setSearch] = useState("");
   const [dieSearch, setDieSearch] = useState("");
@@ -67,9 +72,10 @@ export default function InventoryPage() {
       const res = await fetch("/api/materials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed"); setCreating(false); return; }
-      setMaterials((p) => [...p, { ...data.material, onHand: 0, allocated: 0, reorderPoint: 0 }]);
+      const qty = parseInt(form.initialQty) || 0;
+      setMaterials((p) => [...p, { ...data.material, onHand: qty, allocated: 0, reorderPoint: Math.max(Math.round(qty * 0.2), 50) }]);
       setShowModal(false);
-      setForm({ name: "", sku: "", category: "", unit: "sheets", vendor: "" });
+      setForm({ name: "", sku: "", category: "board", unit: "sheets", vendor: "", weight: "", coating: "", size: "", pricePerM: "", initialQty: "" });
     } catch { setError("Something went wrong"); }
     setCreating(false);
   };
@@ -86,6 +92,9 @@ export default function InventoryPage() {
         </div>
         {tab === "materials" && (
           <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />Add Material</Button>
+        )}
+        {tab === "dies" && (
+          <Button onClick={() => setShowDieModal(true)} className="gap-2"><Plus className="h-4 w-4" />Add Die</Button>
         )}
       </div>
 
@@ -367,24 +376,78 @@ export default function InventoryPage() {
         </>
       )}
 
+      {/* Add Material Modal */}
       {showModal && (
         <>
           <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowModal(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Add Material</h2><button onClick={() => setShowModal(false)}><X className="h-5 w-5 text-gray-400" /></button></div>
               <form onSubmit={handleCreate} className="space-y-4">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Name *</label><Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. 18pt C1S Paperboard" autoFocus /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">SKU</label><Input value={form.sku} onChange={(e) => update("sku", e.target.value)} /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Category</label><Input value={form.category} onChange={(e) => update("category", e.target.value)} placeholder="substrate, ink, coating" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Description *</label><Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Stallion C/2/S White" autoFocus /></div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Weight</label><Input value={form.weight} onChange={(e) => update("weight", e.target.value)} placeholder="e.g. 18pt, 100lb" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Coating</label><Select value={form.coating} onChange={(e) => update("coating", e.target.value)} options={[{ value: "", label: "Select..." }, { value: "C/1/S", label: "C/1/S" }, { value: "C/2/S", label: "C/2/S" }, { value: "Dull", label: "Dull" }, { value: "Gloss", label: "Gloss" }, { value: "Matte", label: "Matte" }, { value: "Uncoated", label: "Uncoated" }]} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Type</label><Select value={form.category} onChange={(e) => update("category", e.target.value)} options={[{ value: "board", label: "Board" }, { value: "cover", label: "Cover" }, { value: "text", label: "Text" }, { value: "substrate", label: "Other Substrate" }, { value: "ink", label: "Ink" }, { value: "coating", label: "Coating" }, { value: "adhesive", label: "Adhesive" }]} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label><Input value={form.unit} onChange={(e) => update("unit", e.target.value)} placeholder="sheets, lbs, gallons" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label><Select value={form.vendor} onChange={(e) => update("vendor", e.target.value)} options={[{ value: "", label: "Select vendor..." }, ...vendors.map(v => ({ value: v.name, label: v.name }))]} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Size</label><Input value={form.size} onChange={(e) => update("size", e.target.value)} placeholder="e.g. 20 x 26" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">SKU / Item #</label><Input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="e.g. INV-374" /></div>
                 </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Price per M ($)</label><Input type="number" step="0.01" value={form.pricePerM} onChange={(e) => update("pricePerM", e.target.value)} placeholder="e.g. 212.00" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Initial Qty</label><Input type="number" value={form.initialQty} onChange={(e) => update("initialQty", e.target.value)} placeholder="On hand" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label><Input value={form.unit} onChange={(e) => update("unit", e.target.value)} placeholder="sheets" /></div>
+                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label><Select value={form.vendor} onChange={(e) => update("vendor", e.target.value)} options={[{ value: "", label: "Select vendor..." }, ...vendors.map(v => ({ value: v.name, label: v.name }))]} /></div>
                 <div className="flex gap-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Material"}</Button></div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add Die Modal */}
+      {showDieModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowDieModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Add Cutting Die</h2><button onClick={() => setShowDieModal(false)}><X className="h-5 w-5 text-gray-400" /></button></div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setDieError("");
+                if (!dieForm.dieNumber) { setDieError("Die number required"); return; }
+                setCreatingDie(true);
+                try {
+                  const res = await fetch("/api/dies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dieForm) });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setDies(prev => [data.die, ...prev]);
+                    setDieTotal(prev => prev + 1);
+                    setShowDieModal(false);
+                    setDieForm({ dieNumber: "", customerName: "", item: "", description: "", length: "", width: "", height: "", notes: "" });
+                  } else setDieError(data.error || "Failed");
+                } catch { setDieError("Something went wrong"); }
+                setCreatingDie(false);
+              }} className="space-y-4">
+                {dieError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{dieError}</div>}
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Die Number *</label><Input value={dieForm.dieNumber} onChange={(e) => updateDie("dieNumber", e.target.value)} placeholder="e.g. RA-637" autoFocus /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer</label><Input value={dieForm.customerName} onChange={(e) => updateDie("customerName", e.target.value)} placeholder="Customer name" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Item</label><Input value={dieForm.item} onChange={(e) => updateDie("item", e.target.value)} placeholder="e.g. Tuck box" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><Input value={dieForm.description} onChange={(e) => updateDie("description", e.target.value)} placeholder="Details" /></div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Length</label><Input type="number" step="0.25" value={dieForm.length} onChange={(e) => updateDie("length", e.target.value)} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Width</label><Input type="number" step="0.25" value={dieForm.width} onChange={(e) => updateDie("width", e.target.value)} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Height</label><Input type="number" step="0.25" value={dieForm.height} onChange={(e) => updateDie("height", e.target.value)} /></div>
+                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label><Input value={dieForm.notes} onChange={(e) => updateDie("notes", e.target.value)} placeholder="e.g. 4up, returned to customer" /></div>
+                <div className="flex gap-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowDieModal(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creatingDie}>{creatingDie ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Die"}</Button></div>
               </form>
             </div>
           </div>
