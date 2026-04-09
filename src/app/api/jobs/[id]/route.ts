@@ -130,7 +130,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "ADMIN" && session.role !== "PRODUCTION_MANAGER")) {
+    const deleteRoles = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
+    if (!session || !deleteRoles.includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

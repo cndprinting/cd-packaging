@@ -31,7 +31,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "ADMIN" && session.role !== "PRODUCTION_MANAGER")) {
+    const adminRoles = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
+    if (!session || !adminRoles.includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
