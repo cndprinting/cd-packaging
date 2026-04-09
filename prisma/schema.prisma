@@ -661,6 +661,7 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   CONVERTED
+  ARCHIVED
 }
 
 enum ProductType {

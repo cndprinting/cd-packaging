@@ -6,8 +6,11 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "C&D Packaging | Production Tracking",
-  description: "Track packaging production from quote through delivery with C&D Packaging.",
+  title: "Godzilla | C&D Printing & Packaging",
+  description: "Production management system for C&D Printing & Packaging Co.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

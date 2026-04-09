@@ -16,7 +16,7 @@ interface Company { id: string; name: string; industry?: string; }
 
 interface Quote { id: string; quoteNumber: string; customerName: string; productType: string; productName: string; quantity: number; unitPrice: number; totalPrice: number; status: string; validUntil: string; createdAt: string; }
 
-const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", sent: "bg-blue-100 text-blue-700", approved: "bg-emerald-100 text-emerald-700", rejected: "bg-red-100 text-red-700", converted: "bg-purple-100 text-purple-700" };
+const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", sent: "bg-blue-100 text-blue-700", approved: "bg-emerald-100 text-emerald-700", rejected: "bg-red-100 text-red-700", converted: "bg-purple-100 text-purple-700", archived: "bg-gray-100 text-gray-400" };
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -26,6 +26,7 @@ export default function QuotesPage() {
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "" });
   const update = (f: string, v: string) => setForm(p => ({ ...p, [f]: v }));
 
@@ -36,6 +37,8 @@ export default function QuotesPage() {
   }, []);
 
   const filtered = useMemo(() => quotes.filter(q => {
+    if (!showArchived && q.status === "archived") return false;
+    if (showArchived && q.status !== "archived") return false;
     if (search && !q.quoteNumber.toLowerCase().includes(search.toLowerCase()) && !q.customerName.toLowerCase().includes(search.toLowerCase()) && !q.productName.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter && q.status !== statusFilter) return false;
     if (typeFilter && q.productType !== typeFilter) return false;
@@ -78,6 +81,9 @@ export default function QuotesPage() {
         <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Search quotes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" /></div>
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={[{ value: "", label: "All Statuses" }, { value: "draft", label: "Draft" }, { value: "sent", label: "Sent" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }, { value: "converted", label: "Converted" }]} className="w-36" />
         <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} className="w-40" />
+        <button onClick={() => setShowArchived(!showArchived)} className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${showArchived ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+          {showArchived ? "Show Active" : "Show Archived"}
+        </button>
       </div></Card>
 
       <Card>
@@ -100,6 +106,11 @@ export default function QuotesPage() {
                     {(q.status === "draft" || q.status === "sent") && <Button variant="ghost" size="sm" className="gap-1 text-gray-600" onClick={() => alert("Send to CSR/Salesperson — email integration coming soon")}><Mail className="h-3.5 w-3.5" /></Button>}
                     {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}
                     <Button variant="ghost" size="sm" className="gap-1" onClick={() => window.open(`/dashboard/quotes/${q.id}/print`, '_blank')}><Printer className="h-3.5 w-3.5" /></Button>
+                    {q.status !== "archived" ? (
+                      <Button variant="ghost" size="sm" className="gap-1 text-gray-400" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "archived" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "archived" } : x)); }}>Archive</Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "draft" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "draft" } : x)); }}>Restore</Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
