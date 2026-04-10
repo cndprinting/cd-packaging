@@ -128,12 +128,15 @@ export async function PUT(request: NextRequest) {
             contactName: quote.contactName,
             customerPO: "",
             // Populate from quote specs
-            stockDescription: specs.paperStock || specs.paper || null,
+            stockDescription: specs.paperStock || specs.paper || specs.stockDescription || null,
             finishedWidth: specs.dimensions ? parseFloat(specs.dimensions.split("x")[0]) || null : null,
             finishedHeight: specs.dimensions ? parseFloat(specs.dimensions.split("x")[1]) || null : null,
-            inkFront: specs.colors || null,
+            inkFront: specs.colors ? specs.colors.split("/")[0] || null : null,
+            inkBack: specs.colors ? specs.colors.split("/")[1] || null : null,
             varnish: specs.coating || null,
             coating: specs.finishing || null,
+            pressAssignment: specs.pressName || null,
+            dueDate: quote.validUntil || null,
           },
         });
         await prisma.quote.update({ where: { id }, data: { convertedJobId: job.id } });
