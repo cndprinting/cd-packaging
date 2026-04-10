@@ -168,10 +168,7 @@ export default function QuoteDetailPage() {
           {(quote.status === "draft" || quote.status === "sent") && (
             <>
               <Button onClick={() => { setEmailType("customer"); setEmailTo(quote.contactEmail || ""); setShowEmailModal(true); }} disabled={updating} className="gap-2 bg-blue-600 hover:bg-blue-700">
-                <Send className="h-4 w-4" /> Send to Customer
-              </Button>
-              <Button variant="outline" onClick={() => { setEmailType("internal"); setEmailTo(""); setShowEmailModal(true); }} className="gap-2">
-                <Mail className="h-4 w-4" /> Send Internal
+                <Send className="h-4 w-4" /> Send to...
               </Button>
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote

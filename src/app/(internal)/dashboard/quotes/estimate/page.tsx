@@ -1075,7 +1075,7 @@ export default function EstimatePage() {
               <Combobox
                 value={form.salesRepName as string || ""}
                 onChange={(_id, label) => set("salesRepName" as keyof FormState, label)}
-                options={employees.filter(e => e.role === "SALES_REP" || e.role === "ADMIN").map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
+                options={employees.map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
                 placeholder="Select sales rep..."
               />
             </Field>
@@ -1083,7 +1083,7 @@ export default function EstimatePage() {
               <Combobox
                 value={form.csrName as string || ""}
                 onChange={(_id, label) => set("csrName" as keyof FormState, label)}
-                options={employees.filter(e => e.role === "CSR" || e.role === "ADMIN" || e.role === "PRODUCTION_MANAGER").map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
+                options={employees.map(e => ({ id: e.id, label: e.name, subtitle: e.role.replace(/_/g, " ") }))}
                 placeholder="Select CSR..."
               />
             </Field>
@@ -1171,6 +1171,16 @@ export default function EstimatePage() {
               onChange={(e) => set("finishedHeight", Number(e.target.value))}
             />
           </Field>
+          {isCarton && (
+            <Field label="Finished Depth (in)">
+              <Input
+                type="number"
+                step="0.0625"
+                value={(form as any).finishedDepth || ""}
+                onChange={(e) => set("finishedDepth" as keyof FormState, Number(e.target.value))}
+              />
+            </Field>
+          )}
           {!isCarton && (
             <Field label="Number of Pages">
               <Input
@@ -1226,7 +1236,13 @@ export default function EstimatePage() {
                 value={form.selectedPressId}
                 onChange={(e) => {
                   set("selectedPressId", e.target.value);
-                  set("selectedConfigId", "");
+                  // Auto-select first config
+                  const press = presses.find(p => p.id === e.target.value);
+                  if (press && press.configurations.length > 0) {
+                    set("selectedConfigId", press.configurations[0].id);
+                  } else {
+                    set("selectedConfigId", "");
+                  }
                 }}
                 options={[
                   { value: "", label: "— Select Press —" },
@@ -1239,21 +1255,7 @@ export default function EstimatePage() {
                 ]}
               />
             </Field>
-            {selectedPress && selectedPress.configurations.length > 0 && (
-              <Field label="Configuration" hint="Press color/coating setup">
-                <Select
-                  value={form.selectedConfigId}
-                  onChange={(e) => set("selectedConfigId", e.target.value)}
-                  options={[
-                    { value: "", label: "— Select Config —" },
-                    ...selectedPress.configurations.map((c) => ({
-                      value: c.id,
-                      label: `${c.name} (${c.numColors}C, $${(selectedPress.costPerHour + c.addToHourlyRate).toFixed(0)}/hr)`,
-                    })),
-                  ]}
-                />
-              </Field>
-            )}
+            {/* Config auto-selected — hidden from user per Nitay's request */}
             <Field label="Stock Type" hint="Affects waste rates and ink coverage">
               <Select
                 value={form.stockType}
@@ -1261,6 +1263,8 @@ export default function EstimatePage() {
                 options={[
                   { value: "uncoated", label: "Uncoated" },
                   { value: "coated", label: "Coated" },
+                  { value: "c1s", label: "C1S (Coated 1 Side)" },
+                  { value: "c2s", label: "C2S (Coated 2 Sides)" },
                 ]}
               />
             </Field>
