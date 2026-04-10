@@ -1268,15 +1268,7 @@ export default function EstimatePage() {
                 ]}
               />
             </Field>
-            <Field label="Paper Stock" hint="Search from inventory" className="sm:col-span-2">
-              <Combobox
-                value={form.stockDescription as string || ""}
-                onChange={(_id, label) => set("stockDescription" as keyof FormState, label)}
-                options={materialsList.map(m => ({ id: m.id, label: m.name, subtitle: m.sku || undefined }))}
-                placeholder="Search paper stock..."
-                allowCreate
-              />
-            </Field>
+            {/* Paper stock moved to Paper & Ink section */}
           </div>
           {selectedConfig && (
             <div className="mt-4 rounded-lg border border-brand-200 bg-brand-50/50 p-4">
@@ -1323,9 +1315,6 @@ export default function EstimatePage() {
               </Field>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Die-Cutting Plate Cost ($)">
-                <Input type="number" step="0.01" value={form.dieCuttingPlateCost || ""} onChange={(e) => set("dieCuttingPlateCost", Number(e.target.value))} />
-              </Field>
               <Field label="Make-Ready Sheets" hint="Waste for ink balance + die registration">
                 <Input type="number" value={form.makeReadySheets || ""} onChange={(e) => set("makeReadySheets", Number(e.target.value))} />
               </Field>
@@ -1334,6 +1323,20 @@ export default function EstimatePage() {
 
           <Section title="Paper & Ink" icon={Droplets}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Field label="Paper Stock" hint="Search from inventory" className="sm:col-span-2">
+                <Combobox
+                  value={form.stockDescription as string || ""}
+                  onChange={(_id, label) => set("stockDescription" as keyof FormState, label)}
+                  options={materialsList.map(m => ({ id: m.id, label: m.name, subtitle: m.sku || undefined }))}
+                  placeholder="Search paper stock..."
+                  allowCreate
+                />
+              </Field>
+              <Field label="Paper Weight" hint="e.g. 18pt, 100lb">
+                <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 18pt" />
+              </Field>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Paper Pricing">
                 <Select
                   value={form.paperPricingMode as string}
@@ -1789,6 +1792,9 @@ export default function EstimatePage() {
         <div className="mt-4 border-t border-gray-100 pt-4">
           <p className="text-sm font-medium text-gray-700 mb-3">Cutting Die Cost</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Die-Cutting Plate Cost ($)">
+              <Input type="number" step="0.01" value={form.dieCuttingPlateCost || ""} onChange={(e) => set("dieCuttingPlateCost", Number(e.target.value))} />
+            </Field>
             <Field label="Rule (linear inches)" hint="Cutting/scoring @ $1.45/in">
               <Input type="number" step="1" value={form.dieCostLinearInches || ""} onChange={(e) => set("dieCostLinearInches", Number(e.target.value))} />
             </Field>
