@@ -409,8 +409,28 @@ export default function QuoteDetailPage() {
                   disabled={updating || !selectedVolume}
                   onClick={async () => {
                     setShowConvertModal(false);
-                    await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, quantity: selectedVolume }) }).catch(() => {});
-                    updateStatus("converted");
+                    setUpdating(true);
+                    try {
+                      const res = await fetch("/api/quotes", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: quote.id, status: "converted", quantity: selectedVolume }),
+                      });
+                      if (res.ok) {
+                        const r = await fetch(`/api/quotes/${quote.id}`);
+                        const d = await r.json();
+                        if (d.quote?.convertedJobId) {
+                          alert(`Job created at ${selectedVolume.toLocaleString()} units! Redirecting...`);
+                          window.location.href = `/dashboard/jobs/${d.quote.convertedJobId}`;
+                          return;
+                        }
+                        setQuote(d.quote || quote);
+                      } else {
+                        const errData = await res.json().catch(() => ({}));
+                        alert(errData.error || "Failed to convert");
+                      }
+                    } catch { alert("Something went wrong"); }
+                    setUpdating(false);
                   }}
                 >
                   <Package className="h-4 w-4" /> Convert at {selectedVolume.toLocaleString()}

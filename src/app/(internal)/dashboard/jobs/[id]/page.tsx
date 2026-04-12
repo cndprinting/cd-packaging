@@ -608,7 +608,7 @@ export default function JobDetailPage() {
                     existingInvoices = (invData.invoices || []).filter((inv: any) => inv.jobId === job.id);
                   } catch {}
 
-                  const quotedPrice = (job as any).quotedPrice || 0;
+                  const quotedPrice = (job as any).quotedPrice || (job as any).estimatedCost || ((job as any).unitPrice ? (job as any).unitPrice * job.quantity : 0);
                   const totalInvoiced = existingInvoices.reduce((s: number, inv: any) => s + inv.total, 0);
                   const totalPaid = existingInvoices.reduce((s: number, inv: any) => {
                     let paid = 0;
