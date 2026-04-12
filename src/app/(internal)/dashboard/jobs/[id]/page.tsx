@@ -317,7 +317,9 @@ export default function JobDetailPage() {
             samplesChecked: j.samplesChecked || false,
             aaCharges: j.aaCharges || 0,
             vendorInfo: j.vendorInfo || "",
-          };
+            quotedPrice: j.quotedPrice || 0,
+            estimatedCost: j.estimatedCost || 0,
+          } as any;
           setJob(formatted);
           setEditForm({ name: formatted.name, description: formatted.description || "", quantity: String(formatted.quantity), dueDate: formatted.dueDate, priority: formatted.priority });
           setLoading(false);
