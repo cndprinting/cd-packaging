@@ -178,7 +178,9 @@ export default function QuoteDetailPage() {
                   setSelectedVolume(quote.quantity);
                   setShowConvertModal(true);
                 } else {
-                  updateStatus("converted");
+                  if (confirm(`Convert to job at ${quote.quantity.toLocaleString()} units for ${formatCurrency(quote.totalPrice)}?`)) {
+                    updateStatus("converted");
+                  }
                 }
               }} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
                 {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
