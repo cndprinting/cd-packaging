@@ -174,14 +174,8 @@ export default function QuoteDetailPage() {
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
               <Button variant="outline" onClick={() => {
-                if (specs.quantityTiers && specs.quantityTiers.length > 1) {
-                  setSelectedVolume(quote.quantity);
-                  setShowConvertModal(true);
-                } else {
-                  if (confirm(`Convert to job at ${quote.quantity.toLocaleString()} units for ${formatCurrency(quote.totalPrice)}?`)) {
-                    updateStatus("converted");
-                  }
-                }
+                setSelectedVolume(quote.quantity);
+                setShowConvertModal(true);
               }} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
                 {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
               </Button>
@@ -199,15 +193,9 @@ export default function QuoteDetailPage() {
           )}
           {quote.status === "approved" && (
             <>
-              {specs.quantityTiers && specs.quantityTiers.length > 1 ? (
-                <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                  <Package className="h-4 w-4" /> Convert to Job...
-                </Button>
-              ) : (
-                <Button onClick={() => updateStatus("converted")} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                  <Package className="h-4 w-4" /> Convert to Job
-                </Button>
-              )}
+              <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
+              </Button>
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
@@ -368,31 +356,51 @@ export default function QuoteDetailPage() {
       )}
 
       {/* Volume Selection Modal for Conversion */}
-      {showConvertModal && specs.quantityTiers && (
+      {showConvertModal && (
         <>
           <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowConvertModal(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Select Volume for Job</h2>
+                <h2 className="text-lg font-semibold">Convert to Job</h2>
                 <button onClick={() => setShowConvertModal(false)}><X className="h-5 w-5 text-gray-400" /></button>
               </div>
-              <p className="text-sm text-gray-500 mb-4">This quote was estimated at multiple quantities. Select which volume to use for the job:</p>
+              <p className="text-sm text-gray-500 mb-4">
+                {specs.quantityTiers && specs.quantityTiers.length > 1
+                  ? "This quote has multiple volume options. Select which quantity to produce:"
+                  : "Confirm the quantity for this job:"}
+              </p>
               <div className="space-y-2 mb-6">
-                {(specs.quantityTiers as { quantity: number; total: number; costPerUnit: number; costPer1000: number }[]).map((tier, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setSelectedVolume(tier.quantity)}
-                    className={`flex w-full items-center justify-between rounded-lg border-2 p-3 transition-all ${selectedVolume === tier.quantity ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <div className="text-left">
-                      <p className="font-semibold text-gray-900">{tier.quantity.toLocaleString()} units</p>
-                      <p className="text-xs text-gray-500">{formatCurrency(tier.costPerUnit)}/unit</p>
+                {specs.quantityTiers && specs.quantityTiers.length > 1 ? (
+                  specs.quantityTiers.map((tier: any, i: number) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedVolume(tier.quantity)}
+                      className={`flex w-full items-center justify-between rounded-lg border-2 p-3 transition-all ${selectedVolume === tier.quantity ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:border-gray-300"}`}
+                    >
+                      <div className="text-left">
+                        <p className="font-semibold text-gray-900">{tier.quantity.toLocaleString()} units</p>
+                        <p className="text-xs text-gray-500">{formatCurrency(tier.costPerUnit)}/unit</p>
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">{formatCurrency(tier.total)}</p>
+                    </button>
+                  ))
+                ) : (
+                  <div className="rounded-lg border-2 border-brand-500 bg-brand-50 p-4 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{quote.quantity.toLocaleString()} units</p>
+                    <p className="text-sm text-gray-500 mt-1">{formatCurrency(quote.totalPrice)}</p>
+                    <div className="mt-3">
+                      <label className="text-xs text-gray-500">Change quantity:</label>
+                      <Input
+                        type="number"
+                        value={selectedVolume || quote.quantity}
+                        onChange={(e) => setSelectedVolume(Number(e.target.value))}
+                        className="mt-1 text-center"
+                      />
                     </div>
-                    <p className="text-lg font-bold text-gray-900">{formatCurrency(tier.total)}</p>
-                  </button>
-                ))}
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setShowConvertModal(false)}>Cancel</Button>
@@ -401,7 +409,6 @@ export default function QuoteDetailPage() {
                   disabled={updating || !selectedVolume}
                   onClick={async () => {
                     setShowConvertModal(false);
-                    // Update quantity before converting
                     await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, quantity: selectedVolume }) }).catch(() => {});
                     updateStatus("converted");
                   }}
