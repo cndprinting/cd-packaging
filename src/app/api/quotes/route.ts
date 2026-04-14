@@ -130,6 +130,15 @@ export async function PUT(request: NextRequest) {
         let specs: Record<string, string> = {};
         if (quote.specs) { try { specs = JSON.parse(quote.specs); } catch {} }
 
+        // jobTicket block (rich) takes precedence over legacy loose specs fields
+        const jt: any = (specs as any).jobTicket || {};
+        const parseDim = (key: "width" | "height") => {
+          if (!specs.dimensions) return null;
+          const parts = String(specs.dimensions).split("x");
+          const v = parseFloat(key === "width" ? parts[0] : parts[1]);
+          return isFinite(v) ? v : null;
+        };
+
         const job = await prisma.job.create({
           data: {
             jobNumber: finalJobNumber, orderId: order.id,
@@ -139,21 +148,46 @@ export async function PUT(request: NextRequest) {
             priority: "NORMAL",
             quantity: quote.quantity,
             quotedPrice: quote.totalPrice,
+            estimatedCost: quote.totalPrice, // Mary's estimate as initial cost baseline
             productType: quote.productType,
             jobType: "NEW_ORDER",
             estimateNumber: quote.quoteNumber,
             contactName: quote.contactName,
             customerPO: "",
-            // Populate from quote specs
-            stockDescription: specs.paperStock || specs.paper || specs.stockDescription || null,
-            finishedWidth: specs.dimensions ? parseFloat(specs.dimensions.split("x")[0]) || null : null,
-            finishedHeight: specs.dimensions ? parseFloat(specs.dimensions.split("x")[1]) || null : null,
-            inkFront: specs.colors ? specs.colors.split("/")[0] || null : null,
-            inkBack: specs.colors ? specs.colors.split("/")[1] || null : null,
-            varnish: specs.coating || null,
-            coating: specs.finishing || null,
-            pressAssignment: specs.pressName || null,
             dueDate: quote.validUntil || null,
+
+            // ── Size specs ──
+            flatSizeWidth: jt.flatSizeWidth ?? null,
+            flatSizeHeight: jt.flatSizeHeight ?? null,
+            finishedWidth: jt.finishedWidth ?? parseDim("width"),
+            finishedHeight: jt.finishedHeight ?? parseDim("height"),
+            numberUp: jt.numberUp ?? null,
+            numPages: jt.numPages ?? null,
+
+            // ── Stock & inks ──
+            stockDescription: jt.stockDescription || specs.paperStock || specs.paper || specs.stockDescription || null,
+            inkFront: jt.inkFront ?? (specs.colors ? specs.colors.split("/")[0] || null : null),
+            inkBack: jt.inkBack ?? (specs.colors ? specs.colors.split("/")[1] || null : null),
+            varnish: jt.varnish ?? specs.coating ?? null,
+            coating: jt.coating ?? specs.finishing ?? null,
+            dieNumber: jt.dieNumber ?? null,
+
+            // ── Press ──
+            pressAssignment: jt.pressAssignment ?? specs.pressName ?? null,
+            pressFormat: jt.pressFormat ?? specs.pressConfig ?? null,
+            makeReadyCount: jt.makeReadyCount ?? null,
+
+            // ── Bindery (derived from estimator; CSR/Mary can still toggle on ticket) ──
+            binderyFold: !!jt.binderyFold,
+            binderyStitch: !!jt.binderyStitch,
+            binderyScore: !!jt.binderyScore,
+            binderyGlue: !!jt.binderyGlue,
+            binderyWrap: !!jt.binderyWrap,
+            binderyNotes: jt.binderyNotes ?? null,
+
+            // ── Labor baseline from estimator ──
+            estimatedHours: jt.estimatedHours ?? null,
+            laborCostRate: jt.laborCostRate ?? null,
           },
         });
         await prisma.quote.update({ where: { id }, data: { convertedJobId: job.id } });

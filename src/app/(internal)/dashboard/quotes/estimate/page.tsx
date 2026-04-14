@@ -933,6 +933,38 @@ function EstimateContent() {
           ] : undefined,
           costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount, commission: calc.commissionAmount },
           additionalProducts: quoteProducts.length > 0 ? quoteProducts : undefined,
+          // ─── Job Ticket payload — auto-fills the job when quote converts ─────
+          jobTicket: {
+            flatSizeWidth: Number(form.sheetWidth) || null,
+            flatSizeHeight: Number(form.sheetHeight) || null,
+            finishedWidth: Number(form.finishedWidth) || null,
+            finishedHeight: Number(form.finishedHeight) || null,
+            numberUp: Number(form.numberUp) || null,
+            numPages: Number(form.numPages) || null,
+            inkFront: form.inkColorsFront > 0 ? `${form.inkColorsFront}/0` : null,
+            inkBack: form.inkColorsBack > 0 ? `${form.inkColorsBack}/0` : null,
+            varnish: form.specialtyCoating && form.specialtyCoating !== "none" ? form.specialtyCoating : null,
+            coating: form.coatingType && form.coatingType !== "none" ? form.coatingType : null,
+            pressAssignment: selectedPress?.name || null,
+            pressFormat: selectedConfig?.name || null,
+            makeReadyCount: Number(form.makeReadySheets) || null,
+            stockDescription: [form.stockType, form.paperWeight ? `${form.paperWeight}#` : "", form.paperBasisWeight ? `${form.paperBasisWeight}lb basis` : ""].filter(Boolean).join(" ") || null,
+            // Bindery flags derived from cost entries
+            binderyFold: Number(form.foldingCost) > 0,
+            binderyStitch: Number(form.saddleStitchCost) > 0 || Number(form.perfectBindingCost) > 0,
+            binderyScore: Number(form.strippingToolCost) > 0,
+            binderyGlue: Number(form.gluingSetup) > 0,
+            binderyWrap: !!form.skidPack,
+            binderyNotes: [
+              form.handBind1Name ? `Hand: ${form.handBind1Name}` : "",
+              form.handBind2Name ? `Hand: ${form.handBind2Name}` : "",
+              form.windowPatching > 0 ? "Window patching" : "",
+            ].filter(Boolean).join("; ") || null,
+            dieNumber: form.diePlywoodSize || null,
+            // Labor
+            estimatedHours: (Number(form.pressRunTime) || 0) + (Number(form.prepressTime) || 0) + (Number(form.setupTime) || 0),
+            laborCostRate: Number(form.pressOperatorRate) || null,
+          },
         }),
       };
       const res = await fetch("/api/quotes", {
