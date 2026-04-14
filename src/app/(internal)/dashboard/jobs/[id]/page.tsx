@@ -202,7 +202,7 @@ export default function JobDetailPage() {
   // Lookup data for dropdowns
   const [employees, setEmployees] = useState<{ id: string; name: string; role: string }[]>([]);
   const [dbPresses, setDbPresses] = useState<{ id: string; name: string; costPerHour: number }[]>([]);
-  const [dbMaterials, setDbMaterials] = useState<{ id: string; name: string; sku: string | null }[]>([]);
+  const [dbMaterials, setDbMaterials] = useState<{ id: string; name: string; sku: string | null; onHand?: number; allocated?: number; available?: number; unit?: string; isShort?: boolean; isLow?: boolean }[]>([]);
 
   useEffect(() => {
     fetch("/api/users").then(r => r.json()).then(d => { if (d.users) setEmployees(d.users); }).catch(() => {});
@@ -947,8 +947,42 @@ export default function JobDetailPage() {
               <Select
                 value={job.stockDescription || ""}
                 onChange={(e) => updateJobField("stockDescription", e.target.value)}
-                options={[{ value: "", label: "Select stock..." }, ...dbMaterials.map(m => ({ value: m.name, label: `${m.name}${m.sku ? ` (${m.sku})` : ""}` }))]}
+                options={[{ value: "", label: "Select stock..." }, ...dbMaterials.map(m => {
+                  const avail = m.available ?? 0;
+                  const short = m.isShort || avail <= 0;
+                  const tag = short ? " ⚠ SHORT" : m.isLow ? " ⚠ LOW" : avail > 0 ? ` — ${avail.toLocaleString()} free` : "";
+                  return { value: m.name, label: `${m.name}${m.sku ? ` (${m.sku})` : ""}${tag}` };
+                })]}
               />
+              {/* Inventory status strip for selected stock */}
+              {job.stockDescription && (() => {
+                const sel = dbMaterials.find(m => m.name === job.stockDescription);
+                if (!sel) return null;
+                const onHand = sel.onHand ?? 0;
+                const allocated = sel.allocated ?? 0;
+                const available = sel.available ?? 0;
+                const unit = sel.unit || "sheets";
+                const needed = job.quantity || 0;
+                const shortForJob = needed > 0 && available < needed;
+                const bg = shortForJob || sel.isShort ? "bg-red-50 border-red-200 text-red-800"
+                          : sel.isLow ? "bg-amber-50 border-amber-200 text-amber-800"
+                          : "bg-emerald-50 border-emerald-200 text-emerald-800";
+                return (
+                  <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${bg}`}>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <span><span className="font-semibold">On Hand:</span> {onHand.toLocaleString()} {unit}</span>
+                      <span><span className="font-semibold">Allocated:</span> {allocated.toLocaleString()}</span>
+                      <span><span className="font-semibold">Free:</span> {available.toLocaleString()}</span>
+                      {needed > 0 && <span><span className="font-semibold">Needed for this job:</span> {needed.toLocaleString()}</span>}
+                    </div>
+                    {shortForJob && (
+                      <div className="mt-1 font-medium">
+                        ⚠ Not enough free inventory — switch Paper Source to "Order New" and flag for purchasing.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex items-end">
               <Checkbox
