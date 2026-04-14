@@ -13,6 +13,7 @@ import {
 
 const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
   { label: "Jobs", href: "/dashboard/jobs", icon: Package },
   { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid },
@@ -78,6 +79,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
     // CSRs and Sales Reps — limited view, no estimating data
     if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER") {
       return [
+        { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
         { label: "Jobs", href: "/dashboard/jobs", icon: Package },
         { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },

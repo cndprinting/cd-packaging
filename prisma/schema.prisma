@@ -923,6 +923,54 @@ model Invoice {
   @@index([invoiceNumber])
 }
 
+// ─── QUOTE REQUESTS (Sales/CSR intake for estimating) ────
+
+model QuoteRequest {
+  id                String   @id @default(cuid())
+  requestNumber     String   @unique
+  status            String   @default("pending") // pending, estimating, completed, cancelled
+  dateNeeded        DateTime?
+  jobType           String?  // new, exact_reprint, reprint_with_changes
+  pickupJobNumber   String?
+  customerName      String
+  companyId         String?
+  productType       String?  // komori, digital, letterpress, bindery, vendor
+  descriptionType   String?  // flyer, postcard, brochure, book, etc.
+  jobTitle          String?
+  quantity1         Int?
+  quantity2         Int?
+  quantity3         Int?
+  quantity4         Int?
+  quantity5         Int?
+  pages             Int?
+  coverType         String?  // self_cover, plus_cover
+  colorsSide1       String?
+  colorsSide2       String?
+  coatingSide1      String?
+  coatingSide2      String?
+  flatWidth         Float?
+  flatHeight        Float?
+  finishedWidth     Float?
+  finishedHeight    Float?
+  finishedDepth     Float?
+  paperWeight       String?
+  paperDescription  String?
+  paperType         String?  // text, cover
+  finishing         String?  // JSON array of finishing operations
+  specialInstructions String?
+  vendorName        String?
+  deliveryInstructions String?
+  submittedBy       String
+  submittedByName   String
+  estimatedBy       String?
+  convertedQuoteId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status])
+  @@index([submittedBy])
+}
+
 // ─── PAPER USAGE & VENDOR PURCHASES ──────────────────────
 
 model PaperUsage {
