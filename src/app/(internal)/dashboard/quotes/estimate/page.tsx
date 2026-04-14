@@ -243,6 +243,17 @@ interface FormState {
   foilSizeSquareInches: number;
   dieCostLinearInches: number;
   diePlywoodSize: string;
+  // Job Ticket extras (carry to job on conversion)
+  fscCertified: boolean;
+  pressCheck: boolean;
+  softCover: boolean;
+  plusCover: boolean;
+  hasBleeds: boolean;
+  blanketNumber: string;
+  deliveryTo: string;
+  samplesRequired: boolean;
+  samplesTo: string;
+  specialInstructions: string;
   // Volume Forecasting
   monthlyVolume: string;
   contractMonths: string;
@@ -359,6 +370,16 @@ const defaultForm: FormState = {
   foilSizeSquareInches: 0,
   dieCostLinearInches: 0,
   diePlywoodSize: "",
+  fscCertified: false,
+  pressCheck: false,
+  softCover: false,
+  plusCover: false,
+  hasBleeds: false,
+  blanketNumber: "",
+  deliveryTo: "",
+  samplesRequired: false,
+  samplesTo: "",
+  specialInstructions: "",
   monthlyVolume: "",
   contractMonths: "12",
   volumeDiscount: "0",
@@ -961,6 +982,17 @@ function EstimateContent() {
               form.windowPatching > 0 ? "Window patching" : "",
             ].filter(Boolean).join("; ") || null,
             dieNumber: form.diePlywoodSize || null,
+            // Job ticket extras (Mary can fill these on the estimator)
+            fscCertified: !!form.fscCertified,
+            pressCheck: !!form.pressCheck,
+            softCover: !!form.softCover,
+            plusCover: !!form.plusCover,
+            hasBleeds: !!form.hasBleeds,
+            blanketNumber: form.blanketNumber || null,
+            deliveryTo: form.deliveryTo || null,
+            samplesRequired: !!form.samplesRequired,
+            samplesTo: form.samplesTo || null,
+            pressNotes: form.specialInstructions || null,
             // Labor
             estimatedHours: (Number(form.pressRunTime) || 0) + (Number(form.prepressTime) || 0) + (Number(form.setupTime) || 0),
             laborCostRate: Number(form.pressOperatorRate) || null,
@@ -1363,6 +1395,53 @@ function EstimateContent() {
           )}
         </Section>
       )}
+
+      {/* ── Job Ticket Details — pre-fills Darrin's job ticket on conversion ── */}
+      <Section title="Job Ticket Details (Optional)" icon={FileText} defaultOpen={false}>
+        <p className="text-xs text-gray-500 mb-3">
+          Mary: fill any you know now — they auto-populate the job ticket so Darrin doesn&apos;t have to re-enter. CSRs can still edit them later.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Field label="Blanket #">
+            <Input value={form.blanketNumber} onChange={(e) => set("blanketNumber", e.target.value)} placeholder="Blanket number..." />
+          </Field>
+          <Field label="Deliver To">
+            <Input value={form.deliveryTo} onChange={(e) => set("deliveryTo", e.target.value)} placeholder="Ship-to address / location" />
+          </Field>
+          <Field label="Samples To">
+            <Input value={form.samplesTo} onChange={(e) => set("samplesTo", e.target.value)} placeholder="Who gets samples" />
+          </Field>
+          <Field label="Special Instructions" className="sm:col-span-2 lg:col-span-3">
+            <Input value={form.specialInstructions} onChange={(e) => set("specialInstructions", e.target.value)} placeholder="Notes for the press / bindery / shipping" />
+          </Field>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-5 pt-3 border-t border-gray-100">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.fscCertified} onChange={(e) => set("fscCertified", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            FSC Certified
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.pressCheck} onChange={(e) => set("pressCheck", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Press Check Required
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.hasBleeds} onChange={(e) => set("hasBleeds", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Has Bleeds
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.softCover} onChange={(e) => set("softCover", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Soft Cover
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.plusCover} onChange={(e) => set("plusCover", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Plus Cover
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.samplesRequired} onChange={(e) => set("samplesRequired", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Samples Required
+          </label>
+        </div>
+      </Section>
     </div>
   );
 

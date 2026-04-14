@@ -171,6 +171,20 @@ export async function PUT(request: NextRequest) {
             varnish: jt.varnish ?? specs.coating ?? null,
             coating: jt.coating ?? specs.finishing ?? null,
             dieNumber: jt.dieNumber ?? null,
+            blanketNumber: jt.blanketNumber ?? null,
+
+            // ── Flags Mary may already know ──
+            fscCertified: !!jt.fscCertified,
+            pressCheck: !!jt.pressCheck,
+            softCover: !!jt.softCover,
+            plusCover: !!jt.plusCover,
+            hasBleeds: !!jt.hasBleeds,
+
+            // ── Delivery & samples ──
+            deliveryTo: jt.deliveryTo ?? null,
+            samplesRequired: !!jt.samplesRequired,
+            samplesTo: jt.samplesTo ?? null,
+            pressNotes: jt.pressNotes ?? null,
 
             // ── Press ──
             pressAssignment: jt.pressAssignment ?? specs.pressName ?? null,

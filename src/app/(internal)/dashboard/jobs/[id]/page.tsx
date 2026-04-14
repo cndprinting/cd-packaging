@@ -69,15 +69,15 @@ interface JobData {
   pressCheck?: boolean;
   stockDescription?: string;
   fscCertified?: boolean;
-  blanketNo?: string;
+  blanketNumber?: string;
   dieNumber?: string;
-  flatWidth?: number;
-  flatHeight?: number;
+  flatSizeWidth?: number;
+  flatSizeHeight?: number;
   finishedWidth?: number;
   finishedHeight?: number;
   inkFront?: string;
   inkBack?: string;
-  varnishCoating?: string;
+  varnish?: string;
   softCover?: boolean;
   plusCover?: boolean;
   hasBleeds?: boolean;
@@ -273,15 +273,15 @@ export default function JobDetailPage() {
             pressCheck: j.pressCheck || false,
             stockDescription: j.stockDescription || "",
             fscCertified: j.fscCertified || false,
-            blanketNo: j.blanketNo || "",
+            blanketNumber: j.blanketNumber || "",
             dieNumber: j.dieNumber || "",
-            flatWidth: j.flatWidth || 0,
-            flatHeight: j.flatHeight || 0,
+            flatSizeWidth: j.flatSizeWidth || 0,
+            flatSizeHeight: j.flatSizeHeight || 0,
             finishedWidth: j.finishedWidth || 0,
             finishedHeight: j.finishedHeight || 0,
             inkFront: j.inkFront || "",
             inkBack: j.inkBack || "",
-            varnishCoating: j.varnishCoating || "",
+            varnish: j.varnish || "",
             softCover: j.softCover || false,
             plusCover: j.plusCover || false,
             hasBleeds: j.hasBleeds || false,
@@ -345,15 +345,15 @@ export default function JobDetailPage() {
           pressCheck: false,
           stockDescription: "",
           fscCertified: false,
-          blanketNo: "",
+          blanketNumber: "",
           dieNumber: "",
-          flatWidth: 0,
-          flatHeight: 0,
+          flatSizeWidth: 0,
+          flatSizeHeight: 0,
           finishedWidth: 0,
           finishedHeight: 0,
           inkFront: "",
           inkBack: "",
-          varnishCoating: "",
+          varnish: "",
           softCover: false,
           plusCover: false,
           hasBleeds: false,
@@ -958,9 +958,9 @@ export default function JobDetailPage() {
             <div>
               <SectionLabel>Blanket No.</SectionLabel>
               <Input
-                defaultValue={job.blanketNo || ""}
+                defaultValue={job.blanketNumber || ""}
                 placeholder="Blanket #..."
-                onBlur={(e) => updateJobField("blanketNo", e.target.value)}
+                onBlur={(e) => updateJobField("blanketNumber", e.target.value)}
               />
             </div>
             <div>
@@ -979,18 +979,18 @@ export default function JobDetailPage() {
               <div className="flex gap-2 items-center">
                 <Input
                   type="number"
-                  defaultValue={job.flatWidth || ""}
+                  defaultValue={job.flatSizeWidth || ""}
                   placeholder="Width"
                   className="flex-1"
-                  onBlur={(e) => updateJobField("flatWidth", parseFloat(e.target.value) || 0)}
+                  onBlur={(e) => updateJobField("flatSizeWidth", parseFloat(e.target.value) || 0)}
                 />
                 <span className="text-gray-400 text-sm">x</span>
                 <Input
                   type="number"
-                  defaultValue={job.flatHeight || ""}
+                  defaultValue={job.flatSizeHeight || ""}
                   placeholder="Height"
                   className="flex-1"
-                  onBlur={(e) => updateJobField("flatHeight", parseFloat(e.target.value) || 0)}
+                  onBlur={(e) => updateJobField("flatSizeHeight", parseFloat(e.target.value) || 0)}
                 />
               </div>
             </div>
@@ -1037,9 +1037,9 @@ export default function JobDetailPage() {
             <div>
               <SectionLabel>Varnish / Coating</SectionLabel>
               <Input
-                defaultValue={job.varnishCoating || ""}
+                defaultValue={job.varnish || ""}
                 placeholder="e.g. Aqueous Gloss"
-                onBlur={(e) => updateJobField("varnishCoating", e.target.value)}
+                onBlur={(e) => updateJobField("varnish", e.target.value)}
               />
             </div>
           </div>
