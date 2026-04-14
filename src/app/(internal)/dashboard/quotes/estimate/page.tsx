@@ -1007,6 +1007,19 @@ function EstimateContent() {
       if (res.ok) {
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
+        // If this estimate was started from a quote request, mark it completed
+        // so it exits the Quote Requests queue and lives on the Quotes tab.
+        if (fromRequestId) {
+          try {
+            const data = await res.json();
+            const newQuoteId = data?.quote?.id;
+            await fetch("/api/quote-requests", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: fromRequestId, status: "completed", convertedQuoteId: newQuoteId }),
+            });
+          } catch { /* non-fatal */ }
+        }
       }
     } catch {
       /* ignore */

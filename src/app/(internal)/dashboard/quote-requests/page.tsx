@@ -44,6 +44,7 @@ export default function QuoteRequestsPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [userRole, setUserRole] = useState("");
+  const [view, setView] = useState<"active" | "completed" | "all">("active");
 
   const [form, setForm] = useState({
     dateNeeded: "", jobType: "new", pickupJobNumber: "", customerName: "", productType: "komori",
@@ -82,6 +83,12 @@ export default function QuoteRequestsPage() {
 
   const pending = requests.filter(r => r.status === "pending").length;
   const estimating = requests.filter(r => r.status === "estimating").length;
+  const completed = requests.filter(r => r.status === "completed").length;
+  const visibleRequests = requests.filter(r => {
+    if (view === "active") return r.status === "pending" || r.status === "estimating";
+    if (view === "completed") return r.status === "completed";
+    return true;
+  });
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-brand-600" /></div>;
 
@@ -98,15 +105,37 @@ export default function QuoteRequestsPage() {
         <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Request</Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card className="p-4 text-center"><p className="text-2xl font-bold text-amber-600">{pending}</p><p className="text-xs text-gray-500">Pending</p></Card>
         <Card className="p-4 text-center"><p className="text-2xl font-bold text-blue-600">{estimating}</p><p className="text-xs text-gray-500">Being Estimated</p></Card>
-        <Card className="p-4 text-center"><p className="text-2xl font-bold text-gray-900">{requests.length}</p><p className="text-xs text-gray-500">Total Requests</p></Card>
+        <Card className="p-4 text-center"><p className="text-2xl font-bold text-emerald-600">{completed}</p><p className="text-xs text-gray-500">Completed</p></Card>
+        <Card className="p-4 text-center"><p className="text-2xl font-bold text-gray-900">{requests.length}</p><p className="text-xs text-gray-500">Total</p></Card>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex items-center gap-1 border-b border-gray-200">
+        {([
+          { id: "active", label: `Active (${pending + estimating})` },
+          { id: "completed", label: `Completed (${completed})` },
+          { id: "all", label: `All (${requests.length})` },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setView(tab.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              view === tab.id
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Request List */}
       <div className="space-y-3">
-        {requests.map((req) => (
+        {visibleRequests.map((req) => (
           <Card key={req.id} className={`border-l-4 ${req.status === "pending" ? "border-l-amber-400" : req.status === "estimating" ? "border-l-blue-400" : req.status === "completed" ? "border-l-emerald-400" : "border-l-gray-300"}`}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
@@ -149,11 +178,15 @@ export default function QuoteRequestsPage() {
             </CardContent>
           </Card>
         ))}
-        {requests.length === 0 && (
+        {visibleRequests.length === 0 && (
           <Card className="p-12 text-center">
             <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No quote requests yet</p>
-            <p className="text-xs text-gray-400 mt-1">Click "New Request" to submit specs for estimating</p>
+            <p className="text-gray-500">
+              {view === "active" ? "No active quote requests" : view === "completed" ? "No completed requests yet" : "No quote requests yet"}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              {view === "active" ? "Completed requests moved to the Quotes tab." : "Click \"New Request\" to submit specs for estimating"}
+            </p>
           </Card>
         )}
       </div>
