@@ -71,6 +71,7 @@ interface JobData {
   fscCertified?: boolean;
   blanketNumber?: string;
   dieNumber?: string;
+  paperSource?: string;
   flatSizeWidth?: number;
   flatSizeHeight?: number;
   finishedWidth?: number;
@@ -275,6 +276,7 @@ export default function JobDetailPage() {
             fscCertified: j.fscCertified || false,
             blanketNumber: j.blanketNumber || "",
             dieNumber: j.dieNumber || "",
+            paperSource: j.paperSource || "on_hand",
             flatSizeWidth: j.flatSizeWidth || 0,
             flatSizeHeight: j.flatSizeHeight || 0,
             finishedWidth: j.finishedWidth || 0,
@@ -347,6 +349,7 @@ export default function JobDetailPage() {
           fscCertified: false,
           blanketNumber: "",
           dieNumber: "",
+          paperSource: "on_hand",
           flatSizeWidth: 0,
           flatSizeHeight: 0,
           finishedWidth: 0,
@@ -953,6 +956,65 @@ export default function JobDetailPage() {
                 checked={job.fscCertified || false}
                 onChange={(v) => updateJobField("fscCertified", v)}
               />
+            </div>
+
+            {/* Paper Source — Darrin flags whether to use on-hand stock or order fresh */}
+            <div className="lg:col-span-3">
+              <SectionLabel>Paper Source</SectionLabel>
+              <div className="flex flex-wrap items-center gap-2">
+                {([
+                  { value: "on_hand", label: "Use On Hand", color: "emerald" },
+                  { value: "order_new", label: "Order New", color: "amber" },
+                  { value: "customer_supplied", label: "Customer Supplied", color: "blue" },
+                ] as const).map(opt => {
+                  const active = (job.paperSource || "on_hand") === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => updateJobField("paperSource", opt.value)}
+                      className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        active
+                          ? opt.color === "emerald" ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : opt.color === "amber" ? "border-amber-500 bg-amber-50 text-amber-700"
+                          : "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+                {job.paperSource === "order_new" && job.stockDescription && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/purchases", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            jobId: job.id,
+                            category: "paper",
+                            description: `${job.stockDescription} — Job ${job.jobNumber} (${job.quantity?.toLocaleString() || "?"} units)`,
+                            status: "needed",
+                          }),
+                        });
+                        if (res.ok) alert("Flagged for purchasing — check the purchase queue on the job.");
+                        else alert("Could not flag for purchase. Check the inventory / purchasing page.");
+                      } catch { alert("Network error flagging purchase."); }
+                    }}
+                    className="ml-2 px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
+                  >
+                    + Flag for Purchasing
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {job.paperSource === "order_new" && "Darrin: flag this if on-hand inventory is spoken for. Click Flag for Purchasing to send to the purchase queue."}
+                {job.paperSource === "on_hand" && "Using existing inventory. Make sure the stock isn't allocated to another job."}
+                {job.paperSource === "customer_supplied" && "Customer is providing the paper — no purchase needed."}
+              </p>
             </div>
 
             <div>

@@ -264,6 +264,7 @@ model Job {
   fscCertified     Boolean   @default(false)
   blanketNumber    String?
   dieNumber        String?
+  paperSource      String?   // "on_hand" | "order_new" | "customer_supplied"
 
   // Size Specs
   flatSizeWidth    Float?
