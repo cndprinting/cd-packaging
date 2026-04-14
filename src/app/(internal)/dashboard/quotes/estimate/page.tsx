@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -438,6 +439,12 @@ function Field({
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function EstimatePage() {
+  return <Suspense><EstimateContent /></Suspense>;
+}
+
+function EstimateContent() {
+  const searchParams = useSearchParams();
+  const fromRequestId = searchParams.get("from");
   const [form, setForm] = useState<FormState>({ ...defaultForm });
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -488,7 +495,37 @@ export default function EstimatePage() {
     fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
     fetch("/api/users").then(r => r.json()).then(d => { if (d.users) setEmployees(d.users.filter((u: { role: string }) => u.role !== "CUSTOMER")); }).catch(() => {});
     fetch("/api/materials").then(r => r.json()).then(d => { if (d.materials) setMaterialsList(d.materials); }).catch(() => {});
-  }, []);
+
+    // Pre-fill from Quote Request if ?from=requestId
+    if (fromRequestId) {
+      fetch("/api/quote-requests").then(r => r.json()).then(d => {
+        const req = (d.requests || []).find((r: any) => r.id === fromRequestId);
+        if (req) {
+          setForm(prev => ({
+            ...prev,
+            customerName: req.customerName || prev.customerName,
+            jobName: req.jobTitle || req.descriptionType || prev.jobName,
+            quantity: req.quantity1 || prev.quantity,
+            quantityTiers: [req.quantity2, req.quantity3, req.quantity4, req.quantity5].filter(Boolean) as number[],
+            finishedWidth: req.finishedWidth || prev.finishedWidth,
+            finishedHeight: req.finishedHeight || prev.finishedHeight,
+            finishedDepth: req.finishedDepth || prev.finishedDepth,
+            sheetWidth: req.flatWidth || prev.sheetWidth,
+            sheetHeight: req.flatHeight || prev.sheetHeight,
+            numPages: req.pages || prev.numPages,
+            inkColorsFront: req.colorsSide1 === "4_process" ? 4 : req.colorsSide1 === "process_1pms" ? 5 : req.colorsSide1 === "process_2pms" ? 6 : req.colorsSide1 === "black" ? 1 : req.colorsSide1 === "pms" ? 1 : prev.inkColorsFront,
+            inkColorsBack: req.colorsSide2 === "4_process" ? 4 : req.colorsSide2 === "process_1pms" ? 5 : req.colorsSide2 === "process_2pms" ? 6 : req.colorsSide2 === "black" ? 1 : req.colorsSide2 === "pms" ? 1 : req.colorsSide2 === "none" ? 0 : prev.inkColorsBack,
+            specialtyCoating: req.coatingSide1 === "gloss_aq" ? "aqueous" : req.coatingSide1 === "soft_touch_aq" ? "soft-touch" : req.coatingSide1 === "matte_aq" ? "matte" : req.coatingSide1?.includes("uv") ? "uv" : prev.specialtyCoating,
+            productType: req.descriptionType === "folding_carton" ? "FOLDING_CARTON" : "COMMERCIAL_PRINT",
+            stockDescription: req.paperDescription || prev.stockDescription,
+            paperBasisWeight: req.paperWeight ? parseFloat(req.paperWeight) || 0 : prev.paperBasisWeight,
+          } as any));
+          // Auto-advance to step 2 since product type is set
+          setStep(2);
+        }
+      }).catch(() => {});
+    }
+  }, [fromRequestId]);
 
   // Auto-fill from press/config selection
   const selectedPress = useMemo(() => presses.find((p) => p.id === form.selectedPressId), [presses, form.selectedPressId]);
