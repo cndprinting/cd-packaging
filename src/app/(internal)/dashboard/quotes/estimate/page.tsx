@@ -610,19 +610,24 @@ function EstimateContent() {
       }
     } else if (isCommOffset) {
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
-      const sheetsNeeded = Math.ceil((q * v) / 1);
-      const paperCost = (sheetsNeeded / 1000) * num("commPaperCostPer1000");
+      // Calculate forms (signatures) for multi-page books
+      const pages = num("numPages") || 1;
+      const pagesPerForm = (num("numberUp") || 1) * 2; // 2 sides per sheet, times number-up
+      const numForms = Math.max(1, Math.ceil(pages / Math.max(pagesPerForm, 1)));
+      const sheetsPerForm = q + num("makeReadySheets");
+      const totalSheets = numForms * sheetsPerForm;
+      const paperCost = (totalSheets / 1000) * num("commPaperCostPer1000");
       const coverageMultiplier = num("inkCoveragePercent") / 100;
-      const inkCost = num("commInkCost") * totalColors * coverageMultiplier;
+      const inkCost = num("commInkCost") * totalColors * coverageMultiplier * numForms;
       materialsCost = paperCost + inkCost;
-      toolingCost = num("plateCostEach") * totalColors;
+      toolingCost = num("plateCostEach") * totalColors * numForms; // plates per form
       finishingCost =
         num("foldingCost") +
         num("saddleStitchCost") +
         num("perfectBindingCost") +
         num("trimCost") +
         num("binderySetupHours") * num("binderyRate");
-      makeReadyCost = (500 / 1000) * num("commPaperCostPer1000");
+      makeReadyCost = 0; // already included in sheetsPerForm above
     } else if (isCommDigital) {
       const sheetsNeeded = q * v;
       materialsCost = sheetsNeeded * num("commDigitalClickCharge") + num("digitalPaperCost") * (sheetsNeeded / 1000);
