@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Plus, X, Loader2, ArrowRight, FileBarChart, Trash2, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { FileText, Plus, X, Loader2, ArrowRight, FileBarChart, Trash2, ChevronDown, ChevronRight, Info, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -321,6 +321,20 @@ export default function QuoteRequestsPage() {
                       setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: "estimating" } : r));
                     }}>
                       <ArrowRight className="h-3.5 w-3.5" /> Start Estimating
+                    </Button>
+                  )}
+                  {req.status !== "completed" && !req.convertedQuoteId && (
+                    <Button size="sm" variant="outline" className="gap-1 text-purple-600" title="Create a placeholder job without waiting for the estimator — for testing downstream steps" onClick={async () => {
+                      if (!confirm("Fast-track this request to a placeholder job? Use this to test production/job-ticket features without waiting on a full estimate.")) return;
+                      const res = await fetch(`/api/quote-requests/${req.id}/fast-track`, { method: "POST" });
+                      const data = await res.json();
+                      if (res.ok && data.job) {
+                        window.location.href = `/dashboard/jobs/${data.job.id}`;
+                      } else {
+                        alert(data.error || "Fast-track failed");
+                      }
+                    }}>
+                      <Zap className="h-3.5 w-3.5" /> Fast-track to Job
                     </Button>
                   )}
                   {isEstimator && req.status === "estimating" && (
