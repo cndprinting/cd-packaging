@@ -44,26 +44,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=db_error", request.url));
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email } });
 
+    // Strict allowlist: user must already exist in our DB, regardless of domain.
+    // Admins pre-add users with the correct role; SSO just authenticates them.
+    // This prevents any @cndprinting.com mailbox from auto-gaining CSR access.
     if (!user) {
-      // Check if this is a @cndprinting.com email — auto-create as OPERATOR
-      if (email.endsWith("@cndprinting.com")) {
-        // Find the internal company
-        const internal = await prisma.company.findFirst({ where: { type: "internal" } });
-        user = await prisma.user.create({
-          data: {
-            name,
-            email,
-            passwordHash: "", // No password needed for SSO users
-            role: "CSR",
-            companyId: internal?.id || null,
-            isActive: true,
-          },
-        });
-      } else {
-        return NextResponse.redirect(new URL("/login?error=not_registered", request.url));
-      }
+      return NextResponse.redirect(new URL("/login?error=not_approved", request.url));
     }
 
     if (!user.isActive) {

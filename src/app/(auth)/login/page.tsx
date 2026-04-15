@@ -1,20 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+const SSO_ERROR_MESSAGES: Record<string, string> = {
+  not_approved: "This Microsoft account is not on the approved list. Contact an administrator to request access.",
+  not_registered: "This Microsoft account is not registered. Contact an administrator.",
+  sso_denied: "Microsoft sign-in was cancelled or denied.",
+  sso_failed: "Microsoft sign-in failed. Please try again or contact support.",
+  account_disabled: "This account has been disabled. Contact an administrator.",
+  no_email: "Microsoft did not return an email address for this account.",
+  db_error: "Database error during sign-in. Please try again.",
+};
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="w-full max-w-md"><div className="bg-white rounded-2xl shadow-2xl p-8 text-center text-gray-400">Loading...</div></div>}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Surface SSO errors from ?error= query param
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err) setError(SSO_ERROR_MESSAGES[err] || "Sign-in failed. Please try again.");
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
