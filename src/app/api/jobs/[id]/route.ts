@@ -45,6 +45,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
 
+    // Pre-press gate: block entry to PRINTING and beyond unless proof is approved.
+    // Stages that require sign-off to enter.
+    const GATED_STAGES = new Set([
+      "PRINTING", "COATING_FINISHING", "DIE_CUTTING", "GLUING_FOLDING",
+      "QA", "PACKED", "SHIPPED", "DELIVERED", "INVOICED",
+    ]);
+    const checkPrepressGate = async (jobId: string, nextStatus: string): Promise<string | null> => {
+      if (!GATED_STAGES.has(nextStatus)) return null;
+      const approved = await prisma.proof.count({
+        where: { jobId, status: "APPROVED" },
+      });
+      if (approved === 0) {
+        return "Pre-press gate: cannot move into printing until at least one proof is approved. Upload and approve a proof first.";
+      }
+      return null;
+    };
+
     // Advance to next stage
     if (action === "advance") {
       const job = await prisma.job.findUnique({ where: { id } });
@@ -56,6 +73,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       const nextStatus = STAGES[currentIndex + 1];
+      const gateError = await checkPrepressGate(id, nextStatus);
+      if (gateError) return NextResponse.json({ error: gateError }, { status: 409 });
       const updated = await prisma.job.update({
         where: { id },
         data: { status: nextStatus },
@@ -70,6 +89,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Set specific status
     if (action === "setStatus" && updates.status) {
+      const gateError = await checkPrepressGate(id, updates.status);
+      if (gateError) return NextResponse.json({ error: gateError }, { status: 409 });
       const updated = await prisma.job.update({
         where: { id },
         data: { status: updates.status },

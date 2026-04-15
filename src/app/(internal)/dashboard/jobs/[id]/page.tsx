@@ -1308,6 +1308,11 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
+      {/* 6a. PROOFS                                                         */}
+      {/* ================================================================= */}
+      <ProofsCard jobId={jobId} />
+
+      {/* ================================================================= */}
       {/* 6b. PRE-PRESS INSTRUCTIONS                                         */}
       {/* ================================================================= */}
       <Card>
@@ -1585,5 +1590,103 @@ export default function JobDetailPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Proofs card — tied to job, visible to customer via portal
+function ProofsCard({ jobId }: { jobId: string }) {
+  const [proofs, setProofs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const load = async () => {
+    try {
+      const res = await fetch(`/api/proofs?jobId=${jobId}`);
+      const data = await res.json();
+      setProofs(data.proofs || []);
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [jobId]);
+
+  const createProof = async () => {
+    if (!fileName.trim()) return;
+    await fetch("/api/proofs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, fileName, fileUrl: fileUrl || null, notes: notes || null }),
+    });
+    setFileName(""); setFileUrl(""); setNotes(""); setAdding(false);
+    load();
+  };
+
+  const decide = async (proofId: string, action: "approve" | "reject") => {
+    await fetch("/api/proofs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, proofId }),
+    });
+    load();
+  };
+
+  const statusBadge = (s: string) => {
+    if (s === "APPROVED") return "bg-emerald-100 text-emerald-700";
+    if (s === "REJECTED") return "bg-red-100 text-red-700";
+    return "bg-amber-100 text-amber-700";
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2"><FileImage className="h-4 w-4" />Proofs</CardTitle>
+        <Button variant="outline" size="sm" onClick={() => setAdding(!adding)} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" />{adding ? "Cancel" : "Upload Proof"}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {adding && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+            <Input placeholder="File name (e.g., proof-v1.pdf)" value={fileName} onChange={(e) => setFileName(e.target.value)} />
+            <Input placeholder="File URL (paste link to stored PDF)" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} />
+            <Input placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Button size="sm" onClick={createProof} className="gap-1.5">
+              <Send className="h-3.5 w-3.5" />Send to Customer
+            </Button>
+          </div>
+        )}
+        {loading ? (
+          <p className="text-sm text-gray-400">Loading proofs...</p>
+        ) : proofs.length === 0 ? (
+          <p className="text-sm text-gray-400">No proofs yet. Upload the first round for customer review.</p>
+        ) : (
+          <div className="space-y-2">
+            {proofs.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">v{p.version}</span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadge(p.status)}`}>{p.status}</span>
+                    {p.fileUrl && <a href={p.fileUrl} target="_blank" rel="noopener" className="text-xs text-brand-600 hover:underline">{p.fileName || "view"}</a>}
+                    {!p.fileUrl && <span className="text-xs text-gray-500">{p.fileName}</span>}
+                  </div>
+                  {p.notes && <p className="text-xs text-gray-500 mt-0.5">{p.notes}</p>}
+                </div>
+                {p.status === "PENDING" && (
+                  <div className="flex gap-2">
+                    <button onClick={() => decide(p.id, "approve")} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Approve</button>
+                    <button onClick={() => decide(p.id, "reject")} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Reject</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-gray-400 mt-3">Approving a proof unlocks the printing gate — the job can then advance to PRINTING.</p>
+      </CardContent>
+    </Card>
   );
 }
