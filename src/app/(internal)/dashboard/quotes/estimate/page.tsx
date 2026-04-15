@@ -526,8 +526,10 @@ function EstimateContent() {
             ...prev,
             customerName: req.customerName || prev.customerName,
             jobName: req.jobTitle || req.descriptionType || prev.jobName,
-            quantity: req.quantity1 || prev.quantity,
-            quantityTiers: [req.quantity2, req.quantity3, req.quantity4, req.quantity5].filter(Boolean) as number[],
+            quantity: Number(req.quantity1 || req.quantity2 || req.quantity3 || prev.quantity) || prev.quantity,
+            quantityTiers: [req.quantity2, req.quantity3, req.quantity4, req.quantity5]
+              .map((q: any) => Number(q))
+              .filter((q: number) => q && !isNaN(q)),
             finishedWidth: req.finishedWidth || prev.finishedWidth,
             finishedHeight: req.finishedHeight || prev.finishedHeight,
             finishedDepth: req.finishedDepth || prev.finishedDepth,

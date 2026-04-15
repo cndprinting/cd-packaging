@@ -949,6 +949,7 @@ model QuoteRequest {
   colorsSide2       String?
   coatingSide1      String?
   coatingSide2      String?
+  customColorCoatingNotes String?
   flatWidth         Float?
   flatHeight        Float?
   finishedWidth     Float?

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Plus, X, Loader2, Search, Clock, Check, ArrowRight } from "lucide-react";
+import { FileText, Plus, X, Loader2, Search, Clock, Check, ArrowRight, FileBarChart } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,6 @@ const statusColors: Record<string, string> = {
 };
 
 interface Company { id: string; name: string; }
-interface Vendor { id: string; name: string; }
 
 export default function QuoteRequestsPage() {
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
@@ -42,7 +41,6 @@ export default function QuoteRequestsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [userRole, setUserRole] = useState("");
   const [view, setView] = useState<"active" | "completed" | "all">("active");
 
@@ -52,16 +50,16 @@ export default function QuoteRequestsPage() {
     quantity1: "", quantity2: "", quantity3: "", quantity4: "", quantity5: "",
     pages: "", coverType: "self_cover",
     colorsSide1: "", colorsSide2: "", coatingSide1: "", coatingSide2: "",
+    customColorCoatingNotes: "",
     flatWidth: "", flatHeight: "", finishedWidth: "", finishedHeight: "", finishedDepth: "",
     paperWeight: "", paperDescription: "", paperType: "cover",
-    finishing: "", specialInstructions: "", vendorName: "", deliveryInstructions: "",
+    finishing: "", specialInstructions: "", deliveryInstructions: "",
   });
   const update = (f: string, v: string) => setForm(p => ({ ...p, [f]: v }));
 
   useEffect(() => {
     fetch("/api/quote-requests").then(r => r.json()).then(d => setRequests(d.requests || [])).catch(() => {}).finally(() => setLoading(false));
     fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
-    fetch("/api/companies?type=vendor").then(r => r.json()).then(d => setVendors(d.companies || [])).catch(() => {});
     fetch("/api/auth/session").then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role); }).catch(() => {});
   }, []);
 
@@ -102,7 +100,36 @@ export default function QuoteRequestsPage() {
             <p className="text-sm text-gray-500">Submit specs for estimating</p>
           </div>
         </div>
-        <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Request</Button>
+        <div className="flex gap-2">
+          <label className="cursor-pointer">
+            <Button variant="outline" className="gap-1.5" asChild>
+              <span><FileBarChart className="h-4 w-4" />Import Order Form</span>
+            </Button>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append("file", file);
+                try {
+                  const res = await fetch("/api/import", { method: "POST", body: fd });
+                  const data = await res.json();
+                  if (res.ok) {
+                    alert(`Imported ${data.imported} line items (${data.totalQuantity?.toLocaleString() || 0} total units)`);
+                    window.location.reload();
+                  } else {
+                    alert(data.error || "Import failed");
+                  }
+                } catch { alert("Import failed"); }
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Request</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -277,8 +304,22 @@ export default function QuoteRequestsPage() {
 
                 {/* Row 5: Pages + Cover */}
                 <div className="grid grid-cols-3 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Pages</label>
-                    <Input type="number" value={form.pages} onChange={(e) => update("pages", e.target.value)} placeholder="e.g. 28" />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Pages {form.descriptionType === "folding_carton" && <span className="text-gray-400">(max 2 for carton)</span>}
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={form.descriptionType === "folding_carton" ? "2" : undefined}
+                      value={form.pages}
+                      onChange={(e) => {
+                        let v = e.target.value;
+                        if (form.descriptionType === "folding_carton" && parseInt(v) > 2) v = "2";
+                        update("pages", v);
+                      }}
+                      placeholder={form.descriptionType === "folding_carton" ? "1 or 2" : "e.g. 28"}
+                    />
                   </div>
                   <div><label className="block text-xs font-medium text-gray-700 mb-1">Cover Type</label>
                     <Select value={form.coverType} onChange={(e) => update("coverType", e.target.value)} options={[
@@ -361,20 +402,44 @@ export default function QuoteRequestsPage() {
                   </div>
                 </div>
 
-                {/* Row 9: Paper */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Paper Weight</label>
-                    <Input value={form.paperWeight} onChange={(e) => update("paperWeight", e.target.value)} placeholder="e.g. 18pt, 100lb" />
+                {/* Custom Color / Coating notes (CSRs can add nuance) */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Custom Color / Coating Notes</label>
+                  <Input
+                    value={form.customColorCoatingNotes}
+                    onChange={(e) => update("customColorCoatingNotes", e.target.value)}
+                    placeholder="e.g. PMS 186 + foil stamp, touch plate red, etc."
+                  />
+                </div>
+
+                {/* Row 9: Paper — standardized weight dropdown with custom fallback */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Paper Weight / Stock</label>
+                    <Select
+                      value={form.paperWeight}
+                      onChange={(e) => update("paperWeight", e.target.value)}
+                      options={[
+                        { value: "", label: "Select..." },
+                        { value: "16pt C1S", label: "16pt C1S" },
+                        { value: "16pt C2S", label: "16pt C2S" },
+                        { value: "18pt C1S", label: "18pt C1S" },
+                        { value: "18pt C2S", label: "18pt C2S" },
+                        { value: "24pt C1S", label: "24pt C1S" },
+                        { value: "24pt C2S", label: "24pt C2S" },
+                        { value: "custom", label: "Custom (specify →)" },
+                      ]}
+                    />
                   </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Paper Description</label>
-                    <Input value={form.paperDescription} onChange={(e) => update("paperDescription", e.target.value)} placeholder="e.g. C1S SBS" />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Paper Type</label>
-                    <Select value={form.paperType} onChange={(e) => update("paperType", e.target.value)} options={[
-                      { value: "cover", label: "Cover" },
-                      { value: "text", label: "Text" },
-                      { value: "board", label: "Board" },
-                    ]} />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      {form.paperWeight === "custom" ? "Custom Paper Description *" : "Paper Description (optional)"}
+                    </label>
+                    <Input
+                      value={form.paperDescription}
+                      onChange={(e) => update("paperDescription", e.target.value)}
+                      placeholder={form.paperWeight === "custom" ? "e.g. 100# Cougar Natural Cover" : "e.g. FSC-certified, recycled"}
+                    />
                   </div>
                 </div>
 
@@ -388,14 +453,10 @@ export default function QuoteRequestsPage() {
                   <Input value={form.specialInstructions} onChange={(e) => update("specialInstructions", e.target.value)} placeholder="Any special notes..." />
                 </div>
 
-                {/* Row 12: Vendor + Delivery */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Vendor</label>
-                    <Select value={form.vendorName} onChange={(e) => update("vendorName", e.target.value)} options={[{ value: "", label: "Select vendor..." }, ...vendors.map(v => ({ value: v.name, label: v.name }))]} />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Delivery Instructions</label>
-                    <Input value={form.deliveryInstructions} onChange={(e) => update("deliveryInstructions", e.target.value)} placeholder="Delivery details..." />
-                  </div>
+                {/* Row 12: Delivery — vendor removed per CSR feedback; Mary picks vendor in estimating */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Delivery Instructions</label>
+                  <Input value={form.deliveryInstructions} onChange={(e) => update("deliveryInstructions", e.target.value)} placeholder="Delivery details..." />
                 </div>
 
                 <div className="flex gap-2 pt-2">

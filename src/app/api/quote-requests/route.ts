@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
         paperType: body.paperType || null,
         finishing: body.finishing || null,
         specialInstructions: body.specialInstructions || null,
+        customColorCoatingNotes: body.customColorCoatingNotes || null,
         vendorName: body.vendorName || null,
         deliveryInstructions: body.deliveryInstructions || null,
         submittedBy: session.id,
