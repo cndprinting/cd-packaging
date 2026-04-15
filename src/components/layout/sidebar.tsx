@@ -22,6 +22,7 @@ const internalNav = [
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
   // { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck }, // Archived — team doesn't need it (Apr 2026)
+  { label: "Pre-Press", href: "/dashboard/prepress", icon: FileCheck },
   { label: "Production", href: "/dashboard/production", icon: Factory },
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
