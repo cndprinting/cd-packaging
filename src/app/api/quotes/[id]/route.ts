@@ -27,6 +27,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         status: quote.status.toLowerCase(),
         validUntil: quote.validUntil?.toISOString().split("T")[0] || "",
         notes: quote.notes,
+        customerNotes: quote.customerNotes,
         specs: quote.specs,
         createdBy: quote.createdBy,
         convertedJobId: quote.convertedJobId,

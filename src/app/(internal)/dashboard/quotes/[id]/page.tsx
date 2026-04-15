@@ -30,6 +30,7 @@ interface QuoteData {
   status: string;
   validUntil: string;
   notes: string | null;
+  customerNotes: string | null;
   specs: string | null;
   convertedJobId: string | null;
   createdAt: string;
@@ -347,13 +348,24 @@ export default function QuoteDetailPage() {
       {quote.notes && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Notes</CardTitle>
+            <CardTitle className="text-base">Internal Notes</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{quote.notes}</p>
           </CardContent>
         </Card>
       )}
+
+      {/* Customer-facing notes (editable by CSRs) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Customer Notes</CardTitle>
+          <p className="text-xs text-gray-500 mt-1">Shown to the customer on the quote PDF and email. Use for payment terms, delivery expectations, anything the customer should see.</p>
+        </CardHeader>
+        <CardContent>
+          <CustomerNotesEditor quoteId={quote.id} initial={quote.customerNotes || ""} />
+        </CardContent>
+      </Card>
 
       {/* Volume Selection Modal for Conversion */}
       {showConvertModal && (
@@ -574,6 +586,53 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
         <p className="text-xs text-gray-400">{sublabel}</p>
       </div>
       <span className="text-sm font-semibold text-gray-900">{formatCurrency(amount)}</span>
+    </div>
+  );
+}
+
+function CustomerNotesEditor({ quoteId, initial }: { quoteId: string; initial: string }) {
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // PUT requires status — preserve current by reading first
+      const cur = await fetch(`/api/quotes/${quoteId}`).then(r => r.json());
+      const status = cur?.quote?.status || "draft";
+      await fetch("/api/quotes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quoteId, status, customerNotes: value }),
+      });
+      setSavedAt(new Date());
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        rows={4}
+        placeholder="e.g., Net 30 payment terms. Delivery includes lift gate. Proofs must be approved within 48 hours."
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">
+          {savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : "Unsaved changes save when you click Save"}
+        </p>
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || value === initial}
+          className="px-3 py-1.5 text-sm rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

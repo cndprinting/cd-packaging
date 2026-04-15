@@ -7,7 +7,7 @@ import {
   ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
   ShieldCheck, FileImage, Loader2, ChevronRight, Pencil, X, Check,
   Trash2, Users, Layers, Printer, Scissors,
-  DollarSign, Info, Plus, Send, CircleAlert,
+  DollarSign, Info, Plus, Send, CircleAlert, FileCheck,
 } from "lucide-react";
 import { demoJobs, PRODUCT_TYPES } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +93,8 @@ interface JobData {
   finalPressCount?: number;
   pressmanInitials?: string;
   pressNotes?: string;
+  paymentNotes?: string;
+  prepressNotes?: string;
   binderyScore?: boolean;
   binderyPerf?: boolean;
   binderyDrill?: boolean;
@@ -298,6 +300,8 @@ export default function JobDetailPage() {
             finalPressCount: j.finalPressCount || 0,
             pressmanInitials: j.pressmanInitials || "",
             pressNotes: j.pressNotes || "",
+            paymentNotes: j.paymentNotes || "",
+            prepressNotes: j.prepressNotes || "",
             binderyScore: j.binderyScore || false,
             binderyPerf: j.binderyPerf || false,
             binderyDrill: j.binderyDrill || false,
@@ -371,6 +375,8 @@ export default function JobDetailPage() {
           finalPressCount: 0,
           pressmanInitials: "",
           pressNotes: "",
+          paymentNotes: "",
+          prepressNotes: "",
           binderyScore: false,
           binderyPerf: false,
           binderyDrill: false,
@@ -1298,6 +1304,42 @@ export default function JobDetailPage() {
               onBlur={(e) => updateJobField("binderyNotes", e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 6b. PRE-PRESS INSTRUCTIONS                                         */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><FileCheck className="h-4 w-4" />Pre-Press Instructions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <textarea
+            defaultValue={job.prepressNotes || ""}
+            placeholder="Notes for Michael/Kevin — proof rounds, structural design, plate requirements, trapping..."
+            rows={3}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            onBlur={(e) => updateJobField("prepressNotes", e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 6c. PAYMENT INFO / TERMS                                           */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Payment Info</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <textarea
+            defaultValue={job.paymentNotes || ""}
+            placeholder="Payment terms, deposit received, PO reference, billing instructions..."
+            rows={3}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            onBlur={(e) => updateJobField("paymentNotes", e.target.value)}
+          />
         </CardContent>
       </Card>
 

@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "inkFront", "inkBack", "varnish", "coating", "pressAssignment", "pressFormat", "paperSource",
       "imposition", "runningSize", "pressmanInitials", "binderyOther", "binderyNotes",
       "deliveryPackaging", "deliveryTo", "samplesTo", "vendorInfo", "pressNotes",
-      "plantLocation",
+      "paymentNotes", "prepressNotes", "plantLocation",
     ];
     const boolFields = [
       "fscCertified", "pressCheck", "ledInk", "binderyScore", "binderyPerf",

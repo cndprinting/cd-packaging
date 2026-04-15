@@ -69,7 +69,7 @@ export async function PUT(request: NextRequest) {
     const session = await getSession();
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
-    const { id, status, quantity } = await request.json();
+    const { id, status, quantity, customerNotes } = await request.json();
     if (!id || !status) return NextResponse.json({ error: "ID and status required" }, { status: 400 });
 
     const prismaModule = await import("@/lib/prisma");
@@ -90,7 +90,13 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    await prisma.quote.update({ where: { id }, data: { status: dbStatus as "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" | "ARCHIVED" } });
+    await prisma.quote.update({
+      where: { id },
+      data: {
+        status: dbStatus as "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" | "ARCHIVED",
+        ...(customerNotes !== undefined ? { customerNotes } : {}),
+      },
+    });
 
     // If converting to job, create the job
     if (status === "converted") {

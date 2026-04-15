@@ -320,6 +320,8 @@ model Job {
   proofDate        DateTime?
   enteredDate      DateTime?
   pressNotes       String?
+  paymentNotes     String?
+  prepressNotes    String?
 
   // Labor Tracking
   estimatedHours   Float?    // total estimated labor hours for this job
@@ -689,6 +691,7 @@ model Quote {
   status        QuoteStatus @default(DRAFT)
   validUntil    DateTime?
   notes         String?
+  customerNotes String?     // customer-facing notes shown on the quote PDF/email
   specs         String?     // JSON string for dimensions, paper, colors, etc.
   createdBy     String?
   convertedJobId String?
