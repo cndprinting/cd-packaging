@@ -935,12 +935,13 @@ model QuoteRequest {
   status            String   @default("pending") // pending, estimating, completed, cancelled
   dateNeeded        DateTime?
   jobType           String?  // new, exact_reprint, reprint_with_changes
-  pickupJobNumber   String?
+  pickupJobNumber   String?  // previous job number for reprints
   customerName      String
   companyId         String?
   productType       String?  // komori, digital, letterpress, bindery, vendor
   descriptionType   String?  // flyer, postcard, brochure, book, etc.
   jobTitle          String?
+  // Legacy quantity fields kept for backwards compat; new requests use lineItems
   quantity1         Int?
   quantity2         Int?
   quantity3         Int?
@@ -948,23 +949,84 @@ model QuoteRequest {
   quantity5         Int?
   pages             Int?
   coverType         String?  // self_cover, plus_cover
+  orientation       String?  // portrait, landscape
+  // Proofs
+  lowResProofs      Int?
+  hiResProofs       Int?
+  // Colors
   colorsSide1       String?
   colorsSide2       String?
+  // Coatings (expanded per Mary's form)
   coatingSide1      String?
   coatingSide2      String?
+  floodUv           Boolean  @default(false)
+  spotUv            Boolean  @default(false)
+  uvSides           String?  // "1" or "2"
+  floodLedUv        Boolean  @default(false)
+  spotLedUv         Boolean  @default(false)
+  ledUvSides        String?
+  aqueous           Boolean  @default(false)
+  drytrap           Boolean  @default(false)
   customColorCoatingNotes String?
+  // Sizes (defaults for all lines; lineItems can override)
   flatWidth         Float?
   flatHeight        Float?
   finishedWidth     Float?
   finishedHeight    Float?
   finishedDepth     Float?
+  hasBleeds         Boolean  @default(false)
+  // Paper
   paperWeight       String?
   paperDescription  String?
   paperType         String?  // text, cover
-  finishing         String?  // JSON array of finishing operations
+  // Folding / scoring / perf
+  foldType          String?
+  score             Boolean  @default(false)
+  perf              Boolean  @default(false)
+  // Die / foil / emboss
+  dieCut            Boolean  @default(false)
+  existingDieNumber String?
+  numPockets        Int?
+  dieVHSize         String?  // "V" or "H" + size
+  foil              String?  // spec description
+  foilIsNew         Boolean  @default(false)
+  emboss            String?
+  embossIsNew       Boolean  @default(false)
+  // Bindery
+  saddleStitch      Boolean  @default(false)
+  cornerStitch      Boolean  @default(false)
+  perfectBind       Boolean  @default(false)
+  plasticCoil       String?
+  wireO             String?
+  gbc               String?
+  caseBind          String?
+  // Finishing
+  lamination        String?
+  drill             Boolean  @default(false)
+  bandIn            String?
+  wrapIn            String?
+  padIn             String?
+  ncrPad            Boolean  @default(false)
+  numbering         String?
+  punch             Boolean  @default(false)
+  roundCorner       Boolean  @default(false)
+  // Mailing
+  mailingServices   String?
+  waferSeal         Boolean  @default(false)
+  waferSealTabs     Int?
+  waferSealLocation String?
+  // Generic finishing fallback
+  finishing         String?  // JSON array of finishing operations (legacy)
+  // Artwork
+  artworkUrl        String?
+  artworkFileName   String?
+  artworkIsNew      Boolean  @default(true)
+  artworkNotes      String?
+  // Notes + delivery
   specialInstructions String?
   vendorName        String?
   deliveryInstructions String?
+  // Tracking
   submittedBy       String
   submittedByName   String
   estimatedBy       String?
@@ -972,8 +1034,32 @@ model QuoteRequest {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  lineItems         QuoteRequestLineItem[]
+
   @@index([status])
   @@index([submittedBy])
+}
+
+// Per-SKU/version breakdown on a quote request — supports multi-version orders
+// (e.g., Scar Heal with 2oz / 4oz / 8oz boxes each with own qty/die).
+model QuoteRequestLineItem {
+  id               String       @id @default(cuid())
+  quoteRequestId   String
+  quoteRequest     QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  sortOrder        Int          @default(0)
+  version          String       // label, e.g., "2oz box", "Side A", "English"
+  quantity         Int          @default(0)
+  // Optional per-line overrides of request-level defaults
+  flatWidth        Float?
+  flatHeight       Float?
+  finishedWidth    Float?
+  finishedHeight   Float?
+  finishedDepth    Float?
+  dieNumber        String?
+  dieIsNew         Boolean      @default(false)
+  notes            String?
+
+  @@index([quoteRequestId])
 }
 
 // ─── PAPER USAGE & VENDOR PURCHASES ──────────────────────
