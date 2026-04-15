@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Plus, X, Loader2, Search, Clock, Check, ArrowRight, FileBarChart } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Plus, X, Loader2, ArrowRight, FileBarChart, Trash2, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ interface QuoteRequest {
   submittedByName: string;
   createdAt: string;
   convertedQuoteId: string | null;
+  lineItems?: { id: string; version: string; quantity: number }[];
 }
 
 const statusColors: Record<string, string> = {
@@ -34,6 +35,134 @@ const statusColors: Record<string, string> = {
 
 interface Company { id: string; name: string; }
 
+type LineItem = {
+  version: string;
+  quantity: string;
+  flatWidth: string;
+  flatHeight: string;
+  finishedWidth: string;
+  finishedHeight: string;
+  finishedDepth: string;
+  dieNumber: string;
+  dieIsNew: boolean;
+  notes: string;
+};
+
+const emptyLineItem = (n: number): LineItem => ({
+  version: `Version ${n}`,
+  quantity: "",
+  flatWidth: "", flatHeight: "",
+  finishedWidth: "", finishedHeight: "", finishedDepth: "",
+  dieNumber: "", dieIsNew: false, notes: "",
+});
+
+type FormState = {
+  // Customer basics
+  jobType: string; pickupJobNumber: string;
+  customerName: string; companyId: string;
+  dateNeeded: string;
+  productType: string; descriptionType: string; jobTitle: string;
+  pages: string; coverType: string; orientation: string;
+  // Proofs
+  lowResProofs: string; hiResProofs: string;
+  // Colors
+  colorsSide1: string; colorsSide2: string;
+  // Coatings
+  coatingSide1: string; coatingSide2: string;
+  floodUv: boolean; spotUv: boolean; uvSides: string;
+  floodLedUv: boolean; spotLedUv: boolean; ledUvSides: string;
+  aqueous: boolean; drytrap: boolean;
+  customColorCoatingNotes: string;
+  // Size (only used if no line items override)
+  flatWidth: string; flatHeight: string;
+  finishedWidth: string; finishedHeight: string; finishedDepth: string;
+  hasBleeds: boolean;
+  // Paper
+  paperWeight: string; paperDescription: string; paperType: string;
+  // Bindery / folding
+  foldType: string; score: boolean; perf: boolean; dieCut: boolean;
+  existingDieNumber: string; numPockets: string; dieVHSize: string;
+  // Foil / emboss
+  foil: string; foilIsNew: boolean;
+  emboss: string; embossIsNew: boolean;
+  // Binding
+  saddleStitch: boolean; cornerStitch: boolean; perfectBind: boolean;
+  plasticCoil: string; wireO: string; gbc: string; caseBind: string;
+  lamination: string;
+  // Finishing add-ons
+  drill: boolean; bandIn: string; wrapIn: string; padIn: string;
+  ncrPad: boolean; numbering: string; punch: boolean; roundCorner: boolean;
+  // Mailing
+  mailingServices: string;
+  waferSeal: boolean; waferSealTabs: string; waferSealLocation: string;
+  // Art
+  artworkUrl: string; artworkFileName: string; artworkIsNew: boolean; artworkNotes: string;
+  // Notes
+  specialInstructions: string; vendorName: string; deliveryInstructions: string;
+};
+
+const defaultForm: FormState = {
+  jobType: "new", pickupJobNumber: "",
+  customerName: "", companyId: "",
+  dateNeeded: "",
+  productType: "komori", descriptionType: "", jobTitle: "",
+  pages: "", coverType: "self_cover", orientation: "",
+  lowResProofs: "1", hiResProofs: "1",
+  colorsSide1: "", colorsSide2: "",
+  coatingSide1: "", coatingSide2: "",
+  floodUv: false, spotUv: false, uvSides: "",
+  floodLedUv: false, spotLedUv: false, ledUvSides: "",
+  aqueous: false, drytrap: false,
+  customColorCoatingNotes: "",
+  flatWidth: "", flatHeight: "",
+  finishedWidth: "", finishedHeight: "", finishedDepth: "",
+  hasBleeds: false,
+  paperWeight: "", paperDescription: "", paperType: "cover",
+  foldType: "", score: false, perf: false, dieCut: false,
+  existingDieNumber: "", numPockets: "", dieVHSize: "",
+  foil: "", foilIsNew: false,
+  emboss: "", embossIsNew: false,
+  saddleStitch: false, cornerStitch: false, perfectBind: false,
+  plasticCoil: "", wireO: "", gbc: "", caseBind: "",
+  lamination: "",
+  drill: false, bandIn: "", wrapIn: "", padIn: "",
+  ncrPad: false, numbering: "", punch: false, roundCorner: false,
+  mailingServices: "",
+  waferSeal: false, waferSealTabs: "", waferSealLocation: "",
+  artworkUrl: "", artworkFileName: "", artworkIsNew: true, artworkNotes: "",
+  specialInstructions: "", vendorName: "", deliveryInstructions: "",
+};
+
+// Collapsible section
+function Section({ title, subtitle, defaultOpen = true, children }: { title: string; subtitle?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-gray-200 rounded-lg">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">{title}</div>
+          {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
+        </div>
+        {open ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+      </button>
+      {open && <div className="px-4 pb-4 pt-1 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>{children}</div>;
+}
+
+function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
+      {label}
+    </label>
+  );
+}
+
 export default function QuoteRequestsPage() {
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,18 +173,15 @@ export default function QuoteRequestsPage() {
   const [userRole, setUserRole] = useState("");
   const [view, setView] = useState<"active" | "completed" | "all">("active");
 
-  const [form, setForm] = useState({
-    dateNeeded: "", jobType: "new", pickupJobNumber: "", customerName: "", productType: "komori",
-    descriptionType: "", jobTitle: "",
-    quantity1: "", quantity2: "", quantity3: "", quantity4: "", quantity5: "",
-    pages: "", coverType: "self_cover",
-    colorsSide1: "", colorsSide2: "", coatingSide1: "", coatingSide2: "",
-    customColorCoatingNotes: "",
-    flatWidth: "", flatHeight: "", finishedWidth: "", finishedHeight: "", finishedDepth: "",
-    paperWeight: "", paperDescription: "", paperType: "cover",
-    finishing: "", specialInstructions: "", deliveryInstructions: "",
-  });
-  const update = (f: string, v: string) => setForm(p => ({ ...p, [f]: v }));
+  const [form, setForm] = useState<FormState>(defaultForm);
+  const [lineItems, setLineItems] = useState<LineItem[]>([emptyLineItem(1)]);
+  const update = <K extends keyof FormState>(f: K, v: FormState[K]) => setForm(p => ({ ...p, [f]: v }));
+  const updateLine = (idx: number, patch: Partial<LineItem>) => setLineItems(p => p.map((li, i) => i === idx ? { ...li, ...patch } : li));
+  const addLine = () => setLineItems(p => [...p, emptyLineItem(p.length + 1)]);
+  const removeLine = (idx: number) => setLineItems(p => p.length === 1 ? p : p.filter((_, i) => i !== idx));
+
+  const isReprint = form.jobType === "exact_reprint" || form.jobType === "reprint_with_changes";
+  const isExactReprint = form.jobType === "exact_reprint";
 
   useEffect(() => {
     fetch("/api/quote-requests").then(r => r.json()).then(d => setRequests(d.requests || [])).catch(() => {}).finally(() => setLoading(false));
@@ -65,15 +191,23 @@ export default function QuoteRequestsPage() {
 
   const isEstimator = ["OWNER", "GM", "ADMIN", "ESTIMATOR", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"].includes(userRole);
 
+  const resetForm = () => { setForm(defaultForm); setLineItems([emptyLineItem(1)]); setError(""); };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!form.customerName) { setError("Customer name required"); return; }
+    const validLines = lineItems.filter(li => li.version.trim() && li.quantity);
+    if (validLines.length === 0) { setError("At least one line item with a quantity required"); return; }
     setCreating(true);
     try {
-      const res = await fetch("/api/quote-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const res = await fetch("/api/quote-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, lineItems: validLines }),
+      });
       const data = await res.json();
-      if (res.ok) { setRequests(prev => [data.request, ...prev]); setShowModal(false); }
+      if (res.ok) { setRequests(prev => [data.request, ...prev]); setShowModal(false); resetForm(); }
       else setError(data.error || "Failed");
     } catch { setError("Something went wrong"); }
     setCreating(false);
@@ -101,7 +235,7 @@ export default function QuoteRequestsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <label className="cursor-pointer">
+          <label className="cursor-pointer" title="Bulk-import line items from a customer PO / order form spreadsheet (xlsx or csv). Use this when the customer sends a sheet with SKUs + quantities you want to attach to a quote or job — not for routine quote requests.">
             <Button variant="outline" className="gap-1.5" asChild>
               <span><FileBarChart className="h-4 w-4" />Import Order Form</span>
             </Button>
@@ -118,8 +252,7 @@ export default function QuoteRequestsPage() {
                   const res = await fetch("/api/import", { method: "POST", body: fd });
                   const data = await res.json();
                   if (res.ok) {
-                    alert(`Imported ${data.imported} line items (${data.totalQuantity?.toLocaleString() || 0} total units)`);
-                    window.location.reload();
+                    alert(`Parsed ${data.lineItems?.length || 0} line items (${data.totalQuantity?.toLocaleString() || 0} total units). Attach to a job from the job ticket page.`);
                   } else {
                     alert(data.error || "Import failed");
                   }
@@ -128,7 +261,7 @@ export default function QuoteRequestsPage() {
               }}
             />
           </label>
-          <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Request</Button>
+          <Button onClick={() => { resetForm(); setShowModal(true); }} className="gap-2"><Plus className="h-4 w-4" />New Request</Button>
         </div>
       </div>
 
@@ -150,9 +283,7 @@ export default function QuoteRequestsPage() {
             key={tab.id}
             onClick={() => setView(tab.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              view === tab.id
-                ? "border-brand-600 text-brand-700"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+              view === tab.id ? "border-brand-600 text-brand-700" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
             {tab.label}
@@ -174,7 +305,11 @@ export default function QuoteRequestsPage() {
                   <p className="font-semibold text-gray-900">{req.customerName} — {req.jobTitle || req.descriptionType || "Untitled"}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {req.productType && <span className="mr-3">Type: {req.productType}</span>}
-                    {req.quantity1 && <span className="mr-3">Qty: {req.quantity1.toLocaleString()}</span>}
+                    {req.lineItems && req.lineItems.length > 0 ? (
+                      <span className="mr-3">{req.lineItems.length} version{req.lineItems.length > 1 ? "s" : ""} · {req.lineItems.reduce((s, l) => s + (l.quantity || 0), 0).toLocaleString()} total</span>
+                    ) : req.quantity1 ? (
+                      <span className="mr-3">Qty: {req.quantity1.toLocaleString()}</span>
+                    ) : null}
                     {req.dateNeeded && <span>Need by: {formatDate(req.dateNeeded)}</span>}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">Submitted by {req.submittedByName} on {formatDate(req.createdAt)}</p>
@@ -223,203 +358,195 @@ export default function QuoteRequestsPage() {
         <>
           <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowModal(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl p-6 max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4 sticky top-0 bg-white z-10 pb-2 border-b border-gray-100">
                 <h2 className="text-lg font-semibold">New Quote Request</h2>
                 <button onClick={() => setShowModal(false)}><X className="h-5 w-5 text-gray-400" /></button>
               </div>
-              <form onSubmit={handleCreate} className="space-y-4">
+              <form onSubmit={handleCreate} className="space-y-3">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
-                {/* Row 1: Job Type + Date + Pickup */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Job Type</label>
-                    <Select value={form.jobType} onChange={(e) => update("jobType", e.target.value)} options={[
-                      { value: "new", label: "New Job" },
-                      { value: "exact_reprint", label: "Exact Reprint" },
-                      { value: "reprint_with_changes", label: "Reprint w/ Changes" },
-                    ]} />
+                {/* 1. Job type + customer basics */}
+                <Section title="Job Basics" defaultOpen={true}>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Reprint Type</label>
+                    <div className="flex gap-2">
+                      {[
+                        { v: "new", label: "New Job" },
+                        { v: "exact_reprint", label: "Exact Reprint" },
+                        { v: "reprint_with_changes", label: "Reprint w/ Changes" },
+                      ].map(opt => (
+                        <button key={opt.v} type="button" onClick={() => update("jobType", opt.v)}
+                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${form.jobType === opt.v ? "bg-brand-50 border-brand-500 text-brand-700" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Date Needed</label>
-                    <Input type="date" value={form.dateNeeded} onChange={(e) => update("dateNeeded", e.target.value)} />
-                  </div>
-                  {form.jobType !== "new" && (
-                    <div><label className="block text-xs font-medium text-gray-700 mb-1">Pickup Job #</label>
-                      <Input value={form.pickupJobNumber} onChange={(e) => update("pickupJobNumber", e.target.value)} placeholder="Previous job #" />
+                  {isReprint && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                      <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <Field label="Previous Job #">
+                          <Input value={form.pickupJobNumber} onChange={(e) => update("pickupJobNumber", e.target.value)} placeholder="e.g. 24-1234" />
+                        </Field>
+                      </div>
                     </div>
                   )}
-                </div>
-
-                {/* Row 2: Customer + Product Type */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Customer *</label>
-                    <Combobox value={form.customerName} onChange={(_id, label) => update("customerName", label)}
-                      options={companies.map(c => ({ id: c.id, label: c.name }))} placeholder="Select customer..." allowCreate />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Customer *">
+                      <Combobox value={form.customerName} onChange={(id, label) => { update("customerName", label); update("companyId", id || ""); }}
+                        options={companies.map(c => ({ id: c.id, label: c.name }))} placeholder="Select customer..." allowCreate />
+                    </Field>
+                    <Field label="Date Needed">
+                      <Input type="date" value={form.dateNeeded} onChange={(e) => update("dateNeeded", e.target.value)} />
+                    </Field>
                   </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Product Type</label>
-                    <Select value={form.productType} onChange={(e) => update("productType", e.target.value)} options={[
-                      { value: "komori", label: "Komori (Offset)" },
-                      { value: "digital", label: "Digital" },
-                      { value: "letterpress", label: "Letterpress" },
-                      { value: "bindery", label: "Bindery Only" },
-                      { value: "vendor", label: "Outside Vendor" },
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Product Type">
+                      <Select value={form.productType} onChange={(e) => update("productType", e.target.value)} options={[
+                        { value: "komori", label: "Komori (Offset)" },
+                        { value: "digital", label: "Digital" },
+                        { value: "letterpress", label: "Letterpress" },
+                        { value: "bindery", label: "Bindery Only" },
+                        { value: "vendor", label: "Outside Vendor" },
+                      ]} />
+                    </Field>
+                    <Field label="Job Title">
+                      <Input value={form.jobTitle} onChange={(e) => update("jobTitle", e.target.value)} placeholder="Job name" />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="Description">
+                      <Select value={form.descriptionType} onChange={(e) => update("descriptionType", e.target.value)} options={[
+                        { value: "", label: "Select type..." },
+                        { value: "folding_carton", label: "Folding Carton" },
+                        { value: "flyer", label: "Flyer" },
+                        { value: "postcard", label: "Postcard" },
+                        { value: "brochure", label: "Brochure" },
+                        { value: "book", label: "Book" },
+                        { value: "pocket_folder", label: "Pocket Folder" },
+                        { value: "letterhead", label: "Letterhead" },
+                        { value: "envelope", label: "Sleeve Envelope" },
+                        { value: "business_card", label: "Business Card" },
+                        { value: "door_hanger", label: "Door Hanger" },
+                        { value: "hang_tag", label: "Hang Tag" },
+                      ]} />
+                    </Field>
+                    <Field label={`Pages${form.descriptionType === "folding_carton" ? " (max 2)" : ""}`}>
+                      <Input type="number" min="1" max={form.descriptionType === "folding_carton" ? "2" : undefined}
+                        value={form.pages}
+                        onChange={(e) => {
+                          let v = e.target.value;
+                          if (form.descriptionType === "folding_carton" && parseInt(v) > 2) v = "2";
+                          update("pages", v);
+                        }} placeholder="e.g. 28" />
+                    </Field>
+                    <Field label="Cover Type">
+                      <Select value={form.coverType} onChange={(e) => update("coverType", e.target.value)} options={[
+                        { value: "self_cover", label: "Self Cover" },
+                        { value: "plus_cover", label: "Plus Cover" },
+                      ]} />
+                    </Field>
+                  </div>
+                  <Field label="Orientation">
+                    <Select value={form.orientation} onChange={(e) => update("orientation", e.target.value)} options={[
+                      { value: "", label: "Not specified" },
+                      { value: "portrait", label: "Portrait" },
+                      { value: "landscape", label: "Landscape" },
                     ]} />
-                  </div>
-                </div>
+                  </Field>
+                </Section>
 
-                {/* Row 3: Description + Job Title */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                    <Select value={form.descriptionType} onChange={(e) => update("descriptionType", e.target.value)} options={[
-                      { value: "", label: "Select type..." },
-                      { value: "folding_carton", label: "Folding Carton" },
-                      { value: "flyer", label: "Flyer" },
-                      { value: "postcard", label: "Postcard" },
-                      { value: "brochure", label: "Brochure" },
-                      { value: "book", label: "Book" },
-                      { value: "pocket_folder", label: "Pocket Folder" },
-                      { value: "letterhead", label: "Letterhead" },
-                      { value: "envelope", label: "Sleeve Envelope" },
-                      { value: "business_card", label: "Business Card" },
-                      { value: "door_hanger", label: "Door Hanger" },
-                      { value: "hang_tag", label: "Hang Tag" },
-                    ]} />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
-                    <Input value={form.jobTitle} onChange={(e) => update("jobTitle", e.target.value)} placeholder="Job name / description" />
-                  </div>
-                </div>
-
-                {/* Row 4: Quantities */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantities (up to 5 tiers)</label>
-                  <div className="grid grid-cols-5 gap-2">
-                    <Input type="number" value={form.quantity1} onChange={(e) => update("quantity1", e.target.value)} placeholder="Qty 1" />
-                    <Input type="number" value={form.quantity2} onChange={(e) => update("quantity2", e.target.value)} placeholder="Qty 2" />
-                    <Input type="number" value={form.quantity3} onChange={(e) => update("quantity3", e.target.value)} placeholder="Qty 3" />
-                    <Input type="number" value={form.quantity4} onChange={(e) => update("quantity4", e.target.value)} placeholder="Qty 4" />
-                    <Input type="number" value={form.quantity5} onChange={(e) => update("quantity5", e.target.value)} placeholder="Qty 5" />
-                  </div>
-                </div>
-
-                {/* Row 5: Pages + Cover */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Pages {form.descriptionType === "folding_carton" && <span className="text-gray-400">(max 2 for carton)</span>}
-                    </label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max={form.descriptionType === "folding_carton" ? "2" : undefined}
-                      value={form.pages}
-                      onChange={(e) => {
-                        let v = e.target.value;
-                        if (form.descriptionType === "folding_carton" && parseInt(v) > 2) v = "2";
-                        update("pages", v);
-                      }}
-                      placeholder={form.descriptionType === "folding_carton" ? "1 or 2" : "e.g. 28"}
-                    />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Cover Type</label>
-                    <Select value={form.coverType} onChange={(e) => update("coverType", e.target.value)} options={[
-                      { value: "self_cover", label: "Self Cover" },
-                      { value: "plus_cover", label: "Plus Cover" },
-                    ]} />
-                  </div>
-                </div>
-
-                {/* Row 6: Colors */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Colors Side 1</label>
-                    <Select value={form.colorsSide1} onChange={(e) => update("colorsSide1", e.target.value)} options={[
-                      { value: "", label: "Select..." },
-                      { value: "4_process", label: "4 Process (CMYK)" },
-                      { value: "process_1pms", label: "Process + 1 PMS" },
-                      { value: "process_2pms", label: "Process + 2 PMS" },
-                      { value: "black", label: "Black Only" },
-                      { value: "pms", label: "PMS Only" },
-                    ]} />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Colors Side 2</label>
-                    <Select value={form.colorsSide2} onChange={(e) => update("colorsSide2", e.target.value)} options={[
-                      { value: "", label: "Select..." },
-                      { value: "4_process", label: "4 Process (CMYK)" },
-                      { value: "process_1pms", label: "Process + 1 PMS" },
-                      { value: "process_2pms", label: "Process + 2 PMS" },
-                      { value: "black", label: "Black Only" },
-                      { value: "pms", label: "PMS Only" },
-                      { value: "none", label: "None" },
-                    ]} />
-                  </div>
-                </div>
-
-                {/* Row 7: Coatings */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Coating Side 1</label>
-                    <Select value={form.coatingSide1} onChange={(e) => update("coatingSide1", e.target.value)} options={[
-                      { value: "", label: "None" },
-                      { value: "gloss_aq", label: "Gloss AQ" },
-                      { value: "satin_aq", label: "Satin AQ" },
-                      { value: "matte_aq", label: "Matte AQ" },
-                      { value: "soft_touch_aq", label: "Soft Touch AQ" },
-                      { value: "flood_led_uv", label: "Flood LED UV" },
-                      { value: "spot_led_uv", label: "Spot LED UV" },
-                    ]} />
-                  </div>
-                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Coating Side 2</label>
-                    <Select value={form.coatingSide2} onChange={(e) => update("coatingSide2", e.target.value)} options={[
-                      { value: "", label: "None" },
-                      { value: "gloss_aq", label: "Gloss AQ" },
-                      { value: "satin_aq", label: "Satin AQ" },
-                      { value: "matte_aq", label: "Matte AQ" },
-                      { value: "soft_touch_aq", label: "Soft Touch AQ" },
-                      { value: "flood_led_uv", label: "Flood LED UV" },
-                      { value: "spot_led_uv", label: "Spot LED UV" },
-                    ]} />
-                  </div>
-                </div>
-
-                {/* Row 8: Sizes */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Flat Size</label>
-                    <div className="flex gap-2 items-center">
-                      <Input type="number" step="0.0625" value={form.flatWidth} onChange={(e) => update("flatWidth", e.target.value)} placeholder="W" />
-                      <span className="text-gray-400">x</span>
-                      <Input type="number" step="0.0625" value={form.flatHeight} onChange={(e) => update("flatHeight", e.target.value)} placeholder="H" />
+                {/* 2. Line items */}
+                <Section title="Versions & Quantities" subtitle="Add a line per SKU / version. Each can have its own size and die." defaultOpen={true}>
+                  {lineItems.map((li, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-700">Line {idx + 1}</span>
+                        {lineItems.length > 1 && (
+                          <button type="button" onClick={() => removeLine(idx)} className="text-red-500 hover:text-red-700"><Trash2 className="h-3.5 w-3.5" /></button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Field label="Version / SKU">
+                          <Input value={li.version} onChange={(e) => updateLine(idx, { version: e.target.value })} placeholder="e.g. Version A" />
+                        </Field>
+                        <Field label="Quantity">
+                          <Input type="number" value={li.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} placeholder="0" />
+                        </Field>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field label="Flat W x H (optional override)">
+                          <div className="flex gap-1 items-center">
+                            <Input type="number" step="0.0625" value={li.flatWidth} onChange={(e) => updateLine(idx, { flatWidth: e.target.value })} placeholder="W" />
+                            <span className="text-gray-400 text-xs">x</span>
+                            <Input type="number" step="0.0625" value={li.flatHeight} onChange={(e) => updateLine(idx, { flatHeight: e.target.value })} placeholder="H" />
+                          </div>
+                        </Field>
+                        <Field label="Finished W x H x D (optional)">
+                          <div className="flex gap-1 items-center">
+                            <Input type="number" step="0.0625" value={li.finishedWidth} onChange={(e) => updateLine(idx, { finishedWidth: e.target.value })} placeholder="W" />
+                            <span className="text-gray-400 text-xs">x</span>
+                            <Input type="number" step="0.0625" value={li.finishedHeight} onChange={(e) => updateLine(idx, { finishedHeight: e.target.value })} placeholder="H" />
+                            <span className="text-gray-400 text-xs">x</span>
+                            <Input type="number" step="0.0625" value={li.finishedDepth} onChange={(e) => updateLine(idx, { finishedDepth: e.target.value })} placeholder="D" />
+                          </div>
+                        </Field>
+                        {!isExactReprint && (
+                          <Field label="Die # (if different)">
+                            <div className="flex gap-1">
+                              <Input value={li.dieNumber} onChange={(e) => updateLine(idx, { dieNumber: e.target.value })} placeholder="Die #" />
+                              <label className="flex items-center gap-1 text-xs">
+                                <input type="checkbox" checked={li.dieIsNew} onChange={(e) => updateLine(idx, { dieIsNew: e.target.checked })} className="h-3 w-3" />
+                                New
+                              </label>
+                            </div>
+                          </Field>
+                        )}
+                      </div>
+                      <Field label="Line Notes">
+                        <Input value={li.notes} onChange={(e) => updateLine(idx, { notes: e.target.value })} placeholder="version-specific notes..." />
+                      </Field>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Finished Size</label>
-                    <div className="flex gap-2 items-center">
-                      <Input type="number" step="0.0625" value={form.finishedWidth} onChange={(e) => update("finishedWidth", e.target.value)} placeholder="W" />
-                      <span className="text-gray-400">x</span>
-                      <Input type="number" step="0.0625" value={form.finishedHeight} onChange={(e) => update("finishedHeight", e.target.value)} placeholder="H" />
-                      <span className="text-gray-400">x</span>
-                      <Input type="number" step="0.0625" value={form.finishedDepth} onChange={(e) => update("finishedDepth", e.target.value)} placeholder="D" />
-                    </div>
-                  </div>
-                </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5"><Plus className="h-3.5 w-3.5" />Add Version</Button>
+                </Section>
 
-                {/* Custom Color / Coating notes (CSRs can add nuance) */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Custom Color / Coating Notes</label>
-                  <Input
-                    value={form.customColorCoatingNotes}
-                    onChange={(e) => update("customColorCoatingNotes", e.target.value)}
-                    placeholder="e.g. PMS 186 + foil stamp, touch plate red, etc."
-                  />
-                </div>
+                {/* 3. Art & Proofs */}
+                <Section title="Art & Proofs" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Low-Res Proofs">
+                      <Input type="number" value={form.lowResProofs} onChange={(e) => update("lowResProofs", e.target.value)} placeholder="1" />
+                    </Field>
+                    {!isExactReprint && (
+                      <Field label="Hi-Res Proofs">
+                        <Input type="number" value={form.hiResProofs} onChange={(e) => update("hiResProofs", e.target.value)} placeholder="1" />
+                      </Field>
+                    )}
+                  </div>
+                  <div className="flex gap-4">
+                    <Check label="New artwork (not yet supplied)" checked={form.artworkIsNew} onChange={(v) => update("artworkIsNew", v)} />
+                    <Check label="Has bleeds" checked={form.hasBleeds} onChange={(v) => update("hasBleeds", v)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Artwork File URL (if already uploaded)">
+                      <Input value={form.artworkUrl} onChange={(e) => update("artworkUrl", e.target.value)} placeholder="https://..." />
+                    </Field>
+                    <Field label="Artwork File Name">
+                      <Input value={form.artworkFileName} onChange={(e) => update("artworkFileName", e.target.value)} placeholder="job-art.pdf" />
+                    </Field>
+                  </div>
+                  <Field label="Artwork Notes">
+                    <Input value={form.artworkNotes} onChange={(e) => update("artworkNotes", e.target.value)} placeholder="e.g. client sending revised file Mon" />
+                  </Field>
+                </Section>
 
-                {/* Row 9: Paper — standardized weight dropdown with custom fallback */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Paper Weight / Stock</label>
-                    <Select
-                      value={form.paperWeight}
-                      onChange={(e) => update("paperWeight", e.target.value)}
-                      options={[
+                {/* 4. Paper & Size */}
+                <Section title="Paper & Default Size" subtitle="Used when line items don't override" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Paper Weight / Stock">
+                      <Select value={form.paperWeight} onChange={(e) => update("paperWeight", e.target.value)} options={[
                         { value: "", label: "Select..." },
                         { value: "16pt C1S", label: "16pt C1S" },
                         { value: "16pt C2S", label: "16pt C2S" },
@@ -428,38 +555,247 @@ export default function QuoteRequestsPage() {
                         { value: "24pt C1S", label: "24pt C1S" },
                         { value: "24pt C2S", label: "24pt C2S" },
                         { value: "custom", label: "Custom (specify →)" },
-                      ]}
-                    />
+                      ]} />
+                    </Field>
+                    <Field label={form.paperWeight === "custom" ? "Custom Paper Description *" : "Paper Description"}>
+                      <Input value={form.paperDescription} onChange={(e) => update("paperDescription", e.target.value)}
+                        placeholder={form.paperWeight === "custom" ? "e.g. 100# Cougar Natural Cover" : "e.g. FSC-certified"} />
+                    </Field>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      {form.paperWeight === "custom" ? "Custom Paper Description *" : "Paper Description (optional)"}
-                    </label>
-                    <Input
-                      value={form.paperDescription}
-                      onChange={(e) => update("paperDescription", e.target.value)}
-                      placeholder={form.paperWeight === "custom" ? "e.g. 100# Cougar Natural Cover" : "e.g. FSC-certified, recycled"}
-                    />
+                  <Field label="Paper Type">
+                    <Select value={form.paperType} onChange={(e) => update("paperType", e.target.value)} options={[
+                      { value: "cover", label: "Cover" },
+                      { value: "text", label: "Text" },
+                      { value: "bond", label: "Bond" },
+                      { value: "board", label: "Board" },
+                    ]} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Default Flat Size (W x H)">
+                      <div className="flex gap-1 items-center">
+                        <Input type="number" step="0.0625" value={form.flatWidth} onChange={(e) => update("flatWidth", e.target.value)} placeholder="W" />
+                        <span className="text-gray-400">x</span>
+                        <Input type="number" step="0.0625" value={form.flatHeight} onChange={(e) => update("flatHeight", e.target.value)} placeholder="H" />
+                      </div>
+                    </Field>
+                    <Field label="Default Finished Size (W x H x D)">
+                      <div className="flex gap-1 items-center">
+                        <Input type="number" step="0.0625" value={form.finishedWidth} onChange={(e) => update("finishedWidth", e.target.value)} placeholder="W" />
+                        <span className="text-gray-400">x</span>
+                        <Input type="number" step="0.0625" value={form.finishedHeight} onChange={(e) => update("finishedHeight", e.target.value)} placeholder="H" />
+                        <span className="text-gray-400">x</span>
+                        <Input type="number" step="0.0625" value={form.finishedDepth} onChange={(e) => update("finishedDepth", e.target.value)} placeholder="D" />
+                      </div>
+                    </Field>
                   </div>
-                </div>
+                </Section>
 
-                {/* Row 10: Finishing */}
-                <div><label className="block text-xs font-medium text-gray-700 mb-1">Finishing Operations</label>
-                  <Input value={form.finishing} onChange={(e) => update("finishing", e.target.value)} placeholder="e.g. Score, Perf, Fold, Die Cut, Glue, Stitch" />
-                </div>
+                {/* 5. Colors & Coatings */}
+                <Section title="Colors & Coatings" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Colors Side 1">
+                      <Select value={form.colorsSide1} onChange={(e) => update("colorsSide1", e.target.value)} options={[
+                        { value: "", label: "Select..." },
+                        { value: "4_process", label: "4 Process (CMYK)" },
+                        { value: "process_1pms", label: "Process + 1 PMS" },
+                        { value: "process_2pms", label: "Process + 2 PMS" },
+                        { value: "black", label: "Black Only" },
+                        { value: "pms", label: "PMS Only" },
+                      ]} />
+                    </Field>
+                    <Field label="Colors Side 2">
+                      <Select value={form.colorsSide2} onChange={(e) => update("colorsSide2", e.target.value)} options={[
+                        { value: "", label: "Select..." },
+                        { value: "4_process", label: "4 Process (CMYK)" },
+                        { value: "process_1pms", label: "Process + 1 PMS" },
+                        { value: "process_2pms", label: "Process + 2 PMS" },
+                        { value: "black", label: "Black Only" },
+                        { value: "pms", label: "PMS Only" },
+                        { value: "none", label: "None" },
+                      ]} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Coating Side 1">
+                      <Select value={form.coatingSide1} onChange={(e) => update("coatingSide1", e.target.value)} options={[
+                        { value: "", label: "None" },
+                        { value: "gloss_aq", label: "Gloss AQ" },
+                        { value: "satin_aq", label: "Satin AQ" },
+                        { value: "matte_aq", label: "Matte AQ" },
+                        { value: "soft_touch_aq", label: "Soft Touch AQ" },
+                      ]} />
+                    </Field>
+                    <Field label="Coating Side 2">
+                      <Select value={form.coatingSide2} onChange={(e) => update("coatingSide2", e.target.value)} options={[
+                        { value: "", label: "None" },
+                        { value: "gloss_aq", label: "Gloss AQ" },
+                        { value: "satin_aq", label: "Satin AQ" },
+                        { value: "matte_aq", label: "Matte AQ" },
+                        { value: "soft_touch_aq", label: "Soft Touch AQ" },
+                      ]} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1 border border-gray-200 rounded-lg p-2">
+                      <div className="text-xs font-semibold text-gray-700">UV</div>
+                      <Check label="Flood UV" checked={form.floodUv} onChange={(v) => update("floodUv", v)} />
+                      <Check label="Spot UV" checked={form.spotUv} onChange={(v) => update("spotUv", v)} />
+                      {(form.floodUv || form.spotUv) && (
+                        <Select value={form.uvSides} onChange={(e) => update("uvSides", e.target.value)} options={[
+                          { value: "", label: "Sides..." },
+                          { value: "1_side", label: "1 Side" },
+                          { value: "2_sides", label: "2 Sides" },
+                        ]} />
+                      )}
+                    </div>
+                    <div className="space-y-1 border border-gray-200 rounded-lg p-2">
+                      <div className="text-xs font-semibold text-gray-700">LED UV</div>
+                      <Check label="Flood LED UV" checked={form.floodLedUv} onChange={(v) => update("floodLedUv", v)} />
+                      <Check label="Spot LED UV" checked={form.spotLedUv} onChange={(v) => update("spotLedUv", v)} />
+                      {(form.floodLedUv || form.spotLedUv) && (
+                        <Select value={form.ledUvSides} onChange={(e) => update("ledUvSides", e.target.value)} options={[
+                          { value: "", label: "Sides..." },
+                          { value: "1_side", label: "1 Side" },
+                          { value: "2_sides", label: "2 Sides" },
+                        ]} />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <Check label="Aqueous" checked={form.aqueous} onChange={(v) => update("aqueous", v)} />
+                    <Check label="Dry trap" checked={form.drytrap} onChange={(v) => update("drytrap", v)} />
+                  </div>
+                  <Field label="Custom Color / Coating Notes">
+                    <Input value={form.customColorCoatingNotes} onChange={(e) => update("customColorCoatingNotes", e.target.value)}
+                      placeholder="e.g. PMS 186 + touch plate red" />
+                  </Field>
+                </Section>
 
-                {/* Row 11: Special Instructions */}
-                <div><label className="block text-xs font-medium text-gray-700 mb-1">Special Bindery Instructions</label>
-                  <Input value={form.specialInstructions} onChange={(e) => update("specialInstructions", e.target.value)} placeholder="Any special notes..." />
-                </div>
+                {/* 6. Finishing / Bindery */}
+                <Section title="Finishing / Folding / Die" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Fold Type">
+                      <Select value={form.foldType} onChange={(e) => update("foldType", e.target.value)} options={[
+                        { value: "", label: "None" },
+                        { value: "half", label: "Half Fold" },
+                        { value: "tri_fold", label: "Tri Fold" },
+                        { value: "z_fold", label: "Z Fold" },
+                        { value: "gate", label: "Gate Fold" },
+                        { value: "double_parallel", label: "Double Parallel" },
+                        { value: "accordion", label: "Accordion" },
+                        { value: "french", label: "French Fold" },
+                      ]} />
+                    </Field>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 items-end pb-2">
+                      <Check label="Score" checked={form.score} onChange={(v) => update("score", v)} />
+                      <Check label="Perf" checked={form.perf} onChange={(v) => update("perf", v)} />
+                      <Check label="Die Cut" checked={form.dieCut} onChange={(v) => update("dieCut", v)} />
+                    </div>
+                  </div>
+                  {form.dieCut && (
+                    <div className="grid grid-cols-3 gap-3 border-l-2 border-brand-200 pl-3">
+                      <Field label="Existing Die #">
+                        <Input value={form.existingDieNumber} onChange={(e) => update("existingDieNumber", e.target.value)} placeholder="Die #" />
+                      </Field>
+                      <Field label="# Pockets">
+                        <Input type="number" value={form.numPockets} onChange={(e) => update("numPockets", e.target.value)} />
+                      </Field>
+                      <Field label="V/H Die Size">
+                        <Input value={form.dieVHSize} onChange={(e) => update("dieVHSize", e.target.value)} placeholder="e.g. 28x40 V" />
+                      </Field>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Foil (color/type)">
+                      <div className="flex gap-1">
+                        <Input value={form.foil} onChange={(e) => update("foil", e.target.value)} placeholder="e.g. gold" />
+                        <Check label="New" checked={form.foilIsNew} onChange={(v) => update("foilIsNew", v)} />
+                      </div>
+                    </Field>
+                    <Field label="Emboss/Deboss">
+                      <div className="flex gap-1">
+                        <Input value={form.emboss} onChange={(e) => update("emboss", e.target.value)} placeholder="e.g. blind emboss logo" />
+                        <Check label="New" checked={form.embossIsNew} onChange={(v) => update("embossIsNew", v)} />
+                      </div>
+                    </Field>
+                  </div>
+                  <Field label="Lamination">
+                    <Select value={form.lamination} onChange={(e) => update("lamination", e.target.value)} options={[
+                      { value: "", label: "None" },
+                      { value: "gloss", label: "Gloss" },
+                      { value: "matte", label: "Matte" },
+                      { value: "soft_touch", label: "Soft Touch" },
+                    ]} />
+                  </Field>
+                </Section>
 
-                {/* Row 12: Delivery — vendor removed per CSR feedback; Mary picks vendor in estimating */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Delivery Instructions</label>
-                  <Input value={form.deliveryInstructions} onChange={(e) => update("deliveryInstructions", e.target.value)} placeholder="Delivery details..." />
-                </div>
+                {/* 7. Binding */}
+                <Section title="Binding" defaultOpen={false}>
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+                    <Check label="Saddle Stitch" checked={form.saddleStitch} onChange={(v) => update("saddleStitch", v)} />
+                    <Check label="Corner Stitch" checked={form.cornerStitch} onChange={(v) => update("cornerStitch", v)} />
+                    <Check label="Perfect Bind" checked={form.perfectBind} onChange={(v) => update("perfectBind", v)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Plastic Coil">
+                      <Input value={form.plasticCoil} onChange={(e) => update("plasticCoil", e.target.value)} placeholder="e.g. 1/2 black" />
+                    </Field>
+                    <Field label="Wire-O">
+                      <Input value={form.wireO} onChange={(e) => update("wireO", e.target.value)} placeholder="e.g. 3:1 white" />
+                    </Field>
+                    <Field label="GBC">
+                      <Input value={form.gbc} onChange={(e) => update("gbc", e.target.value)} />
+                    </Field>
+                    <Field label="Case Bind">
+                      <Input value={form.caseBind} onChange={(e) => update("caseBind", e.target.value)} />
+                    </Field>
+                  </div>
+                </Section>
 
-                <div className="flex gap-2 pt-2">
+                {/* 8. Bindery Add-ons */}
+                <Section title="Bindery Add-ons" defaultOpen={false}>
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+                    <Check label="Drill" checked={form.drill} onChange={(v) => update("drill", v)} />
+                    <Check label="NCR Pad" checked={form.ncrPad} onChange={(v) => update("ncrPad", v)} />
+                    <Check label="Punch" checked={form.punch} onChange={(v) => update("punch", v)} />
+                    <Check label="Round Corner" checked={form.roundCorner} onChange={(v) => update("roundCorner", v)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Band In"><Input value={form.bandIn} onChange={(e) => update("bandIn", e.target.value)} placeholder="qty per band" /></Field>
+                    <Field label="Wrap In"><Input value={form.wrapIn} onChange={(e) => update("wrapIn", e.target.value)} placeholder="qty per wrap" /></Field>
+                    <Field label="Pad In"><Input value={form.padIn} onChange={(e) => update("padIn", e.target.value)} placeholder="qty per pad" /></Field>
+                    <Field label="Numbering"><Input value={form.numbering} onChange={(e) => update("numbering", e.target.value)} placeholder="start/format" /></Field>
+                  </div>
+                </Section>
+
+                {/* 9. Mailing */}
+                <Section title="Mailing Services" defaultOpen={false}>
+                  <Field label="Mailing Services">
+                    <Input value={form.mailingServices} onChange={(e) => update("mailingServices", e.target.value)} placeholder="e.g. inkjet, bulk mail, NCOA" />
+                  </Field>
+                  <Check label="Wafer Seal" checked={form.waferSeal} onChange={(v) => update("waferSeal", v)} />
+                  {form.waferSeal && (
+                    <div className="grid grid-cols-2 gap-3 border-l-2 border-brand-200 pl-3">
+                      <Field label="# of Tabs"><Input type="number" value={form.waferSealTabs} onChange={(e) => update("waferSealTabs", e.target.value)} /></Field>
+                      <Field label="Location"><Input value={form.waferSealLocation} onChange={(e) => update("waferSealLocation", e.target.value)} placeholder="top / bottom / sides" /></Field>
+                    </div>
+                  )}
+                </Section>
+
+                {/* 10. Delivery + Notes */}
+                <Section title="Delivery & Notes" defaultOpen={false}>
+                  <Field label="Vendor Name (if outside)">
+                    <Input value={form.vendorName} onChange={(e) => update("vendorName", e.target.value)} placeholder="vendor if outside job" />
+                  </Field>
+                  <Field label="Delivery Instructions">
+                    <Input value={form.deliveryInstructions} onChange={(e) => update("deliveryInstructions", e.target.value)} placeholder="Delivery details..." />
+                  </Field>
+                  <Field label="Special Instructions">
+                    <Input value={form.specialInstructions} onChange={(e) => update("specialInstructions", e.target.value)} placeholder="Any special notes for the estimator..." />
+                  </Field>
+                </Section>
+
+                <div className="flex gap-2 pt-2 sticky bottom-0 bg-white pb-2 border-t border-gray-100">
                   <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button>
                   <Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Request"}</Button>
                 </div>
