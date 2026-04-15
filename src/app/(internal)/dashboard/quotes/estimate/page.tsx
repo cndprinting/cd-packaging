@@ -521,31 +521,58 @@ function EstimateContent() {
     if (fromRequestId) {
       fetch("/api/quote-requests").then(r => r.json()).then(d => {
         const req = (d.requests || []).find((r: any) => r.id === fromRequestId);
-        if (req) {
-          setForm(prev => ({
-            ...prev,
-            customerName: req.customerName || prev.customerName,
-            jobName: req.jobTitle || req.descriptionType || prev.jobName,
-            quantity: Number(req.quantity1 || req.quantity2 || req.quantity3 || prev.quantity) || prev.quantity,
-            quantityTiers: [req.quantity2, req.quantity3, req.quantity4, req.quantity5]
-              .map((q: any) => Number(q))
-              .filter((q: number) => q && !isNaN(q)),
-            finishedWidth: req.finishedWidth || prev.finishedWidth,
-            finishedHeight: req.finishedHeight || prev.finishedHeight,
-            finishedDepth: req.finishedDepth || prev.finishedDepth,
-            sheetWidth: req.flatWidth || prev.sheetWidth,
-            sheetHeight: req.flatHeight || prev.sheetHeight,
-            numPages: req.pages || prev.numPages,
-            inkColorsFront: req.colorsSide1 === "4_process" ? 4 : req.colorsSide1 === "process_1pms" ? 5 : req.colorsSide1 === "process_2pms" ? 6 : req.colorsSide1 === "black" ? 1 : req.colorsSide1 === "pms" ? 1 : prev.inkColorsFront,
-            inkColorsBack: req.colorsSide2 === "4_process" ? 4 : req.colorsSide2 === "process_1pms" ? 5 : req.colorsSide2 === "process_2pms" ? 6 : req.colorsSide2 === "black" ? 1 : req.colorsSide2 === "pms" ? 1 : req.colorsSide2 === "none" ? 0 : prev.inkColorsBack,
-            specialtyCoating: req.coatingSide1 === "gloss_aq" ? "aqueous" : req.coatingSide1 === "soft_touch_aq" ? "soft-touch" : req.coatingSide1 === "matte_aq" ? "matte" : req.coatingSide1?.includes("uv") ? "uv" : prev.specialtyCoating,
-            productType: req.descriptionType === "folding_carton" ? "FOLDING_CARTON" : "COMMERCIAL_PRINT",
-            stockDescription: req.paperDescription || prev.stockDescription,
-            paperBasisWeight: req.paperWeight ? parseFloat(req.paperWeight) || 0 : prev.paperBasisWeight,
-          } as any));
-          // Auto-advance to step 2 since product type is set
-          setStep(2);
-        }
+        if (!req) return;
+
+        // Prefer new lineItems → first line's quantity is primary, rest become tiers.
+        // Fall back to legacy quantity1..5 fields for old requests.
+        const qrLineItems: any[] = Array.isArray(req.lineItems) ? req.lineItems : [];
+        const primaryQty = qrLineItems.length > 0
+          ? Number(qrLineItems[0].quantity) || 0
+          : Number(req.quantity1 || req.quantity2 || req.quantity3 || 0);
+        const tiers = qrLineItems.length > 1
+          ? qrLineItems.slice(1).map((li: any) => Number(li.quantity)).filter((n: number) => n && !isNaN(n))
+          : [req.quantity2, req.quantity3, req.quantity4, req.quantity5].map((q: any) => Number(q)).filter((q: number) => q && !isNaN(q));
+
+        // First line's size overrides win if provided (CSRs may size per-version).
+        const firstLine = qrLineItems[0] || {};
+        const effectiveFlatW = Number(firstLine.flatWidth) || Number(req.flatWidth) || 0;
+        const effectiveFlatH = Number(firstLine.flatHeight) || Number(req.flatHeight) || 0;
+        const effectiveFinW = Number(firstLine.finishedWidth) || Number(req.finishedWidth) || 0;
+        const effectiveFinH = Number(firstLine.finishedHeight) || Number(req.finishedHeight) || 0;
+        const effectiveFinD = Number(firstLine.finishedDepth) || Number(req.finishedDepth) || 0;
+
+        // Stash raw request on window for the save handler to pull line items
+        // into specs (avoids threading another state var through 500 lines of form).
+        (window as any).__quoteRequestPrefill = { id: req.id, lineItems: qrLineItems, raw: req };
+
+        setForm(prev => ({
+          ...prev,
+          customerName: req.customerName || prev.customerName,
+          jobName: req.jobTitle || req.descriptionType || prev.jobName,
+          quantity: primaryQty || prev.quantity,
+          quantityTiers: tiers,
+          versions: qrLineItems.length > 1 ? qrLineItems.length : prev.versions,
+          finishedWidth: effectiveFinW || prev.finishedWidth,
+          finishedHeight: effectiveFinH || prev.finishedHeight,
+          finishedDepth: effectiveFinD || prev.finishedDepth,
+          sheetWidth: effectiveFlatW || prev.sheetWidth,
+          sheetHeight: effectiveFlatH || prev.sheetHeight,
+          numPages: req.pages || prev.numPages,
+          inkColorsFront: req.colorsSide1 === "4_process" ? 4 : req.colorsSide1 === "process_1pms" ? 5 : req.colorsSide1 === "process_2pms" ? 6 : req.colorsSide1 === "black" ? 1 : req.colorsSide1 === "pms" ? 1 : prev.inkColorsFront,
+          inkColorsBack: req.colorsSide2 === "4_process" ? 4 : req.colorsSide2 === "process_1pms" ? 5 : req.colorsSide2 === "process_2pms" ? 6 : req.colorsSide2 === "black" ? 1 : req.colorsSide2 === "pms" ? 1 : req.colorsSide2 === "none" ? 0 : prev.inkColorsBack,
+          specialtyCoating: req.coatingSide1 === "gloss_aq" ? "aqueous" : req.coatingSide1 === "soft_touch_aq" ? "soft-touch" : req.coatingSide1 === "matte_aq" ? "matte" : (req.floodUv || req.spotUv || req.floodLedUv || req.spotLedUv) ? "uv" : prev.specialtyCoating,
+          productType: req.descriptionType === "folding_carton" ? "FOLDING_CARTON" : "COMMERCIAL_PRINT",
+          stockDescription: req.paperDescription || prev.stockDescription,
+          paperBasisWeight: req.paperWeight ? parseFloat(req.paperWeight) || 0 : prev.paperBasisWeight,
+          // ── Mary field passthrough ──
+          hasBleeds: !!req.hasBleeds || prev.hasBleeds,
+          plusCover: req.coverType === "plus_cover" || prev.plusCover,
+          softCover: req.coverType === "self_cover" || prev.softCover,
+          specialInstructions: [req.specialInstructions, req.customColorCoatingNotes, req.artworkNotes].filter(Boolean).join(" | ") || prev.specialInstructions,
+          deliveryTo: req.deliveryInstructions || prev.deliveryTo,
+        } as any));
+        // Auto-advance to step 2 since product type is set
+        setStep(2);
       }).catch(() => {});
     }
   }, [fromRequestId]);
@@ -956,6 +983,11 @@ function EstimateContent() {
           ] : undefined,
           costBreakdown: { materials: calc.materialsCost, tooling: calc.toolingCost, labor: calc.laborCost, finishing: calc.finishingCost, waste: calc.makeReadyCost, shipping: calc.shippingCost, markup: calc.markupAmount, commission: calc.commissionAmount },
           additionalProducts: quoteProducts.length > 0 ? quoteProducts : undefined,
+          // Quote request line items — flow through to JobLineItem rows on conversion.
+          lineItems: (() => {
+            const pf = (typeof window !== "undefined" ? (window as any).__quoteRequestPrefill : null);
+            return pf && Array.isArray(pf.lineItems) && pf.lineItems.length > 0 ? pf.lineItems : undefined;
+          })(),
           // ─── Job Ticket payload — auto-fills the job when quote converts ─────
           jobTicket: {
             flatSizeWidth: Number(form.sheetWidth) || null,

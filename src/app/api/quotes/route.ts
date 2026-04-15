@@ -212,6 +212,23 @@ export async function PUT(request: NextRequest) {
         });
         await prisma.quote.update({ where: { id }, data: { convertedJobId: job.id } });
 
+        // Materialize quote-request line items as JobLineItem rows so the job
+        // ticket shows the multi-SKU breakdown CSRs submitted.
+        const qrLineItems: any[] = Array.isArray((specs as any).lineItems) ? (specs as any).lineItems : [];
+        if (qrLineItems.length > 0) {
+          await prisma.jobLineItem.createMany({
+            data: qrLineItems.map((li, idx) => ({
+              jobId: job.id,
+              description: li.version || `Version ${idx + 1}`,
+              quantity: Number(li.quantity) || 0,
+              flatSize: (li.flatWidth && li.flatHeight) ? `${li.flatWidth}x${li.flatHeight}` : null,
+              finishedWidth: li.finishedWidth != null ? Number(li.finishedWidth) : null,
+              finishedHeight: li.finishedHeight != null ? Number(li.finishedHeight) : null,
+              sortOrder: idx,
+            })),
+          }).catch(() => {});
+        }
+
         // Auto-create purchase flags based on specs
         const purchaseFlags = [];
         if (specs.paperStock) purchaseFlags.push({ jobId: job.id, category: "paper", description: `${specs.paperStock} - ${quote.quantity} units`, status: "needed" });
