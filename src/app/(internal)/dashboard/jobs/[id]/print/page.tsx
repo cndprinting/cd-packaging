@@ -80,9 +80,28 @@ export default function PrintJobTicketPage() {
     ...lineItems,
     ...Array(Math.max(0, MIN_LINE_ROWS - lineItems.length)).fill(null),
   ];
+
+  // If there are no explicit press runs but the job has press-level fields set
+  // (from the Press Information dropdowns), synthesize a default row so they
+  // actually appear on the printed ticket. Previously these fields were stored
+  // on the Job but never printed, making the dropdowns look pointless.
+  const syntheticPressRun = pressRuns.length === 0 && (job.pressAssignment || job.pressFormat || job.runningSize) ? [{
+    press: job.pressAssignment || "",
+    formNumber: job.pressFormat || "",
+    finishCount: job.finalPressCount || null,
+    makeReady: job.makeReadyCount || null,
+    runningSize: job.runningSize || "",
+    imposition: job.imposition || "",
+    numberUp: job.numberUp || null,
+    inkSpec: job.inkFront || "",
+    firstPassCount: job.firstPassCount || null,
+    finalPressCount: job.finalPressCount || null,
+    pressmanInitials: job.pressmanInitials || "",
+  }] : [];
+  const effectivePressRuns = pressRuns.length > 0 ? pressRuns : syntheticPressRun;
   const displayPressRuns = [
-    ...pressRuns,
-    ...Array(Math.max(0, MIN_PRESS_ROWS - pressRuns.length)).fill(null),
+    ...effectivePressRuns,
+    ...Array(Math.max(0, MIN_PRESS_ROWS - effectivePressRuns.length)).fill(null),
   ];
 
   // Purchases for stock section
@@ -665,6 +684,24 @@ export default function PrintJobTicketPage() {
               </td>
             </tr>
           ))}
+        </tbody>
+      </table>
+
+      {/* ════════════════════════════════════════════════════════ */}
+      {/* PRE-PRESS INSTRUCTIONS (for Michael / Kevin)           */}
+      {/* ════════════════════════════════════════════════════════ */}
+      <table className="mt">
+        <tbody>
+          <tr>
+            <td className="section-hd">Pre-Press Instructions</td>
+          </tr>
+          <tr>
+            <td style={{ verticalAlign: "top", minHeight: "40px" }}>
+              <div className="wr-box" style={{ minHeight: "40px", whiteSpace: "pre-wrap" }}>
+                {f("prepressNotes") || ""}
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
 

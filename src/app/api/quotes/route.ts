@@ -216,14 +216,20 @@ export async function PUT(request: NextRequest) {
         // ticket shows the multi-SKU breakdown CSRs submitted.
         const qrLineItems: any[] = Array.isArray((specs as any).lineItems) ? (specs as any).lineItems : [];
         if (qrLineItems.length > 0) {
+          // Derive an ink spec string (e.g. "4/1") from job-level inks so the
+          // printed ticket shows per-line ink instead of an empty X/X column.
+          const frontN = jt.inkFront ? String(jt.inkFront).match(/\d+/)?.[0] || "" : "";
+          const backN = jt.inkBack ? String(jt.inkBack).match(/\d+/)?.[0] || "" : "";
+          const derivedInk = frontN || backN ? `${frontN || "0"}/${backN || "0"}` : "";
           await prisma.jobLineItem.createMany({
             data: qrLineItems.map((li, idx) => ({
               jobId: job.id,
               description: li.version || `Version ${idx + 1}`,
               quantity: Number(li.quantity) || 0,
-              flatSize: (li.flatWidth && li.flatHeight) ? `${li.flatWidth}x${li.flatHeight}` : null,
-              finishedWidth: li.finishedWidth != null ? Number(li.finishedWidth) : null,
-              finishedHeight: li.finishedHeight != null ? Number(li.finishedHeight) : null,
+              flatSize: (li.flatWidth && li.flatHeight) ? `${li.flatWidth}x${li.flatHeight}` : (jt.flatSizeWidth && jt.flatSizeHeight ? `${jt.flatSizeWidth}x${jt.flatSizeHeight}` : null),
+              finishedWidth: li.finishedWidth != null ? Number(li.finishedWidth) : (jt.finishedWidth ?? null),
+              finishedHeight: li.finishedHeight != null ? Number(li.finishedHeight) : (jt.finishedHeight ?? null),
+              inkSpec: derivedInk || null,
               sortOrder: idx,
             })),
           }).catch(() => {});

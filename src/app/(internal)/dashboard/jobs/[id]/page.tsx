@@ -820,33 +820,80 @@ export default function JobDetailPage() {
                 <SectionLabel>Versions / Line Items</SectionLabel>
                 <Button variant="outline" size="sm" onClick={async () => {
                   const desc = prompt("Description (e.g. MR-30200 #7346 / 9,750):");
+                  if (!desc) return;
                   const qty = prompt("Quantity:");
-                  if (desc && qty) {
-                    const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", description: desc, quantity: parseInt(qty) || 1 }) });
-                    if (res.ok) {
-                      setFeedback({ msg: "Line item added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
-                      // Reload line items
-                      const lr = await fetch(`/api/jobs/${jobId}/lines`);
-                      const ld = await lr.json();
-                      if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
-                    }
+                  const flatSize = prompt("Flat size (e.g. 11x17):") || "";
+                  const finSize = prompt("Finished size (e.g. 8.5x11):") || "";
+                  let finishedWidth: number | null = null, finishedHeight: number | null = null;
+                  if (finSize) {
+                    const [w, h] = finSize.split(/[xX]/).map(s => parseFloat(s.trim()));
+                    if (!isNaN(w)) finishedWidth = w;
+                    if (!isNaN(h)) finishedHeight = h;
+                  }
+                  const inkSpec = prompt("Ink spec (e.g. 4/0 CMYK, or 5/4 +PMS):") || "";
+                  const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", description: desc, quantity: parseInt(qty || "1") || 1, flatSize, finishedWidth, finishedHeight, inkSpec }) });
+                  if (res.ok) {
+                    setFeedback({ msg: "Line item added", type: "success" }); setTimeout(() => setFeedback(null), 2000);
+                    const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                    const ld = await lr.json();
+                    if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
                   }
                 }}>+ Add Row</Button>
               </div>
-              <div className="bg-gray-50 rounded-lg overflow-hidden border">
+              <div className="bg-gray-50 rounded-lg overflow-hidden border overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Qty</th><th className="p-2 text-left font-medium">Description</th><th className="p-2 text-left font-medium">Ink Spec</th></tr></thead>
+                  <thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium">Qty</th><th className="p-2 text-left font-medium">Description</th><th className="p-2 text-left font-medium">Flat Size</th><th className="p-2 text-left font-medium">Finished Size</th><th className="p-2 text-left font-medium">Ink Spec</th><th className="p-2 w-8"></th></tr></thead>
                   <tbody>
                     {((job as any).lineItems && (job as any).lineItems.length > 0) ? (
-                      (job as any).lineItems.map((li: any, i: number) => (
-                        <tr key={li.id || i} className="border-t"><td className="p-2 font-medium">{li.quantity?.toLocaleString()}</td><td className="p-2">{li.description || "—"}</td><td className="p-2">{li.inkSpec || "—"}</td></tr>
-                      ))
+                      (job as any).lineItems.map((li: any, i: number) => {
+                        // Click-to-edit cell: prompts for a new value, PATCHes, reloads.
+                        // Keeps markup tiny without rebuilding the whole table into a form.
+                        const editCell = async (field: string, label: string, current: any) => {
+                          const next = prompt(`${label}:`, String(current ?? ""));
+                          if (next === null) return;
+                          const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", itemId: li.id, field, value: next }) });
+                          if (res.ok) {
+                            const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                            const ld = await lr.json();
+                            if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
+                          }
+                        };
+                        const finSizeDisplay = li.finishedWidth ? `${li.finishedWidth}${li.finishedHeight ? ` x ${li.finishedHeight}` : ""}` : "—";
+                        return (
+                          <tr key={li.id || i} className="border-t hover:bg-white">
+                            <td className="p-2 font-medium cursor-pointer" onClick={() => editCell("quantity", "Quantity", li.quantity)}>{li.quantity?.toLocaleString() || "—"}</td>
+                            <td className="p-2 cursor-pointer" onClick={() => editCell("description", "Description", li.description)}>{li.description || "—"}</td>
+                            <td className="p-2 cursor-pointer" onClick={() => editCell("flatSize", "Flat size (e.g. 11x17)", li.flatSize)}>{li.flatSize || "—"}</td>
+                            <td className="p-2 cursor-pointer" onClick={async () => {
+                              const next = prompt("Finished size (WxH, e.g. 8.5x11):", `${li.finishedWidth || ""}x${li.finishedHeight || ""}`);
+                              if (next === null) return;
+                              const [w, h] = next.split(/[xX]/).map(s => parseFloat(s.trim()));
+                              await fetch(`/api/jobs/${jobId}/lines`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", itemId: li.id, field: "finishedWidth", value: isNaN(w) ? null : w }) });
+                              await fetch(`/api/jobs/${jobId}/lines`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", itemId: li.id, field: "finishedHeight", value: isNaN(h) ? null : h }) });
+                              const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                              const ld = await lr.json();
+                              if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
+                            }}>{finSizeDisplay}</td>
+                            <td className="p-2 cursor-pointer" onClick={() => editCell("inkSpec", "Ink spec (e.g. 4/0 CMYK)", li.inkSpec)}>{li.inkSpec || "—"}</td>
+                            <td className="p-1 text-right">
+                              <button className="text-red-500 hover:text-red-700 text-xs" title="Delete line" onClick={async () => {
+                                if (!confirm("Delete this line item?")) return;
+                                await fetch(`/api/jobs/${jobId}/lines`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "lineItem", itemId: li.id }) });
+                                const lr = await fetch(`/api/jobs/${jobId}/lines`);
+                                const ld = await lr.json();
+                                if (ld.lineItems) setJob((prev: any) => prev ? { ...prev, lineItems: ld.lineItems } : prev);
+                              }}>✕</button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
-                      <tr className="border-t"><td className="p-2 font-medium">{job.quantity?.toLocaleString()}</td><td className="p-2">{job.description || "—"}</td><td className="p-2">{job.inkFront || "—"}</td></tr>
+                      <tr className="border-t"><td className="p-2 font-medium">{job.quantity?.toLocaleString()}</td><td className="p-2">{job.description || "—"}</td><td className="p-2">{job.flatSizeWidth && job.flatSizeHeight ? `${job.flatSizeWidth}x${job.flatSizeHeight}` : "—"}</td><td className="p-2">{job.finishedWidth && job.finishedHeight ? `${job.finishedWidth} x ${job.finishedHeight}` : "—"}</td><td className="p-2">{job.inkFront || "—"}</td><td /></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-gray-400 mt-1">Click any cell to edit. Size and ink are per-version.</p>
             </div>
           </CardContent>
         </Card>
@@ -1127,6 +1174,104 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
+      {/* 4b. OUTSIDE PURCHASES — moved adjacent to Stock per CSR feedback  */}
+      {/* (paper / coatings / foil are stock-like decisions; keep together) */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Outside Purchases Required</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setAddingPurchase(true)} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" />Add Purchase
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {addingPurchase && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <SectionLabel>Category</SectionLabel>
+                  <Select value={newPurchase.category} onChange={(e) => setNewPurchase((p) => ({ ...p, category: e.target.value }))} options={PURCHASE_CATEGORIES} />
+                </div>
+                <div>
+                  <SectionLabel>Description</SectionLabel>
+                  <Input value={newPurchase.description} onChange={(e) => setNewPurchase((p) => ({ ...p, description: e.target.value }))} placeholder="Description..." />
+                </div>
+                <div>
+                  <SectionLabel>Vendor</SectionLabel>
+                  <Input value={newPurchase.vendor} onChange={(e) => setNewPurchase((p) => ({ ...p, vendor: e.target.value }))} placeholder="Vendor..." />
+                </div>
+                <div>
+                  <SectionLabel>Est. Cost</SectionLabel>
+                  <Input type="number" value={newPurchase.estCost} onChange={(e) => setNewPurchase((p) => ({ ...p, estCost: e.target.value }))} placeholder="$0.00" />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setAddingPurchase(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleAddPurchase} className="gap-1.5"><Check className="h-3.5 w-3.5" />Save</Button>
+              </div>
+            </div>
+          )}
+
+          {purchases.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left">
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Description</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Vendor</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Est. Cost</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
+                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.map((p) => (
+                    <tr key={p.id} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2.5 pr-3">
+                        <Badge variant="secondary">{PURCHASE_CATEGORIES.find((c) => c.value === p.category)?.label || p.category}</Badge>
+                      </td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.description || "--"}</td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.vendor || "--"}</td>
+                      <td className="py-2.5 pr-3 text-gray-700">{p.estCost ? `$${Number(p.estCost).toFixed(2)}` : "--"}</td>
+                      <td className="py-2.5 pr-3">
+                        <Badge className={
+                          p.status === "RECEIVED" ? "bg-green-100 text-green-700" :
+                          p.status === "ORDERED" ? "bg-amber-100 text-amber-700" :
+                          "bg-red-100 text-red-700"
+                        }>
+                          {p.status === "RECEIVED" ? "Received" : p.status === "ORDERED" ? "Ordered" : "Needed"}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex gap-1">
+                          {p.status === "NEEDED" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => handleUpdatePurchaseStatus(p.id, "ORDERED")}>
+                              Mark Ordered
+                            </Button>
+                          )}
+                          {p.status === "ORDERED" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2 text-green-700" onClick={() => handleUpdatePurchaseStatus(p.id, "RECEIVED")}>
+                              Mark Received
+                            </Button>
+                          )}
+                          {p.status === "RECEIVED" && (
+                            <span className="text-xs text-gray-400 py-1">Complete</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-6">No outside purchases. Click &quot;Add Purchase&quot; to add one.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
       {/* 5. PRESS INFORMATION                                              */}
       {/* ================================================================= */}
       <Card>
@@ -1225,14 +1370,16 @@ export default function JobDetailPage() {
             <div className="flex items-center justify-between mb-2">
               <SectionLabel>Press Runs</SectionLabel>
               <Button variant="outline" size="sm" onClick={async () => {
-                const press = prompt("Press (e.g. KOM, Offset #2):");
-                const form = prompt("Form # / Info:");
-                const finish = prompt("Finish Count:");
-                const makeReady = prompt("Make Ready:");
-                const runSize = prompt("Running Size (e.g. 23X29):");
-                const imp = prompt("Imposition (e.g. 1-Side):");
-                const nUp = prompt("# Up:");
-                const ink = prompt("Ink (e.g. 5/0):");
+                // Pre-fill each prompt from the job-level press fields so Kelsey
+                // doesn't have to re-type what she already picked in the dropdowns.
+                const press = prompt("Press (e.g. KOM, Offset #2):", job.pressAssignment || "");
+                const form = prompt("Form # / Info:", job.pressFormat || "");
+                const finish = prompt("Finish Count:", job.finalPressCount ? String(job.finalPressCount) : "");
+                const makeReady = prompt("Make Ready:", job.makeReadyCount ? String(job.makeReadyCount) : "");
+                const runSize = prompt("Running Size (e.g. 23X29):", job.runningSize || "");
+                const imp = prompt("Imposition (e.g. 1-Side):", job.imposition || "");
+                const nUp = prompt("# Up:", job.numberUp ? String(job.numberUp) : "");
+                const ink = prompt("Ink (e.g. 5/0):", job.inkFront || "");
                 if (press) {
                   const res = await fetch(`/api/jobs/${jobId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "pressRun", press, formNumber: form, finishCount: finish, makeReady, runningSize: runSize, imposition: imp, numberUp: nUp, inkSpec: ink }) });
                   if (res.ok) {
@@ -1345,104 +1492,6 @@ export default function JobDetailPage() {
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             onBlur={(e) => updateJobField("paymentNotes", e.target.value)}
           />
-        </CardContent>
-      </Card>
-
-      {/* ================================================================= */}
-      {/* 7. OUTSIDE PURCHASES                                              */}
-      {/* ================================================================= */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Outside Purchases Required</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setAddingPurchase(true)} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />Add Purchase
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {/* Add-purchase form */}
-          {addingPurchase && (
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div>
-                  <SectionLabel>Category</SectionLabel>
-                  <Select value={newPurchase.category} onChange={(e) => setNewPurchase((p) => ({ ...p, category: e.target.value }))} options={PURCHASE_CATEGORIES} />
-                </div>
-                <div>
-                  <SectionLabel>Description</SectionLabel>
-                  <Input value={newPurchase.description} onChange={(e) => setNewPurchase((p) => ({ ...p, description: e.target.value }))} placeholder="Description..." />
-                </div>
-                <div>
-                  <SectionLabel>Vendor</SectionLabel>
-                  <Input value={newPurchase.vendor} onChange={(e) => setNewPurchase((p) => ({ ...p, vendor: e.target.value }))} placeholder="Vendor..." />
-                </div>
-                <div>
-                  <SectionLabel>Est. Cost</SectionLabel>
-                  <Input type="number" value={newPurchase.estCost} onChange={(e) => setNewPurchase((p) => ({ ...p, estCost: e.target.value }))} placeholder="$0.00" />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setAddingPurchase(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleAddPurchase} className="gap-1.5"><Check className="h-3.5 w-3.5" />Save</Button>
-              </div>
-            </div>
-          )}
-
-          {purchases.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left">
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Description</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Vendor</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Est. Cost</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {purchases.map((p) => (
-                    <tr key={p.id} className="border-b border-gray-100 last:border-0">
-                      <td className="py-2.5 pr-3">
-                        <Badge variant="secondary">{PURCHASE_CATEGORIES.find((c) => c.value === p.category)?.label || p.category}</Badge>
-                      </td>
-                      <td className="py-2.5 pr-3 text-gray-700">{p.description || "--"}</td>
-                      <td className="py-2.5 pr-3 text-gray-700">{p.vendor || "--"}</td>
-                      <td className="py-2.5 pr-3 text-gray-700">{p.estCost ? `$${Number(p.estCost).toFixed(2)}` : "--"}</td>
-                      <td className="py-2.5 pr-3">
-                        <Badge className={
-                          p.status === "RECEIVED" ? "bg-green-100 text-green-700" :
-                          p.status === "ORDERED" ? "bg-amber-100 text-amber-700" :
-                          "bg-red-100 text-red-700"
-                        }>
-                          {p.status === "RECEIVED" ? "Received" : p.status === "ORDERED" ? "Ordered" : "Needed"}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5">
-                        <div className="flex gap-1">
-                          {p.status === "NEEDED" && (
-                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => handleUpdatePurchaseStatus(p.id, "ORDERED")}>
-                              Mark Ordered
-                            </Button>
-                          )}
-                          {p.status === "ORDERED" && (
-                            <Button size="sm" variant="outline" className="text-xs h-7 px-2 text-green-700" onClick={() => handleUpdatePurchaseStatus(p.id, "RECEIVED")}>
-                              Mark Received
-                            </Button>
-                          )}
-                          {p.status === "RECEIVED" && (
-                            <span className="text-xs text-gray-400 py-1">Complete</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400 text-center py-6">No outside purchases. Click &quot;Add Purchase&quot; to add one.</p>
-          )}
         </CardContent>
       </Card>
 

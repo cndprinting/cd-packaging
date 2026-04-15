@@ -68,13 +68,27 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       },
     });
 
-    // Copy line items to job line items
+    // Copy line items to job line items, carrying sizes + deriving an ink
+    // spec from the QR's global colors fields so CSRs don't land on an
+    // empty job ticket missing the info they just entered.
+    const derivedInk = (() => {
+      const colorMap: Record<string, string> = {
+        "4_process": "4", "process_1pms": "5", "process_2pms": "6", "black": "1", "pms": "1", "none": "0",
+      };
+      const f = colorMap[qr.colorsSide1 || ""] ?? "";
+      const b = colorMap[qr.colorsSide2 || ""] ?? "";
+      return f || b ? `${f || "0"}/${b || "0"}` : "";
+    })();
     if (qr.lineItems.length > 0) {
       await prisma.jobLineItem.createMany({
         data: qr.lineItems.map((li, idx) => ({
           jobId: job.id,
           description: li.version,
           quantity: li.quantity,
+          flatSize: (li.flatWidth && li.flatHeight) ? `${li.flatWidth}x${li.flatHeight}` : (qr.flatWidth && qr.flatHeight ? `${qr.flatWidth}x${qr.flatHeight}` : null),
+          finishedWidth: li.finishedWidth ?? qr.finishedWidth ?? null,
+          finishedHeight: li.finishedHeight ?? qr.finishedHeight ?? null,
+          inkSpec: derivedInk || null,
           sortOrder: idx,
         })),
       }).catch(() => {});
