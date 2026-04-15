@@ -222,6 +222,11 @@ model Job {
   order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderItemId      String?   @unique
   orderItem        OrderItem? @relation(fields: [orderItemId], references: [id])
+  // Link back to the originating quote request (if any). Lets the job ticket
+  // surface the full QR menu (proofs, foil, mailing, etc.) without duplicating
+  // 40+ columns here. Plain String? — no Prisma relation — so the QR can be
+  // queried lazily when needed.
+  quoteRequestId   String?
   name             String
   description      String?
   status           JobStatus @default(QUOTE)
@@ -695,6 +700,7 @@ model Quote {
   specs         String?     // JSON string for dimensions, paper, colors, etc.
   createdBy     String?
   convertedJobId String?
+  quoteRequestId String?    // Link back to originating quote request for pass-through of full QR detail
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 

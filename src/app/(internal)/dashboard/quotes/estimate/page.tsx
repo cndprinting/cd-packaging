@@ -959,6 +959,7 @@ function EstimateContent() {
     try {
       const body = {
         customerName: form.customerName,
+        quoteRequestId: fromRequestId || undefined,
         productType: form.productType,
         productName: form.jobName,
         description: `${form.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"} - ${form.pressType === "OFFSET" ? "Offset" : "Digital"}${selectedPress ? ` (${selectedPress.name})` : ""} | ${form.finishedWidth}" x ${form.finishedHeight}"`,

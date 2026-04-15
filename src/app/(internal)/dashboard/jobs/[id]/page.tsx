@@ -192,6 +192,7 @@ export default function JobDetailPage() {
   const jobId = params.id as string;
 
   const [job, setJob] = useState<JobData | null>(null);
+  const [quoteRequest, setQuoteRequest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [advancing, setAdvancing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -327,6 +328,7 @@ export default function JobDetailPage() {
             estimatedCost: j.estimatedCost || 0,
           } as any;
           setJob(formatted);
+          if (data.quoteRequest) setQuoteRequest(data.quoteRequest);
           setEditForm({ name: formatted.name, description: formatted.description || "", quantity: String(formatted.quantity), dueDate: formatted.dueDate, priority: formatted.priority });
           setLoading(false);
           return;
@@ -1458,6 +1460,89 @@ export default function JobDetailPage() {
       {/* 6a. PROOFS                                                         */}
       {/* ================================================================= */}
       <ProofsCard jobId={jobId} />
+
+      {/* ================================================================= */}
+      {/* 6a². FROM QUOTE REQUEST — long-tail fields that don't have Job cols */}
+      {/* ================================================================= */}
+      {quoteRequest && (
+        <Card className="border-blue-200 bg-blue-50/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-900">
+              <FileCheck className="h-4 w-4" />From Quote Request #{quoteRequest.requestNumber}
+            </CardTitle>
+            <p className="text-xs text-gray-600">Read-only snapshot of the original CSR intake — source of truth for fields the ticket doesn't track directly.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-3">
+              {(() => {
+                const qr = quoteRequest;
+                const rows: Array<[string, any]> = [];
+                const push = (label: string, v: any) => { if (v != null && v !== "" && v !== false) rows.push([label, v === true ? "Yes" : String(v)]); };
+                push("Job type", qr.jobType && qr.jobType !== "new" ? (qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES") : null);
+                push("Pickup from", qr.pickupJobNumber);
+                push("Low-res proofs", qr.lowResProofs);
+                push("Hi-res proofs", qr.hiResProofs);
+                push("Orientation", qr.orientation);
+                push("Colors S1", qr.colorsSide1);
+                push("Colors S2", qr.colorsSide2);
+                push("Coating S1", qr.coatingSide1);
+                push("Coating S2", qr.coatingSide2);
+                push("Flood UV", qr.floodUv && (qr.uvSides || "yes"));
+                push("Spot UV", qr.spotUv && (qr.uvSides || "yes"));
+                push("Flood LED UV", qr.floodLedUv && (qr.ledUvSides || "yes"));
+                push("Spot LED UV", qr.spotLedUv && (qr.ledUvSides || "yes"));
+                push("Aqueous", qr.aqueous);
+                push("Dry trap", qr.drytrap);
+                push("Fold type", qr.foldType);
+                push("Saddle stitch", qr.saddleStitch);
+                push("Corner stitch", qr.cornerStitch);
+                push("Perfect bind", qr.perfectBind);
+                push("Plastic coil", qr.plasticCoil);
+                push("Wire-O", qr.wireO);
+                push("GBC", qr.gbc);
+                push("Case bind", qr.caseBind);
+                push("Lamination", qr.lamination);
+                push("Foil", qr.foil && `${qr.foil}${qr.foilIsNew ? " (NEW)" : ""}`);
+                push("Emboss", qr.emboss && `${qr.emboss}${qr.embossIsNew ? " (NEW)" : ""}`);
+                push("Die cut", qr.dieCut && `${qr.existingDieNumber ? `#${qr.existingDieNumber}` : "yes"}${qr.dieVHSize ? ` (${qr.dieVHSize})` : ""}`);
+                push("Drill", qr.drill);
+                push("Punch", qr.punch);
+                push("Score", qr.score);
+                push("Perf", qr.perf);
+                push("Round corner", qr.roundCorner);
+                push("Numbering", qr.numbering);
+                push("NCR pad", qr.ncrPad);
+                push("Band", qr.bandIn);
+                push("Wrap", qr.wrapIn);
+                push("Pad", qr.padIn);
+                push("Mailing", qr.mailingServices);
+                push("Wafer seal", qr.waferSeal && `${qr.waferSealTabs ? `x${qr.waferSealTabs}` : ""}${qr.waferSealLocation ? ` @ ${qr.waferSealLocation}` : ""}`);
+                push("# Pockets", qr.numPockets);
+                push("Artwork", qr.artworkIsNew ? "NEW" : qr.artworkFileName || qr.artworkUrl || null);
+                push("Vendor", qr.vendorName);
+                return rows.map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-2 border-b border-blue-100 py-1">
+                    <span className="text-gray-600">{k}</span>
+                    <span className="font-medium text-gray-900">{v}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+            {quoteRequest.specialInstructions && (
+              <div className="mt-3 rounded border border-blue-200 bg-white p-2 text-xs">
+                <div className="font-semibold text-blue-900">Special instructions</div>
+                <div className="whitespace-pre-wrap text-gray-700">{quoteRequest.specialInstructions}</div>
+              </div>
+            )}
+            {quoteRequest.customColorCoatingNotes && (
+              <div className="mt-2 rounded border border-blue-200 bg-white p-2 text-xs">
+                <div className="font-semibold text-blue-900">Color / coating notes</div>
+                <div className="whitespace-pre-wrap text-gray-700">{quoteRequest.customColorCoatingNotes}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ================================================================= */}
       {/* 6b. PRE-PRESS INSTRUCTIONS                                         */}

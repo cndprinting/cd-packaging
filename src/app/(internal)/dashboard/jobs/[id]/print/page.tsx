@@ -13,6 +13,7 @@ export default function PrintJobTicketPage() {
   const [job, setJob] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [pressRuns, setPressRuns] = useState<any[]>([]);
+  const [quoteRequest, setQuoteRequest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function PrintJobTicketPage() {
           const pr = (linesData.pressRuns?.length ? linesData.pressRuns : j.pressRuns) || [];
           setLineItems(li);
           setPressRuns(pr);
+          if (jobData.quoteRequest) setQuoteRequest(jobData.quoteRequest);
         }
       } catch (e) {
         console.error("Failed to load job:", e);
@@ -704,6 +706,83 @@ export default function PrintJobTicketPage() {
           </tr>
         </tbody>
       </table>
+
+      {/* ════════════════════════════════════════════════════════ */}
+      {/* FROM QUOTE REQUEST — long-tail fields not on Job columns */}
+      {/* ════════════════════════════════════════════════════════ */}
+      {quoteRequest && (() => {
+        const qr = quoteRequest;
+        const rows: Array<[string, string]> = [];
+        const push = (label: string, v: any) => {
+          if (v == null || v === "" || v === false) return;
+          rows.push([label, v === true ? "Yes" : String(v)]);
+        };
+        push("Job type", qr.jobType && qr.jobType !== "new" ? (qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES") : null);
+        push("Pickup from", qr.pickupJobNumber);
+        push("Low-res proofs", qr.lowResProofs);
+        push("Hi-res proofs", qr.hiResProofs);
+        push("Orientation", qr.orientation);
+        push("Flood UV", qr.floodUv && (qr.uvSides || "yes"));
+        push("Spot UV", qr.spotUv && (qr.uvSides || "yes"));
+        push("Flood LED UV", qr.floodLedUv && (qr.ledUvSides || "yes"));
+        push("Spot LED UV", qr.spotLedUv && (qr.ledUvSides || "yes"));
+        push("Aqueous", qr.aqueous);
+        push("Dry trap", qr.drytrap);
+        push("Fold type", qr.foldType);
+        push("Saddle stitch", qr.saddleStitch);
+        push("Corner stitch", qr.cornerStitch);
+        push("Perfect bind", qr.perfectBind);
+        push("Plastic coil", qr.plasticCoil);
+        push("Wire-O", qr.wireO);
+        push("GBC", qr.gbc);
+        push("Case bind", qr.caseBind);
+        push("Lamination", qr.lamination);
+        push("Foil", qr.foil && `${qr.foil}${qr.foilIsNew ? " (NEW)" : ""}`);
+        push("Emboss", qr.emboss && `${qr.emboss}${qr.embossIsNew ? " (NEW)" : ""}`);
+        push("Die cut", qr.dieCut && `${qr.existingDieNumber ? `#${qr.existingDieNumber}` : "yes"}${qr.dieVHSize ? ` (${qr.dieVHSize})` : ""}`);
+        push("Drill", qr.drill);
+        push("Punch", qr.punch);
+        push("Score", qr.score);
+        push("Perf", qr.perf);
+        push("Round corner", qr.roundCorner);
+        push("Numbering", qr.numbering);
+        push("NCR pad", qr.ncrPad);
+        push("Band", qr.bandIn);
+        push("Wrap", qr.wrapIn);
+        push("Pad", qr.padIn);
+        push("Mailing", qr.mailingServices);
+        push("Wafer seal", qr.waferSeal && `${qr.waferSealTabs ? `x${qr.waferSealTabs}` : ""}${qr.waferSealLocation ? ` @ ${qr.waferSealLocation}` : ""}`);
+        push("# Pockets", qr.numPockets);
+        push("Artwork", qr.artworkIsNew ? "NEW" : qr.artworkFileName || qr.artworkUrl || null);
+        push("Vendor", qr.vendorName);
+        if (rows.length === 0 && !qr.customColorCoatingNotes) return null;
+        return (
+          <table className="mt">
+            <tbody>
+              <tr>
+                <td className="section-hd">From Quote Request #{qr.requestNumber}</td>
+              </tr>
+              <tr>
+                <td style={{ verticalAlign: "top", padding: "4px 6px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2px 12px", fontSize: "9pt" }}>
+                    {rows.map(([k, v]) => (
+                      <div key={k} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px dotted #999" }}>
+                        <span style={{ color: "#555" }}>{k}</span>
+                        <span style={{ fontWeight: 600 }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {qr.customColorCoatingNotes && (
+                    <div style={{ marginTop: "4px", fontSize: "9pt" }}>
+                      <strong>Color/coating notes:</strong> {qr.customColorCoatingNotes}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        );
+      })()}
 
       {/* ════════════════════════════════════════════════════════ */}
       {/* ROW 9 & 10: PRESS INSTRUCTIONS + BINDERY               */}

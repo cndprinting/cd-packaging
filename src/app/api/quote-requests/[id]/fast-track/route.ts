@@ -54,17 +54,125 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const totalQty = qr.lineItems.reduce((s, li) => s + (li.quantity || 0), 0) || (qr.quantity1 || 0) || 1;
     const jobName = qr.jobTitle || qr.descriptionType || `Fast-track from ${qr.requestNumber}`;
 
+    // Best-effort hydration of Job's structured columns from the QR. Anything
+    // without a matching Job column still rides through via the quoteRequestId
+    // link (rendered as a "From Quote Request" card on the ticket).
+    const colorCount = (s: string | null | undefined): number | null => {
+      if (!s) return null;
+      if (s === "4_process") return 4;
+      if (s === "process_1pms") return 5;
+      if (s === "process_2pms") return 6;
+      if (s === "black" || s === "pms") return 1;
+      if (s === "none") return 0;
+      return null;
+    };
+    const front = colorCount(qr.colorsSide1);
+    const back = colorCount(qr.colorsSide2);
+    const inkFrontStr = front != null ? `${front}/0` : null;
+    const inkBackStr = back != null ? `${back}/0` : null;
+
+    // Coating/varnish — collapse the QR's multiple coating flags into one string
+    const coatingParts: string[] = [];
+    if (qr.coatingSide1) coatingParts.push(`S1: ${qr.coatingSide1}`);
+    if (qr.coatingSide2) coatingParts.push(`S2: ${qr.coatingSide2}`);
+    if (qr.floodUv) coatingParts.push(`Flood UV${qr.uvSides ? ` (${qr.uvSides})` : ""}`);
+    if (qr.spotUv) coatingParts.push(`Spot UV${qr.uvSides ? ` (${qr.uvSides})` : ""}`);
+    if (qr.floodLedUv) coatingParts.push(`Flood LED UV${qr.ledUvSides ? ` (${qr.ledUvSides})` : ""}`);
+    if (qr.spotLedUv) coatingParts.push(`Spot LED UV${qr.ledUvSides ? ` (${qr.ledUvSides})` : ""}`);
+    if (qr.aqueous) coatingParts.push("Aqueous");
+    if (qr.drytrap) coatingParts.push("Dry trap");
+    const coatingStr = coatingParts.join("; ") || null;
+
+    // Stock description: combine paper weight + description
+    const stockDesc = [qr.paperWeight, qr.paperDescription, qr.paperType].filter(Boolean).join(" / ") || null;
+
+    // Bindery flags derived from QR menu
+    const binderyFold = !!qr.foldType;
+    const binderyStitch = !!(qr.saddleStitch || qr.cornerStitch || qr.perfectBind);
+    const binderyScore = !!qr.score;
+    const binderyPerf = !!qr.perf;
+    const binderyDrill = !!qr.drill;
+    const binderyCount = !!qr.numbering;
+    const binderyPockets = !!(qr.numPockets && qr.numPockets > 0);
+
+    // Bindery notes — collect everything that doesn't map to a flag
+    const binderyBits: string[] = [];
+    if (qr.foldType) binderyBits.push(`Fold: ${qr.foldType}`);
+    if (qr.perfectBind) binderyBits.push("Perfect bind");
+    if (qr.cornerStitch) binderyBits.push("Corner stitch");
+    if (qr.saddleStitch) binderyBits.push("Saddle stitch");
+    if (qr.plasticCoil) binderyBits.push(`Plastic coil: ${qr.plasticCoil}`);
+    if (qr.wireO) binderyBits.push(`Wire-O: ${qr.wireO}`);
+    if (qr.gbc) binderyBits.push(`GBC: ${qr.gbc}`);
+    if (qr.caseBind) binderyBits.push(`Case bind: ${qr.caseBind}`);
+    if (qr.lamination) binderyBits.push(`Lamination: ${qr.lamination}`);
+    if (qr.bandIn) binderyBits.push(`Band: ${qr.bandIn}`);
+    if (qr.wrapIn) binderyBits.push(`Wrap: ${qr.wrapIn}`);
+    if (qr.padIn) binderyBits.push(`Pad: ${qr.padIn}`);
+    if (qr.ncrPad) binderyBits.push("NCR pad");
+    if (qr.punch) binderyBits.push("Punch");
+    if (qr.roundCorner) binderyBits.push("Round corner");
+    if (qr.numbering) binderyBits.push(`Numbering: ${qr.numbering}`);
+    if (qr.foil) binderyBits.push(`Foil: ${qr.foil}${qr.foilIsNew ? " (NEW)" : ""}`);
+    if (qr.emboss) binderyBits.push(`Emboss: ${qr.emboss}${qr.embossIsNew ? " (NEW)" : ""}`);
+    if (qr.dieCut) binderyBits.push(`Die cut${qr.existingDieNumber ? ` #${qr.existingDieNumber}` : ""}${qr.dieVHSize ? ` (${qr.dieVHSize})` : ""}`);
+    if (qr.mailingServices) binderyBits.push(`Mailing: ${qr.mailingServices}`);
+    if (qr.waferSeal) binderyBits.push(`Wafer seal${qr.waferSealTabs ? ` x${qr.waferSealTabs}` : ""}${qr.waferSealLocation ? ` @ ${qr.waferSealLocation}` : ""}`);
+    const binderyNotesStr = binderyBits.join("; ") || null;
+
+    // Prepress notes — art + proof info + color/coating nuance
+    const prepressBits: string[] = [];
+    if (qr.artworkIsNew) prepressBits.push("NEW artwork");
+    else prepressBits.push("Art supplied");
+    if (qr.artworkFileName) prepressBits.push(`File: ${qr.artworkFileName}`);
+    if (qr.artworkUrl) prepressBits.push(`URL: ${qr.artworkUrl}`);
+    if (qr.artworkNotes) prepressBits.push(qr.artworkNotes);
+    if (qr.lowResProofs) prepressBits.push(`Low-res proofs: ${qr.lowResProofs}`);
+    if (qr.hiResProofs) prepressBits.push(`Hi-res proofs: ${qr.hiResProofs}`);
+    if (qr.customColorCoatingNotes) prepressBits.push(qr.customColorCoatingNotes);
+    if (qr.orientation) prepressBits.push(`Orientation: ${qr.orientation}`);
+    const prepressNotesStr = prepressBits.join("\n") || null;
+
     const job = await prisma.job.create({
       data: {
         jobNumber,
         orderId: order.id,
+        quoteRequestId: qr.id,
         name: jobName,
-        description: `[Fast-tracked from ${qr.requestNumber}] ${qr.specialInstructions || ""}`.trim(),
+        description: qr.jobType && qr.jobType !== "new"
+          ? `[${qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES"}${qr.pickupJobNumber ? ` of ${qr.pickupJobNumber}` : ""}] ${qr.specialInstructions || ""}`.trim()
+          : qr.specialInstructions || null,
         status: "QUOTE",
         priority: "NORMAL",
         quantity: totalQty,
         dueDate: qr.dateNeeded || null,
         productType: qr.descriptionType === "folding_carton" ? "FOLDING_CARTON" : "COMMERCIAL_PRINT",
+        // Size
+        flatSizeWidth: qr.flatWidth ?? null,
+        flatSizeHeight: qr.flatHeight ?? null,
+        finishedWidth: qr.finishedWidth ?? null,
+        finishedHeight: qr.finishedHeight ?? null,
+        numPages: qr.pages ?? null,
+        // Ink / coating / stock
+        inkFront: inkFrontStr,
+        inkBack: inkBackStr,
+        coating: coatingStr,
+        stockDescription: stockDesc,
+        // Flags
+        hasBleeds: !!qr.hasBleeds,
+        softCover: qr.coverType === "self_cover",
+        plusCover: qr.coverType === "plus_cover",
+        // Die
+        dieNumber: qr.existingDieNumber || null,
+        // Bindery
+        binderyFold, binderyStitch, binderyScore, binderyPerf,
+        binderyDrill, binderyCount, binderyPockets,
+        binderyNotes: binderyNotesStr,
+        // Notes
+        prepressNotes: prepressNotesStr,
+        deliveryTo: qr.deliveryInstructions || null,
+        // Vendor
+        vendorInfo: qr.vendorName || null,
       },
     });
 

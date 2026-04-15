@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const body = await request.json();
-    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes } = body;
+    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes, quoteRequestId } = body;
     if (!customerName || !productName || !quantity) return NextResponse.json({ error: "Customer, product name, and quantity required" }, { status: 400 });
 
     const prismaModule = await import("@/lib/prisma");
@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         status: "DRAFT",
         validUntil: validUntil ? new Date(validUntil) : null,
         notes, createdBy: session.id,
+        quoteRequestId: quoteRequestId || null,
       },
     });
 
@@ -145,9 +146,23 @@ export async function PUT(request: NextRequest) {
           return isFinite(v) ? v : null;
         };
 
+        // Lazy-load the originating quote request (if any) so we can hydrate
+        // Job's bindery/prepress columns that the estimator doesn't touch.
+        const linkedQr = quote.quoteRequestId
+          ? await prisma.quoteRequest.findUnique({ where: { id: quote.quoteRequestId } }).catch(() => null)
+          : null;
+
+        const qrBinderyFold = !!linkedQr?.foldType;
+        const qrBinderyStitch = !!(linkedQr?.saddleStitch || linkedQr?.cornerStitch || linkedQr?.perfectBind);
+        const qrBinderyScore = !!linkedQr?.score;
+        const qrBinderyPerf = !!linkedQr?.perf;
+        const qrBinderyDrill = !!linkedQr?.drill;
+        const qrBinderyCount = !!linkedQr?.numbering;
+
         const job = await prisma.job.create({
           data: {
             jobNumber: finalJobNumber, orderId: order.id,
+            quoteRequestId: quote.quoteRequestId || null,
             name: quote.productName,
             description: quote.description,
             status: "QUOTE",
@@ -198,9 +213,12 @@ export async function PUT(request: NextRequest) {
             makeReadyCount: jt.makeReadyCount ?? null,
 
             // ── Bindery (derived from estimator; CSR/Mary can still toggle on ticket) ──
-            binderyFold: !!jt.binderyFold,
-            binderyStitch: !!jt.binderyStitch,
-            binderyScore: !!jt.binderyScore,
+            binderyFold: !!jt.binderyFold || qrBinderyFold,
+            binderyStitch: !!jt.binderyStitch || qrBinderyStitch,
+            binderyScore: !!jt.binderyScore || qrBinderyScore,
+            binderyPerf: qrBinderyPerf,
+            binderyDrill: qrBinderyDrill,
+            binderyCount: qrBinderyCount,
             binderyGlue: !!jt.binderyGlue,
             binderyWrap: !!jt.binderyWrap,
             binderyNotes: jt.binderyNotes ?? null,

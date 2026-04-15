@@ -23,7 +23,17 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       include: { order: { include: { company: true } }, stages: true, proofs: true, lineItems: { orderBy: { sortOrder: "asc" } }, pressRuns: { orderBy: { sortOrder: "asc" } }, purchases: true },
     });
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    return NextResponse.json({ job, source: "database" });
+
+    // Lazy-load the originating quote request so the job ticket can render
+    // the full QR menu (proofs, foil, mailing, etc.) as a read-only card.
+    const quoteRequest = job.quoteRequestId
+      ? await prisma.quoteRequest.findUnique({
+          where: { id: job.quoteRequestId },
+          include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+        }).catch(() => null)
+      : null;
+
+    return NextResponse.json({ job, quoteRequest, source: "database" });
   } catch (error) {
     console.error("Job GET error:", error);
     return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
