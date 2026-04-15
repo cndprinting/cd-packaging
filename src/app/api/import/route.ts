@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import ExcelJS from "exceljs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,21 +17,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // Read the file as array buffer
+    // Parse .xlsx / .xls / .csv via exceljs (replaces xlsx / SheetJS — prototype
+    // pollution + ReDoS CVEs with no patch; licensing pulled from npm).
     const buffer = await file.arrayBuffer();
-    const xlsx = require("xlsx");
-    const workbook = xlsx.read(buffer, { type: "buffer" });
+    const workbook = new ExcelJS.Workbook();
+    const isCsv = file.name.toLowerCase().endsWith(".csv");
+    if (isCsv) {
+      // exceljs csv reader wants a stream; convert buffer to one.
+      const { Readable } = await import("stream");
+      const stream = Readable.from(Buffer.from(buffer));
+      await workbook.csv.read(stream);
+    } else {
+      await workbook.xlsx.load(buffer);
+    }
 
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows: Record<string, any>[] = xlsx.utils.sheet_to_json(sheet, { defval: "" });
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount < 2) {
+      return NextResponse.json({ error: "No data found in spreadsheet" }, { status: 400 });
+    }
+
+    // Extract headers from row 1; build rows as Record<header, value>
+    const headerRow = sheet.getRow(1);
+    const headers: string[] = [];
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      headers[colNumber] = String(cell.value ?? "").trim();
+    });
+
+    const rows: Record<string, unknown>[] = [];
+    for (let r = 2; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const obj: Record<string, unknown> = {};
+      let hasAny = false;
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const key = headers[colNumber];
+        if (!key) return;
+        let v: unknown = cell.value;
+        // exceljs wraps formula/hyperlink/richText in objects — unwrap to primitive
+        if (v && typeof v === "object") {
+          const anyV = v as { result?: unknown; text?: unknown; richText?: { text: string }[] };
+          if ("result" in anyV) v = anyV.result;
+          else if ("text" in anyV) v = anyV.text;
+          else if (Array.isArray(anyV.richText)) v = anyV.richText.map(t => t.text).join("");
+          else v = String(v);
+        }
+        if (v !== null && v !== undefined && v !== "") hasAny = true;
+        obj[key] = v ?? "";
+      });
+      if (hasAny) rows.push(obj);
+    }
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "No data found in spreadsheet" }, { status: 400 });
     }
 
-    // Auto-detect column mapping
-    const headers = Object.keys(rows[0]).map(h => h.toLowerCase().trim());
+    // Auto-detect column mapping (same logic as before)
     const findCol = (patterns: string[]) => {
       const key = Object.keys(rows[0]).find(k =>
         patterns.some(p => k.toLowerCase().trim().includes(p))

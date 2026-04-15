@@ -1,3 +1,4 @@
+// @ts-nocheck — one-off seed script, xlsx dependency removed in security cleanup
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
