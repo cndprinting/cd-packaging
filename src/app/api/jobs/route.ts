@@ -12,7 +12,7 @@ export async function GET() {
     }
 
     const jobs = await prisma.job.findMany({
-      include: { order: { include: { company: true } } },
+      include: { order: { include: { company: true } }, csr: true },
       orderBy: { createdAt: "desc" },
     });
 
@@ -29,9 +29,10 @@ export async function GET() {
       priority: j.priority,
       quantity: j.quantity,
       dueDate: j.dueDate?.toISOString().split("T")[0] || "",
-      csrName: "",
+      csrName: j.csr?.name ?? "",
       salesRepName: "",
       productionOwnerName: "",
+      updatedAt: j.updatedAt?.toISOString() ?? "",
       isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
       isBlocked: false,
     }));

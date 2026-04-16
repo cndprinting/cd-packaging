@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2, FileBarChart, ArrowRight, Building2 } from "lucide-react";
+import { Clock, AlertTriangle, BarChart3, Timer, Layers, Package, Truck, Loader2, FileBarChart, ArrowRight, Building2, ClipboardList } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -49,6 +49,22 @@ export default function ReportsPage() {
               <div>
                 <h2 className="text-lg font-bold">Weekly Executive Report</h2>
                 <p className="text-sm text-white/80">KPIs, volumes, sales, costs, and trends — printable PDF with Excel backup</p>
+              </div>
+            </div>
+            <ArrowRight className="h-6 w-6 text-white/70" />
+          </CardContent>
+        </Card>
+      </Link>
+
+      {/* WIP Report */}
+      <Link href="/dashboard/reports/wip">
+        <Card className="bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-lg transition-shadow cursor-pointer">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/20 p-3"><ClipboardList className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-lg font-bold">WIP Report</h2>
+                <p className="text-sm text-white/80">Daily shop floor report — active jobs grouped by department with overdue alerts</p>
               </div>
             </div>
             <ArrowRight className="h-6 w-6 text-white/70" />

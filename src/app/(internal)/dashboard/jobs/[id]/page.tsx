@@ -7,7 +7,7 @@ import {
   ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
   ShieldCheck, FileImage, Loader2, ChevronRight, Pencil, X, Check,
   Trash2, Users, Layers, Printer, Scissors,
-  DollarSign, Info, Plus, Send, CircleAlert, FileCheck,
+  DollarSign, Info, Plus, Send, CircleAlert, FileCheck, Copy,
 } from "lucide-react";
 import { demoJobs, PRODUCT_TYPES } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
@@ -641,6 +641,25 @@ export default function JobDetailPage() {
                 }}
               >
                 <DollarSign className="h-4 w-4" />Create Invoice
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={async () => {
+                  if (!confirm(`Duplicate ${job.jobNumber} as an exact reprint? All ticket notes and specs will be copied to a new job number.`)) return;
+                  try {
+                    const res = await fetch(`/api/jobs/${jobId}/duplicate`, { method: "POST" });
+                    const data = await res.json();
+                    if (res.ok && data.job) {
+                      flash(`Duplicated → ${data.job.jobNumber}`);
+                      router.push(`/dashboard/jobs/${data.job.id}`);
+                    } else {
+                      alert(data.error || "Failed to duplicate");
+                    }
+                  } catch { alert("Failed to duplicate job"); }
+                }}
+              >
+                <Copy className="h-4 w-4" />Duplicate (Reprint)
               </Button>
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete

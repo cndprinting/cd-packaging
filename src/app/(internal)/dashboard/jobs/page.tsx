@@ -48,6 +48,8 @@ const STATUSES = [
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState("");
+  const [deepResults, setDeepResults] = useState<any[] | null>(null);
+  const [deepSearching, setDeepSearching] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -64,6 +66,21 @@ export default function JobsPage() {
       .then((data) => { if (data.jobs) setJobs(data.jobs); })
       .catch(() => {});
   }, []);
+
+  // Deep server-side search across all fields (debounced)
+  useEffect(() => {
+    if (search.length < 3) { setDeepResults(null); return; }
+    const timeout = setTimeout(async () => {
+      setDeepSearching(true);
+      try {
+        const res = await fetch(`/api/jobs/search?q=${encodeURIComponent(search)}`);
+        const data = await res.json();
+        setDeepResults(data.jobs || []);
+      } catch { setDeepResults(null); }
+      setDeepSearching(false);
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
@@ -127,7 +144,7 @@ export default function JobsPage() {
         <div className="flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input placeholder="Search by job number or name..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder="Search all fields — customer, PO#, die#, paper, ink, bindery..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} placeholder="All Statuses" options={[{ value: "", label: "All Statuses" }, ...STATUSES.map((s) => ({ value: s, label: getStatusLabel(s) }))]} className="w-40" />
           <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} placeholder="All Priorities" options={[{ value: "", label: "All Priorities" }, { value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} className="w-40" />
@@ -135,6 +152,46 @@ export default function JobsPage() {
           <Select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} className="w-40" />
         </div>
       </Card>
+
+      {/* Deep Search Results */}
+      {search.length >= 3 && (
+        <Card className="p-4 border-blue-200 bg-blue-50/30">
+          <div className="flex items-center gap-2 mb-3">
+            <Search className="h-4 w-4 text-blue-600" />
+            <span className="font-medium text-blue-900">
+              Full search: &quot;{search}&quot;
+            </span>
+            {deepSearching && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+            {deepResults && !deepSearching && (
+              <span className="text-xs text-gray-500">{deepResults.length} result{deepResults.length !== 1 ? "s" : ""} across all fields</span>
+            )}
+          </div>
+          {deepResults && deepResults.length > 0 && (
+            <div className="space-y-1.5">
+              {deepResults.map((r: any) => (
+                <Link key={r.id} href={`/dashboard/jobs/${r.id}`}>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-blue-100/50 cursor-pointer">
+                    <div>
+                      <span className="text-xs font-mono text-gray-500">{r.jobNumber}</span>
+                      <span className="mx-2 font-medium text-sm text-gray-900">{r.name}</span>
+                      <span className="text-xs text-gray-500">{r.companyName}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      {r.dieNumber && <span>Die: {r.dieNumber}</span>}
+                      {r.stockDescription && <span className="max-w-[120px] truncate">{r.stockDescription}</span>}
+                      {r.inkFront && <span>Ink: {r.inkFront}/{r.inkBack}</span>}
+                      <Badge className={getStatusColor(r.status)}>{getStatusLabel(r.status)}</Badge>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+          {deepResults && deepResults.length === 0 && !deepSearching && (
+            <p className="text-sm text-gray-500">No jobs found matching &quot;{search}&quot; in any field.</p>
+          )}
+        </Card>
+      )}
 
       {/* Job Groups */}
       {Object.entries(grouped).map(([status, statusJobs]) => (
