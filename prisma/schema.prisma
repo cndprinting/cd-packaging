@@ -327,6 +327,11 @@ model Job {
   pressNotes       String?
   paymentNotes     String?
   prepressNotes    String?
+  // General Notes — cross-department critical info (deadlines, mask pin#s,
+  // quality warnings). CSRs were cramming notes into random margins because
+  // department-specific notes are only visible to one team. This field is
+  // rendered prominently at the top of the job ticket + print view.
+  generalNotes     String?
 
   // Labor Tracking
   estimatedHours   Float?    // total estimated labor hours for this job

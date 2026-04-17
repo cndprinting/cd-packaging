@@ -394,6 +394,40 @@ export default function PrintJobTicketPage() {
       </table>
 
       {/* ════════════════════════════════════════════════════════ */}
+      {/* GENERAL NOTES — cross-department critical info            */}
+      {/* Added per Carrie Cady's CSR feedback: prominent block     */}
+      {/* everyone sees before description / department notes.     */}
+      {/* ════════════════════════════════════════════════════════ */}
+      {f("generalNotes") && (
+        <table className="mt" style={{ border: "2px solid #000" }}>
+          <tbody>
+            <tr>
+              <td
+                className="section-hd"
+                style={{ background: "#fff3cd", borderBottom: "2px solid #000" }}
+              >
+                ⚠ GENERAL NOTES — READ BEFORE STARTING
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  padding: "6px 8px",
+                  fontSize: "11pt",
+                  fontWeight: 600,
+                  whiteSpace: "pre-wrap",
+                  minHeight: "50px",
+                  background: "#fffbea",
+                }}
+              >
+                {f("generalNotes")}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      {/* ════════════════════════════════════════════════════════ */}
       {/* ROW 4: JOB DESCRIPTION TABLE (multiple rows)           */}
       {/* ════════════════════════════════════════════════════════ */}
       <table className="mt">

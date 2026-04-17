@@ -129,6 +129,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         vendorInfo: sourceJob.vendorInfo,
         pressNotes: sourceJob.pressNotes,
         prepressNotes: sourceJob.prepressNotes,
+        generalNotes: sourceJob.generalNotes,
         softCover: sourceJob.softCover,
         plusCover: sourceJob.plusCover,
         hasBleeds: sourceJob.hasBleeds,

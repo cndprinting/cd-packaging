@@ -95,6 +95,7 @@ interface JobData {
   pressNotes?: string;
   paymentNotes?: string;
   prepressNotes?: string;
+  generalNotes?: string;
   binderyScore?: boolean;
   binderyPerf?: boolean;
   binderyDrill?: boolean;
@@ -303,6 +304,7 @@ export default function JobDetailPage() {
             pressNotes: j.pressNotes || "",
             paymentNotes: j.paymentNotes || "",
             prepressNotes: j.prepressNotes || "",
+            generalNotes: j.generalNotes || "",
             binderyScore: j.binderyScore || false,
             binderyPerf: j.binderyPerf || false,
             binderyDrill: j.binderyDrill || false,
@@ -745,6 +747,30 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
+      {/* 2c. GENERAL NOTES — cross-department critical info                */}
+      {/* Added per Carrie's feedback: CSRs need one prominent notes field  */}
+      {/* visible to every department (prepress, press, bindery, shipping) */}
+      {/* instead of cramming critical info into margins and corners.       */}
+      {/* ================================================================= */}
+      <Card className="border-amber-300 bg-amber-50/50 print:border-2 print:border-black">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-amber-900">
+            <CircleAlert className="h-4 w-4" />General Notes
+            <span className="text-xs font-normal text-amber-700">— visible to all departments on the ticket &amp; printout</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <textarea
+            defaultValue={job.generalNotes || ""}
+            placeholder="Critical info everyone on this job needs to see: deadlines, mask pin #s, customer quirks, quality warnings, cross-department coordination..."
+            rows={3}
+            className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            onBlur={(e) => updateJobField("generalNotes", e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
       {/* 3. JOB TICKET INFO — 2-column grid                               */}
       {/* ================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -808,7 +834,9 @@ export default function JobDetailPage() {
               <p className="text-sm font-medium text-gray-900">{job.name}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Page info line — per CSR feedback, # Pages / Self Cover / Plus Cover
+                live together on one line so they read in sequence at the top. */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
                 <SectionLabel># Pages</SectionLabel>
                 <Input
@@ -818,7 +846,11 @@ export default function JobDetailPage() {
                   onBlur={(e) => updateJobField("numPages", parseInt(e.target.value) || 0)}
                 />
               </div>
-              <div>
+              <div className="flex items-center gap-4 pb-2">
+                <Checkbox label="Self Cover" checked={job.softCover || false} onChange={(v) => updateJobField("softCover", v)} />
+                <Checkbox label="Plus Cover" checked={job.plusCover || false} onChange={(v) => updateJobField("plusCover", v)} />
+              </div>
+              <div className="md:col-span-2">
                 <SectionLabel>Job Type</SectionLabel>
                 <Select
                   value={job.jobType || "NEW_ORDER"}
@@ -1187,9 +1219,8 @@ export default function JobDetailPage() {
           </div>
 
           <div className="flex gap-6 mt-4 pt-4 border-t border-gray-100">
-            <Checkbox label="Soft Cover" checked={job.softCover || false} onChange={(v) => updateJobField("softCover", v)} />
-            <Checkbox label="Plus Cover" checked={job.plusCover || false} onChange={(v) => updateJobField("plusCover", v)} />
             <Checkbox label="Has Bleeds" checked={job.hasBleeds || false} onChange={(v) => updateJobField("hasBleeds", v)} />
+            {/* Self Cover / Plus Cover moved to page-info row at top of ticket per CSR feedback */}
           </div>
         </CardContent>
       </Card>
