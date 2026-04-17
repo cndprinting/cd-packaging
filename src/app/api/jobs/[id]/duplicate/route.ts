@@ -28,12 +28,17 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // Generate new order and job numbers
+    // Generate new order and job numbers with collision fallback.
+    const ts = Date.now().toString().slice(-6);
     const orderCount = await prisma.order.count();
-    const orderNumber = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
+    const candidateOrder = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
+    const existingOrderCollision = await prisma.order.findUnique({ where: { orderNumber: candidateOrder } });
+    const orderNumber = existingOrderCollision ? `ORD-${ts}` : candidateOrder;
 
     const jobCount = await prisma.job.count();
-    const jobNumber = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
+    const candidateJob = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
+    const existingJobCollision = await prisma.job.findUnique({ where: { jobNumber: candidateJob } });
+    const jobNumber = existingJobCollision ? `PKG-2026-${ts}` : candidateJob;
 
     // Create new order linked to the same company
     const newOrder = await prisma.order.create({

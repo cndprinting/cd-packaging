@@ -35,11 +35,19 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     }
     if (!companyId) return NextResponse.json({ error: "No customer company available" }, { status: 400 });
 
-    // Generate order + job numbers
+    // Generate order + job numbers with collision fallback.
+    // Count-based numbering collides if records were deleted, so we check
+    // the candidate against the DB and fall back to a timestamp suffix.
+    const ts = Date.now().toString().slice(-6);
     const orderCount = await prisma.order.count();
-    const orderNumber = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
+    const candidateOrder = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
+    const existingOrder = await prisma.order.findUnique({ where: { orderNumber: candidateOrder } });
+    const orderNumber = existingOrder ? `ORD-${ts}` : candidateOrder;
+
     const jobCount = await prisma.job.count();
-    const jobNumber = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
+    const candidateJob = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
+    const existingJob = await prisma.job.findUnique({ where: { jobNumber: candidateJob } });
+    const jobNumber = existingJob ? `PKG-2026-${ts}` : candidateJob;
 
     const order = await prisma.order.create({
       data: {
@@ -133,6 +141,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     if (qr.orientation) prepressBits.push(`Orientation: ${qr.orientation}`);
     const prepressNotesStr = prepressBits.join("\n") || null;
 
+    // General Notes — the QR's specialInstructions + customColorCoatingNotes
+    // are exactly the cross-departmental "read before starting" info that
+    // Carrie's General Notes section was built for. Surface them there so
+    // they print prominently at the top of every ticket.
+    const generalNotesBits: string[] = [];
+    if (qr.specialInstructions) generalNotesBits.push(qr.specialInstructions);
+    if (qr.customColorCoatingNotes) generalNotesBits.push(`Color/coating: ${qr.customColorCoatingNotes}`);
+    const generalNotesStr = generalNotesBits.join("\n\n") || null;
+
     const job = await prisma.job.create({
       data: {
         jobNumber,
@@ -140,8 +157,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         quoteRequestId: qr.id,
         name: jobName,
         description: qr.jobType && qr.jobType !== "new"
-          ? `[${qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES"}${qr.pickupJobNumber ? ` of ${qr.pickupJobNumber}` : ""}] ${qr.specialInstructions || ""}`.trim()
-          : qr.specialInstructions || null,
+          ? `[${qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES"}${qr.pickupJobNumber ? ` of ${qr.pickupJobNumber}` : ""}]`.trim()
+          : null,
         status: "QUOTE",
         priority: "NORMAL",
         quantity: totalQty,
@@ -170,6 +187,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         binderyNotes: binderyNotesStr,
         // Notes
         prepressNotes: prepressNotesStr,
+        generalNotes: generalNotesStr,
         deliveryTo: qr.deliveryInstructions || null,
         // Vendor
         vendorInfo: qr.vendorName || null,

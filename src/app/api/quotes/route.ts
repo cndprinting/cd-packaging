@@ -159,6 +159,13 @@ export async function PUT(request: NextRequest) {
         const qrBinderyDrill = !!linkedQr?.drill;
         const qrBinderyCount = !!linkedQr?.numbering;
 
+        // Surface cross-departmental QR notes into generalNotes so they print
+        // prominently on the job ticket (per Carrie's feedback).
+        const qrGeneralBits: string[] = [];
+        if (linkedQr?.specialInstructions) qrGeneralBits.push(linkedQr.specialInstructions);
+        if (linkedQr?.customColorCoatingNotes) qrGeneralBits.push(`Color/coating: ${linkedQr.customColorCoatingNotes}`);
+        const qrGeneralNotes = qrGeneralBits.join("\n\n") || null;
+
         const job = await prisma.job.create({
           data: {
             jobNumber: finalJobNumber, orderId: order.id,
@@ -222,6 +229,7 @@ export async function PUT(request: NextRequest) {
             binderyGlue: !!jt.binderyGlue,
             binderyWrap: !!jt.binderyWrap,
             binderyNotes: jt.binderyNotes ?? null,
+            generalNotes: qrGeneralNotes,
 
             // ── Labor baseline from estimator ──
             estimatedHours: jt.estimatedHours ?? null,

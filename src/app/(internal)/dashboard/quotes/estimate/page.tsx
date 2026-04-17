@@ -1478,7 +1478,7 @@ function EstimateContent() {
           </label>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={form.softCover} onChange={(e) => set("softCover", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-            Soft Cover
+            Self Cover
           </label>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={form.plusCover} onChange={(e) => set("plusCover", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
