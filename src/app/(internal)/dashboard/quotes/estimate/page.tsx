@@ -116,6 +116,15 @@ interface PlantStandardsData {
   deliveryRate: number;
   deliveryAvgMinutes: number;
   scorePerfRate: number;
+  // Phase 1 additions
+  hiResProofCost: number;
+  lowResProofCost: number;
+  imposeTimePerFormMin: number;
+  cutTimePerCutSec: number;
+  foldTimePerFoldSec: number;
+  drillTimePerHoleSec: number;
+  paperCuttingRate: number;
+  plateMakingRate: number;
   [key: string]: number | string;
 }
 
@@ -154,11 +163,29 @@ interface FormState {
   coatingCostPer1000: number;
   gluingSetup: number;
   windowPatching: number;
-  // Proofs
+  // Proofs (legacy Sherpa/Dylux/Matchprint count fields — kept for back-compat but not wired to cost)
   proofSherpa2: number;
   proofSherpa43: number;
   proofDylux: number;
   proofMatchprint: number;
+  // Phase 1 — Mary's feedback: quantitative proof pricing
+  hiResProofCount: number;  // high-res 1-sided proofs
+  lowResProofCount: number; // low-res 2-sided proofs
+  // Phase 1 — extra plates beyond auto-calc (e.g. spot PMS on one form)
+  extraPlates: { description: string; cost: number }[];
+  plateLaborMinutesEach: number; // labor minutes per plate (drives plate labor cost)
+  // Phase 1 — ink type per side (Process / PMS / LED UV) drives rate lookup
+  inkTypeFront: string; // "process" | "pms" | "led_uv"
+  inkTypeBack: string;
+  // Phase 1 — paper taxonomy + carton math
+  paperCategory: string; // "coated" | "uncoated" | "c1s" | "cover" | "text" | "label" | ""
+  sheetsPerCarton: number;
+  roundUpCartons: boolean;
+  // Phase 1 — quantitative finishing (replaces difficulty dials)
+  numCuts: number;
+  foldType: string; // "none" | "half" | "tri" | "z" | "gate" | "roll" | "accordion" | "double_parallel" | "french" | "custom"
+  numFolds: number;
+  numDrillHoles: number;
   // Bindery detail
   cuttingDiff: number;
   handBind1Name: string;
@@ -300,6 +327,20 @@ const defaultForm: FormState = {
   proofSherpa43: 0,
   proofDylux: 0,
   proofMatchprint: 0,
+  // Phase 1 defaults
+  hiResProofCount: 0,
+  lowResProofCount: 0,
+  extraPlates: [] as { description: string; cost: number }[],
+  plateLaborMinutesEach: 5,
+  inkTypeFront: "process",
+  inkTypeBack: "process",
+  paperCategory: "",
+  sheetsPerCarton: 0,
+  roundUpCartons: false,
+  numCuts: 0,
+  foldType: "none",
+  numFolds: 0,
+  numDrillHoles: 0,
   cuttingDiff: 1.0,
   handBind1Name: "",
   handBind1SpeedPerHour: 0,
@@ -638,8 +679,17 @@ function EstimateContent() {
     let finishingCost = 0;
     let makeReadyCost = 0;
 
+    // Carton round-up helper: if CSR entered sheets-per-carton and toggled
+    // "round up to full cartons", bump the sheet count to the next carton.
+    const roundUpToCartons = (sheets: number): number => {
+      const per = num("sheetsPerCarton");
+      if (!form.roundUpCartons || per <= 0) return sheets;
+      return Math.ceil(sheets / per) * per;
+    };
+
     if (isCartonOffset) {
-      const sheetsNeeded = Math.ceil((q * v) / (num("numberUp") || 1));
+      const rawSheets = Math.ceil((q * v) / (num("numberUp") || 1));
+      const sheetsNeeded = roundUpToCartons(rawSheets);
       const paperCost = (sheetsNeeded / 1000) * num("paperCostPer1000");
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
       const inkCost = totalColors * num("inkCostPerLb") * (sheetsNeeded / 5000);
@@ -665,7 +715,7 @@ function EstimateContent() {
       const pagesPerForm = (num("numberUp") || 1) * 2; // 2 sides per sheet, times number-up
       const numForms = Math.max(1, Math.ceil(pages / Math.max(pagesPerForm, 1)));
       const sheetsPerForm = q + num("makeReadySheets");
-      const totalSheets = numForms * sheetsPerForm;
+      const totalSheets = roundUpToCartons(numForms * sheetsPerForm);
       const paperCost = (totalSheets / 1000) * num("commPaperCostPer1000");
       const coverageMultiplier = num("inkCoveragePercent") / 100;
       const inkCost = num("commInkCost") * totalColors * coverageMultiplier * numForms;
@@ -686,10 +736,50 @@ function EstimateContent() {
       finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge");
     }
 
+    // ─── Phase 1 additions (Mary's feedback) ─────────────────────────────
+    // Quantitative finishing inputs + proof pricing + plate extras.
+    // Rates come from Plant Standards; all additive on top of existing calc.
+    const ps = plantStandards;
+    // Proof cost
+    const proofCost =
+      num("hiResProofCount") * (ps?.hiResProofCost ?? 30) +
+      num("lowResProofCount") * (ps?.lowResProofCost ?? 12);
+    // Extra plates (manual add-on rows)
+    const extraPlatesCost = (form.extraPlates as { description: string; cost: number }[]).reduce(
+      (sum, p) => sum + (Number(p.cost) || 0), 0
+    );
+    // Plate labor (derived from plate count × minutes/plate × rate)
+    const totalPlateCount = (() => {
+      if (isCartonOffset || isCommOffset) {
+        const colors = num("inkColorsFront") + num("inkColorsBack");
+        const pages = num("numPages") || 1;
+        const pagesPerForm = (num("numberUp") || 1) * 2;
+        const forms = Math.max(1, Math.ceil(pages / Math.max(pagesPerForm, 1)));
+        return colors * forms;
+      }
+      return 0;
+    })();
+    const plateLaborMinutes = totalPlateCount * num("plateLaborMinutesEach");
+    const plateLaborCost = (plateLaborMinutes / 60) * (ps?.plateMakingRate ?? 22);
+    // Quantitative finishing — cuts, folds, drills
+    const cutCost = num("numCuts") * ((ps?.cutTimePerCutSec ?? 8) / 3600) * (ps?.paperCuttingRate ?? 32);
+    // Fold cost scales with quantity × folds per sheet
+    const foldCost = num("numFolds") * q * ((ps?.foldTimePerFoldSec ?? 2) / 3600) * (ps?.folder1Rate ?? 48);
+    // Drill cost scales with quantity × holes per sheet
+    const drillCost = num("numDrillHoles") * q * ((ps?.drillTimePerHoleSec ?? 4) / 3600) * (ps?.drillingRate ?? 35);
+    // Apply carton round-up to totalSheets already computed above? Too intertwined;
+    // instead, report additional sheets as an adjustment to paper cost below.
+    // Add to appropriate buckets
+    toolingCost += extraPlatesCost;
+    finishingCost += cutCost + foldCost + drillCost;
+    // Proof cost is a prepress item → add to materialsCost bucket (simplest)
+    materialsCost += proofCost;
+
     const laborCost =
       num("pressRunTime") * num("pressOperatorRate") +
       num("prepressTime") * num("prepressRate") +
-      num("setupTime") * num("pressOperatorRate");
+      num("setupTime") * num("pressOperatorRate") +
+      plateLaborCost;
 
     const shippingCost = num("shippingCost");
 
@@ -997,25 +1087,30 @@ function EstimateContent() {
             finishedHeight: Number(form.finishedHeight) || null,
             numberUp: Number(form.numberUp) || null,
             numPages: Number(form.numPages) || null,
-            inkFront: form.inkColorsFront > 0 ? `${form.inkColorsFront}/0` : null,
-            inkBack: form.inkColorsBack > 0 ? `${form.inkColorsBack}/0` : null,
             varnish: form.specialtyCoating && form.specialtyCoating !== "none" ? form.specialtyCoating : null,
             coating: form.coatingType && form.coatingType !== "none" ? form.coatingType : null,
             pressAssignment: selectedPress?.name || null,
             pressFormat: selectedConfig?.name || null,
             makeReadyCount: Number(form.makeReadySheets) || null,
             stockDescription: [form.stockType, form.paperWeight ? `${form.paperWeight}#` : "", form.paperBasisWeight ? `${form.paperBasisWeight}lb basis` : ""].filter(Boolean).join(" ") || null,
-            // Bindery flags derived from cost entries
-            binderyFold: Number(form.foldingCost) > 0,
+            // Bindery flags derived from cost entries + Phase 1 quantitative fields
+            binderyFold: Number(form.foldingCost) > 0 || (form.foldType && form.foldType !== "none") || Number(form.numFolds) > 0,
             binderyStitch: Number(form.saddleStitchCost) > 0 || Number(form.perfectBindingCost) > 0,
             binderyScore: Number(form.strippingToolCost) > 0,
+            binderyDrill: Number(form.numDrillHoles) > 0,
             binderyGlue: Number(form.gluingSetup) > 0,
             binderyWrap: !!form.skidPack,
             binderyNotes: [
               form.handBind1Name ? `Hand: ${form.handBind1Name}` : "",
               form.handBind2Name ? `Hand: ${form.handBind2Name}` : "",
               form.windowPatching > 0 ? "Window patching" : "",
+              form.foldType && form.foldType !== "none" && Number(form.numFolds) > 0 ? `${form.foldType} fold × ${form.numFolds}` : "",
+              Number(form.numCuts) > 0 ? `${form.numCuts} cuts` : "",
+              Number(form.numDrillHoles) > 0 ? `${form.numDrillHoles} drill holes` : "",
             ].filter(Boolean).join("; ") || null,
+            // Phase 1 — ink types surfaced on job ticket
+            inkFront: form.inkColorsFront > 0 ? `${form.inkColorsFront}${form.inkTypeFront === "pms" ? " PMS" : form.inkTypeFront === "led_uv" ? " LED UV" : ""}/0` : null,
+            inkBack: form.inkColorsBack > 0 ? `${form.inkColorsBack}${form.inkTypeBack === "pms" ? " PMS" : form.inkTypeBack === "led_uv" ? " LED UV" : ""}/0` : null,
             dieNumber: form.diePlywoodSize || null,
             // Job ticket extras (Mary can fill these on the estimator)
             fscCertified: !!form.fscCertified,
@@ -1524,17 +1619,59 @@ function EstimateContent() {
 
           <Section title="Paper & Ink" icon={Droplets}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Field label="Paper Category" hint="Filters inventory search">
+                <select
+                  value={form.paperCategory}
+                  onChange={(e) => set("paperCategory", e.target.value as any)}
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">— any —</option>
+                  <option value="coated">Coated</option>
+                  <option value="uncoated">Uncoated</option>
+                  <option value="c1s">C1S (Coated 1 Side)</option>
+                  <option value="cover">Cover</option>
+                  <option value="text">Text</option>
+                  <option value="label">Label Stock</option>
+                </select>
+              </Field>
               <Field label="Paper Stock" hint="Search from inventory" className="sm:col-span-2">
                 <Combobox
                   value={form.stockDescription as string || ""}
                   onChange={(_id, label) => set("stockDescription" as keyof FormState, label)}
-                  options={materialsList.map(m => ({ id: m.id, label: m.name, subtitle: m.sku || undefined }))}
-                  placeholder="Search paper stock..."
+                  options={materialsList
+                    .filter(m => {
+                      const cat = form.paperCategory as string;
+                      if (!cat) return true;
+                      const hay = `${m.name} ${m.sku ?? ""}`.toLowerCase();
+                      if (cat === "coated") return hay.includes("coated") || hay.includes("gloss") || hay.includes("matte") || hay.includes("silk");
+                      if (cat === "uncoated") return hay.includes("uncoated") || hay.includes("offset") || hay.includes("opaque");
+                      if (cat === "c1s") return hay.includes("c1s") || hay.includes("c/1/s") || hay.includes("1/s");
+                      if (cat === "cover") return hay.includes("cover") || hay.includes("c/c") || hay.includes("c2s");
+                      if (cat === "text") return hay.includes("text");
+                      if (cat === "label") return hay.includes("label");
+                      return true;
+                    })
+                    .map(m => ({ id: m.id, label: m.name, subtitle: m.sku || undefined }))}
+                  placeholder={`Search ${form.paperCategory || "paper"} stock...`}
                   allowCreate
                 />
               </Field>
               <Field label="Paper Weight" hint="e.g. 18pt, 100lb">
                 <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 18pt" />
+              </Field>
+              <Field label="Sheets per carton" hint="From supplier spec">
+                <Input type="number" value={form.sheetsPerCarton || ""} onChange={(e) => set("sheetsPerCarton", Number(e.target.value))} min={0} />
+              </Field>
+              <Field label="Round up to full cartons" hint="Cover/text stocks usually required">
+                <label className="flex items-center gap-2 h-9 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.roundUpCartons}
+                    onChange={(e) => set("roundUpCartons", e.target.checked as any)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Buy full cartons
+                </label>
               </Field>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -1570,10 +1707,41 @@ function EstimateContent() {
                 <Field label="Colors (Front)">
                   <Input type="number" value={form.inkColorsFront || ""} onChange={(e) => set("inkColorsFront", Number(e.target.value))} min={0} max={8} />
                 </Field>
+                <Field label="Front ink type">
+                  <select
+                    value={form.inkTypeFront}
+                    onChange={(e) => {
+                      set("inkTypeFront", e.target.value as any);
+                      // Auto-update ink cost rate from Plant Standards
+                      if (plantStandards) {
+                        const r = e.target.value === "pms" ? plantStandards.inkPmsPerLb
+                          : e.target.value === "led_uv" ? (plantStandards.inkPmsPerLb * 1.3) // LED UV ~30% premium
+                          : plantStandards.inkColorPerLb;
+                        set("inkCostPerLb", r);
+                      }
+                    }}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="process">Process (4/C)</option>
+                    <option value="pms">PMS (spot)</option>
+                    <option value="led_uv">LED UV</option>
+                  </select>
+                </Field>
                 <Field label="Colors (Back)">
                   <Input type="number" value={form.inkColorsBack || ""} onChange={(e) => set("inkColorsBack", Number(e.target.value))} min={0} max={8} />
                 </Field>
-                <Field label="Ink Cost ($/lb)">
+                <Field label="Back ink type">
+                  <select
+                    value={form.inkTypeBack}
+                    onChange={(e) => set("inkTypeBack", e.target.value as any)}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="process">Process (4/C)</option>
+                    <option value="pms">PMS (spot)</option>
+                    <option value="led_uv">LED UV</option>
+                  </select>
+                </Field>
+                <Field label="Ink Cost ($/lb)" hint={`Auto from ink type; override if needed`}>
                   <Input type="number" step="0.01" value={form.inkCostPerLb || ""} onChange={(e) => set("inkCostPerLb", Number(e.target.value))} />
                 </Field>
               </div>
@@ -1613,25 +1781,118 @@ function EstimateContent() {
             </div>
 
             <div className="mt-4 border-t border-gray-100 pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Proofs</p>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Field label="Sherpa2">
-                  <Input type="number" value={form.proofSherpa2 || ""} onChange={(e) => set("proofSherpa2", Number(e.target.value))} min={0} />
+              <p className="text-sm font-medium text-gray-700 mb-3">Proofs <span className="text-xs font-normal text-gray-500">— per Mary&apos;s feedback: quantitative + priced from Plant Standards</span></p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
+                <Field label={`High-res 1-sided  (${plantStandards ? `$${plantStandards.hiResProofCost.toFixed(2)}/ea` : "$30/ea"})`}>
+                  <Input type="number" value={form.hiResProofCount || ""} onChange={(e) => set("hiResProofCount", Number(e.target.value))} min={0} />
                 </Field>
-                <Field label="Sherpa43">
-                  <Input type="number" value={form.proofSherpa43 || ""} onChange={(e) => set("proofSherpa43", Number(e.target.value))} min={0} />
+                <Field label={`Low-res 2-sided  (${plantStandards ? `$${plantStandards.lowResProofCost.toFixed(2)}/ea` : "$12/ea"})`}>
+                  <Input type="number" value={form.lowResProofCount || ""} onChange={(e) => set("lowResProofCount", Number(e.target.value))} min={0} />
                 </Field>
-                <Field label="Dylux">
-                  <Input type="number" value={form.proofDylux || ""} onChange={(e) => set("proofDylux", Number(e.target.value))} min={0} />
+              </div>
+            </div>
+
+            {/* ── Plates & Plate Labor (Mary's feedback) ── */}
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Plates <span className="text-xs font-normal text-gray-500">— labor auto-calculated from plate count × minutes/plate</span></p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
+                <Field label="Labor minutes per plate" hint={plantStandards ? `Plate maker rate: $${plantStandards.plateMakingRate}/hr` : ""}>
+                  <Input type="number" step="1" value={form.plateLaborMinutesEach || ""} onChange={(e) => set("plateLaborMinutesEach", Number(e.target.value))} min={0} />
                 </Field>
-                <Field label="Matchprint">
-                  <Input type="number" value={form.proofMatchprint || ""} onChange={(e) => set("proofMatchprint", Number(e.target.value))} min={0} />
-                </Field>
+              </div>
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-gray-600">Additional plates (e.g. spot PMS on one form)</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const next = [...(form.extraPlates as { description: string; cost: number }[]), { description: "", cost: 0 }];
+                      set("extraPlates", next as any);
+                    }}
+                  >+ Add plate</Button>
+                </div>
+                {(form.extraPlates as { description: string; cost: number }[]).length > 0 && (
+                  <div className="space-y-2">
+                    {(form.extraPlates as { description: string; cost: number }[]).map((p, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          placeholder="Plate description (e.g. 'Spot PMS 8005 — form 1')"
+                          value={p.description}
+                          onChange={(e) => {
+                            const next = [...(form.extraPlates as { description: string; cost: number }[])];
+                            next[i] = { ...next[i], description: e.target.value };
+                            set("extraPlates", next as any);
+                          }}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Cost $"
+                          className="w-32"
+                          value={p.cost || ""}
+                          onChange={(e) => {
+                            const next = [...(form.extraPlates as { description: string; cost: number }[])];
+                            next[i] = { ...next[i], cost: Number(e.target.value) };
+                            set("extraPlates", next as any);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600"
+                          onClick={() => {
+                            const next = (form.extraPlates as { description: string; cost: number }[]).filter((_, idx) => idx !== i);
+                            set("extraPlates", next as any);
+                          }}
+                        >×</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </Section>
 
           <Section title="Finishing & Bindery" icon={Scissors}>
+            {/* ── Phase 1: Quantitative finishing (Mary's feedback) ── */}
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4">
+              <p className="text-xs font-medium text-blue-900 mb-2">
+                Quantitative finishing — enter counts, system calculates time &amp; cost using Plant Standards rates.
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Field label="# of cuts" hint={plantStandards ? `${plantStandards.cutTimePerCutSec}s/cut @ $${plantStandards.paperCuttingRate}/hr` : "Auto"}>
+                  <Input type="number" value={form.numCuts || ""} onChange={(e) => set("numCuts", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Fold type">
+                  <select
+                    value={form.foldType}
+                    onChange={(e) => set("foldType", e.target.value as any)}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="none">None</option>
+                    <option value="half">Half fold</option>
+                    <option value="tri">Tri (letter) fold</option>
+                    <option value="z">Z fold</option>
+                    <option value="gate">Gate fold</option>
+                    <option value="roll">Roll fold</option>
+                    <option value="accordion">Accordion</option>
+                    <option value="double_parallel">Double parallel</option>
+                    <option value="french">French / cross fold</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </Field>
+                <Field label="# of folds per sheet" hint={plantStandards ? `${plantStandards.foldTimePerFoldSec}s/fold` : "Auto"}>
+                  <Input type="number" value={form.numFolds || ""} onChange={(e) => set("numFolds", Number(e.target.value))} min={0} max={10} />
+                </Field>
+                <Field label="# of drill holes" hint={plantStandards ? `${plantStandards.drillTimePerHoleSec}s/hole @ $${plantStandards.drillingRate}/hr` : "Auto"}>
+                  <Input type="number" value={form.numDrillHoles || ""} onChange={(e) => set("numDrillHoles", Number(e.target.value))} min={0} max={10} />
+                </Field>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Gluing Setup ($)">
                 <Input type="number" step="0.01" value={form.gluingSetup || ""} onChange={(e) => set("gluingSetup", Number(e.target.value))} />
@@ -1639,7 +1900,7 @@ function EstimateContent() {
               <Field label="Window Patching ($)">
                 <Input type="number" step="0.01" value={form.windowPatching || ""} onChange={(e) => set("windowPatching", Number(e.target.value))} />
               </Field>
-              <Field label="Cutting Difficulty" hint="1.0 = normal">
+              <Field label="Cutting Difficulty" hint="Legacy — prefer # of cuts above">
                 <Input type="number" step="0.1" value={form.cuttingDiff || ""} onChange={(e) => set("cuttingDiff", Number(e.target.value))} min={0} max={5} />
               </Field>
             </div>

@@ -725,6 +725,20 @@ model PlantStandard {
   proofingRate          Float    @default(38.50)
   scanningRate          Float    @default(75)
 
+  // Per-unit proof pricing (Phase 1 — Mary's feedback)
+  // Replaces the unwired Sherpa/Dylux/Matchprint count fields with
+  // simple per-proof pricing for high-res 1-sided and low-res 2-sided.
+  hiResProofCost        Float    @default(30)    // per high-res 1-sided proof
+  lowResProofCost       Float    @default(12)    // per low-res 2-sided proof
+  imposeTimePerFormMin  Float    @default(15)    // prepress impose time per form (minutes)
+
+  // Per-unit finishing times (Phase 1 — for quantitative finishing inputs
+  // like "# of cuts", "# of folds", "# of drill holes" that replace
+  // difficulty dials with actual counts)
+  cutTimePerCutSec      Float    @default(8)     // paper cut on trimmer
+  foldTimePerFoldSec    Float    @default(2)     // per fold per sheet (folder runs ~1800/hr at 2 folds)
+  drillTimePerHoleSec   Float    @default(4)     // per drill hole per sheet
+
   // Plate making
   plateMakingRate       Float    @default(22)
   plateSetupMinutes     Float    @default(5)

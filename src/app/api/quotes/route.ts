@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const body = await request.json();
-    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes, quoteRequestId } = body;
+    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes, quoteRequestId, specs } = body;
     if (!customerName || !productName || !quantity) return NextResponse.json({ error: "Customer, product name, and quantity required" }, { status: 400 });
 
     const prismaModule = await import("@/lib/prisma");
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
         validUntil: validUntil ? new Date(validUntil) : null,
         notes, createdBy: session.id,
         quoteRequestId: quoteRequestId || null,
+        specs: specs || null,
       },
     });
 
@@ -224,7 +225,7 @@ export async function PUT(request: NextRequest) {
             binderyStitch: !!jt.binderyStitch || qrBinderyStitch,
             binderyScore: !!jt.binderyScore || qrBinderyScore,
             binderyPerf: qrBinderyPerf,
-            binderyDrill: qrBinderyDrill,
+            binderyDrill: !!jt.binderyDrill || qrBinderyDrill,
             binderyCount: qrBinderyCount,
             binderyGlue: !!jt.binderyGlue,
             binderyWrap: !!jt.binderyWrap,
