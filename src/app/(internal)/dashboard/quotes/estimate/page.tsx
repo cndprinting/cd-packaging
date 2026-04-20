@@ -848,9 +848,13 @@ function EstimateContent() {
         gloss_aq: 1.09, satin_aq: 1.09, matte_aq: 1.09,
         soft_touch: 6.25, led_uv: 6.30, retic_coating: 11.25, retic_varnish: 25.30,
       };
+      // Per-sq-in usage rates from Darrin's AQ calculator (Estimating Calculators.xlsx):
+      // row 6 (regular coating): 7.9e-6  → gloss/satin/matte AQ, LED UV, retic coating
+      // row 8 (soft touch):      7.5e-6
+      // row 7 (retic varn):      9.4e-7
       const usageRates: Record<string, number> = {
         gloss_aq: 0.0000079, satin_aq: 0.0000079, matte_aq: 0.0000079,
-        soft_touch: 0.0000075, led_uv: 0.0000075, retic_coating: 0.0000079, retic_varnish: 0.00000094,
+        soft_touch: 0.0000075, led_uv: 0.0000079, retic_coating: 0.0000079, retic_varnish: 0.00000094,
       };
       const sheetArea = num("coatingSheetWidth") * num("coatingSheetHeight");
       const imps = num("coatingImpressions") || q;
