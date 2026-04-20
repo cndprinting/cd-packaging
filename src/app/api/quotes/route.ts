@@ -239,6 +239,44 @@ export async function PUT(request: NextRequest) {
         });
         await prisma.quote.update({ where: { id }, data: { convertedJobId: job.id } });
 
+        // Phase II — Multi-part jobs: materialize each part as a JobLineItem
+        // with rich fields (name, sizes, ink spec, notes). Full per-part spec
+        // lives in the Quote's specs JSON for the ticket to render sections.
+        const parts: any[] = Array.isArray((specs as any).parts) ? (specs as any).parts : [];
+        if (parts.length > 0) {
+          await prisma.jobLineItem.createMany({
+            data: parts.map((p, idx) => {
+              const frontN = String(p.inkColorsFront || 0);
+              const backN = String(p.inkColorsBack || 0);
+              const inkSuffix = p.inkTypeFront === "pms" ? " PMS"
+                : p.inkTypeFront === "led_uv" ? " LED" : "";
+              const descBits = [
+                p.paperWeight || null,
+                p.paperStock || null,
+                p.pressName ? `Press: ${p.pressName}` : null,
+                p.coatingType ? `Coating: ${p.coatingType}` : null,
+                p.foldType && p.foldType !== "none" && Number(p.numFolds) > 0 ? `${p.foldType} fold × ${p.numFolds}` : null,
+                Number(p.numDrillHoles) > 0 ? `${p.numDrillHoles} drill holes` : null,
+                p.binderyStitch ? "Stitch" : null,
+                p.binderyScore ? "Score" : null,
+                p.binderyTrim ? "Trim to size" : null,
+                p.spoilagePct > 0 ? `+${p.spoilagePct}% spoilage` : null,
+                p.notes || null,
+              ].filter(Boolean).join(" · ");
+              return {
+                jobId: job.id,
+                description: `${p.name || `Part ${idx + 1}`}${descBits ? ` — ${descBits}` : ""}`,
+                quantity: Math.ceil(Number(quote.quantity) * (1 + (Number(p.spoilagePct) || 0) / 100)),
+                flatSize: (p.flatWidth && p.flatHeight) ? `${p.flatWidth}x${p.flatHeight}` : null,
+                finishedWidth: p.finishedWidth != null ? Number(p.finishedWidth) : null,
+                finishedHeight: p.finishedHeight != null ? Number(p.finishedHeight) : null,
+                inkSpec: `${frontN}${inkSuffix}/${backN}`,
+                sortOrder: idx,
+              };
+            }),
+          }).catch(() => {});
+        }
+
         // Materialize quote-request line items as JobLineItem rows so the job
         // ticket shows the multi-SKU breakdown CSRs submitted.
         const qrLineItems: any[] = Array.isArray((specs as any).lineItems) ? (specs as any).lineItems : [];

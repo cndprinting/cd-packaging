@@ -198,8 +198,50 @@ interface FormState {
   // Press extras
   pressHelpers: number;
   wasteFactor: number;
-  // Outside purchases
-  outsidePurchases: { description: string; cost: number }[];
+  // Outside purchases (Phase II — richer form: vendor + pricing mode + ref#)
+  outsidePurchases: {
+    description: string;
+    cost: number;
+    vendor?: string;
+    operation?: string;  // "lamination" | "perfect_bind" | "book_bind" | "coating" | "other"
+    pricingMode?: "lump" | "per_unit";
+    unitAmount?: number; // price per unit when per_unit
+    unitCount?: number;  // count of units (e.g. books, sq-in) when per_unit
+    quoteRef?: string;   // vendor quote ref#
+  }[];
+  // Phase II — Multi-part jobs (books with cover + text, boxes with multiple pieces)
+  // When parts.length > 0, the estimator runs in multi-part mode. Each part has
+  // its own sizes/paper/press/ink/bindery. The quote's global quantity applies to
+  // all parts; spoilagePct adds a per-part buffer (e.g. 10% extra covers).
+  parts: {
+    id: string;
+    name: string;               // "Cover", "Fly sheet", "94pgs text", etc.
+    spoilagePct: number;        // 0-100 — added to this part's effective quantity
+    flatWidth: number;
+    flatHeight: number;
+    finishedWidth: number;
+    finishedHeight: number;
+    numPages: number;           // for text forms
+    paperStock: string;         // free-text or inventory match
+    paperCategory: string;      // coated/uncoated/c1s/cover/text/label
+    paperWeight: string;        // e.g. "100lb Text", "120lb Cover"
+    paperCostPer1000: number;
+    pressName: string;          // "KOMII", "228", etc.
+    inkColorsFront: number;
+    inkColorsBack: number;
+    inkTypeFront: string;       // process/pms/led_uv
+    inkTypeBack: string;
+    coatingType: string;        // matches coatingRates keys
+    binderyFold: boolean;
+    foldType: string;
+    numFolds: number;
+    binderyStitch: boolean;
+    binderyScore: boolean;
+    binderyDrill: boolean;
+    numDrillHoles: number;
+    binderyTrim: boolean;
+    notes: string;
+  }[];
   // Folding Carton + Digital
   clickCharge: number;
   digitalDieCuttingTime: number;
@@ -288,7 +330,7 @@ interface FormState {
   priceLock: string;
   printAndStore: string;
   warehousingCost: string;
-  [key: string]: string | number | boolean | number[] | { description: string; cost: number }[]; // allow dynamic field access
+  [key: string]: string | number | boolean | number[] | { description: string; cost: number }[] | any[]; // allow dynamic field access
 }
 
 const defaultForm: FormState = {
@@ -351,7 +393,8 @@ const defaultForm: FormState = {
   skidPack: false,
   pressHelpers: 0,
   wasteFactor: 0,
-  outsidePurchases: [] as { description: string; cost: number }[],
+  outsidePurchases: [] as any[],
+  parts: [] as any[],
   clickCharge: 0,
   digitalDieCuttingTime: 0,
   digitalCutterRate: 0,
@@ -686,6 +729,38 @@ function EstimateContent() {
       if (!form.roundUpCartons || per <= 0) return sheets;
       return Math.ceil(sheets / per) * per;
     };
+
+    // ─── Phase II: Multi-part jobs (Mary's feedback) ────────────────────
+    // Iterate each part, accumulate paper + ink + coating + finishing cost.
+    // Uses plant standards rates where available; falls back to form-level
+    // values for anything the part doesn't override.
+    const parts = (form.parts as any[]) || [];
+    let partsCost = 0;
+    const partsBreakdown: Array<{ name: string; cost: number }> = [];
+    if (parts.length > 0) {
+      const ps2 = plantStandards;
+      for (const p of parts) {
+        const partQty = q * (1 + (Number(p.spoilagePct) || 0) / 100);
+        const colors = (Number(p.inkColorsFront) || 0) + (Number(p.inkColorsBack) || 0);
+        // Sheets: assume 1-up per part unless specified; use flat vs finished as a coarse imp estimate
+        const partSheets = Math.ceil(partQty * Math.max(1, Number(p.numPages) || 1) / 2);
+        const paperCost = (partSheets / 1000) * (Number(p.paperCostPer1000) || 0);
+        // Ink: process $10.81/lb, pms $19.50/lb, led $25/lb (our rule-of-thumb)
+        const inkRate = p.inkTypeFront === "pms" ? (ps2?.inkPmsPerLb ?? 19.5)
+          : p.inkTypeFront === "led_uv" ? (ps2?.inkPmsPerLb ?? 19.5) * 1.3
+          : (ps2?.inkColorPerLb ?? 10.81);
+        const inkCost = colors * inkRate * (partSheets / 5000);
+        // Fold/drill cost per part (quantitative)
+        const partFoldCost = (Number(p.numFolds) || 0) * partQty *
+          ((ps2?.foldTimePerFoldSec ?? 2) / 3600) * (ps2?.folder1Rate ?? 48);
+        const partDrillCost = (Number(p.numDrillHoles) || 0) * partQty *
+          ((ps2?.drillTimePerHoleSec ?? 4) / 3600) * (ps2?.drillingRate ?? 35);
+        const partCost = paperCost + inkCost + partFoldCost + partDrillCost;
+        partsCost += partCost;
+        partsBreakdown.push({ name: p.name || "Part", cost: partCost });
+      }
+      materialsCost += partsCost;
+    }
 
     if (isCartonOffset) {
       const rawSheets = Math.ceil((q * v) / (num("numberUp") || 1));
@@ -1083,6 +1158,10 @@ function EstimateContent() {
             const pf = (typeof window !== "undefined" ? (window as any).__quoteRequestPrefill : null);
             return pf && Array.isArray(pf.lineItems) && pf.lineItems.length > 0 ? pf.lineItems : undefined;
           })(),
+          // Phase II — Multi-part jobs. Full part detail flows into specs and
+          // materializes as JobLineItem rows on conversion. Per-part paper/press/
+          // ink/bindery is preserved so the job ticket can render separate sections.
+          parts: (form.parts as any[]).length > 0 ? (form.parts as any[]) : undefined,
           // ─── Job Ticket payload — auto-fills the job when quote converts ─────
           jobTicket: {
             flatSizeWidth: Number(form.sheetWidth) || null,
@@ -1621,6 +1700,234 @@ function EstimateContent() {
             </div>
           </Section>
 
+          {/* Phase II — Multi-part jobs (books with cover+text, multi-piece boxes) */}
+          <Section title={`Parts ${(form.parts as any[]).length > 0 ? `(${(form.parts as any[]).length})` : ""}`} icon={Layers} defaultOpen={(form.parts as any[]).length > 0}>
+            <p className="text-xs text-gray-500 mb-3">
+              For books with a cover + text form, or boxes with multiple pieces. Each part gets its own paper, press, ink, and bindery — they all share the quote&apos;s quantity, with optional spoilage % per part (e.g. +10% covers for spoilage).
+            </p>
+            <div className="space-y-3">
+              {(form.parts as any[]).map((p, i) => (
+                <div key={p.id || i} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-gray-500">Part {i + 1}</span>
+                      <Input
+                        className="font-medium w-64"
+                        value={p.name}
+                        placeholder="e.g. Cover, Fly sheet, 94pgs text"
+                        onChange={(e) => {
+                          const next = [...(form.parts as any[])];
+                          next[i] = { ...next[i], name: e.target.value };
+                          set("parts" as keyof FormState, next as any);
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = (form.parts as any[]).filter((_, j) => j !== i);
+                        set("parts" as keyof FormState, next as any);
+                      }}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >Remove part</button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <Field label="Spoilage %" hint="Extra above base qty">
+                      <Input type="number" value={p.spoilagePct || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], spoilagePct: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} min={0} max={50} />
+                    </Field>
+                    <Field label="# Pages" hint="For text forms">
+                      <Input type="number" value={p.numPages || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], numPages: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} min={0} />
+                    </Field>
+                    <Field label="Finished W">
+                      <Input type="number" step="0.125" value={p.finishedWidth || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], finishedWidth: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} />
+                    </Field>
+                    <Field label="Finished H">
+                      <Input type="number" step="0.125" value={p.finishedHeight || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], finishedHeight: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <Field label="Paper stock" className="sm:col-span-2">
+                      <Input value={p.paperStock || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], paperStock: e.target.value };
+                        set("parts" as keyof FormState, next as any);
+                      }} placeholder="e.g. Eames Cover Solar White Canvas" />
+                    </Field>
+                    <Field label="Weight">
+                      <Input value={p.paperWeight || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], paperWeight: e.target.value };
+                        set("parts" as keyof FormState, next as any);
+                      }} placeholder="e.g. 120LB Cover" />
+                    </Field>
+                    <Field label="$ per 1000 sheets">
+                      <Input type="number" step="0.01" value={p.paperCostPer1000 || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], paperCostPer1000: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-2">
+                    <Field label="Press">
+                      <select value={p.pressName || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], pressName: e.target.value };
+                        set("parts" as keyof FormState, next as any);
+                      }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                        <option value="">— select —</option>
+                        {presses.map(pr => <option key={pr.id} value={pr.name}>{pr.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Colors F">
+                      <Input type="number" min={0} max={8} value={p.inkColorsFront || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], inkColorsFront: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} />
+                    </Field>
+                    <Field label="Colors B">
+                      <Input type="number" min={0} max={8} value={p.inkColorsBack || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], inkColorsBack: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} />
+                    </Field>
+                    <Field label="Ink type F">
+                      <select value={p.inkTypeFront || "process"} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], inkTypeFront: e.target.value };
+                        set("parts" as keyof FormState, next as any);
+                      }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                        <option value="process">Process</option>
+                        <option value="pms">PMS</option>
+                        <option value="led_uv">LED UV</option>
+                      </select>
+                    </Field>
+                    <Field label="Coating">
+                      <select value={p.coatingType || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], coatingType: e.target.value };
+                        set("parts" as keyof FormState, next as any);
+                      }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                        <option value="">— none —</option>
+                        <option value="gloss_aq">Gloss AQ</option>
+                        <option value="satin_aq">Satin AQ</option>
+                        <option value="matte_aq">Matte AQ</option>
+                        <option value="soft_touch">Soft Touch</option>
+                        <option value="led_uv">LED UV</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Field label="Fold type">
+                      <select value={p.foldType || "none"} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], foldType: e.target.value, binderyFold: e.target.value !== "none" };
+                        set("parts" as keyof FormState, next as any);
+                      }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                        <option value="none">None</option>
+                        <option value="half">Half</option>
+                        <option value="tri">Tri</option>
+                        <option value="z">Z</option>
+                        <option value="gate">Gate</option>
+                        <option value="roll">Roll</option>
+                        <option value="accordion">Accordion</option>
+                      </select>
+                    </Field>
+                    <Field label="# folds">
+                      <Input type="number" value={p.numFolds || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], numFolds: Number(e.target.value) };
+                        set("parts" as keyof FormState, next as any);
+                      }} min={0} max={10} />
+                    </Field>
+                    <Field label="# drill holes">
+                      <Input type="number" value={p.numDrillHoles || ""} onChange={(e) => {
+                        const next = [...(form.parts as any[])];
+                        next[i] = { ...next[i], numDrillHoles: Number(e.target.value), binderyDrill: Number(e.target.value) > 0 };
+                        set("parts" as keyof FormState, next as any);
+                      }} min={0} max={10} />
+                    </Field>
+                    <Field label="Bindery">
+                      <div className="flex gap-3 pt-1.5">
+                        <label className="flex items-center gap-1 text-xs">
+                          <input type="checkbox" checked={!!p.binderyStitch} onChange={(e) => {
+                            const next = [...(form.parts as any[])];
+                            next[i] = { ...next[i], binderyStitch: e.target.checked };
+                            set("parts" as keyof FormState, next as any);
+                          }} /> Stitch
+                        </label>
+                        <label className="flex items-center gap-1 text-xs">
+                          <input type="checkbox" checked={!!p.binderyScore} onChange={(e) => {
+                            const next = [...(form.parts as any[])];
+                            next[i] = { ...next[i], binderyScore: e.target.checked };
+                            set("parts" as keyof FormState, next as any);
+                          }} /> Score
+                        </label>
+                        <label className="flex items-center gap-1 text-xs">
+                          <input type="checkbox" checked={!!p.binderyTrim} onChange={(e) => {
+                            const next = [...(form.parts as any[])];
+                            next[i] = { ...next[i], binderyTrim: e.target.checked };
+                            set("parts" as keyof FormState, next as any);
+                          }} /> Trim
+                        </label>
+                      </div>
+                    </Field>
+                  </div>
+                  <Field label="Notes" className="mt-2">
+                    <Input value={p.notes || ""} onChange={(e) => {
+                      const next = [...(form.parts as any[])];
+                      next[i] = { ...next[i], notes: e.target.value };
+                      set("parts" as keyof FormState, next as any);
+                    }} placeholder="Optional notes for this part" />
+                  </Field>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [...(form.parts as any[]), {
+                    id: `part-${Date.now()}`,
+                    name: "",
+                    spoilagePct: 0,
+                    flatWidth: 0, flatHeight: 0,
+                    finishedWidth: 0, finishedHeight: 0,
+                    numPages: 0,
+                    paperStock: "", paperCategory: "", paperWeight: "", paperCostPer1000: 0,
+                    pressName: "",
+                    inkColorsFront: 0, inkColorsBack: 0, inkTypeFront: "process", inkTypeBack: "process",
+                    coatingType: "",
+                    binderyFold: false, foldType: "none", numFolds: 0,
+                    binderyStitch: false, binderyScore: false, binderyDrill: false, numDrillHoles: 0,
+                    binderyTrim: false,
+                    notes: "",
+                  }];
+                  set("parts" as keyof FormState, next as any);
+                }}
+                className="text-sm font-medium text-brand-600 hover:text-brand-800"
+              >
+                + Add Part
+              </button>
+            </div>
+          </Section>
+
           <Section title="Paper & Ink" icon={Droplets}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Paper Category" hint="Filters inventory search">
@@ -1952,50 +2259,145 @@ function EstimateContent() {
             </div>
           </Section>
 
-          {/* Outside Purchases */}
+          {/* Outside Purchases — Phase II: richer form per Mary's feedback
+              (vendor, operation type, lump vs per-unit, quote ref#)        */}
           <Section title="Outside Purchases" icon={Truck} defaultOpen={false}>
-            <div className="space-y-2">
-              {(form.outsidePurchases as { description: string; cost: number }[]).map((op, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    value={op.description}
-                    onChange={(e) => {
-                      const newOps = [...(form.outsidePurchases as { description: string; cost: number }[])];
-                      newOps[i] = { ...newOps[i], description: e.target.value };
-                      set("outsidePurchases" as keyof FormState, newOps as any);
-                    }}
-                    placeholder="Description (e.g. Softtouch)"
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={op.cost || ""}
-                    onChange={(e) => {
-                      const newOps = [...(form.outsidePurchases as { description: string; cost: number }[])];
-                      newOps[i] = { ...newOps[i], cost: Number(e.target.value) };
-                      set("outsidePurchases" as keyof FormState, newOps as any);
-                    }}
-                    placeholder="Cost ($)"
-                    className="w-32"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newOps = (form.outsidePurchases as { description: string; cost: number }[]).filter((_, j) => j !== i);
-                      set("outsidePurchases" as keyof FormState, newOps as any);
-                    }}
-                    className="text-gray-400 hover:text-red-500 p-1"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+            <p className="text-xs text-gray-500 mb-3">
+              Vendors give us lump-sum or per-unit pricing per quote. Capture their quote here — it rolls into outside-services total with the Outside markup applied.
+            </p>
+            <div className="space-y-3">
+              {(form.outsidePurchases as any[]).map((op, i) => (
+                <div key={i} className="rounded-lg border border-gray-200 p-3 bg-white">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <Field label="Vendor">
+                      <Input
+                        value={op.vendor || ""}
+                        onChange={(e) => {
+                          const next = [...(form.outsidePurchases as any[])];
+                          next[i] = { ...next[i], vendor: e.target.value };
+                          set("outsidePurchases" as keyof FormState, next as any);
+                        }}
+                        placeholder="e.g. Bindtech"
+                      />
+                    </Field>
+                    <Field label="Operation">
+                      <select
+                        value={op.operation || ""}
+                        onChange={(e) => {
+                          const next = [...(form.outsidePurchases as any[])];
+                          next[i] = { ...next[i], operation: e.target.value };
+                          set("outsidePurchases" as keyof FormState, next as any);
+                        }}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      >
+                        <option value="">— select —</option>
+                        <option value="lamination">Lamination</option>
+                        <option value="perfect_bind">Perfect bind</option>
+                        <option value="book_bind">Book bind / case bind</option>
+                        <option value="coating">Coating / UV</option>
+                        <option value="foil">Foil stamp</option>
+                        <option value="diecut">Die cut</option>
+                        <option value="emboss">Emboss / deboss</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </Field>
+                    <Field label="Pricing">
+                      <select
+                        value={op.pricingMode || "lump"}
+                        onChange={(e) => {
+                          const next = [...(form.outsidePurchases as any[])];
+                          next[i] = { ...next[i], pricingMode: e.target.value };
+                          set("outsidePurchases" as keyof FormState, next as any);
+                        }}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      >
+                        <option value="lump">Lump sum</option>
+                        <option value="per_unit">Per unit</option>
+                      </select>
+                    </Field>
+                    <Field label="Quote ref #">
+                      <Input
+                        value={op.quoteRef || ""}
+                        onChange={(e) => {
+                          const next = [...(form.outsidePurchases as any[])];
+                          next[i] = { ...next[i], quoteRef: e.target.value };
+                          set("outsidePurchases" as keyof FormState, next as any);
+                        }}
+                        placeholder="Vendor quote #"
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <Field label="Description">
+                      <Input
+                        value={op.description || ""}
+                        onChange={(e) => {
+                          const next = [...(form.outsidePurchases as any[])];
+                          next[i] = { ...next[i], description: e.target.value };
+                          set("outsidePurchases" as keyof FormState, next as any);
+                        }}
+                        placeholder="What are we buying?"
+                      />
+                    </Field>
+                    {(op.pricingMode === "per_unit") ? (
+                      <>
+                        <Field label="Unit $">
+                          <Input type="number" step="0.0001" value={op.unitAmount || ""}
+                            onChange={(e) => {
+                              const next = [...(form.outsidePurchases as any[])];
+                              const unitAmount = Number(e.target.value);
+                              const unitCount = Number(next[i].unitCount) || 0;
+                              next[i] = { ...next[i], unitAmount, cost: unitAmount * unitCount };
+                              set("outsidePurchases" as keyof FormState, next as any);
+                            }}
+                          />
+                        </Field>
+                        <Field label="# units">
+                          <Input type="number" value={op.unitCount || ""}
+                            onChange={(e) => {
+                              const next = [...(form.outsidePurchases as any[])];
+                              const unitCount = Number(e.target.value);
+                              const unitAmount = Number(next[i].unitAmount) || 0;
+                              next[i] = { ...next[i], unitCount, cost: unitAmount * unitCount };
+                              set("outsidePurchases" as keyof FormState, next as any);
+                            }}
+                          />
+                        </Field>
+                      </>
+                    ) : (
+                      <Field label="Lump sum $" className="sm:col-span-2">
+                        <Input type="number" step="0.01" value={op.cost || ""}
+                          onChange={(e) => {
+                            const next = [...(form.outsidePurchases as any[])];
+                            next[i] = { ...next[i], cost: Number(e.target.value) };
+                            set("outsidePurchases" as keyof FormState, next as any);
+                          }}
+                        />
+                      </Field>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-gray-500">
+                      {op.pricingMode === "per_unit"
+                        ? `= $${((Number(op.unitAmount)||0) * (Number(op.unitCount)||0)).toFixed(2)}`
+                        : ""}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = (form.outsidePurchases as any[]).filter((_, j) => j !== i);
+                        set("outsidePurchases" as keyof FormState, next as any);
+                      }}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >Remove</button>
+                  </div>
                 </div>
               ))}
               <button
                 type="button"
                 onClick={() => {
-                  const newOps = [...(form.outsidePurchases as { description: string; cost: number }[]), { description: "", cost: 0 }];
-                  set("outsidePurchases" as keyof FormState, newOps as any);
+                  const next = [...(form.outsidePurchases as any[]), { description: "", cost: 0, pricingMode: "lump" }];
+                  set("outsidePurchases" as keyof FormState, next as any);
                 }}
                 className="text-sm font-medium text-brand-600 hover:text-brand-800"
               >
