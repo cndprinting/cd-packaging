@@ -739,6 +739,25 @@ model PlantStandard {
   foldTimePerFoldSec    Float    @default(2)     // per fold per sheet (folder runs ~1800/hr at 2 folds)
   drillTimePerHoleSec   Float    @default(4)     // per drill hole per sheet
 
+  // Phase II Part 2 — Darrin's press/cut/finishing refinements
+  // Coverage-driven press speed: solids run ~8-9k sph (vs. light coverage
+  // at 10-20k on ideal paper). When coverage exceeds the threshold, press
+  // speed caps at solidCoveragePressSpeed.
+  solidCoveragePressSpeed     Int      @default(8500)
+  heavyCoverageThresholdPct   Float    @default(60)
+  // Cut lift model: cutter processes a lift (stack) at a time, limited by
+  // lift height. Standard lift ~6 inches. Lifts = ceil(sheets × caliper / 6).
+  cutLiftHeightInches         Float    @default(6)
+  // Score/perf pricing via scorePerfRate ($37.50/hr) and scorePerfPerHour
+  // (4500/hr). Perf rule is premium because the rule costs more to replace.
+  perfRulePremiumMultiplier   Float    @default(1.5)
+  // Padding (hand bindery rate from handBinderyRate)
+  paddingSheetsPerHour        Int      @default(1000)
+  // Banding/wrapping — 14" x 4770' 55-gauge film at ~$0.057/ft; minor labor
+  // per bundle at hand bindery rate.
+  wrapFilmCostPerFoot         Float    @default(0.057)
+  wrapLaborMinutesPerBundle   Float    @default(1)
+
   // Plate making
   plateMakingRate       Float    @default(22)
   plateSetupMinutes     Float    @default(5)

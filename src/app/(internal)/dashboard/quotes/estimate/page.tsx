@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { recommendPress } from "@/lib/smart-features";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { lookupCaliper, guessCaliperFromText, PAPER_CALIPERS } from "@/lib/paper-calipers";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,15 @@ interface PlantStandardsData {
   drillTimePerHoleSec: number;
   paperCuttingRate: number;
   plateMakingRate: number;
+  // Phase II Part 2 (Darrin's press/cut/finishing refinements)
+  solidCoveragePressSpeed: number;
+  heavyCoverageThresholdPct: number;
+  cutLiftHeightInches: number;
+  perfRulePremiumMultiplier: number;
+  scorePerfPerHour: number;
+  paddingSheetsPerHour: number;
+  wrapFilmCostPerFoot: number;
+  wrapLaborMinutesPerBundle: number;
   [key: string]: number | string;
 }
 
@@ -186,6 +196,15 @@ interface FormState {
   foldType: string; // "none" | "half" | "tri" | "z" | "gate" | "roll" | "accordion" | "double_parallel" | "french" | "custom"
   numFolds: number;
   numDrillHoles: number;
+  // Phase II Part 2 — Darrin's press/cut/finishing refinements
+  coverageSolidsPct: number;       // 0-100; when > threshold, press speed caps at solidCoveragePressSpeed
+  paperCaliperInches: number;      // per-sheet thickness; 0 = auto-lookup from paper desc
+  numScores: number;               // # score rules per sheet
+  numPerfs: number;                // # perf rules per sheet
+  numPads: number;                 // # of pads
+  sheetsPerPad: number;            // sheets per pad
+  numBundles: number;              // # of wrapped bundles
+  wrapLengthPerBundleInches: number; // length of film needed per bundle (perimeter × N wraps)
   // Bindery detail
   cuttingDiff: number;
   handBind1Name: string;
@@ -383,6 +402,14 @@ const defaultForm: FormState = {
   foldType: "none",
   numFolds: 0,
   numDrillHoles: 0,
+  coverageSolidsPct: 0,
+  paperCaliperInches: 0,
+  numScores: 0,
+  numPerfs: 0,
+  numPads: 0,
+  sheetsPerPad: 0,
+  numBundles: 0,
+  wrapLengthPerBundleInches: 0,
   cuttingDiff: 1.0,
   handBind1Name: "",
   handBind1SpeedPerHour: 0,
@@ -836,22 +863,64 @@ function EstimateContent() {
     })();
     const plateLaborMinutes = totalPlateCount * num("plateLaborMinutesEach");
     const plateLaborCost = (plateLaborMinutes / 60) * (ps?.plateMakingRate ?? 22);
-    // Quantitative finishing — cuts, folds, drills
-    const cutCost = num("numCuts") * ((ps?.cutTimePerCutSec ?? 8) / 3600) * (ps?.paperCuttingRate ?? 32);
+    // Quantitative finishing — cuts, folds, drills (Phase 1)
+    // ─ Cut cost refined for Phase II Part 2 with Darrin's lift model ─
+    // Cutter processes one lift (stack) at a time; heavier caliper = fewer
+    // sheets per lift → more lifts → more cut operations. lifts =
+    // ceil(sheets × caliperInches / liftHeightInches). We estimate total
+    // sheets from quantity (multi-part already folded into materialsCost).
+    const caliper = num("paperCaliperInches") || 0.005; // sensible default
+    const liftHeight = ps?.cutLiftHeightInches ?? 6;
+    // Use quantity as a conservative sheet proxy (actual sheet count varies
+    // by path; tracking separately here is good enough for MVP).
+    const cutLifts = Math.max(1, Math.ceil((q * caliper) / liftHeight));
+    const cutCost = num("numCuts") * cutLifts * ((ps?.cutTimePerCutSec ?? 8) / 3600) * (ps?.paperCuttingRate ?? 32);
     // Fold cost scales with quantity × folds per sheet
     const foldCost = num("numFolds") * q * ((ps?.foldTimePerFoldSec ?? 2) / 3600) * (ps?.folder1Rate ?? 48);
     // Drill cost scales with quantity × holes per sheet
     const drillCost = num("numDrillHoles") * q * ((ps?.drillTimePerHoleSec ?? 4) / 3600) * (ps?.drillingRate ?? 35);
+
+    // ─── Phase II Part 2 — Darrin's finishing refinements ────────────────
+    // Score / perf (letterpress): scorePerfRate ($37.50/hr) × ops / scorePerfPerHour (4500)
+    // Perf rule is premium (perfRulePremiumMultiplier, default 1.5×)
+    const perfPremium = ps?.perfRulePremiumMultiplier ?? 1.5;
+    const scorePerfOps = num("numScores") + num("numPerfs") * perfPremium;
+    const scorePerfCost = scorePerfOps * q / (ps?.scorePerfPerHour ?? 4500) * (ps?.scorePerfRate ?? 37.5);
+    // Padding at hand bindery rate: (pads × sheets/pad) / sheetsPerHour × rate
+    const padCost = num("numPads") * num("sheetsPerPad") / (ps?.paddingSheetsPerHour ?? 1000) * (ps?.handBinderyRate ?? 22.5);
+    // Banding/wrapping: film cost + labor
+    const wrapFilmCost = num("numBundles") * (num("wrapLengthPerBundleInches") / 12) * (ps?.wrapFilmCostPerFoot ?? 0.057);
+    const wrapLaborCost = num("numBundles") * ((ps?.wrapLaborMinutesPerBundle ?? 1) / 60) * (ps?.handBinderyRate ?? 22.5);
+    const bundleCost = wrapFilmCost + wrapLaborCost;
+
+    // ─── Coverage-driven press speed reduction (Darrin) ──────────────────
+    // When heavy coverage (solids) exceeds threshold, effective SPH caps at
+    // solidCoveragePressSpeed. Adjusts pressRunTime accordingly if the user
+    // has set coverageSolidsPct and a base run time.
+    const coverageSolids = num("coverageSolidsPct");
+    const heavyThresh = ps?.heavyCoverageThresholdPct ?? 60;
+    const solidSPH = ps?.solidCoveragePressSpeed ?? 8500;
+    let coverageSpeedMultiplier = 1;
+    if (coverageSolids >= heavyThresh && selectedConfig) {
+      const baseSPH = form.stockType === "uncoated" ? selectedConfig.speedUncoated : selectedConfig.speedCoated;
+      if (baseSPH > solidSPH) coverageSpeedMultiplier = solidSPH / baseSPH;
+    }
+    // Apply to the effective pressRunTime at labor sum time (below)
+
     // Apply carton round-up to totalSheets already computed above? Too intertwined;
     // instead, report additional sheets as an adjustment to paper cost below.
     // Add to appropriate buckets
     toolingCost += extraPlatesCost;
-    finishingCost += cutCost + foldCost + drillCost;
+    finishingCost += cutCost + foldCost + drillCost + scorePerfCost + padCost + bundleCost;
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
+    // Press run time scales inversely with coverage multiplier (heavy coverage
+    // slows the press — Darrin). If user already entered pressRunTime manually,
+    // we divide by the multiplier to reflect the real duration.
+    const adjustedPressRunTime = num("pressRunTime") / Math.max(coverageSpeedMultiplier, 0.01);
     const laborCost =
-      num("pressRunTime") * num("pressOperatorRate") +
+      adjustedPressRunTime * num("pressOperatorRate") +
       num("prepressTime") * num("prepressRate") +
       num("setupTime") * num("pressOperatorRate") +
       plateLaborCost;
@@ -1973,6 +2042,23 @@ function EstimateContent() {
               <Field label="Sheets per carton" hint="From supplier spec">
                 <Input type="number" value={form.sheetsPerCarton || ""} onChange={(e) => set("sheetsPerCarton", Number(e.target.value))} min={0} />
               </Field>
+              <Field label="Caliper (inches)" hint={(() => {
+                const auto = lookupCaliper(String(form.paperWeight || form.paperBasisWeight || ""), undefined, form.paperCategory === "cover" ? "Cover" : form.paperCategory === "text" ? "Text" : undefined)
+                  ?? guessCaliperFromText(form.stockDescription as string);
+                return auto ? `Auto-suggests ${auto}" from paper spec` : "Enter manually; drives cut lift count";
+              })()}>
+                <Input
+                  type="number"
+                  step="0.0001"
+                  value={form.paperCaliperInches || ""}
+                  placeholder={(() => {
+                    const auto = lookupCaliper(String(form.paperWeight || form.paperBasisWeight || ""), undefined, form.paperCategory === "cover" ? "Cover" : form.paperCategory === "text" ? "Text" : undefined)
+                      ?? guessCaliperFromText(form.stockDescription as string);
+                    return auto ? `${auto}` : "e.g. 0.014";
+                  })()}
+                  onChange={(e) => set("paperCaliperInches", Number(e.target.value))}
+                />
+              </Field>
               <Field label="Round up to full cartons" hint="Cover/text stocks usually required">
                 <label className="flex items-center gap-2 h-9 text-sm">
                   <input
@@ -2168,13 +2254,20 @@ function EstimateContent() {
           </Section>
 
           <Section title="Finishing & Bindery" icon={Scissors}>
-            {/* ── Phase 1: Quantitative finishing (Mary's feedback) ── */}
+            {/* ── Phase 1 + II: Quantitative finishing (Mary + Darrin) ── */}
             <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4">
               <p className="text-xs font-medium text-blue-900 mb-2">
                 Quantitative finishing — enter counts, system calculates time &amp; cost using Plant Standards rates.
               </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field label="# of cuts" hint={plantStandards ? `${plantStandards.cutTimePerCutSec}s/cut @ $${plantStandards.paperCuttingRate}/hr` : "Auto"}>
+                <Field label="# of cuts" hint={(() => {
+                  const cal = Number(form.paperCaliperInches) || 0.005;
+                  const lh = plantStandards?.cutLiftHeightInches ?? 6;
+                  const lifts = Math.max(1, Math.ceil((form.quantity * cal) / lh));
+                  return plantStandards
+                    ? `${plantStandards.cutTimePerCutSec}s × ${lifts} lift${lifts!==1?"s":""} per cut`
+                    : "Auto";
+                })()}>
                   <Input type="number" value={form.numCuts || ""} onChange={(e) => set("numCuts", Number(e.target.value))} min={0} />
                 </Field>
                 <Field label="Fold type">
@@ -2200,6 +2293,31 @@ function EstimateContent() {
                 </Field>
                 <Field label="# of drill holes" hint={plantStandards ? `${plantStandards.drillTimePerHoleSec}s/hole @ $${plantStandards.drillingRate}/hr` : "Auto"}>
                   <Input type="number" value={form.numDrillHoles || ""} onChange={(e) => set("numDrillHoles", Number(e.target.value))} min={0} max={10} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
+                <Field label="# scores" hint={plantStandards ? `Letterpress — ${plantStandards.scorePerfPerHour}/hr @ $${plantStandards.scorePerfRate}` : "Auto"}>
+                  <Input type="number" value={form.numScores || ""} onChange={(e) => set("numScores", Number(e.target.value))} min={0} max={20} />
+                </Field>
+                <Field label="# perfs" hint={plantStandards ? `${plantStandards.perfRulePremiumMultiplier}× score rule cost` : "Perf premium"}>
+                  <Input type="number" value={form.numPerfs || ""} onChange={(e) => set("numPerfs", Number(e.target.value))} min={0} max={20} />
+                </Field>
+                <Field label="# pads">
+                  <Input type="number" value={form.numPads || ""} onChange={(e) => set("numPads", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Sheets / pad" hint={plantStandards ? `Hand bindery @ $${plantStandards.handBinderyRate}/hr, ${plantStandards.paddingSheetsPerHour}/hr` : "Auto"}>
+                  <Input type="number" value={form.sheetsPerPad || ""} onChange={(e) => set("sheetsPerPad", Number(e.target.value))} min={0} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
+                <Field label="# bundles" hint="For banding/wrapping">
+                  <Input type="number" value={form.numBundles || ""} onChange={(e) => set("numBundles", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Wrap length / bundle (in)" hint={plantStandards ? `$${plantStandards.wrapFilmCostPerFoot}/ft film + labor` : "Inches of film per bundle"}>
+                  <Input type="number" value={form.wrapLengthPerBundleInches || ""} onChange={(e) => set("wrapLengthPerBundleInches", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="% solids coverage" hint={plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press"}>
+                  <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
                 </Field>
               </div>
             </div>
