@@ -394,9 +394,20 @@ model Proof {
   fileUrl       String?
   fileName      String?
   status        ProofStatus @default(PENDING)
-  sentDate      DateTime?
+  sentDate      DateTime?   // when pre-press created/uploaded the proof
   notes         String?
   approvals     ProofApproval[]
+  // Pre-press → Sales → Customer → Production handoff (Mary workflow review):
+  // PENDING = pre-press uploaded, awaiting sales to send to customer
+  // SENT_TO_CUSTOMER (tracked via sentToCustomerAt) = sales sent proof to customer
+  // APPROVED = customer signed off → triggers production alert
+  deliveryMethod     String?     // "email" | "physical"
+  sentToCustomerAt   DateTime?   // when sales sent to the customer
+  sentToCustomerById String?     // which sales rep sent it
+  customerApprovedAt DateTime?   // when customer approved (alert fires at this moment)
+  customerRejectedAt DateTime?
+  productionAlertSentAt DateTime?  // when we notified production — idempotency marker
+
   createdAt     DateTime    @default(now())
 
   @@index([jobId])

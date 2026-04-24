@@ -1785,6 +1785,7 @@ function ProofsCard({ jobId }: { jobId: string }) {
   const [fileName, setFileName] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     try {
@@ -1797,14 +1798,38 @@ function ProofsCard({ jobId }: { jobId: string }) {
 
   useEffect(() => { load(); }, [jobId]);
 
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.url) {
+        setFileUrl(data.url);
+        setFileName(data.fileName || file.name);
+      }
+    } catch { /* user can paste URL manually */ }
+    setUploading(false);
+  };
+
   const createProof = async () => {
-    if (!fileName.trim()) return;
+    if (!fileName.trim() && !fileUrl.trim()) return;
     await fetch("/api/proofs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobId, fileName, fileUrl: fileUrl || null, notes: notes || null }),
     });
     setFileName(""); setFileUrl(""); setNotes(""); setAdding(false);
+    load();
+  };
+
+  const markSent = async (proofId: string, deliveryMethod: "email" | "physical") => {
+    await fetch("/api/proofs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark_sent", proofId, deliveryMethod }),
+    });
     load();
   };
 
@@ -1834,12 +1859,26 @@ function ProofsCard({ jobId }: { jobId: string }) {
       <CardContent>
         {adding && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
-            <Input placeholder="File name (e.g., proof-v1.pdf)" value={fileName} onChange={(e) => setFileName(e.target.value)} />
-            <Input placeholder="File URL (paste link to stored PDF)" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} />
-            <Input placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <Button size="sm" onClick={createProof} className="gap-1.5">
-              <Send className="h-3.5 w-3.5" />Send to Customer
+            <label className="block text-xs font-medium text-gray-700">Attach proof file</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.tiff,.ai,.psd"
+                className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-medium hover:file:bg-brand-100"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); }}
+              />
+              {uploading && <span className="text-xs text-gray-500">Uploading…</span>}
+              {fileUrl && !uploading && <span className="text-xs text-emerald-700 truncate">✓ {fileName}</span>}
+            </div>
+            <Input placeholder="Or paste URL (OneDrive, etc.)" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} />
+            <Input placeholder="File name (auto-fills from upload)" value={fileName} onChange={(e) => setFileName(e.target.value)} />
+            <Input placeholder="Notes for sales/customer (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Button size="sm" onClick={createProof} className="gap-1.5" disabled={uploading}>
+              <Plus className="h-3.5 w-3.5" />Add proof (ready for sales to send)
             </Button>
+            <p className="text-[11px] text-gray-500">
+              Once added, it lands in the sales rep&apos;s queue to email or physically send to the customer.
+            </p>
           </div>
         )}
         {loading ? (
@@ -1848,28 +1887,58 @@ function ProofsCard({ jobId }: { jobId: string }) {
           <p className="text-sm text-gray-400">No proofs yet. Upload the first round for customer review.</p>
         ) : (
           <div className="space-y-2">
-            {proofs.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">v{p.version}</span>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadge(p.status)}`}>{p.status}</span>
-                    {p.fileUrl && <a href={p.fileUrl} target="_blank" rel="noopener" className="text-xs text-brand-600 hover:underline">{p.fileName || "view"}</a>}
-                    {!p.fileUrl && <span className="text-xs text-gray-500">{p.fileName}</span>}
+            {proofs.map((p) => {
+              const sent = !!p.sentToCustomerAt;
+              return (
+                <div key={p.id} className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900">v{p.version}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadge(p.status)}`}>{p.status}</span>
+                        {sent && p.status === "PENDING" && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            SENT · {p.deliveryMethod?.toUpperCase()}
+                          </span>
+                        )}
+                        {p.fileUrl && <a href={p.fileUrl} target="_blank" rel="noopener" className="text-xs text-brand-600 hover:underline">{p.fileName || "view"}</a>}
+                        {!p.fileUrl && <span className="text-xs text-gray-500">{p.fileName}</span>}
+                      </div>
+                      {p.notes && <p className="text-xs text-gray-500 mt-0.5">{p.notes}</p>}
+                      {sent && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Sent to customer {new Date(p.sentToCustomerAt).toLocaleDateString()} via {p.deliveryMethod}
+                        </p>
+                      )}
+                      {p.customerApprovedAt && (
+                        <p className="text-[11px] text-emerald-600 mt-0.5">
+                          ✓ Customer approved {new Date(p.customerApprovedAt).toLocaleDateString()}
+                          {p.productionAlertSentAt && " — production notified"}
+                        </p>
+                      )}
+                    </div>
+                    {p.status === "PENDING" && !sent && (
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => markSent(p.id, "email")} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Email to customer</button>
+                        <button onClick={() => markSent(p.id, "physical")} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Sent physically</button>
+                      </div>
+                    )}
+                    {p.status === "PENDING" && sent && (
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => decide(p.id, "approve")} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold">✓ Customer approved</button>
+                        <button onClick={() => decide(p.id, "reject")} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Rejected</button>
+                      </div>
+                    )}
                   </div>
-                  {p.notes && <p className="text-xs text-gray-500 mt-0.5">{p.notes}</p>}
                 </div>
-                {p.status === "PENDING" && (
-                  <div className="flex gap-2">
-                    <button onClick={() => decide(p.id, "approve")} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Approve</button>
-                    <button onClick={() => decide(p.id, "reject")} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Reject</button>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-        <p className="text-[11px] text-gray-400 mt-3">Approving a proof unlocks the printing gate — the job can then advance to PRINTING.</p>
+        <p className="text-[11px] text-gray-400 mt-3">
+          Flow: <strong>Pre-press uploads</strong> → <strong>Sales sends to customer</strong> (email or physical) →
+          <strong> Customer approves</strong> → production automatically alerted, printing gate unlocks.
+        </p>
       </CardContent>
     </Card>
   );
