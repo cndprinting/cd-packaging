@@ -20,6 +20,52 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { getKPIs, getJobsByStatus, demoJobs, demoAlerts } from "@/lib/demo-data";
 import { getStatusColor, getStatusLabel, getPriorityColor, formatDate } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { FileImage, Send } from "lucide-react";
+import Link from "next/link";
+
+/** Compact proof queue widget — renders when there are items pending. */
+function ProofQueueWidget() {
+  const [counts, setCounts] = useState<{ prepressToDo: number; salesToSend: number; awaitingCustomer: number; role: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/proofs/queue").then(r => r.json()).then(d => {
+      if (d?.prepressToDo !== undefined) {
+        setCounts({
+          prepressToDo: d.prepressToDo.length,
+          salesToSend: d.salesToSend.length,
+          awaitingCustomer: d.awaitingCustomer.length,
+          role: d.currentUser?.role || "",
+        });
+      }
+    }).catch(() => {});
+  }, []);
+  if (!counts) return null;
+  const total = counts.prepressToDo + counts.salesToSend + counts.awaitingCustomer;
+  if (total === 0) return null;
+  const isSales = ["SALES", "CSR", "OWNER", "GM", "ADMIN"].includes(counts.role);
+  const isPrepress = ["PREPRESS", "OWNER", "GM", "ADMIN", "ESTIMATOR"].includes(counts.role);
+  return (
+    <Link href="/dashboard/proofing">
+      <Card className="border-l-4 border-l-purple-500 bg-purple-50/50 hover:shadow-md transition-shadow cursor-pointer">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileImage className="h-5 w-5 text-purple-600" />
+              <div>
+                <p className="text-sm font-semibold text-purple-900">Proofing queue</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  {isPrepress && counts.prepressToDo > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.prepressToDo}</strong> need proof upload</span>}
+                  {isSales && counts.salesToSend > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.salesToSend}</strong> to send to customer</span>}
+                  {isSales && counts.awaitingCustomer > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.awaitingCustomer}</strong> awaiting customer</span>}
+                </p>
+              </div>
+            </div>
+            <Send className="h-4 w-4 text-purple-500" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
 
 interface KPICardProps {
   icon: LucideIcon;
@@ -110,6 +156,9 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">Plant overview and production status</p>
       </div>
+
+      {/* Proofing queue snapshot (shows only when items pending) */}
+      <ProofQueueWidget />
 
       {/* Smart Insights */}
       {insights.length > 0 && (
