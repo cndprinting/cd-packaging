@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import {
   getStatusColor, getStatusLabel, getPriorityColor, formatDate, formatNumber,
 } from "@/lib/utils";
+import { getStageGroupMeta } from "@/lib/stage-groups";
 
 // ---------------------------------------------------------------------------
 // Stage definitions
@@ -666,9 +667,13 @@ export default function JobDetailPage() {
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete
               </Button>
-              <Button onClick={handleAdvance} disabled={advancing || currentStageIndex >= STAGES.length - 1} className="gap-1.5">
+              <Button
+                onClick={handleAdvance}
+                disabled={advancing || currentStageIndex >= STAGES.length - 1}
+                className={`gap-1.5 ${job.status === "CUSTOMER_APPROVAL" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+              >
                 {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
-                Advance Stage
+                {job.status === "CUSTOMER_APPROVAL" ? "▶ Release to Production" : "Advance Stage"}
               </Button>
             </>
           ) : (
@@ -682,6 +687,30 @@ export default function JobDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ================================================================= */}
+      {/* PRODUCTION STATUS BANNER — Phase grouping per workflow review     */}
+      {/* Pre-press is its own phase, NOT part of production. Banner makes  */}
+      {/* the current phase + handoff state crystal clear on every ticket. */}
+      {/* ================================================================= */}
+      {(() => {
+        const meta = getStageGroupMeta(job.status);
+        return (
+          <div className={`rounded-xl border-2 ${meta.border} ${meta.bg} px-5 py-3 flex items-center justify-between gap-4`}>
+            <div className="flex items-center gap-3">
+              <div className={`px-3 py-1.5 rounded-lg ${meta.color} ${meta.bg} border-2 ${meta.border} font-bold text-sm tracking-wider`}>
+                {meta.shortLabel}
+              </div>
+              <div>
+                <p className={`font-semibold ${meta.color}`}>
+                  {meta.label} — Stage: {getStatusLabel(job.status)}
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">{meta.helpText}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Edit Form */}
       {editing && (

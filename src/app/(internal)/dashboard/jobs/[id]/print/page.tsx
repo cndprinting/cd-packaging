@@ -4,8 +4,13 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { getStageGroupMeta } from "@/lib/stage-groups";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+const phaseMeta = (status: string) => getStageGroupMeta(status);
+const prettyStage = (status: string) =>
+  (status || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
 
 export default function PrintJobTicketPage() {
   const params = useParams();
@@ -224,6 +229,34 @@ export default function PrintJobTicketPage() {
           Print Job Ticket
         </button>
       </div>
+
+      {/* ════════════════════════════════════════════════════════ */}
+      {/* PHASE STAMP — clearly tells the floor what state this    */}
+      {/* ticket is in: pre-press / ready / production / shipped   */}
+      {/* ════════════════════════════════════════════════════════ */}
+      {(() => {
+        const meta = phaseMeta(f("status"));
+        return (
+          <div
+            style={{
+              border: `3px solid ${meta.printColor}`,
+              background: meta.printBg,
+              color: meta.printColor,
+              padding: "8px 12px",
+              marginBottom: "8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontWeight: 700,
+            }}
+          >
+            <span style={{ fontSize: "16pt", letterSpacing: "0.5px" }}>{meta.shortLabel}</span>
+            <span style={{ fontSize: "10pt", fontWeight: 500 }}>
+              {meta.label} — {prettyStage(f("status"))}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* ════════════════════════════════════════════════════════ */}
       {/* ROW 1: HEADER                                          */}
