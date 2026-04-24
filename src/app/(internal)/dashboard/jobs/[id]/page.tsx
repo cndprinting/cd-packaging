@@ -201,6 +201,7 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showStageDetail, setShowStageDetail] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
 
@@ -732,46 +733,129 @@ export default function JobDetailPage() {
       {/* ================================================================= */}
       {/* 2. STAGE PROGRESS STEPPER                                         */}
       {/* ================================================================= */}
+      {/* ─── Stage Progress: 5 high-level phases as primary view, with     */}
+      {/* the granular 19-stage detail collapsed behind a toggle. The phase */}
+      {/* order matches getStageGroup. Active phase + completed phases are  */}
+      {/* color-coded; click a phase to jump to its first stage.            */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Stage Progress</CardTitle>
-            <span className="text-xs text-gray-400">Click any stage to jump to it</span>
+            <button
+              type="button"
+              onClick={() => setShowStageDetail((v) => !v)}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              {showStageDetail ? "Hide detailed stages" : "Show detailed stages"}
+            </button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <div className="flex items-center gap-0 min-w-[900px]">
-              {STAGES.map((stage, i) => {
-                const isCompleted = i < STAGES.indexOf(job.status);
-                const isCurrent = i === STAGES.indexOf(job.status);
-                return (
-                  <div key={stage} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center flex-1">
+          {/* Primary: 5 phases */}
+          {(() => {
+            const PHASES: { key: string; label: string; firstStage: string; stages: string[] }[] = [
+              { key: "QUOTING",     label: "Quoting",     firstStage: "QUOTE",            stages: ["QUOTE"] },
+              { key: "PRE_PRESS",   label: "Pre-Press",   firstStage: "ARTWORK_RECEIVED", stages: ["ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL","PREPRESS","PLATING"] },
+              { key: "READY",       label: "Ready",       firstStage: "MATERIALS_ORDERED",stages: ["MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED"] },
+              { key: "PRODUCTION",  label: "Production",  firstStage: "PRINTING",         stages: ["PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA"] },
+              { key: "FULFILLMENT", label: "Fulfillment", firstStage: "PACKED",           stages: ["PACKED","SHIPPED","DELIVERED","INVOICED"] },
+            ];
+            const currentPhase = getStageGroupMeta(job.status).group;
+            const currentPhaseIdx = PHASES.findIndex(p => p.key === currentPhase);
+            return (
+              <div className="flex items-center gap-0">
+                {PHASES.map((phase, i) => {
+                  const isCompleted = i < currentPhaseIdx;
+                  const isCurrent = i === currentPhaseIdx;
+                  // Stage progress within current phase
+                  const stageInPhaseIdx = phase.stages.indexOf(job.status);
+                  const stagesInPhase = phase.stages.length;
+                  return (
+                    <div key={phase.key} className="flex items-center flex-1">
                       <button
+                        type="button"
                         onClick={async () => {
-                          if (stage === job.status) return;
-                          try { await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "setStatus", status: stage }) }); } catch {}
-                          setJob({ ...job, status: stage });
-                          flash(`Jumped to ${getStatusLabel(stage)}`);
+                          if (job.status === phase.firstStage) return;
+                          try { await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "setStatus", status: phase.firstStage }) }); } catch {}
+                          setJob({ ...job, status: phase.firstStage });
+                          flash(`Jumped to ${phase.label}`);
                         }}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-transform hover:scale-125 ${isCompleted ? "bg-green-600 text-white" : isCurrent ? "bg-green-600 text-white ring-4 ring-green-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
-                        title={`Jump to: ${getStatusLabel(stage)}`}
+                        className={`flex-1 px-3 py-2 rounded-lg border-2 transition-colors text-left ${
+                          isCompleted ? "bg-green-50 border-green-400 hover:bg-green-100" :
+                          isCurrent ? "bg-green-100 border-green-600 ring-2 ring-green-200" :
+                          "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                        }`}
+                        title={`Jump to ${phase.label}`}
                       >
-                        {isCompleted ? <CheckCircle className="h-4 w-4" /> : <span>{i + 1}</span>}
+                        <div className="flex items-center gap-2">
+                          {isCompleted ? (
+                            <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                          ) : (
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                              isCurrent ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"
+                            }`}>{i + 1}</span>
+                          )}
+                          <span className={`text-xs font-semibold ${
+                            isCurrent ? "text-green-800" : isCompleted ? "text-green-700" : "text-gray-600"
+                          }`}>{phase.label}</span>
+                        </div>
+                        {isCurrent && (
+                          <p className="text-[10px] text-gray-600 mt-1">
+                            {getStatusLabel(job.status)}
+                            {stagesInPhase > 1 && ` · ${stageInPhaseIdx + 1}/${stagesInPhase}`}
+                          </p>
+                        )}
                       </button>
-                      <span className={`text-[10px] mt-1 text-center leading-tight ${isCurrent ? "font-semibold text-green-700" : isCompleted ? "text-green-600" : "text-gray-400"}`}>
-                        {getStatusLabel(stage)}
-                      </span>
+                      {i < PHASES.length - 1 && (
+                        <div className={`h-0.5 w-3 ${isCompleted ? "bg-green-500" : "bg-gray-200"}`} />
+                      )}
                     </div>
-                    {i < STAGES.length - 1 && (
-                      <div className={`h-0.5 w-full ${i < STAGES.indexOf(job.status) ? "bg-green-500" : "bg-gray-200"}`} />
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Optional: granular 19-stage detail */}
+          {showStageDetail && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-gray-500">Detailed stages — click any to jump</p>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="flex items-center gap-0 min-w-[900px]">
+                  {STAGES.map((stage, i) => {
+                    const isCompleted = i < STAGES.indexOf(job.status);
+                    const isCurrent = i === STAGES.indexOf(job.status);
+                    return (
+                      <div key={stage} className="flex items-center flex-1">
+                        <div className="flex flex-col items-center flex-1">
+                          <button
+                            onClick={async () => {
+                              if (stage === job.status) return;
+                              try { await fetch(`/api/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "setStatus", status: stage }) }); } catch {}
+                              setJob({ ...job, status: stage });
+                              flash(`Jumped to ${getStatusLabel(stage)}`);
+                            }}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-transform hover:scale-125 ${isCompleted ? "bg-green-600 text-white" : isCurrent ? "bg-green-600 text-white ring-4 ring-green-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                            title={`Jump to: ${getStatusLabel(stage)}`}
+                          >
+                            {isCompleted ? <CheckCircle className="h-4 w-4" /> : <span>{i + 1}</span>}
+                          </button>
+                          <span className={`text-[10px] mt-1 text-center leading-tight ${isCurrent ? "font-semibold text-green-700" : isCompleted ? "text-green-600" : "text-gray-400"}`}>
+                            {getStatusLabel(stage)}
+                          </span>
+                        </div>
+                        {i < STAGES.length - 1 && (
+                          <div className={`h-0.5 w-full ${i < STAGES.indexOf(job.status) ? "bg-green-500" : "bg-gray-200"}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
