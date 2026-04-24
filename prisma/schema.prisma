@@ -756,6 +756,33 @@ model PlantStandard {
   // speed caps at solidCoveragePressSpeed.
   solidCoveragePressSpeed     Int      @default(8500)
   heavyCoverageThresholdPct   Float    @default(60)
+
+  // Digital click charges (Mary 4/24/26 — three sheet-size tiers × five
+  // ink configs, plus per-side variable data + VD setup hourly).
+  // Tier 1: 8.5×11 to 13×19   Tier 2: 13×19.3 to 13×30   Tier 3: 13×30.1 to 13×35.4
+  digitalClickT1_1_0          Float    @default(0.06825)  // 1/0 Black
+  digitalClickT1_1_1          Float    @default(0.084)    // 1/1 Black
+  digitalClickT1_4_0          Float    @default(0.189)    // 4/0 Process
+  digitalClickT1_4_1          Float    @default(0.265)    // 4/1 Process/Black
+  digitalClickT1_4_4          Float    @default(0.378)    // 4/4 Process
+  digitalClickT1_VD           Float    @default(0.13545)  // VD per side, additive
+  digitalClickT2_1_0          Float    @default(0.1024)
+  digitalClickT2_1_1          Float    @default(0.126)
+  digitalClickT2_4_0          Float    @default(0.2835)
+  digitalClickT2_4_1          Float    @default(0.386)
+  digitalClickT2_4_4          Float    @default(0.567)
+  digitalClickT2_VD           Float    @default(0.203175)
+  digitalClickT3_1_0          Float    @default(0.137)
+  digitalClickT3_1_1          Float    @default(0.168)
+  digitalClickT3_4_0          Float    @default(0.378)
+  digitalClickT3_4_1          Float    @default(0.515)
+  digitalClickT3_4_4          Float    @default(0.756)
+  digitalClickT3_VD           Float    @default(0.2709)
+  digitalVDSetupRate          Float    @default(65)       // $/hr for VD setup + list maintenance
+  // Tier breakpoints (longest dimension of the run sheet, in inches)
+  digitalTier1MaxLength       Float    @default(19)       // up to 13×19
+  digitalTier2MaxLength       Float    @default(30)       // 13×19.3 to 13×30
+  digitalTier3MaxLength       Float    @default(35.4)     // 13×30.1 to 13×35.4
   // Cut lift model: cutter processes a lift (stack) at a time, limited by
   // lift height. Standard lift ~6 inches. Lifts = ceil(sheets × caliper / 6).
   cutLiftHeightInches         Float    @default(6)

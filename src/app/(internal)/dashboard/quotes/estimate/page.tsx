@@ -38,6 +38,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { recommendPress } from "@/lib/smart-features";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { lookupCaliper, guessCaliperFromText, PAPER_CALIPERS } from "@/lib/paper-calipers";
+import { getDigitalSizeTier, inferInkConfig, getDigitalClickRate, getDigitalVDRate } from "@/lib/digital-clicks";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -135,6 +136,12 @@ interface PlantStandardsData {
   paddingSheetsPerHour: number;
   wrapFilmCostPerFoot: number;
   wrapLaborMinutesPerBundle: number;
+  // Digital click charges (Mary 4/24/26)
+  digitalClickT1_1_0: number; digitalClickT1_1_1: number; digitalClickT1_4_0: number; digitalClickT1_4_1: number; digitalClickT1_4_4: number; digitalClickT1_VD: number;
+  digitalClickT2_1_0: number; digitalClickT2_1_1: number; digitalClickT2_4_0: number; digitalClickT2_4_1: number; digitalClickT2_4_4: number; digitalClickT2_VD: number;
+  digitalClickT3_1_0: number; digitalClickT3_1_1: number; digitalClickT3_4_0: number; digitalClickT3_4_1: number; digitalClickT3_4_4: number; digitalClickT3_VD: number;
+  digitalVDSetupRate: number;
+  digitalTier1MaxLength: number; digitalTier2MaxLength: number; digitalTier3MaxLength: number;
   [key: string]: number | string;
 }
 
@@ -801,14 +808,28 @@ function EstimateContent() {
       finishingCost = num("gluingSetup") + num("windowPatching");
       makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
     } else if (isCartonDigital) {
-      const sheetsNeeded = q * v;
-      materialsCost = sheetsNeeded * num("substrateCostPerSheet");
-      const impressionCost = sheetsNeeded * num("clickCharge");
-      materialsCost += impressionCost;
-      const dieCutMinutes = sheetsNeeded * num("digitalDieCuttingTime");
+      // Tiered click-charge lookup (Mary 4/24/26): qty / numberUp + MR
+      // sheets, multiplied by per-sheet click rate for the right tier
+      // and ink config. VD per side is additive when variableData is on.
+      const numberUp = num("numberUp") || 1;
+      const baseSheets = Math.ceil((q * v) / numberUp);
+      const mrSheets = num("makeReadySheets") || 0;
+      const sheetsThroughPress = baseSheets + mrSheets;
+      const tier = plantStandards
+        ? getDigitalSizeTier(num("sheetWidth"), num("sheetHeight"), plantStandards)
+        : 1;
+      const inkCfg = inferInkConfig(num("inkColorsFront"), num("inkColorsBack"));
+      const baseRate = plantStandards ? getDigitalClickRate(tier, inkCfg, plantStandards) : num("clickCharge");
+      const vdRate = (form.variableData && plantStandards) ? getDigitalVDRate(tier, plantStandards) : 0;
+      const ratePerSheet = baseRate + vdRate;
+      const impressionCost = sheetsThroughPress * ratePerSheet;
+      const paperCost = sheetsThroughPress * num("substrateCostPerSheet");
+      materialsCost = paperCost + impressionCost;
+      const dieCutMinutes = sheetsThroughPress * num("digitalDieCuttingTime");
       finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost");
       if (form.variableData) {
-        finishingCost += num("vdpComplexitySurcharge");
+        // VD setup + list maintenance — flat hourly to materialsCost
+        materialsCost += num("vdpComplexitySurcharge");
       }
     } else if (isCommOffset) {
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
@@ -831,8 +852,20 @@ function EstimateContent() {
         num("binderySetupHours") * num("binderyRate");
       makeReadyCost = 0; // already included in sheetsPerForm above
     } else if (isCommDigital) {
-      const sheetsNeeded = q * v;
-      materialsCost = sheetsNeeded * num("commDigitalClickCharge") + num("digitalPaperCost") * (sheetsNeeded / 1000);
+      // Tiered click-charge lookup (same as carton digital) — Mary 4/24/26
+      const numberUp = num("numberUp") || 1;
+      const baseSheets = Math.ceil((q * v) / numberUp);
+      const mrSheets = num("makeReadySheets") || 0;
+      const sheetsThroughPress = baseSheets + mrSheets;
+      const tier = plantStandards
+        ? getDigitalSizeTier(num("sheetWidth"), num("sheetHeight"), plantStandards)
+        : 1;
+      const inkCfg = inferInkConfig(num("inkColorsFront"), num("inkColorsBack"));
+      const baseRate = plantStandards ? getDigitalClickRate(tier, inkCfg, plantStandards) : num("commDigitalClickCharge");
+      const vdRate = (form.variableData && plantStandards) ? getDigitalVDRate(tier, plantStandards) : 0;
+      const clickCost = sheetsThroughPress * (baseRate + vdRate);
+      const paperCost = num("digitalPaperCost") * (sheetsThroughPress / 1000);
+      materialsCost = clickCost + paperCost;
       const rushMultiplier = 1 + num("rushSurchargePercent") / 100;
       materialsCost *= rushMultiplier;
       finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge");
@@ -2530,8 +2563,27 @@ function EstimateContent() {
       {isCartonDigital && (
         <>
           <Section title="Digital Press Costs" icon={Layers}>
+            {/* Auto-detected click rate for transparency — Mary 4/24/26 */}
+            {plantStandards && (() => {
+              const tier = getDigitalSizeTier(form.sheetWidth || 0, form.sheetHeight || 0, plantStandards);
+              const inkCfg = inferInkConfig(form.inkColorsFront, form.inkColorsBack);
+              const baseRate = getDigitalClickRate(tier, inkCfg, plantStandards);
+              const vdRate = form.variableData ? getDigitalVDRate(tier, plantStandards) : 0;
+              const totalRate = baseRate + vdRate;
+              return (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4 text-sm">
+                  <p className="font-medium text-blue-900 mb-1">Auto-detected click rate (Mary&apos;s pricing matrix)</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div><span className="text-gray-600">Sheet:</span> {form.sheetWidth || "?"}×{form.sheetHeight || "?"}</div>
+                    <div><span className="text-gray-600">Tier:</span> <strong>{tier}</strong> ({tier === 1 ? "8.5×11 to 13×19" : tier === 2 ? "13×19.3 to 13×30" : "13×30.1 to 13×35.4"})</div>
+                    <div><span className="text-gray-600">Ink config:</span> <strong>{inkCfg}</strong></div>
+                    <div><span className="text-gray-600">Per-sheet:</span> <strong>${totalRate.toFixed(5)}</strong>{form.variableData && ` (incl. VD)`}</div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Click Charge / Impression ($)">
+              <Field label="Manual Click Override ($)" hint="Leave 0 to use auto-detected rate above">
                 <Input type="number" step="0.001" value={form.clickCharge || ""} onChange={(e) => set("clickCharge", Number(e.target.value))} />
               </Field>
               <Field label="Substrate Cost ($ per sheet)">
