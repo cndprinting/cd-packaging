@@ -150,8 +150,17 @@ function Section({ title, subtitle, defaultOpen = true, children }: { title: str
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>{children}</div>;
+function Field({ label, children, hint, required }: { label: React.ReactNode; children: React.ReactNode; hint?: string; required?: boolean }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 mb-1">
+        {label}
+        {required && <span className="text-red-600 ml-0.5">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-gray-500 mt-0.5">{hint}</p>}
+    </div>
+  );
 }
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -175,6 +184,10 @@ export default function QuoteRequestsPage() {
 
   const [form, setForm] = useState<FormState>(defaultForm);
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLineItem(1)]);
+  // Jobs list for Previous Job # dropdown (filters by selected customer).
+  const [allJobs, setAllJobs] = useState<{ id: string; jobNumber: string; name: string; companyId: string; companyName: string }[]>([]);
+  // Track artwork upload state to show a spinner + success flag.
+  const [uploadingArtwork, setUploadingArtwork] = useState(false);
   const update = <K extends keyof FormState>(f: K, v: FormState[K]) => setForm(p => ({ ...p, [f]: v }));
   const updateLine = (idx: number, patch: Partial<LineItem>) => setLineItems(p => p.map((li, i) => i === idx ? { ...li, ...patch } : li));
   const addLine = () => setLineItems(p => [...p, emptyLineItem(p.length + 1)]);
@@ -187,6 +200,8 @@ export default function QuoteRequestsPage() {
     fetch("/api/quote-requests").then(r => r.json()).then(d => setRequests(d.requests || [])).catch(() => {}).finally(() => setLoading(false));
     fetch("/api/companies").then(r => r.json()).then(d => setCompanies(d.companies || [])).catch(() => {});
     fetch("/api/auth/session").then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role); }).catch(() => {});
+    // Load all jobs for the Previous Job # dropdown (filtered client-side by customer).
+    fetch("/api/jobs").then(r => r.json()).then(d => setAllJobs(d.jobs || [])).catch(() => {});
   }, []);
 
   const isEstimator = ["OWNER", "GM", "ADMIN", "ESTIMATOR", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"].includes(userRole);
@@ -196,9 +211,14 @@ export default function QuoteRequestsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!form.customerName) { setError("Customer name required"); return; }
+    // Per Mary's CSR-nuance pass: only these 4 are required so sales/CSRs
+    // can submit quickly without Mary-level detail. Everything else is
+    // optional and can be filled in by estimating.
+    if (!form.customerName) { setError("Customer name is required"); return; }
     const validLines = lineItems.filter(li => li.version.trim() && li.quantity);
-    if (validLines.length === 0) { setError("At least one line item with a quantity required"); return; }
+    if (validLines.length === 0) { setError("At least one version with a quantity is required"); return; }
+    if (!form.descriptionType) { setError("Product type is required (pick 'Unsure' if you're not sure)"); return; }
+    if (!form.paperWeight) { setError("Paper type is required (pick 'Unsure' if you're not sure)"); return; }
     setCreating(true);
     try {
       const res = await fetch("/api/quote-requests", {
@@ -379,6 +399,10 @@ export default function QuoteRequestsPage() {
               </div>
               <form onSubmit={handleCreate} className="space-y-3">
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+                <div className="bg-blue-50 border border-blue-200 text-blue-900 text-xs rounded-lg p-2.5">
+                  <strong>Required fields marked with <span className="text-red-600">*</span></strong> — just Customer, Quantity, Product Type, and Paper.
+                  Everything else is optional — if you&apos;re not sure about a detail, leave it blank or pick &quot;Unsure&quot; and Mary will fill it in during estimating.
+                </div>
 
                 {/* 1. Job type + customer basics */}
                 <Section title="Job Basics" defaultOpen={true}>
@@ -401,18 +425,30 @@ export default function QuoteRequestsPage() {
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
                       <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <Field label="Previous Job #">
-                          <Input value={form.pickupJobNumber} onChange={(e) => update("pickupJobNumber", e.target.value)} placeholder="e.g. 24-1234" />
+                        <Field label={`Previous Job #${form.customerName ? ` — filtered to ${form.customerName}` : " — pick customer first to filter"}`}>
+                          <Combobox
+                            value={form.pickupJobNumber}
+                            onChange={(_id, label) => update("pickupJobNumber", label)}
+                            options={allJobs
+                              .filter(j => !form.companyId || j.companyId === form.companyId)
+                              .map(j => ({
+                                id: j.jobNumber,
+                                label: j.jobNumber,
+                                subtitle: `${j.name}${j.companyName ? ` — ${j.companyName}` : ""}`,
+                              }))}
+                            placeholder="Search past jobs..."
+                            allowCreate
+                          />
                         </Field>
                       </div>
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Customer *">
+                    <Field label={<span>Customer <span className="text-red-600">*</span></span>} hint="Required">
                       <Combobox value={form.customerName} onChange={(id, label) => { update("customerName", label); update("companyId", id || ""); }}
                         options={companies.map(c => ({ id: c.id, label: c.name }))} placeholder="Select customer..." allowCreate />
                     </Field>
-                    <Field label="Date Needed">
+                    <Field label="Date Needed (job completion)" hint="When the finished job must ship, not when the quote is due">
                       <Input type="date" value={form.dateNeeded} onChange={(e) => update("dateNeeded", e.target.value)} />
                     </Field>
                   </div>
@@ -431,9 +467,10 @@ export default function QuoteRequestsPage() {
                     </Field>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
-                    <Field label="Description">
+                    <Field label="Product Type" required hint="Pick 'Unsure' if you don't know — Mary will confirm in estimating">
                       <Select value={form.descriptionType} onChange={(e) => update("descriptionType", e.target.value)} options={[
                         { value: "", label: "Select type..." },
+                        { value: "unsure", label: "Unsure — please advise" },
                         { value: "folding_carton", label: "Folding Carton" },
                         { value: "flyer", label: "Flyer" },
                         { value: "postcard", label: "Postcard" },
@@ -456,20 +493,27 @@ export default function QuoteRequestsPage() {
                           update("pages", v);
                         }} placeholder="e.g. 28" />
                     </Field>
-                    <Field label="Cover Type">
-                      <Select value={form.coverType} onChange={(e) => update("coverType", e.target.value)} options={[
-                        { value: "self_cover", label: "Self Cover" },
-                        { value: "plus_cover", label: "Plus Cover" },
+                    {/* Cover Type hidden for folding carton — only applies to books/brochures */}
+                    {form.descriptionType !== "folding_carton" && (
+                      <Field label="Cover Type">
+                        <Select value={form.coverType} onChange={(e) => update("coverType", e.target.value)} options={[
+                          { value: "", label: "Not specified" },
+                          { value: "self_cover", label: "Self Cover" },
+                          { value: "plus_cover", label: "Plus Cover" },
+                        ]} />
+                      </Field>
+                    )}
+                  </div>
+                  {/* Orientation hidden for folding carton — cartons have their own construction */}
+                  {form.descriptionType !== "folding_carton" && (
+                    <Field label="Orientation">
+                      <Select value={form.orientation} onChange={(e) => update("orientation", e.target.value)} options={[
+                        { value: "", label: "Not specified" },
+                        { value: "portrait", label: "Portrait" },
+                        { value: "landscape", label: "Landscape" },
                       ]} />
                     </Field>
-                  </div>
-                  <Field label="Orientation">
-                    <Select value={form.orientation} onChange={(e) => update("orientation", e.target.value)} options={[
-                      { value: "", label: "Not specified" },
-                      { value: "portrait", label: "Portrait" },
-                      { value: "landscape", label: "Landscape" },
-                    ]} />
-                  </Field>
+                  )}
                 </Section>
 
                 {/* 2. Line items */}
@@ -486,7 +530,7 @@ export default function QuoteRequestsPage() {
                         <Field label="Version / SKU">
                           <Input value={li.version} onChange={(e) => updateLine(idx, { version: e.target.value })} placeholder="e.g. Version A" />
                         </Field>
-                        <Field label="Quantity">
+                        <Field label="Quantity" required>
                           <Input type="number" value={li.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} placeholder="0" />
                         </Field>
                       </div>
@@ -543,11 +587,43 @@ export default function QuoteRequestsPage() {
                     <Check label="New artwork (not yet supplied)" checked={form.artworkIsNew} onChange={(v) => update("artworkIsNew", v)} />
                     <Check label="Has bleeds" checked={form.hasBleeds} onChange={(v) => update("hasBleeds", v)} />
                   </div>
+                  {/* File upload — lets sales/CSR attach a PDF or Word doc so Mary
+                      can read dimensions off the artwork instead of risking
+                      typos in the form fields. Falls back to URL paste. */}
+                  <Field label="Attach artwork" hint="PDF, Word doc, or image — Mary can pull dimensions from the file">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.ai,.psd,.indd"
+                        className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-medium hover:file:bg-brand-100"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingArtwork(true);
+                          try {
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            const res = await fetch("/api/upload", { method: "POST", body: fd });
+                            const data = await res.json();
+                            if (data.url) {
+                              update("artworkUrl", data.url);
+                              update("artworkFileName", data.fileName || file.name);
+                            }
+                          } catch { /* user will see empty URL; can paste manually */ }
+                          setUploadingArtwork(false);
+                        }}
+                      />
+                      {uploadingArtwork && <span className="text-xs text-gray-500">Uploading…</span>}
+                      {form.artworkUrl && !uploadingArtwork && (
+                        <span className="text-xs text-emerald-700 truncate">✓ {form.artworkFileName || "uploaded"}</span>
+                      )}
+                    </div>
+                  </Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Artwork File URL (if already uploaded)">
+                    <Field label="Or paste URL (OneDrive, Dropbox, etc.)">
                       <Input value={form.artworkUrl} onChange={(e) => update("artworkUrl", e.target.value)} placeholder="https://..." />
                     </Field>
-                    <Field label="Artwork File Name">
+                    <Field label="File Name">
                       <Input value={form.artworkFileName} onChange={(e) => update("artworkFileName", e.target.value)} placeholder="job-art.pdf" />
                     </Field>
                   </div>
@@ -557,11 +633,12 @@ export default function QuoteRequestsPage() {
                 </Section>
 
                 {/* 4. Paper & Size */}
-                <Section title="Paper & Default Size" subtitle="Used when line items don't override" defaultOpen={false}>
+                <Section title="Paper & Default Size" subtitle="Used when line items don't override" defaultOpen={true}>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Paper Weight / Stock">
+                    <Field label="Paper Weight / Stock" required hint="Pick 'Unsure' if you don't know — Mary will confirm">
                       <Select value={form.paperWeight} onChange={(e) => update("paperWeight", e.target.value)} options={[
                         { value: "", label: "Select..." },
+                        { value: "unsure", label: "Unsure — please advise" },
                         { value: "16pt C1S", label: "16pt C1S" },
                         { value: "16pt C2S", label: "16pt C2S" },
                         { value: "18pt C1S", label: "18pt C1S" },
