@@ -31,8 +31,9 @@ const PRODUCTION_STAGES = [
   "QA",
 ];
 
+// Pre-press is its own phase (handled in /dashboard/prepress) — not a
+// production work center. Production starts at the press.
 const WORK_CENTER_STAGE_MAP: Record<string, string> = {
-  prepress: "PREPRESS",
   "offset-press": "PRINTING",
   "digital-press": "PRINTING",
   "die-cutting": "DIE_CUTTING",
@@ -79,11 +80,14 @@ export default function ProductionPage() {
   );
 
   const workCenterData = useMemo(() => {
-    return demoWorkCenters.map((wc) => {
-      const stage = WORK_CENTER_STAGE_MAP[wc.type];
-      const jobs = stage ? allJobs.filter((j) => j.status === stage).length : 0;
-      return { ...wc, jobs, stage };
-    });
+    // Filter out prepress — it has its own dashboard at /dashboard/prepress.
+    return demoWorkCenters
+      .filter((wc) => wc.type !== "prepress")
+      .map((wc) => {
+        const stage = WORK_CENTER_STAGE_MAP[wc.type];
+        const jobs = stage ? allJobs.filter((j) => j.status === stage).length : 0;
+        return { ...wc, jobs, stage };
+      });
   }, [allJobs]);
 
   async function handleAdvanceStage(jobId: string) {

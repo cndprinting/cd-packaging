@@ -9,8 +9,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+// Plant Floor = physical-floor job timer. Pre-press is NOT a plant-floor
+// activity (it's pre-production technical work — see /dashboard/prepress).
+// Floor departments start at the press.
 const DEPARTMENTS = [
-  { id: "prepress", label: "Prepress", stages: ["QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL", "PREPRESS", "PLATING", "MATERIALS_ORDERED", "MATERIALS_RECEIVED", "SCHEDULED"], color: "bg-indigo-600" },
   { id: "offset-press", label: "Offset Press", stages: ["PRINTING"], color: "bg-blue-600" },
   { id: "digital-press", label: "Digital Press", stages: ["PRINTING"], color: "bg-sky-600" },
   { id: "die-cutting", label: "Die Cutting", stages: ["DIE_CUTTING"], color: "bg-pink-600" },
