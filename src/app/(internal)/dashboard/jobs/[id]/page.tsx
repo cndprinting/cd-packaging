@@ -1226,6 +1226,36 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
+      {/* 4a. PRE-PRESS — proofs + instructions (combined)                   */}
+      {/* Pre-press is a distinct stage between estimating and production.   */}
+      {/* Everything pre-press related lives here: proof uploads, customer   */}
+      {/* delivery, approval, and free-text instructions for the team.      */}
+      {/* Placed above Outside Purchases because pre-press happens first.   */}
+      {/* ================================================================= */}
+      <div className="rounded-xl border-l-4 border-l-purple-500 bg-purple-50/20 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <FileCheck className="h-4 w-4 text-purple-600" />
+          <span className="font-semibold text-purple-900">Pre-Press Stage</span>
+          <span className="text-xs text-gray-500">— Complete proofs + customer approval before production can schedule.</span>
+        </div>
+        <ProofsCard jobId={jobId} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><FileCheck className="h-4 w-4" />Pre-Press Instructions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <textarea
+              defaultValue={job.prepressNotes || ""}
+              placeholder="Notes for Michael/Kevin — proof rounds, structural design, plate requirements, trapping..."
+              rows={3}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              onBlur={(e) => updateJobField("prepressNotes", e.target.value)}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ================================================================= */}
       {/* 4b. OUTSIDE PURCHASES — moved adjacent to Stock per CSR feedback  */}
       {/* (paper / coatings / foil are stock-like decisions; keep together) */}
       {/* ================================================================= */}
@@ -1507,11 +1537,6 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
-      {/* 6a. PROOFS                                                         */}
-      {/* ================================================================= */}
-      <ProofsCard jobId={jobId} />
-
-      {/* ================================================================= */}
       {/* 6a². FROM QUOTE REQUEST — long-tail fields that don't have Job cols */}
       {/* ================================================================= */}
       {quoteRequest && (
@@ -1594,23 +1619,7 @@ export default function JobDetailPage() {
         </Card>
       )}
 
-      {/* ================================================================= */}
-      {/* 6b. PRE-PRESS INSTRUCTIONS                                         */}
-      {/* ================================================================= */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><FileCheck className="h-4 w-4" />Pre-Press Instructions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <textarea
-            defaultValue={job.prepressNotes || ""}
-            placeholder="Notes for Michael/Kevin — proof rounds, structural design, plate requirements, trapping..."
-            rows={3}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            onBlur={(e) => updateJobField("prepressNotes", e.target.value)}
-          />
-        </CardContent>
-      </Card>
+      {/* Pre-Press section moved above Outside Purchases — see Section 4a. */}
 
       {/* ================================================================= */}
       {/* 6c. PAYMENT INFO / TERMS                                           */}
