@@ -195,9 +195,21 @@ interface FormState {
   inkTypeFront: string; // "process" | "pms" | "led_uv"
   inkTypeBack: string;
   // Phase 1 — paper taxonomy + carton math
-  paperCategory: string; // "coated" | "uncoated" | "c1s" | "cover" | "text" | "label" | ""
+  paperCategory: string; // legacy: "coated"/"uncoated"/"c1s"/"cover"/"text"/"label"
   sheetsPerCarton: number;
   roundUpCartons: boolean;
+  // Commit B (Mary 4/24/26) — full paper taxonomy + sheet sizing + mill flag
+  paperType: string;        // Cover/Text/Board C1S/Board C2S/Bond/Index/Envelope/Label/Magnetic/NCR/Vellum/Synthetic
+  paperBrand: string;       // e.g. Mohawk, Cougar, Reich
+  paperColor: string;       // e.g. Solar White, Natural
+  paperTexture: string;     // Smooth, Vellum, Eggshell, Stipple, Laid, Techweave, Metallic
+  paperFinish: string;      // Coated Silk/Dull/Gloss, Uncoated, etc.
+  parentSheetWidth: number; // ordering size, e.g. 23
+  parentSheetHeight: number;// e.g. 35
+  runSheetWidth: number;    // actual press sheet, e.g. 17.5 (2-out of parent)
+  runSheetHeight: number;   // e.g. 23
+  isMillItem: boolean;      // checkbox — flows to quote letter
+  millItemLeadTime: string; // free text e.g. "2-3 weeks", "minimum 5 ctns"
   // Phase 1 — quantitative finishing (replaces difficulty dials)
   numCuts: number;
   foldType: string; // "none" | "half" | "tri" | "z" | "gate" | "roll" | "accordion" | "double_parallel" | "french" | "custom"
@@ -405,6 +417,18 @@ const defaultForm: FormState = {
   paperCategory: "",
   sheetsPerCarton: 0,
   roundUpCartons: false,
+  // Commit B
+  paperType: "",
+  paperBrand: "",
+  paperColor: "",
+  paperTexture: "",
+  paperFinish: "",
+  parentSheetWidth: 0,
+  parentSheetHeight: 0,
+  runSheetWidth: 0,
+  runSheetHeight: 0,
+  isMillItem: false,
+  millItemLeadTime: "",
   numCuts: 0,
   foldType: "none",
   numFolds: 0,
@@ -1277,7 +1301,27 @@ function EstimateContent() {
             pressAssignment: selectedPress?.name || null,
             pressFormat: selectedConfig?.name || null,
             makeReadyCount: Number(form.makeReadySheets) || null,
-            stockDescription: [form.stockType, form.paperWeight ? `${form.paperWeight}#` : "", form.paperBasisWeight ? `${form.paperBasisWeight}lb basis` : ""].filter(Boolean).join(" ") || null,
+            // Stock description prefers the new structured fields (Mary's
+            // 4/24/26 paper spec) when present; falls back to legacy fields.
+            stockDescription: (() => {
+              const bits = [
+                form.paperBasisWeight ? `${form.paperBasisWeight}lb` : "",
+                form.paperType ? form.paperType.replace(/_/g, " ") : "",
+                form.paperFinish ? form.paperFinish.replace(/_/g, " ") : "",
+                form.paperBrand,
+                form.paperColor,
+                form.paperTexture && form.paperTexture !== "smooth" ? form.paperTexture : "",
+              ].filter(Boolean);
+              if (bits.length > 0) return bits.join(" / ");
+              return [form.stockType, form.paperWeight ? `${form.paperWeight}#` : "", form.paperBasisWeight ? `${form.paperBasisWeight}lb basis` : ""].filter(Boolean).join(" ") || null;
+            })(),
+            // Sheet sizes — flatSizeWidth/Height already capture parent;
+            // expose run sheet too via specs.runSheet (rendered on ticket).
+            runSheetWidth: Number(form.runSheetWidth) || null,
+            runSheetHeight: Number(form.runSheetHeight) || null,
+            // Mill item flag — surfaces on quote letter + job ticket
+            isMillItem: !!form.isMillItem,
+            millItemLeadTime: form.millItemLeadTime || null,
             // Bindery flags derived from cost entries + Phase 1 quantitative fields
             binderyFold: Number(form.foldingCost) > 0 || (form.foldType && form.foldType !== "none") || Number(form.numFolds) > 0,
             binderyStitch: Number(form.saddleStitchCost) > 0 || Number(form.perfectBindingCost) > 0,
@@ -2031,8 +2075,113 @@ function EstimateContent() {
           </Section>
 
           <Section title="Paper & Ink" icon={Droplets}>
+            {/* ── Paper Specification (Mary 4/24/26) ────────────────────────
+                Type / brand / color / texture / finish / parent vs run sheet
+                / mill item flag — all flow through to the printed quote.    */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 mb-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-800">Paper Specification</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Field label="Paper Type" hint="High-level category">
+                  <select
+                    value={form.paperType}
+                    onChange={(e) => set("paperType", e.target.value as any)}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">— select —</option>
+                    <option value="cover">Cover</option>
+                    <option value="text">Text</option>
+                    <option value="board_c1s">Board C1S</option>
+                    <option value="board_c2s">Board C2S</option>
+                    <option value="bond">Bond / Writing</option>
+                    <option value="index">Index / Bristol</option>
+                    <option value="envelope">Envelope</option>
+                    <option value="label">Label / Pressure Sensitive</option>
+                    <option value="magnetic">Magnetic</option>
+                    <option value="ncr">Carbonless / NCR</option>
+                    <option value="vellum">Vellum (type)</option>
+                    <option value="synthetic">Synthetic</option>
+                  </select>
+                </Field>
+                <Field label="Finish">
+                  <select
+                    value={form.paperFinish}
+                    onChange={(e) => set("paperFinish", e.target.value as any)}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">— select —</option>
+                    <option value="coated_silk">Coated Silk / Dull</option>
+                    <option value="coated_gloss">Coated Gloss</option>
+                    <option value="uncoated">Uncoated</option>
+                  </select>
+                </Field>
+                <Field label="Texture" hint="If uncoated">
+                  <select
+                    value={form.paperTexture}
+                    onChange={(e) => set("paperTexture", e.target.value as any)}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">— none / smooth —</option>
+                    <option value="smooth">Smooth</option>
+                    <option value="vellum">Vellum</option>
+                    <option value="eggshell">Eggshell</option>
+                    <option value="stipple">Stipple</option>
+                    <option value="laid">Laid</option>
+                    <option value="techweave">Techweave</option>
+                    <option value="metallic">Metallic</option>
+                  </select>
+                </Field>
+                <Field label="Brand">
+                  <Input value={form.paperBrand} onChange={(e) => set("paperBrand", e.target.value)} placeholder="e.g. Mohawk, Cougar, Reich" />
+                </Field>
+                <Field label="Color">
+                  <Input value={form.paperColor} onChange={(e) => set("paperColor", e.target.value)} placeholder="e.g. Solar White" />
+                </Field>
+                <Field label="Basis weight" hint="e.g. 100lb, 14pt">
+                  <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 100" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Field label="Parent sheet W" hint="Ordering size">
+                  <Input type="number" step="0.125" value={form.parentSheetWidth || ""} onChange={(e) => set("parentSheetWidth", Number(e.target.value))} placeholder="e.g. 23" />
+                </Field>
+                <Field label="Parent sheet H">
+                  <Input type="number" step="0.125" value={form.parentSheetHeight || ""} onChange={(e) => set("parentSheetHeight", Number(e.target.value))} placeholder="e.g. 35" />
+                </Field>
+                <Field label="Run sheet W" hint="Press sheet">
+                  <Input type="number" step="0.125" value={form.runSheetWidth || ""} onChange={(e) => set("runSheetWidth", Number(e.target.value))} placeholder="e.g. 17.5" />
+                </Field>
+                <Field label="Run sheet H">
+                  <Input type="number" step="0.125" value={form.runSheetHeight || ""} onChange={(e) => set("runSheetHeight", Number(e.target.value))} placeholder="e.g. 23" />
+                </Field>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.isMillItem}
+                    onChange={(e) => set("isMillItem", e.target.checked as any)}
+                    className="h-4 w-4 rounded border-amber-400 mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <span className="font-medium text-amber-900">Mill item — extended lead time</span>
+                    {form.isMillItem && (
+                      <Input
+                        className="mt-2 bg-white"
+                        value={form.millItemLeadTime}
+                        onChange={(e) => set("millItemLeadTime", e.target.value)}
+                        placeholder="e.g. allow 2-3 weeks; min 5 ctns; mill ships from PA"
+                      />
+                    )}
+                    {form.isMillItem && (
+                      <p className="text-[11px] text-amber-700 mt-1">This note will print on the quote letter to the customer.</p>
+                    )}
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Paper Category" hint="Filters inventory search">
+              <Field label="Paper Category" hint="(Legacy filter — for inventory search only)">
                 <select
                   value={form.paperCategory}
                   onChange={(e) => set("paperCategory", e.target.value as any)}
