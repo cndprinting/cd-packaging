@@ -131,6 +131,8 @@ interface PlantStandardsData {
   solidCoveragePressSpeed: number;
   heavyCoverageThresholdPct: number;
   cutLiftHeightInches: number;
+  boardThicknessCapInches: number;
+  boardThicknessMaxSpeed: number;
   perfRulePremiumMultiplier: number;
   scorePerfPerHour: number;
   paddingSheetsPerHour: number;
@@ -954,13 +956,23 @@ function EstimateContent() {
     // When heavy coverage (solids) exceeds threshold, effective SPH caps at
     // solidCoveragePressSpeed. Adjusts pressRunTime accordingly if the user
     // has set coverageSolidsPct and a base run time.
+    //
+    // Heavy-board cap (Mary 4/24/26) — 28pt+ stocks max at 4,100 SPH
+    // regardless of config. The smaller of the two caps (coverage vs board)
+    // wins.
     const coverageSolids = num("coverageSolidsPct");
     const heavyThresh = ps?.heavyCoverageThresholdPct ?? 60;
     const solidSPH = ps?.solidCoveragePressSpeed ?? 8500;
+    const boardCapInches = ps?.boardThicknessCapInches ?? 0.028;
+    const boardCapSPH = ps?.boardThicknessMaxSpeed ?? 4100;
     let coverageSpeedMultiplier = 1;
-    if (coverageSolids >= heavyThresh && selectedConfig) {
+    if (selectedConfig) {
       const baseSPH = form.stockType === "uncoated" ? selectedConfig.speedUncoated : selectedConfig.speedCoated;
-      if (baseSPH > solidSPH) coverageSpeedMultiplier = solidSPH / baseSPH;
+      let effectiveCap = baseSPH;
+      if (coverageSolids >= heavyThresh) effectiveCap = Math.min(effectiveCap, solidSPH);
+      // Heavy-board cap kicks in at the threshold caliper.
+      if (caliper >= boardCapInches) effectiveCap = Math.min(effectiveCap, boardCapSPH);
+      if (baseSPH > effectiveCap) coverageSpeedMultiplier = effectiveCap / baseSPH;
     }
     // Apply to the effective pressRunTime at labor sum time (below)
 

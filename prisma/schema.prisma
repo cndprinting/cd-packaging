@@ -756,6 +756,10 @@ model PlantStandard {
   // speed caps at solidCoveragePressSpeed.
   solidCoveragePressSpeed     Int      @default(8500)
   heavyCoverageThresholdPct   Float    @default(60)
+  // Heavy-board cap (Mary 4/24/26): 28pt+ stocks max out at 4,100 SPH on
+  // press regardless of config — Rob has to run them slow every time.
+  boardThicknessCapInches     Float    @default(0.028)
+  boardThicknessMaxSpeed      Int      @default(4100)
 
   // Digital click charges (Mary 4/24/26 — three sheet-size tiers × five
   // ink configs, plus per-side variable data + VD setup hourly).
