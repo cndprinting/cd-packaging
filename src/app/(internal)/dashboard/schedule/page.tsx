@@ -34,9 +34,10 @@ function getWeekDays(): { date: Date; label: string; iso: string }[] {
   return days;
 }
 
+// Schedule = production-floor capacity planning. Pre-press is its own
+// phase (see /dashboard/prepress). Floor work centers start at the press.
 function getWorkCenterStageMap(): Record<string, string[]> {
   return {
-    prepress: ["QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL", "PREPRESS", "PLATING", "MATERIALS_ORDERED", "MATERIALS_RECEIVED", "SCHEDULED"],
     press: ["PRINTING"],
     "die-cutting": ["DIE_CUTTING"],
     gluing: ["GLUING_FOLDING"],
@@ -77,7 +78,10 @@ export default function SchedulePage() {
           }
           if (wcRes.ok) {
             const wd = await wcRes.json();
-            if (wd.workCenters?.length) setWorkCenters(wd.workCenters);
+            if (wd.workCenters?.length) {
+              // Hide Prepress — it has its own dashboard at /dashboard/prepress
+              setWorkCenters(wd.workCenters.filter((wc: any) => wc.type !== "prepress" && wc.code !== "PP"));
+            }
           }
         }
       } catch {

@@ -16,12 +16,13 @@ const internalNav = [
   { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
   { label: "Jobs", href: "/dashboard/jobs", icon: Package },
-  { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid },
+  // { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid }, // Archived Apr 2026 — redundant with Schedule + Production for Darrin; page still accessible by URL
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
   { label: "Invoices", href: "/dashboard/invoices", icon: FileBarChart },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
-  // { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck }, // Archived — team doesn't need it (Apr 2026)
+  // Proofing rebuilt as queue page (Apr 2026) — pre-press uploads → sales sends → customer approves → production alerted
+  { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck },
   { label: "Pre-Press", href: "/dashboard/prepress", icon: FileCheck },
   { label: "Production", href: "/dashboard/production", icon: Factory },
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
