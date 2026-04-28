@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
 
     try {
       const { put } = await import("@vercel/blob");
-      const blob = await put(file.name, file, { access: "public" });
+      // addRandomSuffix avoids collisions when two users upload "proof-v1.pdf";
+      // the original filename is still preserved in the response so the UI
+      // displays it normally. Public access matches our other files.
+      const blob = await put(file.name, file, { access: "public", addRandomSuffix: true });
       return NextResponse.json({ url: blob.url, fileName: file.name, size: file.size });
     } catch (e: any) {
       console.error("Blob upload failed:", e);
