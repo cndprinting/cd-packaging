@@ -20,6 +20,7 @@ interface QueueProof {
   customerApprovedAt?: string | null;
   jobNumber: string; jobName: string; customer: string;
   salesRepName: string; salesRepId: string;
+  csrName: string; csrId: string;
 }
 
 interface QueueData {
@@ -76,13 +77,47 @@ export default function ProofingPage() {
     setTimeout(() => setFeedback(""), 3000);
   };
 
+  const nudgeCsr = async (proofId: string, csrName: string) => {
+    setPendingAction(proofId);
+    try {
+      const res = await fetch("/api/proofs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "nudge_csr", proofId }),
+      });
+      const d = await res.json();
+      setFeedback(res.ok ? `Nudged ${csrName || "CSR"} 📧` : (d.error || "Failed to nudge"));
+    } catch { setFeedback("Failed to send nudge"); }
+    setPendingAction("");
+    setTimeout(() => setFeedback(""), 3000);
+  };
+
   const userRole = data?.currentUser?.role || "";
   const userId = data?.currentUser?.id || "";
-  const isSales = ["SALES", "CSR", "OWNER", "GM", "ADMIN"].includes(userRole);
+  // CSRs are the action owners on proofs (mark sent / record approval).
+  // Sales reps see proofs for their jobs but can only "Nudge CSR".
+  // Owner / GM / Admin can act as either.
+  const isCsr = ["CSR", "OWNER", "GM", "ADMIN"].includes(userRole);
+  const isSales = ["SALES", "OWNER", "GM", "ADMIN"].includes(userRole);
   const isPrepress = ["PREPRESS", "OWNER", "GM", "ADMIN", "ESTIMATOR"].includes(userRole);
+  // Visibility into proof queue: any of the three roles
+  const showQueue = isCsr || isSales;
 
-  // Filter proofs to current user if "mine only" is toggled
-  const filterMine = (arr: QueueProof[]) => mineOnly ? arr.filter(p => p.salesRepId === userId) : arr;
+  // Helper: can the current user *act* on this specific proof?
+  // CSR-of-record can; admins/owners/GM can; everyone else just observes.
+  const canActOnProof = (p: QueueProof) => {
+    if (["OWNER", "GM", "ADMIN"].includes(userRole)) return true;
+    if (userRole === "CSR" && p.csrId === userId) return true;
+    return false;
+  };
+
+  // "Mine only" filter — for sales, filters to their sales jobs; for CSR,
+  // filters to their CSR jobs.
+  const filterMine = (arr: QueueProof[]) => {
+    if (!mineOnly) return arr;
+    if (userRole === "CSR") return arr.filter(p => p.csrId === userId);
+    if (userRole === "SALES") return arr.filter(p => p.salesRepId === userId);
+    return arr; // admins see everything regardless
+  };
   const salesToSend = data ? filterMine(data.salesToSend) : [];
   const awaitingCustomer = data ? filterMine(data.awaitingCustomer) : [];
 
@@ -166,8 +201,8 @@ export default function ProofingPage() {
         </Card>
       )}
 
-      {/* ─── Sales to-send (proofs ready to send to customer) ─── */}
-      {isSales && (
+      {/* ─── Ready to send (CSR action owner; sales has visibility only) ─── */}
+      {showQueue && (
         <Card className="border-blue-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-blue-900">
@@ -175,58 +210,80 @@ export default function ProofingPage() {
               Ready to send to customer — {salesToSend.length}
               {mineOnly && userId && <span className="text-xs font-normal text-gray-500">(filtered to your jobs)</span>}
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">
+              CSR is the action owner. Sales reps can nudge the assigned CSR if needed.
+            </p>
           </CardHeader>
           <CardContent>
             {salesToSend.length === 0 ? (
               <p className="text-sm text-gray-400">Nothing to send. 🎉</p>
             ) : (
               <div className="space-y-2">
-                {salesToSend.map((p) => (
-                  <div key={p.id} className="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Link href={`/dashboard/jobs/${p.jobId}`} className="font-semibold text-sm text-gray-900 hover:text-brand-600">
-                            {p.jobNumber}
-                          </Link>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">v{p.version}</span>
-                          {p.fileUrl && (
-                            <a href={p.fileUrl} target="_blank" rel="noopener" className="text-xs text-brand-600 hover:underline">
-                              {p.fileName || "view proof"}
-                            </a>
+                {salesToSend.map((p) => {
+                  const canAct = canActOnProof(p);
+                  return (
+                    <div key={p.id} className="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link href={`/dashboard/jobs/${p.jobId}`} className="font-semibold text-sm text-gray-900 hover:text-brand-600">
+                              {p.jobNumber}
+                            </Link>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">v{p.version}</span>
+                            {p.fileUrl && (
+                              <a href={p.fileUrl} target="_blank" rel="noopener" className="text-xs text-brand-600 hover:underline">
+                                {p.fileName || "view proof"}
+                              </a>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-0.5">{p.jobName} · {p.customer}</div>
+                          <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
+                            {p.csrName && <span className="flex items-center gap-1"><UserIcon className="h-3 w-3" />CSR: <strong className="text-gray-700">{p.csrName}</strong></span>}
+                            {p.salesRepName && <span className="flex items-center gap-1 text-gray-400">Sales: {p.salesRepName}</span>}
+                          </div>
+                          {p.notes && <p className="text-xs text-gray-500 mt-1 italic">{p.notes}</p>}
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          {canAct ? (
+                            <>
+                              <button
+                                disabled={pendingAction === p.id}
+                                onClick={() => markSent(p.id, "email")}
+                                className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                Email to customer
+                              </button>
+                              <button
+                                disabled={pendingAction === p.id}
+                                onClick={() => markSent(p.id, "physical")}
+                                className="text-xs px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"
+                              >
+                                Sent physically
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              disabled={pendingAction === p.id || !p.csrId}
+                              onClick={() => nudgeCsr(p.id, p.csrName)}
+                              title={p.csrId ? `Send a quick email to ${p.csrName}` : "No CSR assigned"}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50"
+                            >
+                              📧 Nudge {p.csrName || "CSR"}
+                            </button>
                           )}
                         </div>
-                        <div className="text-xs text-gray-600 mt-0.5">{p.jobName} · {p.customer}</div>
-                        {p.salesRepName && <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1"><UserIcon className="h-3 w-3" />{p.salesRepName}</div>}
-                        {p.notes && <p className="text-xs text-gray-500 mt-1 italic">{p.notes}</p>}
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          disabled={pendingAction === p.id}
-                          onClick={() => markSent(p.id, "email")}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          Email to customer
-                        </button>
-                        <button
-                          disabled={pendingAction === p.id}
-                          onClick={() => markSent(p.id, "physical")}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"
-                        >
-                          Sent physically
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* ─── Awaiting customer (sales records the response) ─── */}
-      {isSales && (
+      {/* ─── Awaiting customer (CSR records the response) ─── */}
+      {showQueue && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-gray-700">
@@ -239,42 +296,61 @@ export default function ProofingPage() {
               <p className="text-sm text-gray-400">No proofs currently out with customers.</p>
             ) : (
               <div className="space-y-2">
-                {awaitingCustomer.map((p) => (
-                  <div key={p.id} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Link href={`/dashboard/jobs/${p.jobId}`} className="font-semibold text-sm text-gray-900 hover:text-brand-600">
-                            {p.jobNumber}
-                          </Link>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">v{p.version}</span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">SENT · {p.deliveryMethod?.toUpperCase()}</span>
+                {awaitingCustomer.map((p) => {
+                  const canAct = canActOnProof(p);
+                  return (
+                    <div key={p.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link href={`/dashboard/jobs/${p.jobId}`} className="font-semibold text-sm text-gray-900 hover:text-brand-600">
+                              {p.jobNumber}
+                            </Link>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">v{p.version}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">SENT · {p.deliveryMethod?.toUpperCase()}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-0.5">{p.jobName} · {p.customer}</div>
+                          <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
+                            {p.csrName && <span className="flex items-center gap-1"><UserIcon className="h-3 w-3" />CSR: <strong className="text-gray-700">{p.csrName}</strong></span>}
+                            {p.salesRepName && <span className="flex items-center gap-1 text-gray-400">Sales: {p.salesRepName}</span>}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            Sent {p.sentToCustomerAt ? formatDate(p.sentToCustomerAt) : "—"}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600 mt-0.5">{p.jobName} · {p.customer}</div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          Sent {p.sentToCustomerAt ? formatDate(p.sentToCustomerAt) : "—"}
-                          {p.salesRepName && ` by ${p.salesRepName}`}
+                        <div className="flex gap-2 shrink-0">
+                          {canAct ? (
+                            <>
+                              <button
+                                disabled={pendingAction === p.id}
+                                onClick={() => decide(p.id, "approve")}
+                                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 font-semibold"
+                              >
+                                ✓ Customer approved
+                              </button>
+                              <button
+                                disabled={pendingAction === p.id}
+                                onClick={() => decide(p.id, "reject")}
+                                className="text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                              >
+                                Rejected
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              disabled={pendingAction === p.id || !p.csrId}
+                              onClick={() => nudgeCsr(p.id, p.csrName)}
+                              title={p.csrId ? `Send a quick email to ${p.csrName}` : "No CSR assigned"}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50"
+                            >
+                              📧 Nudge {p.csrName || "CSR"}
+                            </button>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          disabled={pendingAction === p.id}
-                          onClick={() => decide(p.id, "approve")}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 font-semibold"
-                        >
-                          ✓ Customer approved
-                        </button>
-                        <button
-                          disabled={pendingAction === p.id}
-                          onClick={() => decide(p.id, "reject")}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
-                        >
-                          Rejected
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

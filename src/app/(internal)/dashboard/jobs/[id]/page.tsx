@@ -1902,23 +1902,50 @@ export default function JobDetailPage() {
 // Proofs card — tied to job, visible to customer via portal
 function ProofsCard({ jobId }: { jobId: string }) {
   const [proofs, setProofs] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string; name?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [fileName, setFileName] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [pendingAction, setPendingAction] = useState("");
+  const [feedback, setFeedback] = useState("");
 
   const load = async () => {
     try {
       const res = await fetch(`/api/proofs?jobId=${jobId}`);
       const data = await res.json();
       setProofs(data.proofs || []);
+      if (data.currentUser) setCurrentUser(data.currentUser);
     } catch { /* ignore */ }
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [jobId]);
+
+  // Pre-press = upload; CSR-of-record = act on proof; everyone else watches.
+  const role = currentUser?.role || "";
+  const userId = currentUser?.id || "";
+  const canActOnProof = (p: any) => {
+    if (["OWNER", "GM", "ADMIN"].includes(role)) return true;
+    if (role === "CSR" && p.job?.csr?.id === userId) return true;
+    return false;
+  };
+
+  const nudgeCsr = async (proofId: string, csrName: string) => {
+    setPendingAction(proofId);
+    try {
+      const res = await fetch("/api/proofs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "nudge_csr", proofId }),
+      });
+      const d = await res.json();
+      setFeedback(res.ok ? `Nudged ${csrName || "CSR"} 📧` : (d.error || "Failed to nudge"));
+    } catch { setFeedback("Failed to send nudge"); }
+    setPendingAction("");
+    setTimeout(() => setFeedback(""), 3000);
+  };
 
   const uploadFile = async (file: File) => {
     setUploading(true);
@@ -1979,6 +2006,11 @@ function ProofsCard({ jobId }: { jobId: string }) {
         </Button>
       </CardHeader>
       <CardContent>
+        {feedback && (
+          <div className="mb-3 text-xs px-3 py-2 rounded bg-emerald-50 border border-emerald-200 text-emerald-700">
+            {feedback}
+          </div>
+        )}
         {adding && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
             <label className="block text-xs font-medium text-gray-700">Attach proof file</label>
@@ -2027,6 +2059,13 @@ function ProofsCard({ jobId }: { jobId: string }) {
                         {!p.fileUrl && <span className="text-xs text-gray-500">{p.fileName}</span>}
                       </div>
                       {p.notes && <p className="text-xs text-gray-500 mt-0.5">{p.notes}</p>}
+                      {(p.job?.csr?.name || p.job?.salesRep?.name) && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {p.job?.csr?.name && <span>CSR: <strong className="text-gray-700">{p.job.csr.name}</strong></span>}
+                          {p.job?.csr?.name && p.job?.salesRep?.name && <span className="mx-2 text-gray-300">·</span>}
+                          {p.job?.salesRep?.name && <span className="text-gray-400">Sales: {p.job.salesRep.name}</span>}
+                        </p>
+                      )}
                       {sent && (
                         <p className="text-[11px] text-gray-400 mt-0.5">
                           Sent to customer {new Date(p.sentToCustomerAt).toLocaleDateString()} via {p.deliveryMethod}
@@ -2039,18 +2078,32 @@ function ProofsCard({ jobId }: { jobId: string }) {
                         </p>
                       )}
                     </div>
-                    {p.status === "PENDING" && !sent && (
+                    {p.status === "PENDING" && !sent && (canActOnProof(p) ? (
                       <div className="flex gap-2 shrink-0">
                         <button onClick={() => markSent(p.id, "email")} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Email to customer</button>
                         <button onClick={() => markSent(p.id, "physical")} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Sent physically</button>
                       </div>
-                    )}
-                    {p.status === "PENDING" && sent && (
+                    ) : (
+                      <button
+                        disabled={pendingAction === p.id || !p.job?.csr?.id}
+                        onClick={() => nudgeCsr(p.id, p.job?.csr?.name)}
+                        title={p.job?.csr?.id ? `Send a quick email to ${p.job?.csr?.name}` : "No CSR assigned"}
+                        className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50 shrink-0"
+                      >📧 Nudge {p.job?.csr?.name || "CSR"}</button>
+                    ))}
+                    {p.status === "PENDING" && sent && (canActOnProof(p) ? (
                       <div className="flex gap-2 shrink-0">
                         <button onClick={() => decide(p.id, "approve")} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold">✓ Customer approved</button>
                         <button onClick={() => decide(p.id, "reject")} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Rejected</button>
                       </div>
-                    )}
+                    ) : (
+                      <button
+                        disabled={pendingAction === p.id || !p.job?.csr?.id}
+                        onClick={() => nudgeCsr(p.id, p.job?.csr?.name)}
+                        title={p.job?.csr?.id ? `Send a quick email to ${p.job?.csr?.name}` : "No CSR assigned"}
+                        className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50 shrink-0"
+                      >📧 Nudge {p.job?.csr?.name || "CSR"}</button>
+                    ))}
                   </div>
                 </div>
               );
@@ -2058,8 +2111,9 @@ function ProofsCard({ jobId }: { jobId: string }) {
           </div>
         )}
         <p className="text-[11px] text-gray-400 mt-3">
-          Flow: <strong>Pre-press uploads</strong> → <strong>Sales sends to customer</strong> (email or physical) →
+          Flow: <strong>Pre-press uploads</strong> → <strong>CSR sends to customer</strong> (email or physical) →
           <strong> Customer approves</strong> → production automatically alerted, printing gate unlocks.
+          {" "}Sales reps see proofs in their queue and can nudge the CSR.
         </p>
       </CardContent>
     </Card>

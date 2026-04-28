@@ -13,10 +13,26 @@ export async function GET(request: NextRequest) {
     const where = jobId ? { jobId } : {};
     const proofs = await prisma.proof.findMany({
       where,
-      include: { job: { include: { order: { include: { company: true } } } }, approvals: { include: { user: true } } },
+      include: {
+        job: {
+          include: {
+            order: { include: { company: true } },
+            csr: { select: { id: true, name: true, email: true } },
+            salesRep: { select: { id: true, name: true, email: true } },
+          },
+        },
+        approvals: { include: { user: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ proofs, source: "database" });
+    // Also surface the current session so the UI can role-gate actions
+    // (CSR-of-record acts; sales reps see and can nudge).
+    const session = await getSession();
+    return NextResponse.json({
+      proofs,
+      currentUser: session ? { id: session.id, name: session.name, role: session.role } : null,
+      source: "database",
+    });
   } catch (error) {
     console.error("Proofs GET error:", error);
     return NextResponse.json({ error: "Failed to fetch proofs" }, { status: 500 });
@@ -35,9 +51,56 @@ export async function POST(request: NextRequest) {
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
 
-    // Sales marks a proof as sent to the customer (email or physical delivery).
+    // Nudge the assigned CSR — sales reps see proofs in their queue but the
+    // CSR is the action owner. This sends a quick email to the CSR so they
+    // know to act. Non-fatal on email failure.
+    if (action === "nudge_csr") {
+      if (!proofId) return NextResponse.json({ error: "Proof ID required" }, { status: 400 });
+      const proof = await prisma.proof.findUnique({
+        where: { id: proofId },
+        include: {
+          job: {
+            include: {
+              order: { include: { company: true } },
+              csr: { select: { email: true, name: true } },
+            },
+          },
+        },
+      });
+      if (!proof?.job?.csr?.email) {
+        return NextResponse.json({ error: "No CSR assigned to this job" }, { status: 400 });
+      }
+      try {
+        const { sendEmail } = await import("@/lib/email/graph-client");
+        const job = proof.job;
+        const customer = job.order?.company?.name || "customer";
+        const status = proof.sentToCustomerAt ? "awaiting customer response" : "ready to send to customer";
+        await sendEmail({
+          from: session.email || process.env.DEFAULT_EMAIL_FROM || "no-reply@cndprinting.com",
+          to: proof.job.csr.email,
+          subject: `Heads up: proof on ${job.jobNumber} (${customer}) — ${status}`,
+          body: `
+            <p>Hi ${proof.job.csr.name || ""},</p>
+            <p>${session.name || "A teammate"} flagged this proof for your attention:</p>
+            <ul>
+              <li><strong>Job:</strong> ${job.jobNumber} — ${job.name || ""}</li>
+              <li><strong>Customer:</strong> ${customer}</li>
+              <li><strong>Proof:</strong> v${proof.version}${proof.fileName ? ` — ${proof.fileName}` : ""}</li>
+              <li><strong>Status:</strong> ${status}</li>
+            </ul>
+            <p><a href="${process.env.NEXTAUTH_URL || "https://packaging.cndprinting.com"}/dashboard/jobs/${job.id}">Open job ticket →</a></p>
+          `.trim(),
+        });
+      } catch (e) {
+        console.error("Nudge CSR email failed:", e);
+        return NextResponse.json({ error: "Email failed — try again" }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // CSR marks a proof as sent to the customer (email or physical delivery).
     // Timestamp + delivery method let us surface "sent — awaiting approval" on
-    // the sales dashboard and audit trail on the job ticket.
+    // the proofing queue and audit trail on the job ticket.
     if (action === "mark_sent") {
       if (!proofId) return NextResponse.json({ error: "Proof ID required" }, { status: 400 });
       const { deliveryMethod } = body;

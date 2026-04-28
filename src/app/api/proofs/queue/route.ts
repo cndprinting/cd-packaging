@@ -52,7 +52,8 @@ export async function GET() {
         job: {
           include: {
             order: { include: { company: true } },
-            salesRep: { select: { id: true, name: true } },
+            salesRep: { select: { id: true, name: true, email: true } },
+            csr: { select: { id: true, name: true, email: true } },
           },
         },
       },
@@ -70,7 +71,8 @@ export async function GET() {
         job: {
           include: {
             order: { include: { company: true } },
-            salesRep: { select: { id: true, name: true } },
+            salesRep: { select: { id: true, name: true, email: true } },
+            csr: { select: { id: true, name: true, email: true } },
           },
         },
       },
@@ -113,6 +115,8 @@ export async function GET() {
         customer: p.job?.order?.company?.name || "",
         salesRepName: p.job?.salesRep?.name || "",
         salesRepId: p.job?.salesRep?.id || "",
+        csrName: p.job?.csr?.name || "",
+        csrId: p.job?.csr?.id || "",
       })),
       awaitingCustomer: awaitingCustomer.map((p) => ({
         id: p.id,
@@ -127,6 +131,8 @@ export async function GET() {
         customer: p.job?.order?.company?.name || "",
         salesRepName: p.job?.salesRep?.name || "",
         salesRepId: p.job?.salesRep?.id || "",
+        csrName: p.job?.csr?.name || "",
+        csrId: p.job?.csr?.id || "",
       })),
       recentlyApproved: recentlyApproved.map((p) => ({
         id: p.id,
