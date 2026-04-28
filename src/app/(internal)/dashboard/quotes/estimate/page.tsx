@@ -610,10 +610,18 @@ export default function EstimatePage() {
 function EstimateContent() {
   const searchParams = useSearchParams();
   const fromRequestId = searchParams.get("from");
+  const draftIdFromUrl = searchParams.get("draftId");
   const [form, setForm] = useState<FormState>({ ...defaultForm });
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Draft auto-save state — Mary's feedback: don't lose work when she
+  // steps away. After the first save (auto or manual), draftQuoteId
+  // holds the quote's id so subsequent auto-saves PUT to update.
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(draftIdFromUrl);
+  const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(!!draftIdFromUrl);
   interface QuoteProduct {
     productName: string;
     productType: string;
@@ -720,6 +728,85 @@ function EstimateContent() {
       }).catch(() => {});
     }
   }, [fromRequestId]);
+
+  // Auto-save every ~30 seconds when form has been touched and we're past
+  // step 1 (we don't auto-save before product type is picked). Only fires
+  // for drafts (status not yet sent/approved/converted). Mary's feedback:
+  // don't lose work when she steps away.
+  useEffect(() => {
+    if (step < 2) return;
+    if (!form.customerName && !form.jobName) return; // empty form, nothing to save
+    if (draftLoading) return; // wait for draft hydration
+    const timer = setTimeout(async () => {
+      if (saving || autoSaving) return;
+      setAutoSaving(true);
+      try {
+        const specsPayload = JSON.stringify({ estimateData: form, autoSavedAt: new Date().toISOString() });
+        if (draftQuoteId) {
+          await fetch("/api/quotes", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: draftQuoteId,
+              specs: specsPayload,
+              customerName: form.customerName,
+              productName: form.jobName,
+              quantity: String(form.quantity || 0),
+            }),
+          });
+        } else if (form.customerName) {
+          // First auto-save creates the draft so it shows up in Mary's queue.
+          const res = await fetch("/api/quotes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerName: form.customerName,
+              productType: form.productType,
+              productName: form.jobName || "Untitled draft",
+              description: "Auto-saved draft (in progress)",
+              quantity: String(form.quantity || 0),
+              unitPrice: "0",
+              specs: specsPayload,
+              quoteRequestId: fromRequestId || undefined,
+            }),
+          });
+          const d = await res.clone().json().catch(() => null);
+          if (res.ok && d?.quote?.id) setDraftQuoteId(d.quote.id);
+        }
+        setAutoSavedAt(new Date());
+      } catch { /* swallow — next tick will retry */ }
+      setAutoSaving(false);
+    }, 30000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, step, draftQuoteId, draftLoading]);
+
+  // Resume from draft — if ?draftId=xxx is in the URL, load that quote's
+  // saved estimateData into the form so Mary can pick up where she left off.
+  useEffect(() => {
+    if (!draftIdFromUrl) return;
+    setDraftLoading(true);
+    fetch(`/api/quotes?id=${draftIdFromUrl}`)
+      .then(r => r.json())
+      .then(d => {
+        // /api/quotes GET returns a list; filter to our id
+        const q = (d.quotes || []).find((x: any) => x.id === draftIdFromUrl);
+        if (!q) return;
+        let savedSpecs: any = {};
+        try { savedSpecs = q.specs ? JSON.parse(q.specs) : {}; } catch {}
+        // Restore the form state we saved on handleSave.
+        if (savedSpecs.estimateData) {
+          setForm(prev => ({ ...prev, ...savedSpecs.estimateData }));
+        }
+        // If the draft already advanced past step 1, jump there.
+        if (savedSpecs.estimateData?.productType && savedSpecs.estimateData?.pressType) {
+          setStep(2);
+        }
+        setDraftQuoteId(q.id);
+      })
+      .catch(() => {})
+      .finally(() => setDraftLoading(false));
+  }, [draftIdFromUrl]);
 
   // Auto-fill from press/config selection
   const selectedPress = useMemo(() => presses.find((p) => p.id === form.selectedPressId), [presses, form.selectedPressId]);
@@ -1272,9 +1359,11 @@ function EstimateContent() {
         description: `${form.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"} - ${form.pressType === "OFFSET" ? "Offset" : "Digital"}${selectedPress ? ` (${selectedPress.name})` : ""} | ${form.finishedWidth}" x ${form.finishedHeight}"`,
         quantity: String(form.quantity),
         unitPrice: String(calc.costPerUnit.toFixed(4)),
-        estimateData: form,
-        estimateTotals: calc,
         specs: JSON.stringify({
+          // Full form snapshot — lets the estimator rehydrate when Mary
+          // re-opens the draft. Includes everything in defaultForm shape.
+          estimateData: form,
+          estimateTotals: calc,
           dimensions: `${form.finishedWidth}x${form.finishedHeight}`,
           sheetSize: `${form.sheetWidth}x${form.sheetHeight}`,
           colors: `${form.inkColorsFront}F/${form.inkColorsBack}B`,
@@ -1370,20 +1459,46 @@ function EstimateContent() {
           },
         }),
       };
-      const res = await fetch("/api/quotes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // Resume-from-draft path: if we already have a draftQuoteId (either
+      // loaded from URL or set after first save), PUT to update instead
+      // of creating a new quote each time. Mary can come and go.
+      let res: Response;
+      let newQuoteId: string | undefined;
+      if (draftQuoteId) {
+        res = await fetch("/api/quotes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: draftQuoteId,
+            specs: body.specs,
+            customerName: body.customerName,
+            productName: body.productName,
+            description: body.description,
+            quantity: body.quantity,
+            unitPrice: body.unitPrice,
+          }),
+        });
+        newQuoteId = draftQuoteId;
+      } else {
+        res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = await res.clone().json().catch(() => null);
+          newQuoteId = data?.quote?.id;
+          if (newQuoteId) setDraftQuoteId(newQuoteId);
+        }
+      }
       if (res.ok) {
         setSaved(true);
+        setAutoSavedAt(new Date());
         setTimeout(() => setSaved(false), 3000);
         // If this estimate was started from a quote request, mark it completed
         // so it exits the Quote Requests queue and lives on the Quotes tab.
-        if (fromRequestId) {
+        if (fromRequestId && newQuoteId) {
           try {
-            const data = await res.json();
-            const newQuoteId = data?.quote?.id;
             await fetch("/api/quote-requests", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
@@ -3369,6 +3484,20 @@ function EstimateContent() {
         >
           <Plus className="h-4 w-4" /> Add Product &amp; Continue
         </Button>
+        {/* Auto-save indicator — Mary's feedback: confidence she won't lose work */}
+        {(autoSavedAt || autoSaving || draftQuoteId) && (
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {autoSaving ? (
+              <span className="text-blue-600">Auto-saving…</span>
+            ) : autoSavedAt ? (
+              <span className="text-emerald-600">
+                ✓ Auto-saved at {autoSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            ) : draftQuoteId ? (
+              <span>Resumed draft</span>
+            ) : null}
+          </div>
+        )}
         <Button onClick={handleSave} disabled={saving || saved} className="gap-2">
           {saved ? (
             <>

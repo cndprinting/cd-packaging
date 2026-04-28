@@ -3,11 +3,30 @@ import { getSession } from "@/lib/session";
 
 // No more demo quotes — real data only
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (prisma) {
+      // Single-quote fetch (used by the estimator to resume drafts).
+      // Returns the full record incl. specs JSON so the form can rehydrate.
+      if (id) {
+        const q = await prisma.quote.findUnique({ where: { id } });
+        if (!q) return NextResponse.json({ quotes: [] });
+        return NextResponse.json({ quotes: [{
+          id: q.id, quoteNumber: q.quoteNumber, customerName: q.customerName,
+          contactName: q.contactName, contactEmail: q.contactEmail,
+          productType: q.productType, productName: q.productName, description: q.description,
+          quantity: q.quantity, unitPrice: q.unitPrice, totalPrice: q.totalPrice,
+          status: q.status.toLowerCase(), validUntil: q.validUntil?.toISOString().split("T")[0] || "",
+          createdAt: q.createdAt.toISOString().split("T")[0],
+          specs: q.specs,
+          notes: q.notes,
+          quoteRequestId: q.quoteRequestId,
+        }] });
+      }
       const quotes = await prisma.quote.findMany({ orderBy: { createdAt: "desc" } });
       if (quotes.length > 0) {
         return NextResponse.json({ quotes: quotes.map(q => ({
@@ -71,12 +90,34 @@ export async function PUT(request: NextRequest) {
     const session = await getSession();
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
-    const { id, status, quantity, customerNotes } = await request.json();
-    if (!id || !status) return NextResponse.json({ error: "ID and status required" }, { status: 400 });
+    const body = await request.json();
+    const { id, status, quantity, customerNotes, specs: bodySpecs, customerName, productName, description, unitPrice } = body;
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ ok: true, status });
+
+    // Draft-update path: when the estimator saves an in-progress quote with
+    // an existing id, we update specs + summary fields without changing the
+    // status (keeps it as DRAFT). Allows Mary to step away and resume.
+    if (bodySpecs && !status) {
+      const updates: any = { specs: bodySpecs };
+      if (customerName !== undefined) updates.customerName = customerName;
+      if (productName !== undefined) updates.productName = productName;
+      if (description !== undefined) updates.description = description;
+      if (quantity !== undefined) updates.quantity = parseInt(quantity) || 0;
+      if (unitPrice !== undefined) {
+        const u = parseFloat(unitPrice) || 0;
+        updates.unitPrice = u;
+        const q = updates.quantity ?? (await prisma.quote.findUnique({ where: { id } }))?.quantity ?? 0;
+        if (q) updates.totalPrice = u * q;
+      }
+      await prisma.quote.update({ where: { id }, data: updates });
+      return NextResponse.json({ ok: true, id });
+    }
+
+    if (!status) return NextResponse.json({ error: "ID and status required" }, { status: 400 });
 
     const statusMap: Record<string, string> = { draft: "DRAFT", sent: "SENT", approved: "APPROVED", rejected: "REJECTED", converted: "CONVERTED", archived: "ARCHIVED" };
     const dbStatus = statusMap[status] || status;
