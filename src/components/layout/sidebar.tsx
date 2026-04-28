@@ -78,6 +78,20 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
     // Shipping only sees Shipping + Settings
     if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings");
 
+    // Pre-Press Manager (Michael Metroka) — pre-press scope only.
+    // Sees Pre-Press, Proofing, Production (visibility), Plant Floor (visibility),
+    // Shipping (visibility). No quotes, no admin, no estimating, no settings.
+    if (role === "PREPRESS_MANAGER") {
+      const allowed = [
+        "/dashboard/prepress",
+        "/dashboard/proofing",
+        "/dashboard/production",
+        "/dashboard/plant-floor",
+        "/dashboard/shipping",
+      ];
+      return internalNav.filter(item => allowed.includes(item.href));
+    }
+
     // CSRs and Sales Reps — limited view, no estimating data
     if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER") {
       return [

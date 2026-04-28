@@ -17,6 +17,7 @@ enum Role {
   SENIOR_PLANT_MANAGER // Darrin — full access, separate from regular plant roles
   ACCOUNTING         // Full access
   ESTIMATOR          // Everything except dashboard — Mary Bitting
+  PREPRESS_MANAGER   // Michael Metroka — Pre-Press, Proofing, Production, Plant Floor, Shipping. Acts on proofs (mark sent / approve).
   CSR                // Everything except accounting/dashboard/executive features
   SALES_REP          // Quotes + their own customers only, job status tracking
   SALES_MANAGER      // Same as SALES_REP but with team view

@@ -10,26 +10,30 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
-    // Try Vercel Blob if configured
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-      try {
-        const { put } = await import("@vercel/blob");
-        const blob = await put(file.name, file, { access: "public" });
-        return NextResponse.json({ url: blob.url, fileName: file.name, size: file.size });
-      } catch (e) {
-        console.error("Blob upload failed:", e);
-      }
+    // Vercel Blob is required for real file storage. The previous fallback
+    // silently returned a fake URL that broke proof links — surface a real
+    // error instead so the UI can prompt the user to paste a URL.
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json({
+        error: "File storage not configured",
+        message: "Vercel Blob isn't set up yet. Until it is, paste a OneDrive/Dropbox URL in the field below instead.",
+        configRequired: "BLOB_READ_WRITE_TOKEN",
+      }, { status: 503 });
     }
 
-    // Fallback: return a placeholder URL (file not actually stored)
-    return NextResponse.json({
-      url: `/uploads/${Date.now()}-${file.name}`,
-      fileName: file.name,
-      size: file.size,
-      note: "File storage not configured. Add BLOB_READ_WRITE_TOKEN env var for Vercel Blob.",
-    });
-  } catch (error) {
+    try {
+      const { put } = await import("@vercel/blob");
+      const blob = await put(file.name, file, { access: "public" });
+      return NextResponse.json({ url: blob.url, fileName: file.name, size: file.size });
+    } catch (e: any) {
+      console.error("Blob upload failed:", e);
+      return NextResponse.json({
+        error: "Upload to Vercel Blob failed",
+        message: e?.message || "Unknown blob error — try pasting a URL instead.",
+      }, { status: 502 });
+    }
+  } catch (error: any) {
     console.error("Upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed", message: error?.message }, { status: 500 });
   }
 }

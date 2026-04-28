@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
               // Find production recipients (roles that schedule jobs).
               const recipients = await prisma.user.findMany({
                 where: {
-                  role: { in: ["PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "OWNER", "GM"] },
+                  role: { in: ["PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "PREPRESS_MANAGER", "OWNER", "GM"] },
                   email: { not: "" as any },
                 },
                 select: { email: true, name: true },

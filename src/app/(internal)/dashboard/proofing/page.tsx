@@ -96,16 +96,16 @@ export default function ProofingPage() {
   // CSRs are the action owners on proofs (mark sent / record approval).
   // Sales reps see proofs for their jobs but can only "Nudge CSR".
   // Owner / GM / Admin can act as either.
-  const isCsr = ["CSR", "OWNER", "GM", "ADMIN"].includes(userRole);
+  const isCsr = ["CSR", "OWNER", "GM", "ADMIN", "PREPRESS_MANAGER"].includes(userRole);
   const isSales = ["SALES", "OWNER", "GM", "ADMIN"].includes(userRole);
-  const isPrepress = ["PREPRESS", "OWNER", "GM", "ADMIN", "ESTIMATOR"].includes(userRole);
+  const isPrepress = ["PREPRESS_MANAGER", "OWNER", "GM", "ADMIN", "ESTIMATOR"].includes(userRole);
   // Visibility into proof queue: any of the three roles
   const showQueue = isCsr || isSales;
 
   // Helper: can the current user *act* on this specific proof?
   // CSR-of-record can; admins/owners/GM can; everyone else just observes.
   const canActOnProof = (p: QueueProof) => {
-    if (["OWNER", "GM", "ADMIN"].includes(userRole)) return true;
+    if (["OWNER", "GM", "ADMIN", "PREPRESS_MANAGER"].includes(userRole)) return true;
     if (userRole === "CSR" && p.csrId === userId) return true;
     return false;
   };

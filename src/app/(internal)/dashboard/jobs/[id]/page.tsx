@@ -1928,7 +1928,7 @@ function ProofsCard({ jobId }: { jobId: string }) {
   const role = currentUser?.role || "";
   const userId = currentUser?.id || "";
   const canActOnProof = (p: any) => {
-    if (["OWNER", "GM", "ADMIN"].includes(role)) return true;
+    if (["OWNER", "GM", "ADMIN", "PREPRESS_MANAGER"].includes(role)) return true;
     if (role === "CSR" && p.job?.csr?.id === userId) return true;
     return false;
   };
@@ -1954,12 +1954,22 @@ function ProofsCard({ jobId }: { jobId: string }) {
       fd.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
-      if (data.url) {
+      if (res.ok && data.url) {
         setFileUrl(data.url);
         setFileName(data.fileName || file.name);
+        setFeedback(`✓ Uploaded ${file.name}`);
+      } else {
+        // Surface the real error — esp. the 503 "blob not configured" case.
+        setFeedback(data.message || data.error || "Upload failed — paste a URL below instead.");
+        // Pre-fill the filename so the user just needs to paste a URL.
+        setFileName(file.name);
       }
-    } catch { /* user can paste URL manually */ }
+    } catch (e: any) {
+      setFeedback(`Upload failed (${e?.message || "network error"}) — paste a URL below instead.`);
+      setFileName(file.name);
+    }
     setUploading(false);
+    setTimeout(() => setFeedback(""), 5000);
   };
 
   const createProof = async () => {
