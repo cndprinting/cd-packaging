@@ -1745,46 +1745,67 @@ function EstimateContent() {
             <p className="mt-1 text-xs text-brand-600 font-medium">The most important number -- everything calculates from this.</p>
           </Field>
 
-          {/* Quantity Tiers */}
-          <div className="mt-3">
+          {/* Quantity Tiers — Mary's 4/30: she added a tier of 1000 but couldn't
+              tell it took effect because the comparison was way at the bottom.
+              Show tiers in a callout box with prices computed inline. */}
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-700">Additional Quantity Tiers</p>
-              <button
-                type="button"
-                onClick={() => setForm(p => ({ ...p, quantityTiers: [...p.quantityTiers, 0] }))}
-                className="text-xs font-medium text-brand-600 hover:text-brand-800"
-              >
-                + Add Tier
-              </button>
-            </div>
-            {form.quantityTiers.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {form.quantityTiers.map((tier, i) => (
-                  <div key={i} className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      value={tier || ""}
-                      onChange={(e) => {
-                        const newTiers = [...form.quantityTiers];
-                        newTiers[i] = Number(e.target.value);
-                        setForm(p => ({ ...p, quantityTiers: newTiers }));
-                      }}
-                      placeholder="Qty"
-                      className="w-28 h-9 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setForm(p => ({ ...p, quantityTiers: p.quantityTiers.filter((_, j) => j !== i) }))}
-                      className="text-gray-400 hover:text-red-500 p-1"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+              <div>
+                <p className="text-sm font-semibold text-blue-900">Additional Quantity Tiers</p>
+                <p className="text-[11px] text-gray-600">Quote multiple volumes side-by-side (e.g. 1,000 / 2,500 / 5,000) — each tier&apos;s price calculates instantly.</p>
               </div>
-            )}
-            {form.quantityTiers.length === 0 && (
-              <p className="text-xs text-gray-400">Add tiers to compare pricing at different volumes.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setForm(p => ({ ...p, quantityTiers: [...p.quantityTiers, 0] }))}
+                className="gap-1.5 shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Tier
+              </Button>
+            </div>
+            {form.quantityTiers.length > 0 ? (
+              <div className="space-y-1.5 mt-3">
+                {form.quantityTiers.map((tier, i) => {
+                  const tierResult = tierCalcs.find(t => t.quantity === tier);
+                  return (
+                    <div key={i} className="flex items-center gap-2 bg-white rounded-md border border-gray-200 px-2 py-1.5">
+                      <Input
+                        type="number"
+                        value={tier || ""}
+                        onChange={(e) => {
+                          const newTiers = [...form.quantityTiers];
+                          newTiers[i] = Number(e.target.value);
+                          setForm(p => ({ ...p, quantityTiers: newTiers }));
+                        }}
+                        placeholder="e.g. 1000"
+                        className="w-28 h-8 text-sm"
+                      />
+                      {tier > 0 && tierResult ? (
+                        <div className="flex-1 flex items-center justify-between text-xs">
+                          <span className="text-gray-600">→ Total <strong className="text-gray-900">{fmtMoney(tierResult.total)}</strong></span>
+                          <span className="text-gray-500">@ {fmtMoney(tierResult.costPerUnit)}/unit · {fmtMoney(tierResult.costPer1000)}/M</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 flex-1">Enter a quantity</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, quantityTiers: p.quantityTiers.filter((_, j) => j !== i) }))}
+                        className="text-gray-400 hover:text-red-500 p-1 shrink-0"
+                        title="Remove tier"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+                <p className="text-[11px] text-gray-500 mt-2 italic">
+                  Full Volume Pricing Comparison table appears below with per-unit and per-1,000 rates for each tier.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 mt-2">No additional tiers yet — click <strong>+ Add Tier</strong> above to add one.</p>
             )}
           </div>
         </div>
