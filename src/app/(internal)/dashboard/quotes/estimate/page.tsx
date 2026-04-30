@@ -214,9 +214,14 @@ interface FormState {
   millItemLeadTime: string; // free text e.g. "2-3 weeks", "minimum 5 ctns"
   // Phase 1 — quantitative finishing (replaces difficulty dials)
   numCuts: number;
-  foldType: string; // "none" | "half" | "tri" | "z" | "gate" | "roll" | "accordion" | "double_parallel" | "french" | "custom"
+  foldType: string; // "none" | "half" | "tri" | "z" | "gate" | "roll" | "accordion" | "double_parallel" | "french" | "right_angle" | "custom"
   numFolds: number;
   numDrillHoles: number;
+  // Saddle stitch — Mary 4/30: prefer auto-calc from qty × rate ÷ speed.
+  // saddleStitchAuto = true means the $ value below was computed from
+  // saddleStitchQty (and should update if rate/speed/qty changes).
+  saddleStitchQty: number;
+  saddleStitchAuto: boolean;
   // Phase II Part 2 — Darrin's press/cut/finishing refinements
   coverageSolidsPct: number;       // 0-100; when > threshold, press speed caps at solidCoveragePressSpeed
   paperCaliperInches: number;      // per-sheet thickness; 0 = auto-lookup from paper desc
@@ -435,6 +440,8 @@ const defaultForm: FormState = {
   foldType: "none",
   numFolds: 0,
   numDrillHoles: 0,
+  saddleStitchQty: 0,
+  saddleStitchAuto: false,
   coverageSolidsPct: 0,
   paperCaliperInches: 0,
   numScores: 0,
@@ -741,7 +748,14 @@ function EstimateContent() {
       if (saving || autoSaving) return;
       setAutoSaving(true);
       try {
-        const specsPayload = JSON.stringify({ estimateData: form, autoSavedAt: new Date().toISOString() });
+        // Auto-save persists BOTH form + computed totals so the detailed
+        // summary, tier comparison, and quote letter all have what they
+        // need when Mary re-opens or navigates to those views.
+        const specsPayload = JSON.stringify({
+          estimateData: form,
+          estimateTotals: calc,
+          autoSavedAt: new Date().toISOString(),
+        });
         if (draftQuoteId) {
           await fetch("/api/quotes", {
             method: "PUT",
@@ -1767,7 +1781,9 @@ function EstimateContent() {
             {form.quantityTiers.length > 0 ? (
               <div className="space-y-1.5 mt-3">
                 {form.quantityTiers.map((tier, i) => {
-                  const tierResult = tierCalcs.find(t => t.quantity === tier);
+                  // Match by index too — handles dup quantities + accepts nearby values
+                  const tierResult = tierCalcs.find(t => t.quantity === tier) || tierCalcs[i];
+                  const showCalc = tier > 0 && tierResult && tierResult.total > 0;
                   return (
                     <div key={i} className="flex items-center gap-2 bg-white rounded-md border border-gray-200 px-2 py-1.5">
                       <Input
@@ -1781,11 +1797,13 @@ function EstimateContent() {
                         placeholder="e.g. 1000"
                         className="w-28 h-8 text-sm"
                       />
-                      {tier > 0 && tierResult ? (
+                      {showCalc ? (
                         <div className="flex-1 flex items-center justify-between text-xs">
                           <span className="text-gray-600">→ Total <strong className="text-gray-900">{fmtMoney(tierResult.total)}</strong></span>
                           <span className="text-gray-500">@ {fmtMoney(tierResult.costPerUnit)}/unit · {fmtMoney(tierResult.costPer1000)}/M</span>
                         </div>
+                      ) : tier > 0 ? (
+                        <span className="text-xs text-amber-600 flex-1">Calculating… (fill out the form to see this tier&apos;s price)</span>
                       ) : (
                         <span className="text-xs text-gray-400 flex-1">Enter a quantity</span>
                       )}
@@ -2417,15 +2435,20 @@ function EstimateContent() {
                 return auto ? `Auto-suggests ${auto}" from paper spec` : "Enter manually; drives cut lift count";
               })()}>
                 <Input
-                  type="number"
-                  step="0.0001"
+                  type="text"
+                  inputMode="decimal"
                   value={form.paperCaliperInches || ""}
                   placeholder={(() => {
                     const auto = lookupCaliper(String(form.paperWeight || form.paperBasisWeight || ""), undefined, form.paperCategory === "cover" ? "Cover" : form.paperCategory === "text" ? "Text" : undefined)
                       ?? guessCaliperFromText(form.stockDescription as string);
                     return auto ? `${auto}` : "e.g. 0.014";
                   })()}
-                  onChange={(e) => set("paperCaliperInches", Number(e.target.value))}
+                  onChange={(e) => {
+                    // type="text" lets Mary paste/type ".0054" or "0.0054" without
+                    // browser step-validation rejecting it. We parse here.
+                    const v = parseFloat(e.target.value);
+                    set("paperCaliperInches", isNaN(v) ? 0 : v);
+                  }}
                 />
               </Field>
               <Field label="Round up to full cartons" hint="Cover/text stocks usually required">
@@ -2690,11 +2713,45 @@ function EstimateContent() {
                   <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
                 </Field>
               </div>
-              {/* Saddle stitch + perfect bind — Mary 4/30: she expected these
-                  alongside the other bindery counts, not buried below */}
+              {/* Saddle stitch + perfect bind — Mary 4/30: auto-calculate
+                  from the rate × qty formula instead of forcing a manual $ */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mt-3 pt-3 border-t border-blue-200">
-                <Field label="Saddle stitch ($)" hint={plantStandards ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr` : "Total"}>
-                  <Input type="number" step="0.01" value={form.saddleStitchCost || ""} onChange={(e) => set("saddleStitchCost", Number(e.target.value))} min={0} />
+                <Field
+                  label="Saddle stitch (qty)"
+                  hint={plantStandards
+                    ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr → ${(() => {
+                        const rate = Number(plantStandards.saddleStitch1Rate) || 95;
+                        const speed = Number(plantStandards.saddleStitch1Speed) || 8000;
+                        const cost = (Number(form.saddleStitchCost) > 0 && !form.saddleStitchAuto)
+                          ? Number(form.saddleStitchCost)
+                          : ((Number(form.saddleStitchQty) || 0) * rate / Math.max(speed, 1));
+                        return `auto-calc = $${cost.toFixed(2)}`;
+                      })()}`
+                    : "Pieces saddle-stitched"}
+                >
+                  <Input
+                    type="number"
+                    value={form.saddleStitchQty || ""}
+                    placeholder={String(form.quantity || "0")}
+                    onChange={(e) => {
+                      const qty = Number(e.target.value) || 0;
+                      const rate = Number(plantStandards?.saddleStitch1Rate) || 95;
+                      const speed = Number(plantStandards?.saddleStitch1Speed) || 8000;
+                      const cost = qty * rate / Math.max(speed, 1);
+                      setForm(p => ({ ...p, saddleStitchQty: qty, saddleStitchCost: cost, saddleStitchAuto: true } as any));
+                    }}
+                    min={0}
+                  />
+                </Field>
+                <Field label="Or override ($)" hint="Manual saddle stitch $ (overrides qty calc)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.saddleStitchAuto ? "" : (form.saddleStitchCost || "")}
+                    placeholder={form.saddleStitchAuto ? `Auto: $${(Number(form.saddleStitchCost) || 0).toFixed(2)}` : "0.00"}
+                    onChange={(e) => setForm(p => ({ ...p, saddleStitchCost: Number(e.target.value), saddleStitchAuto: false } as any))}
+                    min={0}
+                  />
                 </Field>
                 <Field label="Perfect bind ($)" hint="Total cost">
                   <Input type="number" step="0.01" value={form.perfectBindingCost || ""} onChange={(e) => set("perfectBindingCost", Number(e.target.value))} min={0} />
