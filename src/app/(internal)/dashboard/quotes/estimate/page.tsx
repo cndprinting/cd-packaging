@@ -1212,9 +1212,45 @@ function EstimateContent() {
 
     const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideCost;
 
-    // 4-category markup from plant standards
-    const paperMarkup = materialsCost * (num("markupPaper") / 100);
-    const materialMarkup = toolingCost * (num("markupMaterial") / 100);
+    // 4-category markup decomposition — Mary's 4/30/26 feedback. The bug:
+    // paperMarkup was using the lumped materialsCost (paper + ink + coating)
+    // and materialMarkup was using only toolingCost (plates), so material
+    // markup came out to $0 on most quotes. Now we split materialsCost into:
+    //   paperCost     = paper-only       (Paper bucket gets markupPaper)
+    //   materialCost  = ink + coating + tooling (Material bucket gets
+    //                   markupMaterial — these are consumables, separate
+    //                   from paper)
+    // outsideCost stays as outside services (Outside bucket).
+    const inkSoftCost = num("commInkCost") + num("inkCostPerLb") * 0.1; // best-effort
+    // Decompose materialsCost: anything that ISN'T paper goes to material.
+    // paperCost is the part of materialsCost we can identify as paper-only.
+    let paperOnlyCost = 0;
+    let materialOnlyCost = 0;
+    if (isCartonOffset || isCommOffset) {
+      // For offset paths, reconstruct paper portion. carton: paper = (sheets/1000) × paperCostPer1000.
+      // We approximate by attributing the paper portion via paperCostPer1000 × quantity / 1000.
+      const sheetEstimate = Math.max(1, Math.ceil((q * v) / Math.max(num("numberUp"), 1))) + num("makeReadySheets");
+      paperOnlyCost = (sheetEstimate / 1000) * (num("paperCostPer1000") || num("commPaperCostPer1000"));
+      paperOnlyCost = Math.min(paperOnlyCost, materialsCost); // safety
+      materialOnlyCost = Math.max(0, materialsCost - paperOnlyCost) + toolingCost;
+    } else if (isCartonDigital || isCommDigital) {
+      // For digital, paper = substrate cost (carton) or digitalPaperCost (comm).
+      const sheetEstimate = Math.max(1, Math.ceil((q * v) / Math.max(num("numberUp"), 1))) + num("makeReadySheets");
+      if (isCartonDigital) {
+        paperOnlyCost = sheetEstimate * num("substrateCostPerSheet");
+      } else {
+        paperOnlyCost = num("digitalPaperCost") * (sheetEstimate / 1000);
+      }
+      paperOnlyCost = Math.min(paperOnlyCost, materialsCost);
+      materialOnlyCost = Math.max(0, materialsCost - paperOnlyCost) + toolingCost;
+    } else {
+      paperOnlyCost = materialsCost;
+      materialOnlyCost = toolingCost;
+    }
+    void inkSoftCost; // referenced for future ink-cost detail; suppress unused
+
+    const paperMarkup = paperOnlyCost * (num("markupPaper") / 100);
+    const materialMarkup = materialOnlyCost * (num("markupMaterial") / 100);
     const laborMarkup = laborCost * (num("markupLabor") / 100);
     const outsideMarkup = (shippingCost + outsideCost) * (num("markupOutside") / 100);
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
@@ -1229,6 +1265,8 @@ function EstimateContent() {
 
     return {
       materialsCost,
+      paperCost: paperOnlyCost,
+      materialCost: materialOnlyCost,
       toolingCost,
       laborCost,
       finishingCost,
@@ -2122,6 +2160,7 @@ function EstimateContent() {
                         <option value="gate">Gate</option>
                         <option value="roll">Roll</option>
                         <option value="accordion">Accordion</option>
+                        <option value="right_angle">Right-angle</option>
                       </select>
                     </Field>
                     <Field label="# folds">
@@ -2594,6 +2633,7 @@ function EstimateContent() {
                     <option value="accordion">Accordion</option>
                     <option value="double_parallel">Double parallel</option>
                     <option value="french">French / cross fold</option>
+                    <option value="right_angle">Right-angle fold</option>
                     <option value="custom">Custom</option>
                   </select>
                 </Field>
@@ -2627,6 +2667,19 @@ function EstimateContent() {
                 </Field>
                 <Field label="% solids coverage" hint={plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press"}>
                   <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
+                </Field>
+              </div>
+              {/* Saddle stitch + perfect bind — Mary 4/30: she expected these
+                  alongside the other bindery counts, not buried below */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mt-3 pt-3 border-t border-blue-200">
+                <Field label="Saddle stitch ($)" hint={plantStandards ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr` : "Total"}>
+                  <Input type="number" step="0.01" value={form.saddleStitchCost || ""} onChange={(e) => set("saddleStitchCost", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Perfect bind ($)" hint="Total cost">
+                  <Input type="number" step="0.01" value={form.perfectBindingCost || ""} onChange={(e) => set("perfectBindingCost", Number(e.target.value))} min={0} />
+                </Field>
+                <Field label="Trim cost ($)" hint="Final trim to size">
+                  <Input type="number" step="0.01" value={form.trimCost || ""} onChange={(e) => set("trimCost", Number(e.target.value))} min={0} />
                 </Field>
               </div>
             </div>
@@ -3496,6 +3549,31 @@ function EstimateContent() {
             ) : draftQuoteId ? (
               <span>Resumed draft</span>
             ) : null}
+          </div>
+        )}
+        {/* Quick links to printable views — Mary's feedback (4/30): she
+            couldn't find the detailed summary because the buttons were
+            only on the quotes list. Surface them here once a draft exists. */}
+        {draftQuoteId && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/dashboard/quotes/${draftQuoteId}/detailed`, "_blank")}
+              className="gap-1.5"
+              title="Internal itemized estimate breakdown (E&M-style)"
+            >
+              📊 Detailed Summary
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/dashboard/quotes/${draftQuoteId}/print`, "_blank")}
+              className="gap-1.5"
+              title="Customer quote letter"
+            >
+              <Printer className="h-3.5 w-3.5" /> Quote Letter
+            </Button>
           </div>
         )}
         <Button onClick={handleSave} disabled={saving || saved} className="gap-2">
