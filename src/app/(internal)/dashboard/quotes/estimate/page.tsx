@@ -790,7 +790,8 @@ function EstimateContent() {
         setAutoSavedAt(new Date());
       } catch { /* swallow — next tick will retry */ }
       setAutoSaving(false);
-    }, 30000);
+    }, 8000); // Mary 5/1: was 30s, dropped to 8s so drafts show in the
+              // Quotes list almost immediately after she stops typing.
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, step, draftQuoteId, draftLoading]);
@@ -821,6 +822,23 @@ function EstimateContent() {
       .catch(() => {})
       .finally(() => setDraftLoading(false));
   }, [draftIdFromUrl]);
+
+  // Auto-fill caliper when paper weight or category changes — Mary 5/1
+  // wants this to populate, not just suggest in placeholder. Only fills if
+  // user hasn't manually entered a value.
+  useEffect(() => {
+    if (form.paperCaliperInches > 0) return; // user has set it manually
+    const auto = lookupCaliper(
+      String(form.paperWeight || form.paperBasisWeight || ""),
+      undefined,
+      form.paperCategory === "cover" || form.paperType === "cover" || form.paperType === "board_c1s" || form.paperType === "board_c2s" ? "Cover" :
+      form.paperCategory === "text" || form.paperType === "text" ? "Text" : undefined
+    ) ?? guessCaliperFromText(form.stockDescription as string);
+    if (auto && auto > 0) {
+      setForm(prev => ({ ...prev, paperCaliperInches: auto }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.paperWeight, form.paperBasisWeight, form.paperCategory, form.paperType, form.stockDescription]);
 
   // Auto-fill from press/config selection
   const selectedPress = useMemo(() => presses.find((p) => p.id === form.selectedPressId), [presses, form.selectedPressId]);
@@ -2345,18 +2363,21 @@ function EstimateContent() {
                   <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 100" />
                 </Field>
               </div>
+              {/* H × W order — Mary 5/1: grain direction convention. Putting
+                  height first matches how paper is ordered + how the job ticket
+                  reads sheets, so there's no confusion at the floor. */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field label="Parent sheet W" hint="Ordering size">
-                  <Input type="number" step="0.125" value={form.parentSheetWidth || ""} onChange={(e) => set("parentSheetWidth", Number(e.target.value))} placeholder="e.g. 23" />
-                </Field>
-                <Field label="Parent sheet H">
+                <Field label="Parent sheet H" hint="Ordering size (grain ‖ H)">
                   <Input type="number" step="0.125" value={form.parentSheetHeight || ""} onChange={(e) => set("parentSheetHeight", Number(e.target.value))} placeholder="e.g. 35" />
                 </Field>
-                <Field label="Run sheet W" hint="Press sheet">
-                  <Input type="number" step="0.125" value={form.runSheetWidth || ""} onChange={(e) => set("runSheetWidth", Number(e.target.value))} placeholder="e.g. 17.5" />
+                <Field label="Parent sheet W">
+                  <Input type="number" step="0.125" value={form.parentSheetWidth || ""} onChange={(e) => set("parentSheetWidth", Number(e.target.value))} placeholder="e.g. 23" />
                 </Field>
-                <Field label="Run sheet H">
+                <Field label="Run sheet H" hint="Press sheet">
                   <Input type="number" step="0.125" value={form.runSheetHeight || ""} onChange={(e) => set("runSheetHeight", Number(e.target.value))} placeholder="e.g. 23" />
+                </Field>
+                <Field label="Run sheet W">
+                  <Input type="number" step="0.125" value={form.runSheetWidth || ""} onChange={(e) => set("runSheetWidth", Number(e.target.value))} placeholder="e.g. 17.5" />
                 </Field>
               </div>
               <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
@@ -2547,10 +2568,53 @@ function EstimateContent() {
               </div>
             </div>
 
+            {/* Coating — moved here from Mailing & Coatings per Mary 5/1.
+                Per-impression calculator using Darrin's AQ rate table from
+                Plant Standards (gloss/satin/matte AQ $1.09, soft touch $6.25,
+                LED UV $6.30, retic coating $11.25, retic varnish $25.30 per
+                lb; per-sq-in usage rates from his calculator). */}
             <div className="mt-4 border-t border-gray-100 pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Coating</p>
+              <p className="text-sm font-medium text-gray-700 mb-3">Coating <span className="text-xs font-normal text-gray-500">— per-impression calc using Darrin&apos;s AQ rate table</span></p>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <Field label="Specialty Coating">
+                <Field label="Coating Type">
+                  <Select
+                    value={form.coatingType as string}
+                    onChange={(e) => set("coatingType", e.target.value)}
+                    options={[
+                      { value: "none", label: "None" },
+                      { value: "gloss_aq", label: "Gloss Aqueous ($1.09/lb)" },
+                      { value: "satin_aq", label: "Satin Aqueous ($1.09/lb)" },
+                      { value: "matte_aq", label: "Matte Aqueous ($1.09/lb)" },
+                      { value: "soft_touch", label: "Soft Touch Aqueous ($6.25/lb)" },
+                      { value: "led_uv", label: "Gloss LED UV ($6.30/lb)" },
+                      { value: "retic_coating", label: "Reticulated Coating ($11.25/lb)" },
+                      { value: "retic_varnish", label: "Reticulated Varnish ($25.30/lb)" },
+                    ]}
+                  />
+                </Field>
+                {form.coatingType !== "none" && form.coatingType !== "" && (
+                  <>
+                    <Field label="Impressions" hint="# sheets to coat (defaults to qty)">
+                      <Input type="number" value={form.coatingImpressions || ""} placeholder={String(form.quantity || "0")} onChange={(e) => set("coatingImpressions", Number(e.target.value))} />
+                    </Field>
+                    <Field label="Sheet Width (in)" hint="For coverage calc">
+                      <Input type="number" step="0.5" value={form.coatingSheetWidth || ""} onChange={(e) => set("coatingSheetWidth", Number(e.target.value))} />
+                    </Field>
+                    <Field label="Sheet Height (in)">
+                      <Input type="number" step="0.5" value={form.coatingSheetHeight || ""} onChange={(e) => set("coatingSheetHeight", Number(e.target.value))} />
+                    </Field>
+                    <Field label="Spot Coating Blankets" hint="$175 each">
+                      <Input type="number" value={form.coatingBlankets || ""} onChange={(e) => set("coatingBlankets", Number(e.target.value))} min={0} />
+                    </Field>
+                    <Field label="Cyrel Plates" hint="$300 each + $50 shipping">
+                      <Input type="number" value={form.coatingCyrelPlates || ""} onChange={(e) => set("coatingCyrelPlates", Number(e.target.value))} min={0} />
+                    </Field>
+                  </>
+                )}
+              </div>
+              {/* Legacy specialty coating + flat per-1000 cost retained for back-compat */}
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Specialty Coating (legacy)" hint="Use Coating Type above instead">
                   <Select
                     value={form.specialtyCoating}
                     onChange={(e) => set("specialtyCoating", e.target.value)}
@@ -2563,7 +2627,7 @@ function EstimateContent() {
                     ]}
                   />
                 </Field>
-                <Field label="Coating Cost ($ per 1000)">
+                <Field label="Flat Coating Cost ($ per 1000)" hint="Optional manual override">
                   <Input type="number" step="0.01" value={form.coatingCostPer1000 || ""} onChange={(e) => set("coatingCostPer1000", Number(e.target.value))} />
                 </Field>
               </div>
@@ -2753,11 +2817,23 @@ function EstimateContent() {
                     min={0}
                   />
                 </Field>
-                <Field label="Perfect bind ($)" hint="Total cost">
-                  <Input type="number" step="0.01" value={form.perfectBindingCost || ""} onChange={(e) => set("perfectBindingCost", Number(e.target.value))} min={0} />
+                <Field label="Perfect bind ($)" hint="Total cost (lump sum)">
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.perfectBindingCost || ""}
+                    placeholder="0.00"
+                    onChange={(e) => { const v = parseFloat(e.target.value); set("perfectBindingCost", isNaN(v) ? 0 : v); }}
+                  />
                 </Field>
-                <Field label="Trim cost ($)" hint="Final trim to size">
-                  <Input type="number" step="0.01" value={form.trimCost || ""} onChange={(e) => set("trimCost", Number(e.target.value))} min={0} />
+                <Field label="Final trim to size ($)" hint="Lump-sum cost for final trimming">
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.trimCost || ""}
+                    placeholder="0.00"
+                    onChange={(e) => { const v = parseFloat(e.target.value); set("trimCost", isNaN(v) ? 0 : v); }}
+                  />
                 </Field>
               </div>
             </div>
@@ -3260,47 +3336,10 @@ function EstimateContent() {
         </div>
       </Section>
 
-      {/* ── Mailing & Coatings (Outside Services) ───────────────── */}
-      <Section title="Mailing & Coatings" icon={Truck} defaultOpen={false}>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Coating Type">
-            <Select
-              value={form.coatingType as string}
-              onChange={(e) => set("coatingType", e.target.value)}
-              options={[
-                { value: "none", label: "None" },
-                { value: "gloss_aq", label: "Gloss Aqueous ($1.09/lb)" },
-                { value: "satin_aq", label: "Satin Aqueous ($1.09/lb)" },
-                { value: "matte_aq", label: "Matte Aqueous ($1.09/lb)" },
-                { value: "soft_touch", label: "Soft Touch Aqueous ($6.25/lb)" },
-                { value: "led_uv", label: "Gloss LED UV ($6.30/lb)" },
-                { value: "retic_coating", label: "Reticulated Coating ($11.25/lb)" },
-                { value: "retic_varnish", label: "Reticulated Varnish ($25.30/lb)" },
-              ]}
-            />
-          </Field>
-          {form.coatingType !== "none" && (
-            <>
-              <Field label="Sheet Width (in)" hint="For coating coverage calc">
-                <Input type="number" step="0.5" value={form.coatingSheetWidth || ""} onChange={(e) => set("coatingSheetWidth", Number(e.target.value))} />
-              </Field>
-              <Field label="Sheet Height (in)">
-                <Input type="number" step="0.5" value={form.coatingSheetHeight || ""} onChange={(e) => set("coatingSheetHeight", Number(e.target.value))} />
-              </Field>
-              <Field label="Impressions" hint="Total sheets to coat">
-                <Input type="number" value={form.coatingImpressions || ""} onChange={(e) => set("coatingImpressions", Number(e.target.value))} />
-              </Field>
-              <Field label="Spot Coating Blankets" hint="$175 each">
-                <Input type="number" value={form.coatingBlankets || ""} onChange={(e) => set("coatingBlankets", Number(e.target.value))} min={0} />
-              </Field>
-              <Field label="Cyrel Plates" hint="$300 each + $50 shipping">
-                <Input type="number" value={form.coatingCyrelPlates || ""} onChange={(e) => set("coatingCyrelPlates", Number(e.target.value))} min={0} />
-              </Field>
-            </>
-          )}
-        </div>
-
-        <div className="mt-4 border-t border-gray-100 pt-4">
+      {/* ── Mailing & Wafer Sealing (Outside Services) ─── Mary 5/1: coating
+           moved to the Paper & Ink section. This section is mailing-only now. */}
+      <Section title="Mailing" icon={Truck} defaultOpen={false}>
+        <div className="mb-4">
           <p className="text-sm font-medium text-gray-700 mb-3">Mail Inserting</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Field label="Inserter Pockets" hint="0 = no inserting">
