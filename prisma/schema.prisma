@@ -258,6 +258,11 @@ model Job {
 
   // ─── Job Ticket Fields (matching C&D physical form) ────
   jobType          String?   // NEW_ORDER, EXACT_REPRINT, REPRINT_WITH_CHANGES, REPRINT_NEW_FILE
+  // Sub-status — Mike Metroka's feedback: more granular than the 19-stage
+  // pipeline. Free-text / dropdown values like "In Progress", "Working",
+  // "Out on proof", "Ready to Plate", "Waiting on artwork", "On hold".
+  // Lets pre-press signal real state without advancing the official stage.
+  subStatus        String?
   lastJobNumber    String?   // reference to previous job for reprints
   customerPO       String?
   estimateNumber   String?

@@ -113,7 +113,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // General update — supports all job ticket fields
     const updateData: Record<string, unknown> = {};
     const stringFields = [
-      "name", "description", "jobType", "lastJobNumber", "customerPO", "estimateNumber",
+      "name", "description", "jobType", "subStatus", "lastJobNumber", "customerPO", "estimateNumber",
       "repName", "contactName", "stockDescription", "blanketNumber", "dieNumber",
       "inkFront", "inkBack", "varnish", "coating", "pressAssignment", "pressFormat", "paperSource",
       "imposition", "runningSize", "pressmanInitials", "binderyOther", "binderyNotes",

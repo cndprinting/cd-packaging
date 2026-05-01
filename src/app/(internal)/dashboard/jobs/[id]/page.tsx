@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import {
   ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
-  ShieldCheck, FileImage, Loader2, ChevronRight, Pencil, X, Check,
+  ShieldCheck, FileImage, Loader2, ChevronRight, ChevronDown, Pencil, X, Check,
   Trash2, Users, Layers, Printer, Scissors,
   DollarSign, Info, Plus, Send, CircleAlert, FileCheck, Copy,
 } from "lucide-react";
@@ -60,6 +60,7 @@ interface JobData {
   productType?: string;
   // Extended job-ticket fields
   jobType?: string;
+  subStatus?: string;
   contactName?: string;
   customerPO?: string;
   estimateNumber?: string;
@@ -159,6 +160,43 @@ const PURCHASE_CATEGORIES = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+// CollapsibleCard — Mike Metroka 5/1/26: most ticket panes should default
+// to collapsed so the screen isn't a wall of fields. Click the header to
+// expand/collapse. `summary` shows in the header when collapsed (e.g. the
+// customer name on the Customer Info pane) so users get a glance without
+// expanding.
+function CollapsibleCard({
+  title, icon, defaultOpen = true, summary, children, className = "",
+}: {
+  title: React.ReactNode;
+  icon?: React.ReactNode;
+  defaultOpen?: boolean;
+  summary?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className={className}>
+      <CardHeader
+        className="cursor-pointer select-none hover:bg-gray-50/50 transition-colors"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2">{icon}{title}</CardTitle>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            {!open && summary && (
+              <span className="text-xs text-gray-600 truncate max-w-md">{summary}</span>
+            )}
+            {open ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
+          </div>
+        </div>
+      </CardHeader>
+      {open && <CardContent>{children}</CardContent>}
+    </Card>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{children}</label>;
 }
@@ -270,6 +308,7 @@ export default function JobDetailPage() {
             proofStatus: j.proofStatus,
             productType: j.productType,
             jobType: j.jobType || "NEW_ORDER",
+            subStatus: j.subStatus || "",
             contactName: j.contactName || "",
             customerPO: j.customerPO || "",
             estimateNumber: j.estimateNumber || "",
@@ -697,7 +736,7 @@ export default function JobDetailPage() {
       {(() => {
         const meta = getStageGroupMeta(job.status);
         return (
-          <div className={`rounded-xl border-2 ${meta.border} ${meta.bg} px-5 py-3 flex items-center justify-between gap-4`}>
+          <div className={`rounded-xl border-2 ${meta.border} ${meta.bg} px-5 py-3 flex items-center justify-between gap-4 flex-wrap`}>
             <div className="flex items-center gap-3">
               <div className={`px-3 py-1.5 rounded-lg ${meta.color} ${meta.bg} border-2 ${meta.border} font-bold text-sm tracking-wider`}>
                 {meta.shortLabel}
@@ -708,6 +747,30 @@ export default function JobDetailPage() {
                 </p>
                 <p className="text-xs text-gray-600 mt-0.5">{meta.helpText}</p>
               </div>
+            </div>
+            {/* Sub-status — Mike Metroka 5/1/26: pre-press needs a finer
+                signal than the official stage. Shows even when the stage
+                pipeline isn't moving. */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Sub-status:</label>
+              <select
+                value={job.subStatus || ""}
+                onChange={(e) => updateJobField("subStatus", e.target.value)}
+                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="">— pick one —</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Working">Working</option>
+                <option value="Out on Proof">Out on Proof</option>
+                <option value="Awaiting Customer">Awaiting Customer</option>
+                <option value="Ready to Plate">Ready to Plate</option>
+                <option value="Plates Done">Plates Done</option>
+                <option value="Ready to Print">Ready to Print</option>
+                <option value="Waiting on Artwork">Waiting on Artwork</option>
+                <option value="Waiting on Paper">Waiting on Paper</option>
+                <option value="On Hold">On Hold</option>
+                <option value="Done">Done</option>
+              </select>
             </div>
           </div>
         );
@@ -884,52 +947,65 @@ export default function JobDetailPage() {
       </Card>
 
       {/* ================================================================= */}
-      {/* 3. JOB TICKET INFO — 2-column grid                               */}
+      {/* 3. JOB TICKET INFO — Customer / Job split per Mike Metroka 5/1   */}
       {/* ================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Customer & Job Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" />Customer &amp; Job Info</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* ── Customer Info pane (collapsible, default closed) ── */}
+        <CollapsibleCard
+          title="Customer Info"
+          icon={<Users className="h-4 w-4" />}
+          defaultOpen={false}
+          summary={job.companyName}
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <SectionLabel>Customer</SectionLabel>
+              <p className="text-sm font-medium text-gray-900">{job.companyName}</p>
+            </div>
+            <div>
+              <SectionLabel>Contact Name</SectionLabel>
+              <Input
+                defaultValue={job.contactName || ""}
+                placeholder="Contact name..."
+                onBlur={(e) => updateJobField("contactName", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Customer PO</SectionLabel>
+              <Input
+                defaultValue={job.customerPO || ""}
+                placeholder="PO #..."
+                onBlur={(e) => updateJobField("customerPO", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Estimate #</SectionLabel>
+              <Input
+                defaultValue={job.estimateNumber || ""}
+                placeholder="Estimate #..."
+                onBlur={(e) => updateJobField("estimateNumber", e.target.value)}
+              />
+            </div>
+            <div>
+              <SectionLabel>Rep Name</SectionLabel>
+              <Input
+                defaultValue={job.repName || ""}
+                placeholder="Rep name..."
+                onBlur={(e) => updateJobField("repName", e.target.value)}
+              />
+            </div>
+          </div>
+        </CollapsibleCard>
+
+        {/* ── Job Info pane (collapsible, default open — primary working area) ── */}
+        <CollapsibleCard
+          title="Job Info"
+          icon={<Info className="h-4 w-4" />}
+          defaultOpen={true}
+          summary={`${formatNumber(job.quantity)} qty${job.finishedWidth && job.finishedHeight ? ` · ${job.finishedWidth}×${job.finishedHeight}` : ""}`}
+        >
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <SectionLabel>Customer</SectionLabel>
-                <p className="text-sm font-medium text-gray-900">{job.companyName}</p>
-              </div>
-              <div>
-                <SectionLabel>Contact Name</SectionLabel>
-                <Input
-                  defaultValue={job.contactName || ""}
-                  placeholder="Contact name..."
-                  onBlur={(e) => updateJobField("contactName", e.target.value)}
-                />
-              </div>
-              <div>
-                <SectionLabel>Customer PO</SectionLabel>
-                <Input
-                  defaultValue={job.customerPO || ""}
-                  placeholder="PO #..."
-                  onBlur={(e) => updateJobField("customerPO", e.target.value)}
-                />
-              </div>
-              <div>
-                <SectionLabel>Estimate #</SectionLabel>
-                <Input
-                  defaultValue={job.estimateNumber || ""}
-                  placeholder="Estimate #..."
-                  onBlur={(e) => updateJobField("estimateNumber", e.target.value)}
-                />
-              </div>
-              <div>
-                <SectionLabel>Rep Name</SectionLabel>
-                <Input
-                  defaultValue={job.repName || ""}
-                  placeholder="Rep name..."
-                  onBlur={(e) => updateJobField("repName", e.target.value)}
-                />
-              </div>
               <div>
                 <SectionLabel>Quantity</SectionLabel>
                 <p className="text-sm font-medium text-gray-900">{formatNumber(job.quantity)}</p>
@@ -947,8 +1023,7 @@ export default function JobDetailPage() {
               <p className="text-sm font-medium text-gray-900">{job.name}</p>
             </div>
 
-            {/* Page info line — per CSR feedback, # Pages / Self Cover / Plus Cover
-                live together on one line so they read in sequence at the top. */}
+            {/* Page info line — # Pages / Self Cover / Plus Cover */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
                 <SectionLabel># Pages</SectionLabel>
@@ -979,6 +1054,40 @@ export default function JobDetailPage() {
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{job.description}</p>
               </div>
             )}
+
+            {/* Flat Size + Finished Size + Inks — moved here per Mike Metroka 5/1/26 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+              <div>
+                <SectionLabel>Flat Size (W x H)</SectionLabel>
+                <div className="flex gap-2 items-center">
+                  <Input type="number" defaultValue={job.flatSizeWidth || ""} placeholder="W" className="flex-1"
+                    onBlur={(e) => updateJobField("flatSizeWidth", parseFloat(e.target.value) || 0)} />
+                  <span className="text-gray-400 text-sm">x</span>
+                  <Input type="number" defaultValue={job.flatSizeHeight || ""} placeholder="H" className="flex-1"
+                    onBlur={(e) => updateJobField("flatSizeHeight", parseFloat(e.target.value) || 0)} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Finished Size (W x H)</SectionLabel>
+                <div className="flex gap-2 items-center">
+                  <Input type="number" defaultValue={job.finishedWidth || ""} placeholder="W" className="flex-1"
+                    onBlur={(e) => updateJobField("finishedWidth", parseFloat(e.target.value) || 0)} />
+                  <span className="text-gray-400 text-sm">x</span>
+                  <Input type="number" defaultValue={job.finishedHeight || ""} placeholder="H" className="flex-1"
+                    onBlur={(e) => updateJobField("finishedHeight", parseFloat(e.target.value) || 0)} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Ink Front</SectionLabel>
+                <Input defaultValue={job.inkFront || ""} placeholder='e.g. 4/0 CMYK'
+                  onBlur={(e) => updateJobField("inkFront", e.target.value)} />
+              </div>
+              <div>
+                <SectionLabel>Ink Back</SectionLabel>
+                <Input defaultValue={job.inkBack || ""} placeholder='e.g. 1/0 Black'
+                  onBlur={(e) => updateJobField("inkBack", e.target.value)} />
+              </div>
+            </div>
 
             {/* Multi-row Job Line Items (versions/quantities) */}
             <div>
@@ -1061,15 +1170,17 @@ export default function JobDetailPage() {
               </div>
               <p className="text-xs text-gray-400 mt-1">Click any cell to edit. Size and ink are per-version.</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
 
-        {/* Right: Dates & Assignment */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Calendar className="h-4 w-4" />Dates &amp; Assignment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* Right: Dates & Assignment — collapsible (default closed) per Mike */}
+        <CollapsibleCard
+          title="Dates & Assignment"
+          icon={<Calendar className="h-4 w-4" />}
+          defaultOpen={false}
+          summary={`Due ${job.dueDate ? formatDate(job.dueDate) : "not set"}${job.proofDate ? ` · Proof ${formatDate(job.proofDate)}` : ""}`}
+        >
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <SectionLabel>CSR</SectionLabel>
@@ -1120,8 +1231,8 @@ export default function JobDetailPage() {
                 onChange={(v) => updateJobField("pressCheck", v)}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       </div>
 
       {/* ================================================================= */}
@@ -1260,67 +1371,8 @@ export default function JobDetailPage() {
             </div>
             <div />
 
-            {/* Flat Size */}
-            <div>
-              <SectionLabel>Flat Size (W x H)</SectionLabel>
-              <div className="flex gap-2 items-center">
-                <Input
-                  type="number"
-                  defaultValue={job.flatSizeWidth || ""}
-                  placeholder="Width"
-                  className="flex-1"
-                  onBlur={(e) => updateJobField("flatSizeWidth", parseFloat(e.target.value) || 0)}
-                />
-                <span className="text-gray-400 text-sm">x</span>
-                <Input
-                  type="number"
-                  defaultValue={job.flatSizeHeight || ""}
-                  placeholder="Height"
-                  className="flex-1"
-                  onBlur={(e) => updateJobField("flatSizeHeight", parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            </div>
+            {/* Flat Size + Finished Size + Inks moved to Job Info pane (Mike Metroka 5/1/26) */}
 
-            {/* Finished Size */}
-            <div>
-              <SectionLabel>Finished Size (W x H)</SectionLabel>
-              <div className="flex gap-2 items-center">
-                <Input
-                  type="number"
-                  defaultValue={job.finishedWidth || ""}
-                  placeholder="Width"
-                  className="flex-1"
-                  onBlur={(e) => updateJobField("finishedWidth", parseFloat(e.target.value) || 0)}
-                />
-                <span className="text-gray-400 text-sm">x</span>
-                <Input
-                  type="number"
-                  defaultValue={job.finishedHeight || ""}
-                  placeholder="Height"
-                  className="flex-1"
-                  onBlur={(e) => updateJobField("finishedHeight", parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-            <div />
-
-            <div>
-              <SectionLabel>Ink Front</SectionLabel>
-              <Input
-                defaultValue={job.inkFront || ""}
-                placeholder='e.g. 4/0 CMYK'
-                onBlur={(e) => updateJobField("inkFront", e.target.value)}
-              />
-            </div>
-            <div>
-              <SectionLabel>Ink Back</SectionLabel>
-              <Input
-                defaultValue={job.inkBack || ""}
-                placeholder='e.g. 1/0 Black'
-                onBlur={(e) => updateJobField("inkBack", e.target.value)}
-              />
-            </div>
             <div>
               <SectionLabel>Varnish / Coating</SectionLabel>
               <Input
