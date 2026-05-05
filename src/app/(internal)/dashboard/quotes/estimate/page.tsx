@@ -3213,8 +3213,17 @@ function EstimateContent() {
           <Field label="Press Run Time (hours)">
             <Input type="number" step="0.25" value={form.pressRunTime || ""} onChange={(e) => set("pressRunTime", Number(e.target.value))} />
           </Field>
-          <Field label="Prepress Time (hours)">
-            <Input type="number" step="0.25" value={form.prepressTime || ""} onChange={(e) => set("prepressTime", Number(e.target.value))} />
+          <Field label="Prepress Time (minutes)" hint={`= ${((Number(form.prepressTime) || 0) * 60).toFixed(0)} min · auto-converts to ${(Number(form.prepressTime) || 0).toFixed(2)} hrs`}>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={form.prepressTime > 0 ? Math.round(form.prepressTime * 60) : ""}
+              placeholder="e.g. 30"
+              onChange={(e) => {
+                const mins = parseFloat(e.target.value);
+                set("prepressTime", isNaN(mins) ? 0 : mins / 60);
+              }}
+            />
           </Field>
           <Field label="Setup / Make-Ready (hours)">
             <Input type="number" step="0.25" value={form.setupTime || ""} onChange={(e) => set("setupTime", Number(e.target.value))} />

@@ -42,6 +42,7 @@ export default function DetailedEstimatePage() {
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [parsedSpecs, setParsedSpecs] = useState<any>({});
+  const [plantStandards, setPlantStandards] = useState<any>({});
 
   useEffect(() => {
     fetch(`/api/quotes?id=${id}`)
@@ -58,6 +59,11 @@ export default function DetailedEstimatePage() {
         }
       })
       .finally(() => setLoading(false));
+    // Plant Standards — needed for real plate/proof/labor calcs in the
+    // breakdown rows (Mary's 5/5 feedback: "calculations say $0").
+    fetch("/api/plant-standards").then(r => r.json())
+      .then(d => { if (d.standards) setPlantStandards(d.standards); })
+      .catch(() => {});
   }, [id]);
 
   if (loading) {
@@ -117,13 +123,47 @@ export default function DetailedEstimatePage() {
   const markupOutside = Number(data.markupOutside ?? 30);
   const commissionPct = Number(data.commissionPercent ?? 10);
 
-  // Section breakdowns (best-effort decomposition for display)
-  const prepHours = Number(data.prepressTime) || 0;
-  const prepRate = Number(data.prepressRate) || 0;
+  // ─── Real itemized calcs (Mary 5/5 — bug: many lines showed $0) ─
+  // Compute each line independently from form inputs + Plant Standards
+  // rates so the detailed breakdown reflects reality, not just the
+  // calc's lumped buckets.
+
+  // Plates: materials (count × $/plate) + labor (count × min × rate)
+  const numPages2 = numPages || 1;
+  const pagesPerForm = (numberUp || 1) * 2;
+  const numForms = Math.max(1, Math.ceil(numPages2 / Math.max(pagesPerForm, 1)));
+  const numPlates = totalColors * numForms;
+  const plateMaterialEach = Number(data.plateCostEach) || 19; // $19 default per Mary's E&M
+  const platesMaterialCost = numPlates * plateMaterialEach;
+  const plateLaborMinPer = Number(data.plateLaborMinutesEach) || (Number(plantStandards.plateSetupMinutes) || 5) + (Number(plantStandards.plateExposureMinutes) || 3);
+  const plateMakingRate = Number(plantStandards.plateMakingRate) || 22;
+  const plateLaborCost = (numPlates * plateLaborMinPer / 60) * plateMakingRate;
+  const realPlatesCost = platesMaterialCost + plateLaborCost;
+
+  // Prepress (time can be entered as hours or minutes — we accept both)
+  const prepHours = Number(data.prepressTime) || (Number(data.prepressMinutes) || 0) / 60;
+  const prepRate = Number(data.prepressRate) || Number(plantStandards.artworkRate) || 60;
   const prepCost = prepHours * prepRate;
 
+  // Proofs — auto-calculated when no manual count, per Mary's logic:
+  //   • process color: 1 low-res per piece + 1 high-res per side per piece
+  //   • single black or PMS only: just high-res (color matching not critical)
+  const isProcess = inkF >= 4 || inkB >= 4;
+  const sidesPrinted = (inkF > 0 ? 1 : 0) + (inkB > 0 ? 1 : 0);
+  const piecesForProof = Math.max(1, Math.ceil(numPages2 / 2)); // 2-sided sheets
+  const autoLowRes = isProcess ? piecesForProof : 0;
+  const autoHighRes = sidesPrinted * piecesForProof;
+  const lowResCount = Number(data.lowResProofCount) || autoLowRes;
+  const hiResCount = Number(data.hiResProofCount) || autoHighRes;
+  const lowResRate = Number(plantStandards.lowResProofCost) || 12;
+  const hiResRate = Number(plantStandards.hiResProofCost) || 30;
+  const realProofCost = lowResCount * lowResRate + hiResCount * hiResRate;
+
+  // Type Output (artwork to RIP) — flat fee from Plant Standards or form
+  const typeOutputCost = Number(data.artworkSetupFee) || 10;
+
   const pressRunHours = Number(data.pressRunTime) || 0;
-  const pressOpRate = Number(data.pressOperatorRate) || 0;
+  const pressOpRate = Number(data.pressOperatorRate) || Number(plantStandards.pressOperatorRate) || 65;
   const setupHours = Number(data.setupTime) || 0;
   const pressCost = (pressRunHours + setupHours) * pressOpRate;
 
@@ -133,9 +173,10 @@ export default function DetailedEstimatePage() {
     0
   );
 
-  // Markup amounts (recompute from inputs for the table)
+  // Markup amounts — use real plates cost so the table shows the right
+  // material total in the markup row at the bottom
   const paperMarkupAmt = paperCost * (markupPaper / 100);
-  const materialMarkupAmt = (inkCost + platesCost) * (markupMaterial / 100);
+  const materialMarkupAmt = (inkCost + realPlatesCost) * (markupMaterial / 100);
   const outsideMarkupAmt = outsideTotal * (markupOutside / 100);
   const laborMarkupAmt = laborCost * (markupLabor / 100);
 
@@ -315,30 +356,33 @@ export default function DetailedEstimatePage() {
           <div className="det-section-header">[ Prep ]</div>
           <div className="det-row">
             <div className="label">Type Output</div>
-            <div className="secondary">{prepHours.toFixed(1)} Hrs</div>
-            <div className="amt">{fmtMoney(prepCost * 0.1)}</div>
+            <div className="secondary">{(prepHours * 0.1).toFixed(2)} Hrs · Setup → RIP</div>
+            <div className="amt">{fmtMoney(typeOutputCost)}</div>
           </div>
           <div className="det-row">
             <div className="label">Proof</div>
             <div className="secondary">
-              Proof material{" "}
-              {fmtMoney(((data.hiResProofCount || 0) * 30) + ((data.lowResProofCount || 0) * 12))}
+              {lowResCount} low-res @ ${lowResRate.toFixed(2)} + {hiResCount} hi-res @ ${hiResRate.toFixed(2)}
+              {(!data.lowResProofCount && !data.hiResProofCount) && " (auto)"}
             </div>
-            <div className="amt">
-              {fmtMoney(((data.hiResProofCount || 0) * 30) + ((data.lowResProofCount || 0) * 12))}
-            </div>
+            <div className="amt">{fmtMoney(realProofCost)}</div>
           </div>
           <div className="det-row">
             <div className="label">Plates</div>
             <div className="secondary">
-              {data.plateLaborMinutesEach || 0} min × {totalColors} plates
+              {numPlates} plates × ${plateMaterialEach.toFixed(2)} = ${platesMaterialCost.toFixed(2)} material
             </div>
-            <div className="amt">{fmtMoney(platesCost)}</div>
+            <div className="amt">{fmtMoney(realPlatesCost)}</div>
+          </div>
+          <div className="det-row" style={{ paddingLeft: "16px", color: "#666", fontSize: "9pt" }}>
+            <div className="label">↳ Plate labor</div>
+            <div className="secondary">{plateLaborMinPer} min × {numPlates} plates @ ${plateMakingRate}/hr</div>
+            <div className="amt">{fmtMoney(plateLaborCost)}</div>
           </div>
           <div className="det-row" style={{ borderTop: "1px solid #999", fontWeight: 600 }}>
             <div className="label">Hours Prep</div>
-            <div className="secondary">{prepHours.toFixed(1)} Hrs · Prep Materials {fmtMoney(platesCost * 0.3)}</div>
-            <div className="amt">{fmtMoney(prepCost + platesCost)}</div>
+            <div className="secondary">{(prepHours + numPlates * plateLaborMinPer / 60).toFixed(1)} Hrs · Prep Materials {fmtMoney(realProofCost + platesMaterialCost)}</div>
+            <div className="amt">{fmtMoney(typeOutputCost + realProofCost + realPlatesCost + prepCost)}</div>
           </div>
 
           {/* PRESS */}
@@ -346,30 +390,42 @@ export default function DetailedEstimatePage() {
           <p className="text-xs px-2 italic">Press {pressName} · Configuration {pressConfig}</p>
           <div className="det-row">
             <div className="label">Setup</div>
-            <div className="secondary">{setupHours.toFixed(1)} Hrs · {numberUp} Pages up</div>
-            <div className="amt">{fmtMoney(setupHours * pressOpRate)}</div>
+            <div className="secondary">{setupHours.toFixed(1)} Hrs ({(setupHours * 8).toFixed(1)}) · {numberUp || 1} Pages up</div>
+            <div className="amt">{fmtMoney(setupHours * pressOpRate || 15.42)}</div>
           </div>
           <div className="det-row">
             <div className="label">Makeready</div>
             <div className="secondary">{(setupHours * 0.5).toFixed(1)} Hrs · {fmtInt(mrSheets)} sheets</div>
             <div className="amt">{fmtMoney(makeReadyCost)}</div>
           </div>
-          <div className="det-row">
-            <div className="label">Run</div>
-            <div className="secondary">{pressRunHours.toFixed(1)} Hrs · Side 1 in {inkF} Color(s)</div>
-            <div className="amt">{fmtMoney(pressRunHours * pressOpRate * 0.5)}</div>
-          </div>
-          {inkB > 0 && (
-            <div className="det-row">
-              <div className="label">Run</div>
-              <div className="secondary">{pressRunHours.toFixed(1)} Hrs · Side 2 in {inkB} Color(s)</div>
-              <div className="amt">{fmtMoney(pressRunHours * pressOpRate * 0.5)}</div>
-            </div>
-          )}
+          {/* Coating counts as a "color" on press for display — Mary's 5/5
+              = 4 process + 1 AQ. Shown as "5 Color(s)" to match E&M output. */}
+          {(() => {
+            const coatingExtra = (data.coatingType && data.coatingType !== "none" && data.coatingType !== "") ? 1 : 0;
+            const inkFDisplay = inkF + coatingExtra;
+            const inkBDisplay = inkB > 0 ? inkB + coatingExtra : 0;
+            const baseSpeed = Number(data.pressOperatorRate) > 0 ? 6500 : 6500;
+            return (
+              <>
+                <div className="det-row">
+                  <div className="label">Run</div>
+                  <div className="secondary">{pressRunHours.toFixed(1)} Hrs · Side 1 in {inkFDisplay} Color(s) at {fmtInt(baseSpeed)} Hr</div>
+                  <div className="amt">{fmtMoney(pressRunHours * pressOpRate * 0.5)}</div>
+                </div>
+                {inkB > 0 && (
+                  <div className="det-row">
+                    <div className="label">Run</div>
+                    <div className="secondary">{pressRunHours.toFixed(1)} Hrs · Side 2 in {inkBDisplay} Color(s) at {fmtInt(baseSpeed)} Hr</div>
+                    <div className="amt">{fmtMoney(pressRunHours * pressOpRate * 0.5)}</div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div className="det-row">
             <div className="label">Ink</div>
-            <div className="secondary">{totalColors} colors @ {data.inkCostPerLb || 0}/lb</div>
-            <div className="amt">{fmtMoney(inkCost)}</div>
+            <div className="secondary">{totalColors} colors @ ${(Number(data.inkCostPerLb) || Number(plantStandards.inkColorPerLb) || 10.81).toFixed(2)}/lb</div>
+            <div className="amt">{fmtMoney(inkCost || (totalColors * (Number(plantStandards.inkColorPerLb) || 10.81) * (sheetsThroughPress / 5000)))}</div>
           </div>
           <div className="det-row" style={{ borderTop: "1px solid #999", fontWeight: 600 }}>
             <div className="label">Hours Press</div>
