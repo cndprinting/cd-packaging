@@ -53,6 +53,10 @@ async function handleLogin(body: { email: string; password: string }) {
       if (!valid) {
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
+      // Block disabled accounts (security parity with SSO callback).
+      if (user.isActive === false) {
+        return NextResponse.json({ error: "Account disabled — contact your administrator" }, { status: 403 });
+      }
 
       const sessionUser: SessionUser = {
         id: user.id,
