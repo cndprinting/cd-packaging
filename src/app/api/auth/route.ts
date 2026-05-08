@@ -58,6 +58,15 @@ async function handleLogin(body: { email: string; password: string }) {
         return NextResponse.json({ error: "Account disabled — contact your administrator" }, { status: 403 });
       }
 
+      // 2FA gate — if user has TOTP enrolled, return a "pending" response
+      // and wait for the second-step verify call. Don't issue a session yet.
+      if (user.totpEnabledAt) {
+        return NextResponse.json({
+          twoFactorRequired: true,
+          pendingUserId: user.id,
+        });
+      }
+
       const sessionUser: SessionUser = {
         id: user.id,
         email: user.email,

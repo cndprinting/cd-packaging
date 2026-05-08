@@ -105,6 +105,12 @@ model User {
   companyId      String?
   company        Company? @relation(fields: [companyId], references: [id])
   isActive       Boolean  @default(true)
+  // TOTP 2FA — Mary 5/5 ask after Mike's email hack. Authenticator-app
+  // 6-digit codes (Microsoft Authenticator / Google Authenticator / etc.)
+  // Skipped for SSO logins (M365 already enforces MFA via Conditional Access).
+  totpSecret      String?       // base32 secret; set during enrollment, cleared on disable
+  totpEnabledAt   DateTime?     // null = not enrolled; non-null = required at login
+  totpBackupCodes String?       // JSON array of bcrypt-hashed 8-digit codes (10 generated)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

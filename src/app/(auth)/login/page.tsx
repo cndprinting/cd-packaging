@@ -34,6 +34,10 @@ function LoginPageInner() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // 2FA second-step state — when login returns twoFactorRequired, swap
+  // the form to a code-entry view.
+  const [twoFactorPendingUserId, setTwoFactorPendingUserId] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
 
   // Surface SSO errors from ?error= query param
   useEffect(() => {
@@ -60,6 +64,44 @@ function LoginPageInner() {
         return;
       }
 
+      // 2FA gate — server says we need a second factor before issuing
+      // the session. Switch UI to code entry.
+      if (data.twoFactorRequired && data.pendingUserId) {
+        setTwoFactorPendingUserId(data.pendingUserId);
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handle2FA(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/totp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify-login",
+          pendingUserId: twoFactorPendingUserId,
+          code: twoFactorCode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Invalid code — try again");
+        return;
+      }
+      if (data.backupUsed) {
+        // Soft warning before dashboard — backup code burned
+        alert("Backup code accepted. That code is now used and won't work again. Consider regenerating your backup codes from Settings.");
+      }
       router.push("/dashboard");
     } catch {
       setError("Something went wrong. Please try again.");
@@ -76,6 +118,43 @@ function LoginPageInner() {
           <p className="mt-1 text-sm text-gray-500">Sign in to your account</p>
         </div>
 
+        {twoFactorPendingUserId ? (
+          <form onSubmit={handle2FA} className="space-y-5">
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>
+            )}
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-900">
+              <p className="font-medium">Two-factor authentication required</p>
+              <p className="text-xs mt-1">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="2fa" className="block text-sm font-medium text-gray-700">Authenticator code</label>
+              <Input
+                id="2fa"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123 456"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                className="text-center tracking-[0.4em] text-lg"
+                autoFocus
+                required
+              />
+              <p className="text-[11px] text-gray-500">Or enter an 8-digit backup code (no spaces).</p>
+            </div>
+            <Button type="submit" className="w-full" disabled={loading || !twoFactorCode}>
+              {loading ? "Verifying…" : "Verify and sign in"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => { setTwoFactorPendingUserId(null); setTwoFactorCode(""); setError(""); }}
+              className="w-full text-sm text-gray-500 hover:text-gray-700"
+            >
+              ← Back to email + password
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
@@ -166,6 +245,7 @@ function LoginPageInner() {
             )}
           </Button>
         </form>
+        )}
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>

@@ -32,6 +32,7 @@ const internalNav = [
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
   { label: "Help Desk", href: "/dashboard/help-desk", icon: HelpCircle },
+  { label: "Security", href: "/dashboard/security", icon: Shield },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
   { label: "Admin", href: "/dashboard/admin", icon: Shield },
 ];
@@ -72,11 +73,11 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
       return internalNav.filter(item => item.href !== "/dashboard" && item.href !== "/dashboard/invoices");
     }
 
-    // Operator only sees Plant Floor
-    if (role === "OPERATOR") return internalNav.filter(item => item.href === "/dashboard/plant-floor");
+    // Operator only sees Plant Floor + Security (everyone needs 2FA setup)
+    if (role === "OPERATOR") return internalNav.filter(item => item.href === "/dashboard/plant-floor" || item.href === "/dashboard/security");
 
-    // Shipping only sees Shipping + Settings
-    if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings");
+    // Shipping only sees Shipping + Settings + Security
+    if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings" || item.href === "/dashboard/security");
 
     // Pre-Press Manager (Michael Metroka) — pre-press scope only.
     // Sees Pre-Press, Proofing, Production (visibility), Plant Floor (visibility),
@@ -88,6 +89,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
         "/dashboard/production",
         "/dashboard/plant-floor",
         "/dashboard/shipping",
+        "/dashboard/security", // 2FA setup
       ];
       return internalNav.filter(item => allowed.includes(item.href));
     }
@@ -101,6 +103,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
         { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
         { label: "Customers", href: "/dashboard/customers", icon: Users },
         { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
+        { label: "Security", href: "/dashboard/security", icon: Shield },
         { label: "Settings", href: "/dashboard/settings", icon: Settings },
       ];
     }
