@@ -38,7 +38,6 @@ import { Combobox } from "@/components/ui/combobox";
 import { recommendPress } from "@/lib/smart-features";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { lookupCaliper, guessCaliperFromText, PAPER_CALIPERS } from "@/lib/paper-calipers";
-import { getDigitalSizeTier, inferInkConfig, getDigitalClickRate, getDigitalVDRate } from "@/lib/digital-clicks";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -295,6 +294,17 @@ interface FormState {
   variableData: boolean;
   vdpComplexitySurcharge: number;
   digitalCoatingCost: number;
+  // Digital click-fee calculator (Mary 5/18) — parent sheet → run sheet →
+  // pieces-per-sheet drives how many run sheets flow through the press,
+  // and the click fee is a flat per-run-sheet charge.
+  digitalParentPreset: string;   // "19x25" | "23x35" | "26x40" | "custom"
+  digitalParentW: number;
+  digitalParentH: number;
+  digitalRunW: number;
+  digitalRunH: number;
+  digitalPiecesPerSheet: number; // finished pieces laid out on one run sheet
+  digitalClickFee: number;       // flat $/run sheet (default 0.378 = 4/4 process)
+  digitalParentSheetCost: number; // $ per parent sheet of stock
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -469,6 +479,14 @@ const defaultForm: FormState = {
   variableData: false,
   vdpComplexitySurcharge: 0,
   digitalCoatingCost: 0,
+  digitalParentPreset: "19x25",
+  digitalParentW: 19,
+  digitalParentH: 25,
+  digitalRunW: 13,
+  digitalRunH: 19,
+  digitalPiecesPerSheet: 1,
+  digitalClickFee: 0.378,
+  digitalParentSheetCost: 0,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -614,6 +632,131 @@ function Field({
 // inputs offset has). Extracted here so the two paths stay in sync.
 
 type EstimatorSetFn = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+
+// ─── Digital click-fee math (Mary 5/18) ─────────────────────────────────────
+// Standard parent stock sizes. Parent sheets are cut into run sheets that feed
+// the digital press (press max 13" × 36"). "custom" lets Mary type a rare size.
+const DIGITAL_PARENT_PRESETS: Record<string, [number, number]> = {
+  "19x25": [19, 25],
+  "23x35": [23, 35],
+  "26x40": [26, 40],
+};
+const DIGITAL_PRESS_MAX_W = 13;
+const DIGITAL_PRESS_MAX_H = 36;
+
+// Given parent + run dimensions and a number-up, return the per-job sheet
+// counts. The click fee is a flat per-run-sheet charge (#colors-based, not
+// size-based — Mary 5/18), default $0.378 for 4/4 process.
+function digitalSheetMath(opts: {
+  parentW: number; parentH: number; runW: number; runH: number;
+  piecesPerSheet: number; quantity: number; makeReady: number; clickFee: number;
+}) {
+  const { parentW, parentH, runW, runH, piecesPerSheet, quantity, makeReady, clickFee } = opts;
+  const fit = (pW: number, pH: number, rW: number, rH: number) =>
+    rW > 0 && rH > 0 ? Math.floor(pW / rW) * Math.floor(pH / rH) : 0;
+  // Best of either run-sheet orientation on the parent sheet.
+  const runsPerParent = Math.max(
+    fit(parentW, parentH, runW, runH),
+    fit(parentW, parentH, runH, runW),
+  );
+  const pps = Math.max(1, piecesPerSheet);
+  const baseRunSheets = Math.ceil(Math.max(quantity, 0) / pps);
+  const runSheets = baseRunSheets + Math.max(0, makeReady);
+  const parentSheets = runsPerParent > 0 ? Math.ceil(runSheets / runsPerParent) : runSheets;
+  const totalClickFee = runSheets * (clickFee || 0);
+  const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
+  return { runsPerParent, baseRunSheets, runSheets, parentSheets, totalClickFee, perPieceClickFee };
+}
+
+function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const isCustom = form.digitalParentPreset === "custom";
+  const parentW = isCustom ? Number(form.digitalParentW) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[0] ?? 0);
+  const parentH = isCustom ? Number(form.digitalParentH) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[1] ?? 0);
+  const runW = Number(form.digitalRunW) || 0;
+  const runH = Number(form.digitalRunH) || 0;
+  const qty = (Number(form.quantity) || 0) * (Number(form.versions) || 1);
+  const dm = digitalSheetMath({
+    parentW, parentH, runW, runH,
+    piecesPerSheet: Number(form.digitalPiecesPerSheet) || 1,
+    quantity: qty, makeReady: Number(form.makeReadySheets) || 0,
+    clickFee: Number(form.digitalClickFee) || 0,
+  });
+  // Run sheet fits if either orientation lands within the press envelope.
+  const runFits = (runW <= DIGITAL_PRESS_MAX_W && runH <= DIGITAL_PRESS_MAX_H)
+    || (runW <= DIGITAL_PRESS_MAX_H && runH <= DIGITAL_PRESS_MAX_W);
+  const runTooBig = runW > 0 && runH > 0 && !runFits;
+  return (
+    <Section title="Digital Sheets & Click Fee" icon={Layers}>
+      <p className="text-xs text-gray-500 mb-3">
+        Parent stock is cut into run sheets that feed the digital press (max {DIGITAL_PRESS_MAX_W}&quot; × {DIGITAL_PRESS_MAX_H}&quot;).
+        Click fee is a flat per-run-sheet charge based on color, not sheet size.
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="Parent sheet size">
+          <select
+            value={form.digitalParentPreset}
+            onChange={(e) => {
+              const v = e.target.value;
+              set("digitalParentPreset", v);
+              const preset = DIGITAL_PARENT_PRESETS[v];
+              if (preset) { set("digitalParentW", preset[0]); set("digitalParentH", preset[1]); }
+            }}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="19x25">19 × 25</option>
+            <option value="23x35">23 × 35</option>
+            <option value="26x40">26 × 40</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </Field>
+        {isCustom && (
+          <>
+            <Field label="Parent W (in)">
+              <Input type="number" step="0.25" value={form.digitalParentW || ""} onChange={(e) => set("digitalParentW", Number(e.target.value))} />
+            </Field>
+            <Field label="Parent H (in)">
+              <Input type="number" step="0.25" value={form.digitalParentH || ""} onChange={(e) => set("digitalParentH", Number(e.target.value))} />
+            </Field>
+          </>
+        )}
+        <Field label="Run sheet W (in)" hint={`press max ${DIGITAL_PRESS_MAX_W}"`}>
+          <Input type="number" step="0.25" value={form.digitalRunW || ""} onChange={(e) => set("digitalRunW", Number(e.target.value))} />
+        </Field>
+        <Field label="Run sheet H (in)" hint={`press max ${DIGITAL_PRESS_MAX_H}"`}>
+          <Input type="number" step="0.25" value={form.digitalRunH || ""} onChange={(e) => set("digitalRunH", Number(e.target.value))} />
+        </Field>
+        <Field label="Pieces per run sheet" hint="Number-up Mary lays out">
+          <Input type="number" value={form.digitalPiecesPerSheet || ""} onChange={(e) => set("digitalPiecesPerSheet", Number(e.target.value))} min={1} />
+        </Field>
+        <Field label="Make-ready run sheets" hint="Digital make-ready is small — usually a few sheets">
+          <Input type="number" value={form.makeReadySheets || ""} onChange={(e) => set("makeReadySheets", Number(e.target.value))} min={0} />
+        </Field>
+        <Field label="Click fee ($ / run sheet)" hint="Default 0.378 = 4/4 process">
+          <Input type="number" step="0.001" value={form.digitalClickFee || ""} onChange={(e) => set("digitalClickFee", Number(e.target.value))} />
+        </Field>
+        <Field label="Parent sheet cost ($ each)">
+          <Input type="number" step="0.01" value={form.digitalParentSheetCost || ""} onChange={(e) => set("digitalParentSheetCost", Number(e.target.value))} />
+        </Field>
+      </div>
+      {runTooBig && (
+        <p className="mt-2 text-xs font-medium text-red-600">
+          Run sheet exceeds the {DIGITAL_PRESS_MAX_W}&quot; × {DIGITAL_PRESS_MAX_H}&quot; press limit — it won&apos;t feed.
+        </p>
+      )}
+      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+        <p className="text-xs font-semibold text-blue-900 mb-2">Auto-calculated (qty {qty.toLocaleString()})</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+          <div><span className="text-gray-600">Run sheets / parent:</span> <strong>{dm.runsPerParent || "—"}</strong></div>
+          <div><span className="text-gray-600">Run sheets needed:</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
+          <div><span className="text-gray-600">Parent sheets needed:</span> <strong>{dm.parentSheets.toLocaleString()}</strong></div>
+          <div><span className="text-gray-600">Click fee / print:</span> <strong>${(Number(form.digitalClickFee) || 0).toFixed(3)}</strong></div>
+          <div><span className="text-gray-600">Total click fee:</span> <strong>${dm.totalClickFee.toFixed(2)}</strong></div>
+          <div><span className="text-gray-600">Per-piece click fee:</span> <strong>${dm.perPieceClickFee.toFixed(4)}</strong></div>
+        </div>
+      </div>
+    </Section>
+  );
+}
 
 function PaperSpecFields({ form, set }: { form: FormState; set: EstimatorSetFn }) {
   return (
@@ -1271,33 +1414,23 @@ function EstimateContent() {
       finishingCost = num("gluingSetup") + num("windowPatching");
       makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
     } else if (isCartonDigital) {
-      // Tiered click-charge lookup (Mary 4/24/26): qty / numberUp + MR
-      // sheets, multiplied by per-sheet click rate for the right tier
-      // and ink config. VD per side is additive when variableData is on.
-      const numberUp = num("numberUp") || 1;
-      const baseSheets = Math.ceil((q * v) / numberUp);
-      const mrSheets = num("makeReadySheets") || 0;
-      const sheetsThroughPress = baseSheets + mrSheets;
-      const tier = plantStandards
-        ? getDigitalSizeTier(num("sheetWidth"), num("sheetHeight"), plantStandards)
-        : 1;
-      const inkCfg = inferInkConfig(num("inkColorsFront"), num("inkColorsBack"));
-      const baseRate = plantStandards ? getDigitalClickRate(tier, inkCfg, plantStandards) : num("clickCharge");
-      const vdRate = (form.variableData && plantStandards) ? getDigitalVDRate(tier, plantStandards) : 0;
-      const ratePerSheet = baseRate + vdRate;
-      const impressionCost = sheetsThroughPress * ratePerSheet;
-      const paperCost = sheetsThroughPress * num("substrateCostPerSheet");
-      materialsCost = paperCost + impressionCost;
-      const dieCutMinutes = sheetsThroughPress * num("digitalDieCuttingTime");
+      // Digital click-fee model (Mary 5/18): parent → run sheet → pieces-up
+      // sets the run-sheet count; click fee is a flat per-run-sheet charge.
+      const dm = digitalSheetMath({
+        parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+        runW: num("digitalRunW"), runH: num("digitalRunH"),
+        piecesPerSheet: num("digitalPiecesPerSheet"),
+        quantity: q * v, makeReady: num("makeReadySheets"),
+        clickFee: num("digitalClickFee") || 0.378,
+      });
+      const paperCost = dm.parentSheets * num("digitalParentSheetCost");
+      materialsCost = paperCost + dm.totalClickFee;
+      const dieCutMinutes = dm.runSheets * num("digitalDieCuttingTime");
       // Bindery parity with offset (Mary 5/18) — gluing + window patching
-      // roll into finishing; quantitative finishing (cuts/folds/etc.) is added
-      // for all paths further below.
+      // roll into finishing; quantitative finishing is added for all paths below.
       finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
         + num("gluingSetup") + num("windowPatching");
-      if (form.variableData) {
-        // VD setup + list maintenance — flat hourly to materialsCost
-        materialsCost += num("vdpComplexitySurcharge");
-      }
+      if (form.variableData) materialsCost += num("vdpComplexitySurcharge");
     } else if (isCommOffset) {
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
       // Calculate forms (signatures) for multi-page books
@@ -1319,22 +1452,16 @@ function EstimateContent() {
         num("binderySetupHours") * num("binderyRate");
       makeReadyCost = 0; // already included in sheetsPerForm above
     } else if (isCommDigital) {
-      // Tiered click-charge lookup (same as carton digital) — Mary 4/24/26
-      const numberUp = num("numberUp") || 1;
-      const baseSheets = Math.ceil((q * v) / numberUp);
-      const mrSheets = num("makeReadySheets") || 0;
-      const sheetsThroughPress = baseSheets + mrSheets;
-      const tier = plantStandards
-        ? getDigitalSizeTier(num("sheetWidth"), num("sheetHeight"), plantStandards)
-        : 1;
-      const inkCfg = inferInkConfig(num("inkColorsFront"), num("inkColorsBack"));
-      const baseRate = plantStandards ? getDigitalClickRate(tier, inkCfg, plantStandards) : num("commDigitalClickCharge");
-      const vdRate = (form.variableData && plantStandards) ? getDigitalVDRate(tier, plantStandards) : 0;
-      const clickCost = sheetsThroughPress * (baseRate + vdRate);
-      const paperCost = num("digitalPaperCost") * (sheetsThroughPress / 1000);
-      materialsCost = clickCost + paperCost;
-      const rushMultiplier = 1 + num("rushSurchargePercent") / 100;
-      materialsCost *= rushMultiplier;
+      // Digital click-fee model (Mary 5/18) — same as carton digital.
+      const dm = digitalSheetMath({
+        parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+        runW: num("digitalRunW"), runH: num("digitalRunH"),
+        piecesPerSheet: num("digitalPiecesPerSheet"),
+        quantity: q * v, makeReady: num("makeReadySheets"),
+        clickFee: num("digitalClickFee") || 0.378,
+      });
+      const paperCost = dm.parentSheets * num("digitalParentSheetCost");
+      materialsCost = (paperCost + dm.totalClickFee) * (1 + num("rushSurchargePercent") / 100);
       finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
         + num("gluingSetup") + num("windowPatching");
     }
@@ -1589,13 +1716,15 @@ function EstimateContent() {
       paperOnlyCost = Math.min(paperOnlyCost, materialsCost); // safety
       materialOnlyCost = Math.max(0, materialsCost - paperOnlyCost) + toolingCost;
     } else if (isCartonDigital || isCommDigital) {
-      // For digital, paper = substrate cost (carton) or digitalPaperCost (comm).
-      const sheetEstimate = Math.max(1, Math.ceil((q * v) / Math.max(num("numberUp"), 1))) + num("makeReadySheets");
-      if (isCartonDigital) {
-        paperOnlyCost = sheetEstimate * num("substrateCostPerSheet");
-      } else {
-        paperOnlyCost = num("digitalPaperCost") * (sheetEstimate / 1000);
-      }
+      // For digital, paper = parent sheets × parent sheet cost (Mary 5/18).
+      const dm = digitalSheetMath({
+        parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+        runW: num("digitalRunW"), runH: num("digitalRunH"),
+        piecesPerSheet: num("digitalPiecesPerSheet"),
+        quantity: q * v, makeReady: num("makeReadySheets"),
+        clickFee: num("digitalClickFee") || 0.378,
+      });
+      paperOnlyCost = dm.parentSheets * num("digitalParentSheetCost");
       paperOnlyCost = Math.min(paperOnlyCost, materialsCost);
       materialOnlyCost = Math.max(0, materialsCost - paperOnlyCost) + toolingCost;
     } else {
@@ -1670,8 +1799,15 @@ function EstimateContent() {
         finishingCost = num("gluingSetup") + num("windowPatching");
         makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
       } else if (isCartonDigital) {
-        materialsCost = q * v * num("substrateCostPerSheet") + q * v * num("clickCharge");
-        finishingCost = ((q * v * num("digitalDieCuttingTime")) / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
+        const dm = digitalSheetMath({
+          parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+          runW: num("digitalRunW"), runH: num("digitalRunH"),
+          piecesPerSheet: num("digitalPiecesPerSheet"),
+          quantity: q * v, makeReady: num("makeReadySheets"),
+          clickFee: num("digitalClickFee") || 0.378,
+        });
+        materialsCost = dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee;
+        finishingCost = ((dm.runSheets * num("digitalDieCuttingTime")) / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
           + num("gluingSetup") + num("windowPatching");
         if (form.variableData) finishingCost += num("vdpComplexitySurcharge");
       } else if (isCommOffset) {
@@ -1682,10 +1818,16 @@ function EstimateContent() {
         finishingCost = num("foldingCost") + num("saddleStitchCost") + num("perfectBindingCost") + num("trimCost") + num("binderySetupHours") * num("binderyRate");
         makeReadyCost = (500 / 1000) * num("commPaperCostPer1000");
       } else if (isCommDigital) {
-        materialsCost = q * v * num("commDigitalClickCharge") + num("digitalPaperCost") * ((q * v) / 1000);
-        materialsCost *= 1 + num("rushSurchargePercent") / 100;
+        const dm = digitalSheetMath({
+          parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+          runW: num("digitalRunW"), runH: num("digitalRunH"),
+          piecesPerSheet: num("digitalPiecesPerSheet"),
+          quantity: q * v, makeReady: num("makeReadySheets"),
+          clickFee: num("digitalClickFee") || 0.378,
+        });
+        materialsCost = (dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee) * (1 + num("rushSurchargePercent") / 100);
         finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
-        + num("gluingSetup") + num("windowPatching");
+          + num("gluingSetup") + num("windowPatching");
       }
 
       // Recalc press run time for this tier quantity
@@ -1718,18 +1860,28 @@ function EstimateContent() {
     let digitalFixed = 0;
     let digitalVariable = 0;
 
+    // Per-piece digital variable cost (click + paper) sampled at 1,000 pieces.
+    const dmX = digitalSheetMath({
+      parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+      runW: num("digitalRunW"), runH: num("digitalRunH"),
+      piecesPerSheet: num("digitalPiecesPerSheet"),
+      quantity: 1000, makeReady: 0,
+      clickFee: num("digitalClickFee") || 0.378,
+    });
+    const digitalPerPiece = (dmX.totalClickFee + dmX.parentSheets * num("digitalParentSheetCost")) / 1000;
+
     if (isCarton) {
       offsetFixed = num("dieCuttingPlateCost") + num("strippingToolCost") + num("gluingSetup");
       const nUp = num("numberUp") || 1;
       offsetVariable = num("paperCostPer1000") / (1000 * nUp) + num("coatingCostPer1000") / (1000 * nUp);
       digitalFixed = num("digitalCoatingCost");
-      digitalVariable = num("clickCharge") + num("substrateCostPerSheet");
+      digitalVariable = digitalPerPiece;
     } else {
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
       offsetFixed = num("plateCostEach") * totalColors + num("binderySetupHours") * num("binderyRate");
       offsetVariable = num("commPaperCostPer1000") / 1000;
       digitalFixed = num("simpleFinishingCost");
-      digitalVariable = num("commDigitalClickCharge") + num("digitalPaperCost") / 1000;
+      digitalVariable = digitalPerPiece;
     }
 
     const netFixedDiff = offsetFixed - digitalFixed;
@@ -3083,33 +3235,10 @@ function EstimateContent() {
       {/* ── Folding Carton + Digital ────────────────────────────────── */}
       {isCartonDigital && (
         <>
-          <Section title="Digital Press Costs" icon={Layers}>
-            {/* Auto-detected click rate for transparency — Mary 4/24/26 */}
-            {plantStandards && (() => {
-              const tier = getDigitalSizeTier(form.sheetWidth || 0, form.sheetHeight || 0, plantStandards);
-              const inkCfg = inferInkConfig(form.inkColorsFront, form.inkColorsBack);
-              const baseRate = getDigitalClickRate(tier, inkCfg, plantStandards);
-              const vdRate = form.variableData ? getDigitalVDRate(tier, plantStandards) : 0;
-              const totalRate = baseRate + vdRate;
-              return (
-                <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4 text-sm">
-                  <p className="font-medium text-blue-900 mb-1">Auto-detected click rate (Mary&apos;s pricing matrix)</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div><span className="text-gray-600">Sheet:</span> {form.sheetWidth || "?"}×{form.sheetHeight || "?"}</div>
-                    <div><span className="text-gray-600">Tier:</span> <strong>{tier}</strong> ({tier === 1 ? "8.5×11 to 13×19" : tier === 2 ? "13×19.3 to 13×30" : "13×30.1 to 13×35.4"})</div>
-                    <div><span className="text-gray-600">Ink config:</span> <strong>{inkCfg}</strong></div>
-                    <div><span className="text-gray-600">Per-sheet:</span> <strong>${totalRate.toFixed(5)}</strong>{form.variableData && ` (incl. VD)`}</div>
-                  </div>
-                </div>
-              );
-            })()}
+          <DigitalClickSection form={form} set={set} />
+
+          <Section title="Digital Die-Cut & Coating" icon={Layers}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Manual Click Override ($)" hint="Leave 0 to use auto-detected rate above">
-                <Input type="number" step="0.001" value={form.clickCharge || ""} onChange={(e) => set("clickCharge", Number(e.target.value))} />
-              </Field>
-              <Field label="Substrate Cost ($ per sheet)">
-                <Input type="number" step="0.01" value={form.substrateCostPerSheet || ""} onChange={(e) => set("substrateCostPerSheet", Number(e.target.value))} />
-              </Field>
               <Field label="Digital Die-Cut Time (min/sheet)">
                 <Input type="number" step="0.1" value={form.digitalDieCuttingTime || ""} onChange={(e) => set("digitalDieCuttingTime", Number(e.target.value))} />
               </Field>
@@ -3225,14 +3354,10 @@ function EstimateContent() {
       {/* ── Commercial Print + Digital ──────────────────────────────── */}
       {isCommDigital && (
         <>
+          <DigitalClickSection form={form} set={set} />
+
           <Section title="Digital Costs" icon={Layers}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Click Charge / Impression ($)">
-                <Input type="number" step="0.001" value={form.commDigitalClickCharge || ""} onChange={(e) => set("commDigitalClickCharge", Number(e.target.value))} />
-              </Field>
-              <Field label="Digital-Certified Paper ($)" hint="Cost per 1000 sheets">
-                <Input type="number" step="0.01" value={form.digitalPaperCost || ""} onChange={(e) => set("digitalPaperCost", Number(e.target.value))} />
-              </Field>
               <Field label="Rush Surcharge (%)">
                 <Input type="number" step="1" value={form.rushSurchargePercent || ""} onChange={(e) => set("rushSurchargePercent", Number(e.target.value))} min={0} max={100} />
               </Field>
@@ -3258,15 +3383,21 @@ function EstimateContent() {
       {/* ── Universal: Labor & Overhead ─────────────────────────────── */}
       <Section title="Labor & Time" icon={Clock}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Press Operator Rate ($/hr)">
-            <Input type="number" step="0.01" value={form.pressOperatorRate || ""} onChange={(e) => set("pressOperatorRate", Number(e.target.value))} />
-          </Field>
+          {/* Press operator rate + run time are offset-press concepts — for
+              digital, press labor is baked into the click fee (Mary 5/18). */}
+          {isOffset && (
+            <Field label="Press Operator Rate ($/hr)">
+              <Input type="number" step="0.01" value={form.pressOperatorRate || ""} onChange={(e) => set("pressOperatorRate", Number(e.target.value))} />
+            </Field>
+          )}
           <Field label="Prepress Rate ($/hr)">
             <Input type="number" step="0.01" value={form.prepressRate || ""} onChange={(e) => set("prepressRate", Number(e.target.value))} />
           </Field>
-          <Field label="Press Run Time (hours)">
-            <Input type="number" step="0.25" value={form.pressRunTime || ""} onChange={(e) => set("pressRunTime", Number(e.target.value))} />
-          </Field>
+          {isOffset && (
+            <Field label="Press Run Time (hours)">
+              <Input type="number" step="0.25" value={form.pressRunTime || ""} onChange={(e) => set("pressRunTime", Number(e.target.value))} />
+            </Field>
+          )}
           <Field label="Prepress Time (minutes)" hint={`= ${((Number(form.prepressTime) || 0) * 60).toFixed(0)} min · auto-converts to ${(Number(form.prepressTime) || 0).toFixed(2)} hrs`}>
             <Input
               type="text"
