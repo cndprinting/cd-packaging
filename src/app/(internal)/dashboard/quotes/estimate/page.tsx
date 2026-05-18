@@ -305,6 +305,7 @@ interface FormState {
   digitalPiecesPerSheet: number; // finished pieces laid out on one run sheet
   digitalClickFee: number;       // flat $/run sheet (default 0.378 = 4/4 process)
   digitalParentSheetCost: number; // $ per parent sheet of stock
+  digitalParentPaperDesc: string; // parent stock description (brand/weight/finish)
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -487,6 +488,7 @@ const defaultForm: FormState = {
   digitalPiecesPerSheet: 1,
   digitalClickFee: 0.378,
   digitalParentSheetCost: 0,
+  digitalParentPaperDesc: "",
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -685,6 +687,8 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
   const runFits = (runW <= DIGITAL_PRESS_MAX_W && runH <= DIGITAL_PRESS_MAX_H)
     || (runW <= DIGITAL_PRESS_MAX_H && runH <= DIGITAL_PRESS_MAX_W);
   const runTooBig = runW > 0 && runH > 0 && !runFits;
+  const paperTotal = dm.parentSheets * (Number(form.digitalParentSheetCost) || 0);
+  const paperPerPiece = qty > 0 ? paperTotal / qty : 0;
   return (
     <Section title="Digital Sheets & Click Fee" icon={Layers}>
       <p className="text-xs text-gray-500 mb-3">
@@ -737,6 +741,9 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Parent sheet cost ($ each)">
           <Input type="number" step="0.01" value={form.digitalParentSheetCost || ""} onChange={(e) => set("digitalParentSheetCost", Number(e.target.value))} />
         </Field>
+        <Field label="Parent sheet paper" hint="Stock description — brand / weight / finish" className="sm:col-span-2">
+          <Input value={form.digitalParentPaperDesc} onChange={(e) => set("digitalParentPaperDesc", e.target.value)} placeholder="e.g. 14pt C2S SBS, 100lb gloss cover" />
+        </Field>
       </div>
       {runTooBig && (
         <p className="mt-2 text-xs font-medium text-red-600">
@@ -752,6 +759,11 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
           <div><span className="text-gray-600">Click fee / print:</span> <strong>${(Number(form.digitalClickFee) || 0).toFixed(3)}</strong></div>
           <div><span className="text-gray-600">Total click fee:</span> <strong>${dm.totalClickFee.toFixed(2)}</strong></div>
           <div><span className="text-gray-600">Per-piece click fee:</span> <strong>${dm.perPieceClickFee.toFixed(4)}</strong></div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm mt-2 pt-2 border-t border-blue-200">
+          <div><span className="text-gray-600">Total paper cost:</span> <strong>${paperTotal.toFixed(2)}</strong></div>
+          <div><span className="text-gray-600">Per-piece paper cost:</span> <strong>${paperPerPiece.toFixed(4)}</strong></div>
+          <div><span className="text-gray-600">Digital materials total:</span> <strong className="text-blue-900">${(paperTotal + dm.totalClickFee).toFixed(2)}</strong></div>
         </div>
       </div>
     </Section>
