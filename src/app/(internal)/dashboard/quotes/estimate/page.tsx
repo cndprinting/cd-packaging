@@ -608,6 +608,320 @@ function Field({
   );
 }
 
+// ─── Shared estimator sub-sections ───────────────────────────────────────────
+// Paper Specification + Finishing & Bindery are used by BOTH the offset and the
+// digital carton paths (Mary 5/18 — digital needs the same paper + bindery
+// inputs offset has). Extracted here so the two paths stay in sync.
+
+type EstimatorSetFn = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+
+function PaperSpecFields({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 mb-4 space-y-3">
+      <p className="text-sm font-semibold text-gray-800">Paper Specification</p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Field label="Paper Type" hint="High-level category">
+          <select
+            value={form.paperType}
+            onChange={(e) => set("paperType", e.target.value as any)}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">— select —</option>
+            <option value="cover">Cover</option>
+            <option value="text">Text</option>
+            <option value="board_c1s">Board C1S</option>
+            <option value="board_c2s">Board C2S</option>
+            <option value="bond">Bond / Writing</option>
+            <option value="index">Index / Bristol</option>
+            <option value="envelope">Envelope</option>
+            <option value="label">Label / Pressure Sensitive</option>
+            <option value="magnetic">Magnetic</option>
+            <option value="ncr">Carbonless / NCR</option>
+            <option value="vellum">Vellum (type)</option>
+            <option value="synthetic">Synthetic</option>
+          </select>
+        </Field>
+        <Field label="Finish">
+          <select
+            value={form.paperFinish}
+            onChange={(e) => set("paperFinish", e.target.value as any)}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">— select —</option>
+            <option value="coated_silk">Coated Silk / Dull</option>
+            <option value="coated_gloss">Coated Gloss</option>
+            <option value="uncoated">Uncoated</option>
+          </select>
+        </Field>
+        <Field label="Texture" hint="If uncoated">
+          <select
+            value={form.paperTexture}
+            onChange={(e) => set("paperTexture", e.target.value as any)}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">— none / smooth —</option>
+            <option value="smooth">Smooth</option>
+            <option value="vellum">Vellum</option>
+            <option value="eggshell">Eggshell</option>
+            <option value="stipple">Stipple</option>
+            <option value="laid">Laid</option>
+            <option value="techweave">Techweave</option>
+            <option value="metallic">Metallic</option>
+          </select>
+        </Field>
+        <Field label="Brand">
+          <Input value={form.paperBrand} onChange={(e) => set("paperBrand", e.target.value)} placeholder="e.g. Mohawk, Cougar, Reich" />
+        </Field>
+        <Field label="Color">
+          <Input value={form.paperColor} onChange={(e) => set("paperColor", e.target.value)} placeholder="e.g. Solar White" />
+        </Field>
+        <Field label="Basis weight" hint="e.g. 100lb, 14pt">
+          <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 100" />
+        </Field>
+      </div>
+      {/* H × W order — Mary 5/1: grain direction convention. Putting
+          height first matches how paper is ordered + how the job ticket
+          reads sheets, so there's no confusion at the floor. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="Parent sheet H" hint="Ordering size (grain ‖ H)">
+          <Input type="number" step="0.125" value={form.parentSheetHeight || ""} onChange={(e) => set("parentSheetHeight", Number(e.target.value))} placeholder="e.g. 35" />
+        </Field>
+        <Field label="Parent sheet W">
+          <Input type="number" step="0.125" value={form.parentSheetWidth || ""} onChange={(e) => set("parentSheetWidth", Number(e.target.value))} placeholder="e.g. 23" />
+        </Field>
+        <Field label="Run sheet H" hint="Press sheet">
+          <Input type="number" step="0.125" value={form.runSheetHeight || ""} onChange={(e) => set("runSheetHeight", Number(e.target.value))} placeholder="e.g. 23" />
+        </Field>
+        <Field label="Run sheet W">
+          <Input type="number" step="0.125" value={form.runSheetWidth || ""} onChange={(e) => set("runSheetWidth", Number(e.target.value))} placeholder="e.g. 17.5" />
+        </Field>
+      </div>
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
+        <label className="flex items-start gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isMillItem}
+            onChange={(e) => set("isMillItem", e.target.checked as any)}
+            className="h-4 w-4 rounded border-amber-400 mt-0.5"
+          />
+          <div className="flex-1">
+            <span className="font-medium text-amber-900">Mill item — extended lead time</span>
+            {form.isMillItem && (
+              <Input
+                className="mt-2 bg-white"
+                value={form.millItemLeadTime}
+                onChange={(e) => set("millItemLeadTime", e.target.value)}
+                placeholder="e.g. allow 2-3 weeks; min 5 ctns; mill ships from PA"
+              />
+            )}
+            {form.isMillItem && (
+              <p className="text-[11px] text-amber-700 mt-1">This note will print on the quote letter to the customer.</p>
+            )}
+          </div>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function FinishingBinderySection({
+  form,
+  set,
+  setForm,
+  plantStandards,
+}: {
+  form: FormState;
+  set: EstimatorSetFn;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  plantStandards: PlantStandardsData | null;
+}) {
+  return (
+    <Section title="Finishing & Bindery" icon={Scissors}>
+      {/* ── Phase 1 + II: Quantitative finishing (Mary + Darrin) ── */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4">
+        <p className="text-xs font-medium text-blue-900 mb-2">
+          Quantitative finishing — enter counts, system calculates time &amp; cost using Plant Standards rates.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Field label="# of cuts" hint={(() => {
+            const cal = Number(form.paperCaliperInches) || 0.005;
+            const lh = plantStandards?.cutLiftHeightInches ?? 6;
+            const lifts = Math.max(1, Math.ceil((form.quantity * cal) / lh));
+            return plantStandards
+              ? `${plantStandards.cutTimePerCutSec}s × ${lifts} lift${lifts!==1?"s":""} per cut`
+              : "Auto";
+          })()}>
+            <Input type="number" value={form.numCuts || ""} onChange={(e) => set("numCuts", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="Fold type">
+            <select
+              value={form.foldType}
+              onChange={(e) => set("foldType", e.target.value as any)}
+              className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="none">None</option>
+              <option value="half">Half fold</option>
+              <option value="tri">Tri (letter) fold</option>
+              <option value="z">Z fold</option>
+              <option value="gate">Gate fold</option>
+              <option value="roll">Roll fold</option>
+              <option value="accordion">Accordion</option>
+              <option value="double_parallel">Double parallel</option>
+              <option value="french">French / cross fold</option>
+              <option value="right_angle">Right-angle fold</option>
+              <option value="custom">Custom</option>
+            </select>
+          </Field>
+          <Field label="# of folds per sheet" hint={plantStandards ? `${plantStandards.foldTimePerFoldSec}s/fold` : "Auto"}>
+            <Input type="number" value={form.numFolds || ""} onChange={(e) => set("numFolds", Number(e.target.value))} min={0} max={10} />
+          </Field>
+          <Field label="# of drill holes" hint={plantStandards ? `${plantStandards.drillTimePerHoleSec}s/hole @ $${plantStandards.drillingRate}/hr` : "Auto"}>
+            <Input type="number" value={form.numDrillHoles || ""} onChange={(e) => set("numDrillHoles", Number(e.target.value))} min={0} max={10} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
+          <Field label="# scores" hint={plantStandards ? `Letterpress — ${plantStandards.scorePerfPerHour}/hr @ $${plantStandards.scorePerfRate}` : "Auto"}>
+            <Input type="number" value={form.numScores || ""} onChange={(e) => set("numScores", Number(e.target.value))} min={0} max={20} />
+          </Field>
+          <Field label="# perfs" hint={plantStandards ? `${plantStandards.perfRulePremiumMultiplier}× score rule cost` : "Perf premium"}>
+            <Input type="number" value={form.numPerfs || ""} onChange={(e) => set("numPerfs", Number(e.target.value))} min={0} max={20} />
+          </Field>
+          <Field label="# pads">
+            <Input type="number" value={form.numPads || ""} onChange={(e) => set("numPads", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="Sheets / pad" hint={plantStandards ? `Hand bindery @ $${plantStandards.handBinderyRate}/hr, ${plantStandards.paddingSheetsPerHour}/hr` : "Auto"}>
+            <Input type="number" value={form.sheetsPerPad || ""} onChange={(e) => set("sheetsPerPad", Number(e.target.value))} min={0} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
+          <Field label="# bundles" hint="For banding/wrapping">
+            <Input type="number" value={form.numBundles || ""} onChange={(e) => set("numBundles", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="Wrap length / bundle (in)" hint={plantStandards ? `$${plantStandards.wrapFilmCostPerFoot}/ft film + labor` : "Inches of film per bundle"}>
+            <Input type="number" value={form.wrapLengthPerBundleInches || ""} onChange={(e) => set("wrapLengthPerBundleInches", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="% solids coverage" hint={plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press"}>
+            <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
+          </Field>
+        </div>
+        {/* Saddle stitch + perfect bind — Mary 4/30: auto-calculate
+            from the rate × qty formula instead of forcing a manual $ */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mt-3 pt-3 border-t border-blue-200">
+          <Field
+            label="Saddle stitch (qty)"
+            hint={plantStandards
+              ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr → ${(() => {
+                  const rate = Number(plantStandards.saddleStitch1Rate) || 95;
+                  const speed = Number(plantStandards.saddleStitch1Speed) || 8000;
+                  const cost = (Number(form.saddleStitchCost) > 0 && !form.saddleStitchAuto)
+                    ? Number(form.saddleStitchCost)
+                    : ((Number(form.saddleStitchQty) || 0) * rate / Math.max(speed, 1));
+                  return `auto-calc = $${cost.toFixed(2)}`;
+                })()}`
+              : "Pieces saddle-stitched"}
+          >
+            <Input
+              type="number"
+              value={form.saddleStitchQty || ""}
+              placeholder={String(form.quantity || "0")}
+              onChange={(e) => {
+                const qty = Number(e.target.value) || 0;
+                const rate = Number(plantStandards?.saddleStitch1Rate) || 95;
+                const speed = Number(plantStandards?.saddleStitch1Speed) || 8000;
+                const cost = qty * rate / Math.max(speed, 1);
+                setForm(p => ({ ...p, saddleStitchQty: qty, saddleStitchCost: cost, saddleStitchAuto: true } as any));
+              }}
+              min={0}
+            />
+          </Field>
+          <Field label="Or override ($)" hint="Manual saddle stitch $ (overrides qty calc)">
+            <Input
+              type="number"
+              step="0.01"
+              value={form.saddleStitchAuto ? "" : (form.saddleStitchCost || "")}
+              placeholder={form.saddleStitchAuto ? `Auto: $${(Number(form.saddleStitchCost) || 0).toFixed(2)}` : "0.00"}
+              onChange={(e) => setForm(p => ({ ...p, saddleStitchCost: Number(e.target.value), saddleStitchAuto: false } as any))}
+              min={0}
+            />
+          </Field>
+          <Field label="Perfect bind ($)" hint="Total cost (lump sum)">
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={form.perfectBindingCost || ""}
+              placeholder="0.00"
+              onChange={(e) => { const v = parseFloat(e.target.value); set("perfectBindingCost", isNaN(v) ? 0 : v); }}
+            />
+          </Field>
+          <Field label="Final trim to size ($)" hint="Lump-sum cost for final trimming">
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={form.trimCost || ""}
+              placeholder="0.00"
+              onChange={(e) => { const v = parseFloat(e.target.value); set("trimCost", isNaN(v) ? 0 : v); }}
+            />
+          </Field>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Field label="Gluing Setup ($)">
+          <Input type="number" step="0.01" value={form.gluingSetup || ""} onChange={(e) => set("gluingSetup", Number(e.target.value))} />
+        </Field>
+        <Field label="Window Patching ($)">
+          <Input type="number" step="0.01" value={form.windowPatching || ""} onChange={(e) => set("windowPatching", Number(e.target.value))} />
+        </Field>
+        <Field label="Cutting Difficulty" hint="Legacy — prefer # of cuts above">
+          <Input type="number" step="0.1" value={form.cuttingDiff || ""} onChange={(e) => set("cuttingDiff", Number(e.target.value))} min={0} max={5} />
+        </Field>
+      </div>
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <p className="text-sm font-medium text-gray-700 mb-3">Hand Bindery Operations</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Hand Bind 1 Name" hint="e.g. Softtouch">
+            <Input value={form.handBind1Name as string} onChange={(e) => set("handBind1Name", e.target.value)} placeholder="Operation name" />
+          </Field>
+          <Field label="Speed (per hour)">
+            <Input type="number" value={form.handBind1SpeedPerHour || ""} onChange={(e) => set("handBind1SpeedPerHour", Number(e.target.value))} />
+          </Field>
+          <Field label="% of Quantity" hint="100 = all pieces">
+            <Input type="number" value={form.handBind1PctOfQty || ""} onChange={(e) => set("handBind1PctOfQty", Number(e.target.value))} min={0} max={100} />
+          </Field>
+          <Field label="Hand Bind 2 Name" hint="e.g. DC/GL/Fold">
+            <Input value={form.handBind2Name as string} onChange={(e) => set("handBind2Name", e.target.value)} placeholder="Operation name" />
+          </Field>
+          <Field label="Speed (per hour)">
+            <Input type="number" value={form.handBind2SpeedPerHour || ""} onChange={(e) => set("handBind2SpeedPerHour", Number(e.target.value))} />
+          </Field>
+        </div>
+      </div>
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <p className="text-sm font-medium text-gray-700 mb-3">Packing</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Carton Type">
+            <Select
+              value={String(form.cartonType)}
+              onChange={(e) => set("cartonType", Number(e.target.value))}
+              options={[
+                { value: "1", label: "11.25x8.75x10 ($0.93)" },
+                { value: "2", label: "11x9x10 ($0.75)" },
+                { value: "3", label: "LTHD BOX ($0.52)" },
+              ]}
+            />
+          </Field>
+          <Field label="Skid Pack">
+            <label className="flex items-center gap-2 mt-2 cursor-pointer">
+              <input type="checkbox" checked={form.skidPack as boolean} onChange={(e) => set("skidPack", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+              <span className="text-sm text-gray-700">Include skid ($5.00)</span>
+            </label>
+          </Field>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function EstimatePage() {
@@ -971,7 +1285,11 @@ function EstimateContent() {
       const paperCost = sheetsThroughPress * num("substrateCostPerSheet");
       materialsCost = paperCost + impressionCost;
       const dieCutMinutes = sheetsThroughPress * num("digitalDieCuttingTime");
-      finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost");
+      // Bindery parity with offset (Mary 5/18) — gluing + window patching
+      // roll into finishing; quantitative finishing (cuts/folds/etc.) is added
+      // for all paths further below.
+      finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
+        + num("gluingSetup") + num("windowPatching");
       if (form.variableData) {
         // VD setup + list maintenance — flat hourly to materialsCost
         materialsCost += num("vdpComplexitySurcharge");
@@ -1348,7 +1666,8 @@ function EstimateContent() {
         makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
       } else if (isCartonDigital) {
         materialsCost = q * v * num("substrateCostPerSheet") + q * v * num("clickCharge");
-        finishingCost = ((q * v * num("digitalDieCuttingTime")) / 60) * num("digitalCutterRate") + num("digitalCoatingCost");
+        finishingCost = ((q * v * num("digitalDieCuttingTime")) / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
+          + num("gluingSetup") + num("windowPatching");
         if (form.variableData) finishingCost += num("vdpComplexitySurcharge");
       } else if (isCommOffset) {
         const totalColors = num("inkColorsFront") + num("inkColorsBack");
@@ -2298,113 +2617,8 @@ function EstimateContent() {
           </Section>
 
           <Section title="Paper & Ink" icon={Droplets}>
-            {/* ── Paper Specification (Mary 4/24/26) ────────────────────────
-                Type / brand / color / texture / finish / parent vs run sheet
-                / mill item flag — all flow through to the printed quote.    */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 mb-4 space-y-3">
-              <p className="text-sm font-semibold text-gray-800">Paper Specification</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <Field label="Paper Type" hint="High-level category">
-                  <select
-                    value={form.paperType}
-                    onChange={(e) => set("paperType", e.target.value as any)}
-                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value="">— select —</option>
-                    <option value="cover">Cover</option>
-                    <option value="text">Text</option>
-                    <option value="board_c1s">Board C1S</option>
-                    <option value="board_c2s">Board C2S</option>
-                    <option value="bond">Bond / Writing</option>
-                    <option value="index">Index / Bristol</option>
-                    <option value="envelope">Envelope</option>
-                    <option value="label">Label / Pressure Sensitive</option>
-                    <option value="magnetic">Magnetic</option>
-                    <option value="ncr">Carbonless / NCR</option>
-                    <option value="vellum">Vellum (type)</option>
-                    <option value="synthetic">Synthetic</option>
-                  </select>
-                </Field>
-                <Field label="Finish">
-                  <select
-                    value={form.paperFinish}
-                    onChange={(e) => set("paperFinish", e.target.value as any)}
-                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value="">— select —</option>
-                    <option value="coated_silk">Coated Silk / Dull</option>
-                    <option value="coated_gloss">Coated Gloss</option>
-                    <option value="uncoated">Uncoated</option>
-                  </select>
-                </Field>
-                <Field label="Texture" hint="If uncoated">
-                  <select
-                    value={form.paperTexture}
-                    onChange={(e) => set("paperTexture", e.target.value as any)}
-                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value="">— none / smooth —</option>
-                    <option value="smooth">Smooth</option>
-                    <option value="vellum">Vellum</option>
-                    <option value="eggshell">Eggshell</option>
-                    <option value="stipple">Stipple</option>
-                    <option value="laid">Laid</option>
-                    <option value="techweave">Techweave</option>
-                    <option value="metallic">Metallic</option>
-                  </select>
-                </Field>
-                <Field label="Brand">
-                  <Input value={form.paperBrand} onChange={(e) => set("paperBrand", e.target.value)} placeholder="e.g. Mohawk, Cougar, Reich" />
-                </Field>
-                <Field label="Color">
-                  <Input value={form.paperColor} onChange={(e) => set("paperColor", e.target.value)} placeholder="e.g. Solar White" />
-                </Field>
-                <Field label="Basis weight" hint="e.g. 100lb, 14pt">
-                  <Input value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 100" />
-                </Field>
-              </div>
-              {/* H × W order — Mary 5/1: grain direction convention. Putting
-                  height first matches how paper is ordered + how the job ticket
-                  reads sheets, so there's no confusion at the floor. */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field label="Parent sheet H" hint="Ordering size (grain ‖ H)">
-                  <Input type="number" step="0.125" value={form.parentSheetHeight || ""} onChange={(e) => set("parentSheetHeight", Number(e.target.value))} placeholder="e.g. 35" />
-                </Field>
-                <Field label="Parent sheet W">
-                  <Input type="number" step="0.125" value={form.parentSheetWidth || ""} onChange={(e) => set("parentSheetWidth", Number(e.target.value))} placeholder="e.g. 23" />
-                </Field>
-                <Field label="Run sheet H" hint="Press sheet">
-                  <Input type="number" step="0.125" value={form.runSheetHeight || ""} onChange={(e) => set("runSheetHeight", Number(e.target.value))} placeholder="e.g. 23" />
-                </Field>
-                <Field label="Run sheet W">
-                  <Input type="number" step="0.125" value={form.runSheetWidth || ""} onChange={(e) => set("runSheetWidth", Number(e.target.value))} placeholder="e.g. 17.5" />
-                </Field>
-              </div>
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
-                <label className="flex items-start gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.isMillItem}
-                    onChange={(e) => set("isMillItem", e.target.checked as any)}
-                    className="h-4 w-4 rounded border-amber-400 mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <span className="font-medium text-amber-900">Mill item — extended lead time</span>
-                    {form.isMillItem && (
-                      <Input
-                        className="mt-2 bg-white"
-                        value={form.millItemLeadTime}
-                        onChange={(e) => set("millItemLeadTime", e.target.value)}
-                        placeholder="e.g. allow 2-3 weeks; min 5 ctns; mill ships from PA"
-                      />
-                    )}
-                    {form.isMillItem && (
-                      <p className="text-[11px] text-amber-700 mt-1">This note will print on the quote letter to the customer.</p>
-                    )}
-                  </div>
-                </label>
-              </div>
-            </div>
+            {/* ── Paper Specification (Mary 4/24/26) — shared with digital ── */}
+            <PaperSpecFields form={form} set={set} />
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Paper Category" hint="(Legacy filter — for inventory search only)">
@@ -2709,189 +2923,7 @@ function EstimateContent() {
             </div>
           </Section>
 
-          <Section title="Finishing & Bindery" icon={Scissors}>
-            {/* ── Phase 1 + II: Quantitative finishing (Mary + Darrin) ── */}
-            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4">
-              <p className="text-xs font-medium text-blue-900 mb-2">
-                Quantitative finishing — enter counts, system calculates time &amp; cost using Plant Standards rates.
-              </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field label="# of cuts" hint={(() => {
-                  const cal = Number(form.paperCaliperInches) || 0.005;
-                  const lh = plantStandards?.cutLiftHeightInches ?? 6;
-                  const lifts = Math.max(1, Math.ceil((form.quantity * cal) / lh));
-                  return plantStandards
-                    ? `${plantStandards.cutTimePerCutSec}s × ${lifts} lift${lifts!==1?"s":""} per cut`
-                    : "Auto";
-                })()}>
-                  <Input type="number" value={form.numCuts || ""} onChange={(e) => set("numCuts", Number(e.target.value))} min={0} />
-                </Field>
-                <Field label="Fold type">
-                  <select
-                    value={form.foldType}
-                    onChange={(e) => set("foldType", e.target.value as any)}
-                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="none">None</option>
-                    <option value="half">Half fold</option>
-                    <option value="tri">Tri (letter) fold</option>
-                    <option value="z">Z fold</option>
-                    <option value="gate">Gate fold</option>
-                    <option value="roll">Roll fold</option>
-                    <option value="accordion">Accordion</option>
-                    <option value="double_parallel">Double parallel</option>
-                    <option value="french">French / cross fold</option>
-                    <option value="right_angle">Right-angle fold</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </Field>
-                <Field label="# of folds per sheet" hint={plantStandards ? `${plantStandards.foldTimePerFoldSec}s/fold` : "Auto"}>
-                  <Input type="number" value={form.numFolds || ""} onChange={(e) => set("numFolds", Number(e.target.value))} min={0} max={10} />
-                </Field>
-                <Field label="# of drill holes" hint={plantStandards ? `${plantStandards.drillTimePerHoleSec}s/hole @ $${plantStandards.drillingRate}/hr` : "Auto"}>
-                  <Input type="number" value={form.numDrillHoles || ""} onChange={(e) => set("numDrillHoles", Number(e.target.value))} min={0} max={10} />
-                </Field>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
-                <Field label="# scores" hint={plantStandards ? `Letterpress — ${plantStandards.scorePerfPerHour}/hr @ $${plantStandards.scorePerfRate}` : "Auto"}>
-                  <Input type="number" value={form.numScores || ""} onChange={(e) => set("numScores", Number(e.target.value))} min={0} max={20} />
-                </Field>
-                <Field label="# perfs" hint={plantStandards ? `${plantStandards.perfRulePremiumMultiplier}× score rule cost` : "Perf premium"}>
-                  <Input type="number" value={form.numPerfs || ""} onChange={(e) => set("numPerfs", Number(e.target.value))} min={0} max={20} />
-                </Field>
-                <Field label="# pads">
-                  <Input type="number" value={form.numPads || ""} onChange={(e) => set("numPads", Number(e.target.value))} min={0} />
-                </Field>
-                <Field label="Sheets / pad" hint={plantStandards ? `Hand bindery @ $${plantStandards.handBinderyRate}/hr, ${plantStandards.paddingSheetsPerHour}/hr` : "Auto"}>
-                  <Input type="number" value={form.sheetsPerPad || ""} onChange={(e) => set("sheetsPerPad", Number(e.target.value))} min={0} />
-                </Field>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-blue-200">
-                <Field label="# bundles" hint="For banding/wrapping">
-                  <Input type="number" value={form.numBundles || ""} onChange={(e) => set("numBundles", Number(e.target.value))} min={0} />
-                </Field>
-                <Field label="Wrap length / bundle (in)" hint={plantStandards ? `$${plantStandards.wrapFilmCostPerFoot}/ft film + labor` : "Inches of film per bundle"}>
-                  <Input type="number" value={form.wrapLengthPerBundleInches || ""} onChange={(e) => set("wrapLengthPerBundleInches", Number(e.target.value))} min={0} />
-                </Field>
-                <Field label="% solids coverage" hint={plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press"}>
-                  <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
-                </Field>
-              </div>
-              {/* Saddle stitch + perfect bind — Mary 4/30: auto-calculate
-                  from the rate × qty formula instead of forcing a manual $ */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mt-3 pt-3 border-t border-blue-200">
-                <Field
-                  label="Saddle stitch (qty)"
-                  hint={plantStandards
-                    ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr → ${(() => {
-                        const rate = Number(plantStandards.saddleStitch1Rate) || 95;
-                        const speed = Number(plantStandards.saddleStitch1Speed) || 8000;
-                        const cost = (Number(form.saddleStitchCost) > 0 && !form.saddleStitchAuto)
-                          ? Number(form.saddleStitchCost)
-                          : ((Number(form.saddleStitchQty) || 0) * rate / Math.max(speed, 1));
-                        return `auto-calc = $${cost.toFixed(2)}`;
-                      })()}`
-                    : "Pieces saddle-stitched"}
-                >
-                  <Input
-                    type="number"
-                    value={form.saddleStitchQty || ""}
-                    placeholder={String(form.quantity || "0")}
-                    onChange={(e) => {
-                      const qty = Number(e.target.value) || 0;
-                      const rate = Number(plantStandards?.saddleStitch1Rate) || 95;
-                      const speed = Number(plantStandards?.saddleStitch1Speed) || 8000;
-                      const cost = qty * rate / Math.max(speed, 1);
-                      setForm(p => ({ ...p, saddleStitchQty: qty, saddleStitchCost: cost, saddleStitchAuto: true } as any));
-                    }}
-                    min={0}
-                  />
-                </Field>
-                <Field label="Or override ($)" hint="Manual saddle stitch $ (overrides qty calc)">
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={form.saddleStitchAuto ? "" : (form.saddleStitchCost || "")}
-                    placeholder={form.saddleStitchAuto ? `Auto: $${(Number(form.saddleStitchCost) || 0).toFixed(2)}` : "0.00"}
-                    onChange={(e) => setForm(p => ({ ...p, saddleStitchCost: Number(e.target.value), saddleStitchAuto: false } as any))}
-                    min={0}
-                  />
-                </Field>
-                <Field label="Perfect bind ($)" hint="Total cost (lump sum)">
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.perfectBindingCost || ""}
-                    placeholder="0.00"
-                    onChange={(e) => { const v = parseFloat(e.target.value); set("perfectBindingCost", isNaN(v) ? 0 : v); }}
-                  />
-                </Field>
-                <Field label="Final trim to size ($)" hint="Lump-sum cost for final trimming">
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.trimCost || ""}
-                    placeholder="0.00"
-                    onChange={(e) => { const v = parseFloat(e.target.value); set("trimCost", isNaN(v) ? 0 : v); }}
-                  />
-                </Field>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Gluing Setup ($)">
-                <Input type="number" step="0.01" value={form.gluingSetup || ""} onChange={(e) => set("gluingSetup", Number(e.target.value))} />
-              </Field>
-              <Field label="Window Patching ($)">
-                <Input type="number" step="0.01" value={form.windowPatching || ""} onChange={(e) => set("windowPatching", Number(e.target.value))} />
-              </Field>
-              <Field label="Cutting Difficulty" hint="Legacy — prefer # of cuts above">
-                <Input type="number" step="0.1" value={form.cuttingDiff || ""} onChange={(e) => set("cuttingDiff", Number(e.target.value))} min={0} max={5} />
-              </Field>
-            </div>
-            <div className="mt-4 border-t border-gray-100 pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Hand Bindery Operations</p>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <Field label="Hand Bind 1 Name" hint="e.g. Softtouch">
-                  <Input value={form.handBind1Name as string} onChange={(e) => set("handBind1Name", e.target.value)} placeholder="Operation name" />
-                </Field>
-                <Field label="Speed (per hour)">
-                  <Input type="number" value={form.handBind1SpeedPerHour || ""} onChange={(e) => set("handBind1SpeedPerHour", Number(e.target.value))} />
-                </Field>
-                <Field label="% of Quantity" hint="100 = all pieces">
-                  <Input type="number" value={form.handBind1PctOfQty || ""} onChange={(e) => set("handBind1PctOfQty", Number(e.target.value))} min={0} max={100} />
-                </Field>
-                <Field label="Hand Bind 2 Name" hint="e.g. DC/GL/Fold">
-                  <Input value={form.handBind2Name as string} onChange={(e) => set("handBind2Name", e.target.value)} placeholder="Operation name" />
-                </Field>
-                <Field label="Speed (per hour)">
-                  <Input type="number" value={form.handBind2SpeedPerHour || ""} onChange={(e) => set("handBind2SpeedPerHour", Number(e.target.value))} />
-                </Field>
-              </div>
-            </div>
-            <div className="mt-4 border-t border-gray-100 pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Packing</p>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <Field label="Carton Type">
-                  <Select
-                    value={String(form.cartonType)}
-                    onChange={(e) => set("cartonType", Number(e.target.value))}
-                    options={[
-                      { value: "1", label: "11.25x8.75x10 ($0.93)" },
-                      { value: "2", label: "11x9x10 ($0.75)" },
-                      { value: "3", label: "LTHD BOX ($0.52)" },
-                    ]}
-                  />
-                </Field>
-                <Field label="Skid Pack">
-                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                    <input type="checkbox" checked={form.skidPack as boolean} onChange={(e) => set("skidPack", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
-                    <span className="text-sm text-gray-700">Include skid ($5.00)</span>
-                  </label>
-                </Field>
-              </div>
-            </div>
-          </Section>
+          <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
           {/* Outside Purchases — Phase II: richer form per Mary's feedback
               (vendor, operation type, lump vs per-unit, quote ref#)        */}
@@ -3083,6 +3115,14 @@ function EstimateContent() {
               </Field>
             </div>
           </Section>
+
+          {/* Paper + Finishing — Mary 5/18: digital jobs need the same paper
+              spec and bindery inputs the offset path has. */}
+          <Section title="Paper" icon={Droplets}>
+            <PaperSpecFields form={form} set={set} />
+          </Section>
+
+          <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
           <Section title="Variable Data" icon={Hash} defaultOpen={false}>
             <div className="space-y-3">
