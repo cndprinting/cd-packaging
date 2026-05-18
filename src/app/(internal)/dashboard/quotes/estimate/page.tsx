@@ -1335,7 +1335,8 @@ function EstimateContent() {
       materialsCost = clickCost + paperCost;
       const rushMultiplier = 1 + num("rushSurchargePercent") / 100;
       materialsCost *= rushMultiplier;
-      finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge");
+      finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
+        + num("gluingSetup") + num("windowPatching");
     }
 
     // ─── Phase 1 additions (Mary's feedback) ─────────────────────────────
@@ -1683,7 +1684,8 @@ function EstimateContent() {
       } else if (isCommDigital) {
         materialsCost = q * v * num("commDigitalClickCharge") + num("digitalPaperCost") * ((q * v) / 1000);
         materialsCost *= 1 + num("rushSurchargePercent") / 100;
-        finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge");
+        finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
+        + num("gluingSetup") + num("windowPatching");
       }
 
       // Recalc press run time for this tier quantity
@@ -3242,6 +3244,14 @@ function EstimateContent() {
               </Field>
             </div>
           </Section>
+
+          {/* Paper + Finishing — Mary 5/18: digital jobs need the same paper
+              spec and bindery inputs the offset path has. */}
+          <Section title="Paper" icon={Droplets}>
+            <PaperSpecFields form={form} set={set} />
+          </Section>
+
+          <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
         </>
       )}
 
