@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
           specs: q.specs,
           notes: q.notes,
           quoteRequestId: q.quoteRequestId,
+          revision: q.revision,
+          parentQuoteId: q.parentQuoteId,
         }] });
       }
       const quotes = await prisma.quote.findMany({ orderBy: { createdAt: "desc" } });
@@ -49,11 +51,56 @@ export async function POST(request: NextRequest) {
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const body = await request.json();
-    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes, quoteRequestId, specs } = body;
-    if (!customerName || !productName || !quantity) return NextResponse.json({ error: "Customer, product name, and quantity required" }, { status: 400 });
 
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
+
+    // ── Change order (Mary 5/18) ────────────────────────────────────────
+    // Reopen a converted job for a revision. We copy the job's current
+    // quote into a fresh DRAFT (revision + 1) so the estimator can edit it
+    // through the normal flow. Converting that draft re-syncs the job.
+    if (body.changeOrderForJobId && prisma) {
+      const original = await prisma.quote.findFirst({
+        where: { convertedJobId: body.changeOrderForJobId },
+        orderBy: { revision: "desc" },
+      });
+      if (!original) return NextResponse.json({ error: "No source quote found for this job" }, { status: 404 });
+      const rootId = original.parentQuoteId || original.id;
+      const newRev = original.revision + 1;
+      const baseNum = original.quoteNumber.replace(/-R\d+$/, "");
+      let quoteNumber = `${baseNum}-R${newRev}`;
+      if (await prisma.quote.findUnique({ where: { quoteNumber } })) {
+        quoteNumber = `${baseNum}-R${newRev}-${Date.now().toString().slice(-4)}`;
+      }
+      const draft = await prisma.quote.create({
+        data: {
+          quoteNumber,
+          companyId: original.companyId,
+          customerName: original.customerName,
+          contactName: original.contactName,
+          contactEmail: original.contactEmail,
+          productType: original.productType,
+          productName: original.productName,
+          description: original.description,
+          quantity: original.quantity,
+          unitPrice: original.unitPrice,
+          totalPrice: original.totalPrice,
+          status: "DRAFT",
+          validUntil: original.validUntil,
+          notes: original.notes,
+          createdBy: session.id,
+          quoteRequestId: original.quoteRequestId,
+          specs: original.specs,
+          parentQuoteId: rootId,
+          revision: newRev,
+        },
+      });
+      return NextResponse.json({ quote: { id: draft.id, quoteNumber: draft.quoteNumber, revision: newRev } });
+    }
+
+    const { customerName, productType, productName, description, quantity, unitPrice, validUntil, contactName, contactEmail, notes, quoteRequestId, specs } = body;
+    if (!customerName || !productName || !quantity) return NextResponse.json({ error: "Customer, product name, and quantity required" }, { status: 400 });
+
     if (!prisma) {
       // Demo fallback
       return NextResponse.json({ quote: { id: `q-${Date.now()}`, quoteNumber: `QT-2026-${Date.now() % 1000}`, ...body, totalPrice: (parseFloat(unitPrice) || 0) * (parseInt(quantity) || 0), status: "draft", createdAt: new Date().toISOString().split("T")[0] } });
@@ -144,7 +191,68 @@ export async function PUT(request: NextRequest) {
     // If converting to job, create the job
     if (status === "converted") {
       const quote = await prisma.quote.findUnique({ where: { id } });
-      if (quote) {
+
+      // ── Change order re-sync (Mary 5/18) ──: a revised quote (parentQuoteId
+      // set) updates the EXISTING job in place rather than spawning a new one.
+      if (quote && quote.parentQuoteId) {
+        const rootQuote = await prisma.quote.findUnique({ where: { id: quote.parentQuoteId } });
+        const targetJobId = rootQuote?.convertedJobId;
+        if (targetJobId) {
+          let specs: Record<string, string> = {};
+          if (quote.specs) { try { specs = JSON.parse(quote.specs); } catch {} }
+          const jt: any = (specs as any).jobTicket || {};
+          const parseDim = (key: "width" | "height") => {
+            if (!specs.dimensions) return null;
+            const parts = String(specs.dimensions).split("x");
+            const v = parseFloat(key === "width" ? parts[0] : parts[1]);
+            return isFinite(v) ? v : null;
+          };
+          await prisma.job.update({
+            where: { id: targetJobId },
+            data: {
+              name: quote.productName,
+              description: quote.description,
+              quantity: quote.quantity,
+              quotedPrice: quote.totalPrice,
+              estimatedCost: quote.totalPrice,
+              estimateNumber: quote.quoteNumber,
+              flatSizeWidth: jt.flatSizeWidth ?? undefined,
+              flatSizeHeight: jt.flatSizeHeight ?? undefined,
+              finishedWidth: jt.finishedWidth ?? parseDim("width") ?? undefined,
+              finishedHeight: jt.finishedHeight ?? parseDim("height") ?? undefined,
+              numberUp: jt.numberUp ?? undefined,
+              stockDescription: jt.stockDescription || specs.paperStock || specs.stockDescription || undefined,
+              inkFront: jt.inkFront ?? undefined,
+              inkBack: jt.inkBack ?? undefined,
+              coating: jt.coating ?? specs.finishing ?? undefined,
+              binderyFold: jt.binderyFold !== undefined ? !!jt.binderyFold : undefined,
+              binderyStitch: jt.binderyStitch !== undefined ? !!jt.binderyStitch : undefined,
+              binderyScore: jt.binderyScore !== undefined ? !!jt.binderyScore : undefined,
+              binderyDrill: jt.binderyDrill !== undefined ? !!jt.binderyDrill : undefined,
+              binderyGlue: jt.binderyGlue !== undefined ? !!jt.binderyGlue : undefined,
+              binderyNotes: jt.binderyNotes ?? undefined,
+            },
+          });
+          await prisma.quote.update({ where: { id }, data: { convertedJobId: targetJobId } });
+          // Refresh multi-part line items from the revised specs.
+          const parts: any[] = Array.isArray((specs as any).parts) ? (specs as any).parts : [];
+          if (parts.length > 0) {
+            await prisma.jobLineItem.deleteMany({ where: { jobId: targetJobId } }).catch(() => {});
+            await prisma.jobLineItem.createMany({
+              data: parts.map((p, idx) => ({
+                jobId: targetJobId,
+                description: `${p.name || `Part ${idx + 1}`}`,
+                quantity: Math.ceil(Number(quote.quantity) * (1 + (Number(p.spoilagePct) || 0) / 100)),
+                flatSize: (p.flatWidth && p.flatHeight) ? `${p.flatWidth}x${p.flatHeight}` : null,
+                sortOrder: idx,
+              })),
+            }).catch(() => {});
+          }
+          return NextResponse.json({ ok: true, status, changeOrder: true, jobId: targetJobId });
+        }
+      }
+
+      if (quote && !quote.parentQuoteId) {
         // Generate unique job and order numbers using timestamp to avoid collisions
         const ts = Date.now().toString().slice(-6);
         const jobCount = await prisma.job.count();

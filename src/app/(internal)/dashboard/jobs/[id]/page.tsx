@@ -239,6 +239,7 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [coBusy, setCoBusy] = useState(false);
   const [showStageDetail, setShowStageDetail] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
@@ -623,6 +624,37 @@ export default function JobDetailPage() {
                   <Printer className="h-4 w-4" />Print Ticket
                 </Button>
               </a>
+              {/* Change order (Mary 5/18) — reopen the source quote as a new
+                  revision; converting it re-syncs this job in place. */}
+              <Button
+                variant="outline"
+                className="gap-1.5 text-brand-600 border-brand-200 hover:bg-brand-50"
+                disabled={coBusy}
+                onClick={async () => {
+                  if (!job || coBusy) return;
+                  setCoBusy(true);
+                  try {
+                    const res = await fetch("/api/quotes", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ changeOrderForJobId: job.id }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.quote?.id) {
+                      alert(data.error || "Couldn't start a change order for this job. It may not have an originating quote.");
+                      setCoBusy(false);
+                      return;
+                    }
+                    router.push(`/dashboard/quotes/estimate?draftId=${data.quote.id}`);
+                  } catch {
+                    alert("Couldn't start a change order — please try again.");
+                    setCoBusy(false);
+                  }
+                }}
+              >
+                {coBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+                Change Order
+              </Button>
 <Button
                 variant="outline"
                 className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"

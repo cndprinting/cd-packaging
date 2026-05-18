@@ -940,6 +940,9 @@ function EstimateContent() {
   // steps away. After the first save (auto or manual), draftQuoteId
   // holds the quote's id so subsequent auto-saves PUT to update.
   const [draftQuoteId, setDraftQuoteId] = useState<string | null>(draftIdFromUrl);
+  // Change-order revision (Mary 5/18) — set when the loaded draft is a
+  // revision (revision > 1) so we can flag it to the estimator.
+  const [coRevision, setCoRevision] = useState<number | null>(null);
   const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
   const [draftLoading, setDraftLoading] = useState(!!draftIdFromUrl);
@@ -1132,6 +1135,7 @@ function EstimateContent() {
           setStep(2);
         }
         setDraftQuoteId(q.id);
+        if (q.revision && q.revision > 1) setCoRevision(q.revision);
       })
       .catch(() => {})
       .finally(() => setDraftLoading(false));
@@ -3815,6 +3819,17 @@ function EstimateContent() {
           {isCarton ? "Carton" : "Print"} &middot; {isOffset ? "Offset" : "Digital"}
         </Badge>
       </div>
+
+      {/* Change-order banner — Mary 5/18 */}
+      {coRevision && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 print:hidden">
+          <p className="text-sm font-semibold text-amber-900">Change Order — Revision {coRevision}</p>
+          <p className="text-xs text-amber-800 mt-0.5">
+            This is a revised estimate for a job that already converted. The original quote is kept for history.
+            When you convert this revision, the existing job is updated in place — no new job is created.
+          </p>
+        </div>
+      )}
 
       {/* Steps Nav */}
       <div className="flex items-center gap-1 print:hidden">

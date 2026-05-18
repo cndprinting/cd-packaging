@@ -729,11 +729,19 @@ model Quote {
   createdBy     String?
   convertedJobId String?
   quoteRequestId String?    // Link back to originating quote request for pass-through of full QR detail
+  // Change orders (Mary 5/18) — a revised quote for a job that already
+  // converted. parentQuoteId chains a revision back to the original quote;
+  // revision increments each time. The original is revision 1.
+  parentQuoteId  String?
+  revision       Int         @default(1)
+  changeOrderNote String?    // what changed in this revision
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   @@index([status])
   @@index([quoteNumber])
+  @@index([convertedJobId])
+  @@index([parentQuoteId])
 }
 
 // ─── PLANT STANDARDS ────────────────────────────────────
