@@ -1964,6 +1964,11 @@ function EstimateContent() {
             // Stock description prefers the new structured fields (Mary's
             // 4/24/26 paper spec) when present; falls back to legacy fields.
             stockDescription: (() => {
+              // Digital jobs spec their parent stock in the click calculator —
+              // carry that description straight onto the job ticket (Mary 5/18).
+              if (form.pressType === "DIGITAL" && (form.digitalParentPaperDesc || "").trim()) {
+                return form.digitalParentPaperDesc.trim();
+              }
               const bits = [
                 form.paperBasisWeight ? `${form.paperBasisWeight}lb` : "",
                 form.paperType ? form.paperType.replace(/_/g, " ") : "",
