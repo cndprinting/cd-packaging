@@ -672,7 +672,9 @@ function digitalSheetMath(opts: {
   const pps = Math.max(1, piecesPerSheet);
   const baseRunSheets = Math.ceil((sheetsPerPiece * Math.max(quantity, 0)) / pps);
   const runSheets = baseRunSheets + Math.max(0, makeReady);
-  const parentSheets = runsPerParent > 0 ? Math.ceil(runSheets / runsPerParent) : runSheets;
+  // Mary 5/19 (Cybake): each parent yields `runsPerParent` run sheets, so the
+  // total run sheets you actually cut/print = run-sheet count × runs-per-parent.
+  const parentSheets = runsPerParent > 0 ? runSheets * runsPerParent : runSheets;
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
   return { runsPerParent, baseRunSheets, sheetsPerPiece, runSheets, parentSheets, totalClickFee, perPieceClickFee };
