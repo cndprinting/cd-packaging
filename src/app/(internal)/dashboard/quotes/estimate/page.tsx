@@ -670,14 +670,15 @@ function digitalSheetMath(opts: {
   // multiple finished pieces onto one run sheet (number-up, usually 1).
   const sheetsPerPiece = Math.ceil(Math.max(1, pages) / Math.max(1, pagesPerSheet));
   const pps = Math.max(1, piecesPerSheet);
-  const baseRunSheets = Math.ceil((sheetsPerPiece * Math.max(quantity, 0)) / pps);
-  const runSheets = baseRunSheets + Math.max(0, makeReady);
-  // Mary 5/19 (Cybake): each parent yields `runsPerParent` run sheets, so the
-  // total run sheets you actually cut/print = run-sheet count × runs-per-parent.
-  const parentSheets = runsPerParent > 0 ? runSheets * runsPerParent : runSheets;
+  // Parent sheets = the stock you buy/feed. Each parent is cut into
+  // `runsPerParent` run sheets, and every run sheet gets a click (Mary 5/19
+  // Cybake): parents → run sheets = parent count × runs-per-parent.
+  const baseSheets = Math.ceil((sheetsPerPiece * Math.max(quantity, 0)) / pps);
+  const parentSheets = baseSheets + Math.max(0, makeReady);
+  const runSheets = runsPerParent > 0 ? parentSheets * runsPerParent : parentSheets;
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
-  return { runsPerParent, baseRunSheets, sheetsPerPiece, runSheets, parentSheets, totalClickFee, perPieceClickFee };
+  return { runsPerParent, baseSheets, sheetsPerPiece, runSheets, parentSheets, totalClickFee, perPieceClickFee };
 }
 
 function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -784,8 +785,8 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
             <div><span className="text-gray-600">Sheets per piece:</span> <strong>{dm.sheetsPerPiece.toLocaleString()}</strong></div>
           )}
           <div><span className="text-gray-600">Run sheets / parent:</span> <strong>{dm.runsPerParent || "—"}</strong></div>
-          <div><span className="text-gray-600">Total sheets needed:</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
           <div><span className="text-gray-600">Parent sheets needed:</span> <strong>{dm.parentSheets.toLocaleString()}</strong></div>
+          <div><span className="text-gray-600">Run sheets (clicked):</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
           <div><span className="text-gray-600">Click fee / print:</span> <strong>${(Number(form.digitalClickFee) || 0).toFixed(3)}</strong></div>
           <div><span className="text-gray-600">Total click fee:</span> <strong>${dm.totalClickFee.toFixed(2)}</strong></div>
           <div><span className="text-gray-600">Per-piece click fee:</span> <strong>${dm.perPieceClickFee.toFixed(4)}</strong></div>
