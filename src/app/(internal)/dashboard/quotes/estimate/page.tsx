@@ -651,9 +651,9 @@ const DIGITAL_PRESS_MAX_H = 36;
 // size-based — Mary 5/18), default $0.378 for 4/4 process.
 function digitalSheetMath(opts: {
   parentW: number; parentH: number; runW: number; runH: number;
-  piecesPerSheet: number; quantity: number; makeReady: number; clickFee: number;
+  piecesPerSheet: number; quantity: number; pages: number; makeReady: number; clickFee: number;
 }) {
-  const { parentW, parentH, runW, runH, piecesPerSheet, quantity, makeReady, clickFee } = opts;
+  const { parentW, parentH, runW, runH, piecesPerSheet, quantity, pages, makeReady, clickFee } = opts;
   const fit = (pW: number, pH: number, rW: number, rH: number) =>
     rW > 0 && rH > 0 ? Math.floor(pW / rW) * Math.floor(pH / rH) : 0;
   // Best of either run-sheet orientation on the parent sheet.
@@ -662,16 +662,22 @@ function digitalSheetMath(opts: {
     fit(parentW, parentH, runH, runW),
   );
   const pps = Math.max(1, piecesPerSheet);
-  const baseRunSheets = Math.ceil(Math.max(quantity, 0) / pps);
+  // Multi-page jobs (booklets) need pages × quantity page-images printed; a
+  // 1-page/flat piece leaves this unchanged (Mary 5/19).
+  const totalImages = Math.max(quantity, 0) * Math.max(1, pages);
+  const baseRunSheets = Math.ceil(totalImages / pps);
   const runSheets = baseRunSheets + Math.max(0, makeReady);
   const parentSheets = runsPerParent > 0 ? Math.ceil(runSheets / runsPerParent) : runSheets;
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
-  return { runsPerParent, baseRunSheets, runSheets, parentSheets, totalClickFee, perPieceClickFee };
+  return { runsPerParent, baseRunSheets, totalImages, runSheets, parentSheets, totalClickFee, perPieceClickFee };
 }
 
 function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
   const isCustom = form.digitalParentPreset === "custom";
+  // Pages only apply to commercial (multi-page) work; cartons are 1 piece.
+  const isCarton = form.productType === "FOLDING_CARTON";
+  const pages = isCarton ? 1 : Math.max(1, Number(form.numPages) || 1);
   const parentW = isCustom ? Number(form.digitalParentW) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[0] ?? 0);
   const parentH = isCustom ? Number(form.digitalParentH) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[1] ?? 0);
   const runW = Number(form.digitalRunW) || 0;
@@ -680,7 +686,7 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
   const dm = digitalSheetMath({
     parentW, parentH, runW, runH,
     piecesPerSheet: Number(form.digitalPiecesPerSheet) || 1,
-    quantity: qty, makeReady: Number(form.makeReadySheets) || 0,
+    quantity: qty, pages, makeReady: Number(form.makeReadySheets) || 0,
     clickFee: Number(form.digitalClickFee) || 0,
   });
   // Run sheet fits if either orientation lands within the press envelope.
@@ -690,10 +696,11 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
   const paperTotal = dm.parentSheets * (Number(form.digitalParentSheetCost) || 0);
   const paperPerPiece = qty > 0 ? paperTotal / qty : 0;
   return (
-    <Section title="Digital Sheets & Click Fee" icon={Layers}>
+    <Section title="Paper & Click Fee" icon={Layers}>
       <p className="text-xs text-gray-500 mb-3">
         Parent stock is cut into run sheets that feed the digital press (max {DIGITAL_PRESS_MAX_W}&quot; × {DIGITAL_PRESS_MAX_H}&quot;).
         Click fee is a flat per-run-sheet charge based on color, not sheet size.
+        {!isCarton && " For multi-page work, pages × quantity drives total page-images."}
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Parent sheet size">
@@ -732,6 +739,11 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Pieces per run sheet" hint="Number-up Mary lays out">
           <Input type="number" value={form.digitalPiecesPerSheet || ""} onChange={(e) => set("digitalPiecesPerSheet", Number(e.target.value))} min={1} />
         </Field>
+        {!isCarton && (
+          <Field label="# of pages" hint="Per piece — carries from Job Details">
+            <Input type="number" value={form.numPages || ""} onChange={(e) => set("numPages", Number(e.target.value))} min={1} />
+          </Field>
+        )}
         <Field label="Make-ready run sheets" hint="Digital make-ready is small — usually a few sheets">
           <Input type="number" value={form.makeReadySheets || ""} onChange={(e) => set("makeReadySheets", Number(e.target.value))} min={0} />
         </Field>
@@ -751,8 +763,13 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         </p>
       )}
       <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-        <p className="text-xs font-semibold text-blue-900 mb-2">Auto-calculated (qty {qty.toLocaleString()})</p>
+        <p className="text-xs font-semibold text-blue-900 mb-2">
+          Auto-calculated (qty {qty.toLocaleString()}{!isCarton && pages > 1 ? ` × ${pages} pages` : ""})
+        </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+          {!isCarton && (
+            <div><span className="text-gray-600">Total page-images:</span> <strong>{dm.totalImages.toLocaleString()}</strong></div>
+          )}
           <div><span className="text-gray-600">Run sheets / parent:</span> <strong>{dm.runsPerParent || "—"}</strong></div>
           <div><span className="text-gray-600">Run sheets needed:</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
           <div><span className="text-gray-600">Parent sheets needed:</span> <strong>{dm.parentSheets.toLocaleString()}</strong></div>
@@ -1432,7 +1449,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1469,7 +1486,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1733,7 +1750,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       paperOnlyCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1815,7 +1832,7 @@ function EstimateContent() {
           parentW: num("digitalParentW"), parentH: num("digitalParentH"),
           runW: num("digitalRunW"), runH: num("digitalRunH"),
           piecesPerSheet: num("digitalPiecesPerSheet"),
-          quantity: q * v, makeReady: num("makeReadySheets"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
           clickFee: num("digitalClickFee") || 0.378,
         });
         materialsCost = dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee;
@@ -1834,7 +1851,7 @@ function EstimateContent() {
           parentW: num("digitalParentW"), parentH: num("digitalParentH"),
           runW: num("digitalRunW"), runH: num("digitalRunH"),
           piecesPerSheet: num("digitalPiecesPerSheet"),
-          quantity: q * v, makeReady: num("makeReadySheets"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
           clickFee: num("digitalClickFee") || 0.378,
         });
         materialsCost = (dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee) * (1 + num("rushSurchargePercent") / 100);
@@ -1877,7 +1894,7 @@ function EstimateContent() {
       parentW: num("digitalParentW"), parentH: num("digitalParentH"),
       runW: num("digitalRunW"), runH: num("digitalRunH"),
       piecesPerSheet: num("digitalPiecesPerSheet"),
-      quantity: 1000, makeReady: 0,
+      quantity: 1000, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: 0,
       clickFee: num("digitalClickFee") || 0.378,
     });
     const digitalPerPiece = (dmX.totalClickFee + dmX.parentSheets * num("digitalParentSheetCost")) / 1000;
@@ -3268,12 +3285,9 @@ function EstimateContent() {
             </div>
           </Section>
 
-          {/* Paper + Finishing — Mary 5/18: digital jobs need the same paper
-              spec and bindery inputs the offset path has. */}
-          <Section title="Paper" icon={Droplets}>
-            <PaperSpecFields form={form} set={set} />
-          </Section>
-
+          {/* Paper lives in the Paper & Click Fee section above (Mary 5/19) —
+              no separate spec block so the parent/run sheet sizes aren't
+              entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
           <Section title="Variable Data" icon={Hash} defaultOpen={false}>
@@ -3387,12 +3401,9 @@ function EstimateContent() {
             </div>
           </Section>
 
-          {/* Paper + Finishing — Mary 5/18: digital jobs need the same paper
-              spec and bindery inputs the offset path has. */}
-          <Section title="Paper" icon={Droplets}>
-            <PaperSpecFields form={form} set={set} />
-          </Section>
-
+          {/* Paper lives in the Paper & Click Fee section above (Mary 5/19) —
+              no separate spec block so the parent/run sheet sizes aren't
+              entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
         </>
       )}
