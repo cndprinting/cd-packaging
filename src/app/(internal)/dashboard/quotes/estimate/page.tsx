@@ -302,7 +302,8 @@ interface FormState {
   digitalParentH: number;
   digitalRunW: number;
   digitalRunH: number;
-  digitalPiecesPerSheet: number; // finished pieces laid out on one run sheet
+  digitalPiecesPerSheet: number; // finished pieces ganged on one run sheet (number-up)
+  digitalPagesPerSheet: number;  // pages produced per printed sheet (e.g. 4)
   digitalClickFee: number;       // flat $/run sheet (default 0.378 = 4/4 process)
   digitalParentSheetCost: number; // $ per parent sheet of stock
   digitalParentPaperDesc: string; // parent stock description (brand/weight/finish)
@@ -486,6 +487,7 @@ const defaultForm: FormState = {
   digitalRunW: 13,
   digitalRunH: 19,
   digitalPiecesPerSheet: 1,
+  digitalPagesPerSheet: 4,
   digitalClickFee: 0.378,
   digitalParentSheetCost: 0,
   digitalParentPaperDesc: "",
@@ -651,9 +653,10 @@ const DIGITAL_PRESS_MAX_H = 36;
 // size-based — Mary 5/18), default $0.378 for 4/4 process.
 function digitalSheetMath(opts: {
   parentW: number; parentH: number; runW: number; runH: number;
-  piecesPerSheet: number; quantity: number; pages: number; makeReady: number; clickFee: number;
+  piecesPerSheet: number; quantity: number; pages: number; pagesPerSheet: number;
+  makeReady: number; clickFee: number;
 }) {
-  const { parentW, parentH, runW, runH, piecesPerSheet, quantity, pages, makeReady, clickFee } = opts;
+  const { parentW, parentH, runW, runH, piecesPerSheet, quantity, pages, pagesPerSheet, makeReady, clickFee } = opts;
   const fit = (pW: number, pH: number, rW: number, rH: number) =>
     rW > 0 && rH > 0 ? Math.floor(pW / rW) * Math.floor(pH / rH) : 0;
   // Best of either run-sheet orientation on the parent sheet.
@@ -661,16 +664,18 @@ function digitalSheetMath(opts: {
     fit(parentW, parentH, runW, runH),
     fit(parentW, parentH, runH, runW),
   );
+  // Mary 5/19: cost runs off SHEETS, not pages. A multi-page piece needs
+  // ceil(pages / pages-per-sheet) sheets each (e.g. 16pp on 4-page sheets =
+  // 4 sheets/piece). Flat pieces are 1 sheet each. piecesPerSheet still gangs
+  // multiple finished pieces onto one run sheet (number-up, usually 1).
+  const sheetsPerPiece = Math.ceil(Math.max(1, pages) / Math.max(1, pagesPerSheet));
   const pps = Math.max(1, piecesPerSheet);
-  // Multi-page jobs (booklets) need pages × quantity page-images printed; a
-  // 1-page/flat piece leaves this unchanged (Mary 5/19).
-  const totalImages = Math.max(quantity, 0) * Math.max(1, pages);
-  const baseRunSheets = Math.ceil(totalImages / pps);
+  const baseRunSheets = Math.ceil((sheetsPerPiece * Math.max(quantity, 0)) / pps);
   const runSheets = baseRunSheets + Math.max(0, makeReady);
   const parentSheets = runsPerParent > 0 ? Math.ceil(runSheets / runsPerParent) : runSheets;
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
-  return { runsPerParent, baseRunSheets, totalImages, runSheets, parentSheets, totalClickFee, perPieceClickFee };
+  return { runsPerParent, baseRunSheets, sheetsPerPiece, runSheets, parentSheets, totalClickFee, perPieceClickFee };
 }
 
 function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -686,7 +691,8 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
   const dm = digitalSheetMath({
     parentW, parentH, runW, runH,
     piecesPerSheet: Number(form.digitalPiecesPerSheet) || 1,
-    quantity: qty, pages, makeReady: Number(form.makeReadySheets) || 0,
+    quantity: qty, pages, pagesPerSheet: Number(form.digitalPagesPerSheet) || 1,
+    makeReady: Number(form.makeReadySheets) || 0,
     clickFee: Number(form.digitalClickFee) || 0,
   });
   // Run sheet fits if either orientation lands within the press envelope.
@@ -736,14 +742,19 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Run sheet H (in)" hint={`press max ${DIGITAL_PRESS_MAX_H}"`}>
           <Input type="number" step="0.25" value={form.digitalRunH || ""} onChange={(e) => set("digitalRunH", Number(e.target.value))} />
         </Field>
-        <Field label="Pieces per run sheet" hint="Number-up Mary lays out">
-          <Input type="number" value={form.digitalPiecesPerSheet || ""} onChange={(e) => set("digitalPiecesPerSheet", Number(e.target.value))} min={1} />
-        </Field>
         {!isCarton && (
           <Field label="# of pages" hint="Per piece — carries from Job Details">
             <Input type="number" value={form.numPages || ""} onChange={(e) => set("numPages", Number(e.target.value))} min={1} />
           </Field>
         )}
+        {!isCarton && (
+          <Field label="Pages per sheet" hint="e.g. 4 = a 4-page sheet">
+            <Input type="number" value={form.digitalPagesPerSheet || ""} onChange={(e) => set("digitalPagesPerSheet", Number(e.target.value))} min={1} />
+          </Field>
+        )}
+        <Field label="Pieces per run sheet" hint="Number-up — gang multiple pieces (usually 1)">
+          <Input type="number" value={form.digitalPiecesPerSheet || ""} onChange={(e) => set("digitalPiecesPerSheet", Number(e.target.value))} min={1} />
+        </Field>
         <Field label="Make-ready run sheets" hint="Digital make-ready is small — usually a few sheets">
           <Input type="number" value={form.makeReadySheets || ""} onChange={(e) => set("makeReadySheets", Number(e.target.value))} min={0} />
         </Field>
@@ -764,14 +775,14 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
       )}
       <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
         <p className="text-xs font-semibold text-blue-900 mb-2">
-          Auto-calculated (qty {qty.toLocaleString()}{!isCarton && pages > 1 ? ` × ${pages} pages` : ""})
+          Auto-calculated (qty {qty.toLocaleString()}{!isCarton && pages > 1 ? `, ${pages}pp` : ""})
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
           {!isCarton && (
-            <div><span className="text-gray-600">Total page-images:</span> <strong>{dm.totalImages.toLocaleString()}</strong></div>
+            <div><span className="text-gray-600">Sheets per piece:</span> <strong>{dm.sheetsPerPiece.toLocaleString()}</strong></div>
           )}
           <div><span className="text-gray-600">Run sheets / parent:</span> <strong>{dm.runsPerParent || "—"}</strong></div>
-          <div><span className="text-gray-600">Run sheets needed:</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
+          <div><span className="text-gray-600">Total sheets needed:</span> <strong>{dm.runSheets.toLocaleString()}</strong></div>
           <div><span className="text-gray-600">Parent sheets needed:</span> <strong>{dm.parentSheets.toLocaleString()}</strong></div>
           <div><span className="text-gray-600">Click fee / print:</span> <strong>${(Number(form.digitalClickFee) || 0).toFixed(3)}</strong></div>
           <div><span className="text-gray-600">Total click fee:</span> <strong>${dm.totalClickFee.toFixed(2)}</strong></div>
@@ -1449,7 +1460,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1486,7 +1497,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1750,7 +1761,7 @@ function EstimateContent() {
         parentW: num("digitalParentW"), parentH: num("digitalParentH"),
         runW: num("digitalRunW"), runH: num("digitalRunH"),
         piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
+        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"),
         clickFee: num("digitalClickFee") || 0.378,
       });
       paperOnlyCost = dm.parentSheets * num("digitalParentSheetCost");
@@ -1832,7 +1843,7 @@ function EstimateContent() {
           parentW: num("digitalParentW"), parentH: num("digitalParentH"),
           runW: num("digitalRunW"), runH: num("digitalRunH"),
           piecesPerSheet: num("digitalPiecesPerSheet"),
-          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"),
           clickFee: num("digitalClickFee") || 0.378,
         });
         materialsCost = dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee;
@@ -1851,7 +1862,7 @@ function EstimateContent() {
           parentW: num("digitalParentW"), parentH: num("digitalParentH"),
           runW: num("digitalRunW"), runH: num("digitalRunH"),
           piecesPerSheet: num("digitalPiecesPerSheet"),
-          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: num("makeReadySheets"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"),
           clickFee: num("digitalClickFee") || 0.378,
         });
         materialsCost = (dm.parentSheets * num("digitalParentSheetCost") + dm.totalClickFee) * (1 + num("rushSurchargePercent") / 100);
@@ -1894,7 +1905,7 @@ function EstimateContent() {
       parentW: num("digitalParentW"), parentH: num("digitalParentH"),
       runW: num("digitalRunW"), runH: num("digitalRunH"),
       piecesPerSheet: num("digitalPiecesPerSheet"),
-      quantity: 1000, pages: isCarton ? 1 : (num("numPages") || 1), makeReady: 0,
+      quantity: 1000, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: 0,
       clickFee: num("digitalClickFee") || 0.378,
     });
     const digitalPerPiece = (dmX.totalClickFee + dmX.parentSheets * num("digitalParentSheetCost")) / 1000;
