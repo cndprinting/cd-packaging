@@ -670,12 +670,13 @@ function digitalSheetMath(opts: {
   // multiple finished pieces onto one run sheet (number-up, usually 1).
   const sheetsPerPiece = Math.ceil(Math.max(1, pages) / Math.max(1, pagesPerSheet));
   const pps = Math.max(1, piecesPerSheet);
-  // Parent sheets = the stock you buy/feed. Each parent is cut into
-  // `runsPerParent` run sheets, and every run sheet gets a click (Mary 5/19
-  // Cybake): parents → run sheets = parent count × runs-per-parent.
+  // Each parent is cut into `runsPerParent` run sheets, and every run sheet
+  // gets a click (Mary 5/19 Cybake). Make-ready is counted in RUN sheets — a
+  // flat number of setup-waste sheets fed through the press — not parents.
   const baseSheets = Math.ceil((sheetsPerPiece * Math.max(quantity, 0)) / pps);
-  const parentSheets = baseSheets + Math.max(0, makeReady);
-  const runSheets = runsPerParent > 0 ? parentSheets * runsPerParent : parentSheets;
+  const contentRunSheets = runsPerParent > 0 ? baseSheets * runsPerParent : baseSheets;
+  const runSheets = contentRunSheets + Math.max(0, makeReady);
+  const parentSheets = runsPerParent > 0 ? Math.ceil(runSheets / runsPerParent) : runSheets;
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
   return { runsPerParent, baseSheets, sheetsPerPiece, runSheets, parentSheets, totalClickFee, perPieceClickFee };
