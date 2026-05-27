@@ -318,6 +318,14 @@ interface FormState {
   cutterSetupMin: number;
   cutterMachineRate: number;
   cutterOperatorRate: number;
+  // ── Speed-based finishing machines (Mary 5/25): run hrs = qty ÷ (base
+  // speed ÷ complexity); cost = (run + setup) × (machine + operator). ──
+  // 1st Folder (MBO B306/4/4)
+  f1Enabled: boolean; f1Qty: number; f1BaseSpeed: number; f1Complexity: number; f1SetupMin: number; f1MachineRate: number; f1OperatorRate: number;
+  // 2nd Folder (MBO 4/4/4 continuous)
+  f2Enabled: boolean; f2Qty: number; f2BaseSpeed: number; f2Complexity: number; f2SetupMin: number; f2MachineRate: number; f2OperatorRate: number;
+  // Stitcher (Müller Martini 8-pocket)
+  stEnabled: boolean; stQty: number; stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -510,6 +518,9 @@ const defaultForm: FormState = {
   cutterSetupMin: 15,
   cutterMachineRate: 110,
   cutterOperatorRate: 28,
+  f1Enabled: false, f1Qty: 0, f1BaseSpeed: 20000, f1Complexity: 1.0, f1SetupMin: 15, f1MachineRate: 110, f1OperatorRate: 28,
+  f2Enabled: false, f2Qty: 0, f2BaseSpeed: 18000, f2Complexity: 1.0, f2SetupMin: 25, f2MachineRate: 140, f2OperatorRate: 28,
+  stEnabled: false, stQty: 0, stBaseSpeed: 11000, stComplexity: 1.0, stSetupMin: 30, stMachineRate: 160, stOperatorRate: 28,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -881,6 +892,91 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
         </>
       )}
     </Section>
+  );
+}
+
+// Speed-based finishing machines (Folders, Stitcher) — Mary 5/25. Same math:
+// adjusted speed = base speed ÷ complexity multiplier; run hrs = qty ÷ adjusted
+// speed; cost = (run + setup) × (machine + operator rate).
+type SpeedMachineCfg = {
+  enabled: keyof FormState; qty: keyof FormState; baseSpeed: keyof FormState;
+  complexity: keyof FormState; setupMin: keyof FormState; machineRate: keyof FormState; operatorRate: keyof FormState;
+};
+const FOLDER1_CFG: SpeedMachineCfg = { enabled: "f1Enabled", qty: "f1Qty", baseSpeed: "f1BaseSpeed", complexity: "f1Complexity", setupMin: "f1SetupMin", machineRate: "f1MachineRate", operatorRate: "f1OperatorRate" };
+const FOLDER2_CFG: SpeedMachineCfg = { enabled: "f2Enabled", qty: "f2Qty", baseSpeed: "f2BaseSpeed", complexity: "f2Complexity", setupMin: "f2SetupMin", machineRate: "f2MachineRate", operatorRate: "f2OperatorRate" };
+const STITCHER_CFG: SpeedMachineCfg = { enabled: "stEnabled", qty: "stQty", baseSpeed: "stBaseSpeed", complexity: "stComplexity", setupMin: "stSetupMin", machineRate: "stMachineRate", operatorRate: "stOperatorRate" };
+
+function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
+  const num = (k: keyof FormState) => Number(form[k]) || 0;
+  const baseSpeed = num(cfg.baseSpeed);
+  const complexity = Math.max(0.01, num(cfg.complexity) || 1);
+  const qty = Math.max(0, num(cfg.qty));
+  const adjSpeed = baseSpeed / complexity;
+  const runHours = adjSpeed > 0 ? qty / adjSpeed : 0;
+  const setupHours = num(cfg.setupMin) / 60;
+  const cost = (runHours + setupHours) * (num(cfg.machineRate) + num(cfg.operatorRate));
+  return { adjSpeed, runHours, setupHours, cost };
+}
+
+function SpeedMachineSection({ form, set, title, unit, qtyLabel, cfg, complexityHint }: {
+  form: FormState; set: EstimatorSetFn; title: string; unit: string; qtyLabel: string;
+  cfg: SpeedMachineCfg; complexityHint: string;
+}) {
+  const m = speedMachineMath(form, cfg);
+  const enabled = !!form[cfg.enabled];
+  const setK = set as (k: keyof FormState, v: number | boolean) => void;
+  return (
+    <Section title={title} icon={Scissors} defaultOpen={false}>
+      <label className="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" checked={enabled} onChange={(e) => setK(cfg.enabled, e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+        <span className="text-sm font-medium text-gray-700">This job runs on {title}</span>
+      </label>
+      {enabled && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Field label={qtyLabel}>
+              <Input type="number" value={Number(form[cfg.qty]) || ""} onChange={(e) => setK(cfg.qty, Number(e.target.value))} min={0} />
+            </Field>
+            <Field label={`Base speed (${unit})`}>
+              <Input type="number" value={Number(form[cfg.baseSpeed]) || ""} onChange={(e) => setK(cfg.baseSpeed, Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Complexity multiplier" hint={complexityHint}>
+              <Input type="number" step="0.05" value={Number(form[cfg.complexity]) || ""} onChange={(e) => setK(cfg.complexity, Number(e.target.value))} min={1} />
+            </Field>
+            <Field label="Setup (min)">
+              <Input type="number" value={Number(form[cfg.setupMin]) || ""} onChange={(e) => setK(cfg.setupMin, Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Machine rate ($/hr)">
+              <Input type="number" step="0.01" value={Number(form[cfg.machineRate]) || ""} onChange={(e) => setK(cfg.machineRate, Number(e.target.value))} />
+            </Field>
+            <Field label="Operator rate ($/hr)">
+              <Input type="number" step="0.01" value={Number(form[cfg.operatorRate]) || ""} onChange={(e) => setK(cfg.operatorRate, Number(e.target.value))} />
+            </Field>
+          </div>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div><span className="text-gray-600">Adjusted speed:</span> <strong>{Math.round(m.adjSpeed).toLocaleString()} {unit}</strong></div>
+              <div><span className="text-gray-600">Run time:</span> <strong>{m.runHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Setup time:</span> <strong>{m.setupHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Cost:</span> <strong className="text-blue-900">${m.cost.toFixed(2)}</strong></div>
+            </div>
+          </div>
+        </>
+      )}
+    </Section>
+  );
+}
+
+// Renders all four finishing-machine calculators (Mary 5/25) — used on the
+// Carton→Digital, Comm→Digital, and Comm→Offset paths.
+function FinishingMachinesSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  return (
+    <>
+      <CutterSection form={form} set={set} />
+      <SpeedMachineSection form={form} set={set} title="1st Folder (MBO B306)" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER1_CFG} complexityHint="gate 1.35 · coated 1.15 · tight reg 1.20" />
+      <SpeedMachineSection form={form} set={set} title="2nd Folder (MBO 4/4/4)" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER2_CFG} complexityHint="gate/pharma folds raise this" />
+      <SpeedMachineSection form={form} set={set} title="Stitcher (Müller Martini 8-pkt)" unit="books/hr" qtyLabel="Books to stitch" cfg={STITCHER_CFG} complexityHint="pockets · heavy cover · inline punch" />
+    </>
   );
 }
 
@@ -1676,8 +1772,12 @@ function EstimateContent() {
     // Add to appropriate buckets
     toolingCost += extraPlatesCost;
     finishingCost += cutCost + foldCost + drillCost + scorePerfCost + padCost + bundleCost;
-    // Finishing machines (Mary 5/25) — Cutter, etc. roll into the finishing bucket.
+    // Finishing machines (Mary 5/25) — Cutter + Folders + Stitcher roll into
+    // the finishing bucket when enabled.
     if (form.cutterEnabled) finishingCost += finishingCutterMath(form).cost;
+    if (form.f1Enabled) finishingCost += speedMachineMath(form, FOLDER1_CFG).cost;
+    if (form.f2Enabled) finishingCost += speedMachineMath(form, FOLDER2_CFG).cost;
+    if (form.stEnabled) finishingCost += speedMachineMath(form, STITCHER_CFG).cost;
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
@@ -3389,7 +3489,7 @@ function EstimateContent() {
               entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
-          <CutterSection form={form} set={set} />
+          <FinishingMachinesSection form={form} set={set} />
 
           <Section title="Variable Data" icon={Hash} defaultOpen={false}>
             <div className="space-y-3">
@@ -3481,7 +3581,7 @@ function EstimateContent() {
             </div>
           </Section>
 
-          <CutterSection form={form} set={set} />
+          <FinishingMachinesSection form={form} set={set} />
         </>
       )}
 
@@ -3509,7 +3609,7 @@ function EstimateContent() {
               entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
-          <CutterSection form={form} set={set} />
+          <FinishingMachinesSection form={form} set={set} />
         </>
       )}
 
