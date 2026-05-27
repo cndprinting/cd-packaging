@@ -307,6 +307,17 @@ interface FormState {
   digitalClickFee: number;       // flat $/run sheet (default 0.378 = 4/4 process)
   digitalParentSheetCost: number; // $ per parent sheet of stock
   digitalParentPaperDesc: string; // parent stock description (brand/weight/finish)
+  // ── Finishing machine: Cutter (Polar 115) — Mary 5/25 ──
+  // lifts = ceil(sheets / sheets-per-lift); cuts = cuts-per-lift × lifts;
+  // run hrs = cuts / cuts-per-min / 60; cost = (run + setup) × (machine + operator).
+  cutterEnabled: boolean;
+  cutterSheetsToCut: number;
+  cutterSheetsPerLift: number;
+  cutterCutsPerLift: number;
+  cutterCutsPerMin: number;
+  cutterSetupMin: number;
+  cutterMachineRate: number;
+  cutterOperatorRate: number;
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -491,6 +502,14 @@ const defaultForm: FormState = {
   digitalClickFee: 0.378,
   digitalParentSheetCost: 0,
   digitalParentPaperDesc: "",
+  cutterEnabled: false,
+  cutterSheetsToCut: 0,
+  cutterSheetsPerLift: 800,
+  cutterCutsPerLift: 12,
+  cutterCutsPerMin: 10,
+  cutterSetupMin: 15,
+  cutterMachineRate: 110,
+  cutterOperatorRate: 28,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -798,6 +817,69 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
           <div><span className="text-gray-600">Digital materials total:</span> <strong className="text-blue-900">${(paperTotal + dm.totalClickFee).toFixed(2)}</strong></div>
         </div>
       </div>
+    </Section>
+  );
+}
+
+// ─── Finishing machine: Cutter (Polar 115) — Mary 5/25 ──────────────────────
+function finishingCutterMath(form: FormState) {
+  const sheets = Math.max(0, Number(form.cutterSheetsToCut) || 0);
+  const perLift = Math.max(1, Number(form.cutterSheetsPerLift) || 1);
+  const cutsPerLift = Math.max(0, Number(form.cutterCutsPerLift) || 0);
+  const cutsPerMin = Math.max(0.0001, Number(form.cutterCutsPerMin) || 0);
+  const lifts = Math.ceil(sheets / perLift);
+  const totalCuts = cutsPerLift * lifts;
+  const runHours = totalCuts / cutsPerMin / 60;
+  const setupHours = (Number(form.cutterSetupMin) || 0) / 60;
+  const rate = (Number(form.cutterMachineRate) || 0) + (Number(form.cutterOperatorRate) || 0);
+  const cost = (runHours + setupHours) * rate;
+  return { lifts, totalCuts, runHours, setupHours, cost };
+}
+
+function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const c = finishingCutterMath(form);
+  return (
+    <Section title="Cutter (Polar 115)" icon={Scissors} defaultOpen={false}>
+      <label className="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" checked={form.cutterEnabled} onChange={(e) => set("cutterEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+        <span className="text-sm font-medium text-gray-700">This job runs on the guillotine cutter</span>
+      </label>
+      {form.cutterEnabled && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Field label="Sheets to cut" hint="Press/parent sheets being cut">
+              <Input type="number" value={form.cutterSheetsToCut || ""} onChange={(e) => set("cutterSheetsToCut", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Sheets per lift" hint="Stack height the cutter takes">
+              <Input type="number" value={form.cutterSheetsPerLift || ""} onChange={(e) => set("cutterSheetsPerLift", Number(e.target.value))} min={1} />
+            </Field>
+            <Field label="Cuts per lift" hint="Cuts in the program">
+              <Input type="number" value={form.cutterCutsPerLift || ""} onChange={(e) => set("cutterCutsPerLift", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Cuts per minute" hint="8–15 simple, 4–8 complex">
+              <Input type="number" step="0.5" value={form.cutterCutsPerMin || ""} onChange={(e) => set("cutterCutsPerMin", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Setup (min)" hint="3–5 repeat, 10–20 new">
+              <Input type="number" value={form.cutterSetupMin || ""} onChange={(e) => set("cutterSetupMin", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Machine rate ($/hr)">
+              <Input type="number" step="0.01" value={form.cutterMachineRate || ""} onChange={(e) => set("cutterMachineRate", Number(e.target.value))} />
+            </Field>
+            <Field label="Operator rate ($/hr)">
+              <Input type="number" step="0.01" value={form.cutterOperatorRate || ""} onChange={(e) => set("cutterOperatorRate", Number(e.target.value))} />
+            </Field>
+          </div>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+              <div><span className="text-gray-600">Lifts:</span> <strong>{c.lifts.toLocaleString()}</strong></div>
+              <div><span className="text-gray-600">Total cuts:</span> <strong>{c.totalCuts.toLocaleString()}</strong></div>
+              <div><span className="text-gray-600">Run time:</span> <strong>{c.runHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Setup time:</span> <strong>{c.setupHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Cutter cost:</span> <strong className="text-blue-900">${c.cost.toFixed(2)}</strong></div>
+            </div>
+          </div>
+        </>
+      )}
     </Section>
   );
 }
@@ -1594,6 +1676,8 @@ function EstimateContent() {
     // Add to appropriate buckets
     toolingCost += extraPlatesCost;
     finishingCost += cutCost + foldCost + drillCost + scorePerfCost + padCost + bundleCost;
+    // Finishing machines (Mary 5/25) — Cutter, etc. roll into the finishing bucket.
+    if (form.cutterEnabled) finishingCost += finishingCutterMath(form).cost;
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
@@ -3305,6 +3389,8 @@ function EstimateContent() {
               entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
 
+          <CutterSection form={form} set={set} />
+
           <Section title="Variable Data" icon={Hash} defaultOpen={false}>
             <div className="space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
@@ -3394,6 +3480,8 @@ function EstimateContent() {
               </Field>
             </div>
           </Section>
+
+          <CutterSection form={form} set={set} />
         </>
       )}
 
@@ -3420,6 +3508,8 @@ function EstimateContent() {
               no separate spec block so the parent/run sheet sizes aren't
               entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
+
+          <CutterSection form={form} set={set} />
         </>
       )}
 
