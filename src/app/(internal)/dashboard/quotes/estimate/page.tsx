@@ -313,10 +313,12 @@ interface FormState {
   // cost = total minutes / 60 × cost-per-hour ($45, all-in).
   cutterEnabled: boolean;
   cutterSheetsToCut: number;
-  cutterSheetsPerLift: number;
+  cutterMWeight: number;        // lbs per 1000 sheets (M-weight) of the run stock
+  cutterMaxLbsPerLift: number;  // E&M caps the lift by weight (40 lb)
   cutterCutsPerLift: number;
   cutterCutType: string;        // "chop" (0.5 min) | "bleed" (0.7 min)
   cutterStockBand: number;      // 1–5 → load/unload minutes per lift
+  cutterSheetsPerLift: number;  // legacy, unused (now derived from weight)
   cutterCutsPerMin: number;     // legacy, unused
   cutterSetupMin: number;
   cutterMachineRate: number;
@@ -327,8 +329,9 @@ interface FormState {
   f1Enabled: boolean; f1Qty: number; f1FoldType: string; f1BaseSpeed: number; f1Complexity: number; f1SetupMin: number; f1MachineRate: number; f1OperatorRate: number;
   // 2nd Folder
   f2Enabled: boolean; f2Qty: number; f2FoldType: string; f2BaseSpeed: number; f2Complexity: number; f2SetupMin: number; f2MachineRate: number; f2OperatorRate: number;
-  // Stitcher (Müller Martini 8-pocket)
-  stEnabled: boolean; stQty: number; stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
+  // Stitcher (Mueller saddle binder) — auto sigs/passes (Mary 5/27)
+  stEnabled: boolean; stQty: number; stPages: number; stPagesPerSig: number; stPockets: number; stCoverFeeder: boolean;
+  stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -515,6 +518,8 @@ const defaultForm: FormState = {
   digitalParentPaperDesc: "",
   cutterEnabled: false,
   cutterSheetsToCut: 0,
+  cutterMWeight: 200,
+  cutterMaxLbsPerLift: 40,
   cutterSheetsPerLift: 800,
   cutterCutsPerLift: 12,
   cutterCutType: "chop",
@@ -527,8 +532,10 @@ const defaultForm: FormState = {
   // 5 min/job + 20 min/form (≈25). Run speeds PENDING from Mary — editable.
   f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 20000, f1Complexity: 1.0, f1SetupMin: 25, f1MachineRate: 48, f1OperatorRate: 15,
   f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 18000, f2Complexity: 1.0, f2SetupMin: 25, f2MachineRate: 48, f2OperatorRate: 15,
-  // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr.
-  stEnabled: false, stQty: 0, stBaseSpeed: 8000, stComplexity: 1.0, stSetupMin: 30, stMachineRate: 95, stOperatorRate: 20,
+  // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr,
+  // slowest 3000/hr, setup 5/job + 15/pocket, 7 auto + 1 hand = 8 pockets.
+  stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
+  stBaseSpeed: 8000, stComplexity: 1.0, stSetupMin: 30, stMachineRate: 95, stOperatorRate: 20,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -848,9 +855,15 @@ const CUTTER_LOAD_UNLOAD: Record<number, string> = {
 const CUTTER_LOAD_MIN: Record<number, number> = { 1: 1.0, 2: 1.5, 3: 1.75, 4: 2.0, 5: 2.5 };
 function finishingCutterMath(form: FormState) {
   const sheets = Math.max(0, Number(form.cutterSheetsToCut) || 0);
-  const perLift = Math.max(1, Number(form.cutterSheetsPerLift) || 1);
   const cutsPerLift = Math.max(0, Number(form.cutterCutsPerLift) || 0);
-  const lifts = Math.ceil(sheets / perLift);
+  // E&M sizes the lift by WEIGHT (Mary 5/27). Sheets/lift derives from the
+  // stock M-weight (lbs per 1000 sheets) and the max lbs the cutter takes.
+  const mWeight = Math.max(0.01, Number(form.cutterMWeight) || 0.01); // lbs / 1000 sheets
+  const maxLbs = Math.max(0.01, Number(form.cutterMaxLbsPerLift) || 40);
+  const weightPerSheet = mWeight / 1000;
+  const sheetsPerLift = Math.max(1, Math.floor(maxLbs / weightPerSheet));
+  const totalWeight = sheets * weightPerSheet;
+  const lifts = Math.ceil(sheets / sheetsPerLift);
   const perCutMin = form.cutterCutType === "bleed" ? 0.7 : 0.5; // E&M chop vs bleed
   const loadMinPerLift = CUTTER_LOAD_MIN[Number(form.cutterStockBand) || 1] ?? 1.0;
   const cutMinutes = cutsPerLift * lifts * perCutMin;
@@ -859,7 +872,7 @@ function finishingCutterMath(form: FormState) {
   const totalMin = setupMin + cutMinutes + loadMinutes;
   const runHours = totalMin / 60;
   const cost = runHours * (Number(form.cutterMachineRate) || 0);
-  return { lifts, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
+  return { lifts, sheetsPerLift, totalWeight, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
 }
 
 function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -876,8 +889,11 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
             <Field label="Sheets to cut" hint="Press/parent sheets being cut">
               <Input type="number" value={form.cutterSheetsToCut || ""} onChange={(e) => set("cutterSheetsToCut", Number(e.target.value))} min={0} />
             </Field>
-            <Field label="Sheets per lift" hint="Stack the cutter takes (E&M caps by weight)">
-              <Input type="number" value={form.cutterSheetsPerLift || ""} onChange={(e) => set("cutterSheetsPerLift", Number(e.target.value))} min={1} />
+            <Field label="Lbs / 1000 sheets" hint="20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88">
+              <Input type="number" step="0.1" value={form.cutterMWeight || ""} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Max lbs / lift" hint="E&M: 40">
+              <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
             </Field>
             <Field label="Cuts per lift" hint="Cuts in the program">
               <Input type="number" value={form.cutterCutsPerLift || ""} onChange={(e) => set("cutterCutsPerLift", Number(e.target.value))} min={0} />
@@ -904,10 +920,10 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
           </div>
           <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+              <div><span className="text-gray-600">Sheets / lift:</span> <strong>{c.sheetsPerLift.toLocaleString()}</strong></div>
               <div><span className="text-gray-600">Lifts:</span> <strong>{c.lifts.toLocaleString()}</strong></div>
+              <div><span className="text-gray-600">Total weight:</span> <strong>{Math.round(c.totalWeight).toLocaleString()} lb</strong></div>
               <div><span className="text-gray-600">Total cuts:</span> <strong>{c.totalCuts.toLocaleString()}</strong></div>
-              <div><span className="text-gray-600">Cut time:</span> <strong>{c.cutMinutes.toFixed(1)} min</strong></div>
-              <div><span className="text-gray-600">Load/unload:</span> <strong>{c.loadMinutes.toFixed(1)} min</strong></div>
               <div><span className="text-gray-600">Total time:</span> <strong>{c.totalMin.toFixed(1)} min</strong></div>
               <div><span className="text-gray-600">Cutter cost:</span> <strong className="text-blue-900">${c.cost.toFixed(2)}</strong></div>
             </div>
@@ -927,7 +943,6 @@ type SpeedMachineCfg = {
 };
 const FOLDER1_CFG: SpeedMachineCfg = { enabled: "f1Enabled", qty: "f1Qty", baseSpeed: "f1BaseSpeed", complexity: "f1Complexity", setupMin: "f1SetupMin", machineRate: "f1MachineRate", operatorRate: "f1OperatorRate" };
 const FOLDER2_CFG: SpeedMachineCfg = { enabled: "f2Enabled", qty: "f2Qty", baseSpeed: "f2BaseSpeed", complexity: "f2Complexity", setupMin: "f2SetupMin", machineRate: "f2MachineRate", operatorRate: "f2OperatorRate" };
-const STITCHER_CFG: SpeedMachineCfg = { enabled: "stEnabled", qty: "stQty", baseSpeed: "stBaseSpeed", complexity: "stComplexity", setupMin: "stSetupMin", machineRate: "stMachineRate", operatorRate: "stOperatorRate" };
 
 function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
   const num = (k: keyof FormState) => Number(form[k]) || 0;
@@ -1005,6 +1020,82 @@ function SpeedMachineSection({ form, set, title, unit, qtyLabel, cfg, complexity
   );
 }
 
+// Stitcher (Mueller saddle binder) — auto sigs + double passes (Mary 5/27).
+// 1 sig per pocket; passes = ceil(sigs ÷ pockets); E&M setup 5/job + 15/pocket,
+// min 15 min; speed floors at 3000/hr (no per-pocket reduction in C&D's E&M).
+function stitcherMath(form: FormState) {
+  const books = Math.max(0, Number(form.stQty) || 0);
+  const pages = Math.max(1, Number(form.stPages) || Number(form.numPages) || 1);
+  const pagesPerSig = Math.max(1, Number(form.stPagesPerSig) || 1);
+  const pockets = Math.max(1, Number(form.stPockets) || 1);
+  const cover = form.stCoverFeeder ? 1 : 0;
+  const sigs = Math.ceil(pages / pagesPerSig);
+  const passes = Math.max(1, Math.ceil(sigs / pockets));
+  const pocketSetups = sigs + cover;
+  const setupMin = 5 + 15 * pocketSetups; // E&M: 5 min/job + 15 min/pocket
+  const adjSpeed = Math.max(3000, Number(form.stBaseSpeed) || 0); // floor 3000/hr
+  const runHours = passes * (adjSpeed > 0 ? books / adjSpeed : 0);
+  const totalHours = Math.max(15 / 60, setupMin / 60 + runHours);
+  const cost = totalHours * ((Number(form.stMachineRate) || 0) + (Number(form.stOperatorRate) || 0));
+  return { sigs, passes, pocketSetups, setupMin, adjSpeed, runHours, totalHours, cost };
+}
+
+function StitcherSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const s = stitcherMath(form);
+  return (
+    <Section title="Stitcher (Mueller)" icon={Scissors} defaultOpen={false}>
+      <label className="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" checked={form.stEnabled} onChange={(e) => set("stEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+        <span className="text-sm font-medium text-gray-700">This job runs on the saddle stitcher</span>
+      </label>
+      {form.stEnabled && (
+        <>
+          <p className="mb-3 text-xs text-gray-500">Sigs auto-calc at 1 per pocket; extra sigs trigger additional passes (double-pass gathering).</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Field label="Books to stitch">
+              <Input type="number" value={form.stQty || ""} onChange={(e) => set("stQty", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Pages per book" hint="0 = use Job Details pages">
+              <Input type="number" value={form.stPages || ""} placeholder={String(form.numPages || "")} onChange={(e) => set("stPages", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Pages per sig" hint="e.g. 8">
+              <Input type="number" value={form.stPagesPerSig || ""} onChange={(e) => set("stPagesPerSig", Number(e.target.value))} min={1} />
+            </Field>
+            <Field label="Pockets" hint="E&M: 7 auto + 1 hand = 8">
+              <Input type="number" value={form.stPockets || ""} onChange={(e) => set("stPockets", Number(e.target.value))} min={1} />
+            </Field>
+            <Field label="Cover feeder">
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" checked={form.stCoverFeeder} onChange={(e) => set("stCoverFeeder", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+                <span className="text-sm text-gray-700">Self/separate cover</span>
+              </label>
+            </Field>
+            <Field label="Speed (books/hr)" hint="E&M max 8000, floor 3000">
+              <Input type="number" value={form.stBaseSpeed || ""} onChange={(e) => set("stBaseSpeed", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Machine ($/hr)" hint="E&M: $95">
+              <Input type="number" step="0.01" value={form.stMachineRate || ""} onChange={(e) => set("stMachineRate", Number(e.target.value))} />
+            </Field>
+            <Field label="Helper ($/hr)" hint="E&M: $20">
+              <Input type="number" step="0.01" value={form.stOperatorRate || ""} onChange={(e) => set("stOperatorRate", Number(e.target.value))} />
+            </Field>
+          </div>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div><span className="text-gray-600">Sigs:</span> <strong>{s.sigs.toLocaleString()}</strong></div>
+              <div><span className="text-gray-600">Passes:</span> <strong>{s.passes}</strong></div>
+              <div><span className="text-gray-600">Pocket setups:</span> <strong>{s.pocketSetups}</strong></div>
+              <div><span className="text-gray-600">Setup:</span> <strong>{s.setupMin} min</strong></div>
+              <div><span className="text-gray-600">Run time:</span> <strong>{s.runHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Stitcher cost:</span> <strong className="text-blue-900">${s.cost.toFixed(2)}</strong></div>
+            </div>
+          </div>
+        </>
+      )}
+    </Section>
+  );
+}
+
 // Renders all four finishing-machine calculators (Mary 5/25) — used on the
 // Carton→Digital, Comm→Digital, and Comm→Offset paths.
 function FinishingMachinesSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -1013,7 +1104,7 @@ function FinishingMachinesSection({ form, set }: { form: FormState; set: Estimat
       <CutterSection form={form} set={set} />
       <SpeedMachineSection form={form} set={set} title="1st Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER1_CFG} complexityHint="gate 1.35 · coated 1.15 · tight reg 1.20" foldTypeKey="f1FoldType" speedPending />
       <SpeedMachineSection form={form} set={set} title="2nd Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER2_CFG} complexityHint="gate/pharma folds raise this" foldTypeKey="f2FoldType" speedPending />
-      <SpeedMachineSection form={form} set={set} title="Stitcher (Mueller)" unit="books/hr" qtyLabel="Books to stitch" cfg={STITCHER_CFG} complexityHint="pockets · heavy cover · inline punch" />
+      <StitcherSection form={form} set={set} />
     </>
   );
 }
@@ -1815,7 +1906,7 @@ function EstimateContent() {
     if (form.cutterEnabled) finishingCost += finishingCutterMath(form).cost;
     if (form.f1Enabled) finishingCost += speedMachineMath(form, FOLDER1_CFG).cost;
     if (form.f2Enabled) finishingCost += speedMachineMath(form, FOLDER2_CFG).cost;
-    if (form.stEnabled) finishingCost += speedMachineMath(form, STITCHER_CFG).cost;
+    if (form.stEnabled) finishingCost += stitcherMath(form).cost;
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
