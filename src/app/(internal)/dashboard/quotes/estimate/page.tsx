@@ -326,10 +326,11 @@ interface FormState {
   cutterOperatorRate: number;   // legacy, unused (E&M $45/hr is all-in)
   // ── Speed-based finishing machines (Mary 5/25): run hrs = qty ÷ (base
   // speed ÷ complexity); cost = (run + setup) × (machine + operator). ──
-  // 1st Folder (Baum 26×40 in E&M)
-  f1Enabled: boolean; f1Qty: number; f1FoldType: string; f1BaseSpeed: number; f1Complexity: number; f1SetupMin: number; f1MachineRate: number; f1OperatorRate: number;
+  // 1st Folder (Baum 26×40 in E&M). minMin floors machine time (E&M: 15);
+  // help is optional ($15/hr only "when called for").
+  f1Enabled: boolean; f1Qty: number; f1FoldType: string; f1BaseSpeed: number; f1Complexity: number; f1SetupMin: number; f1MinMin: number; f1MachineRate: number; f1OperatorRate: number; f1HelpEnabled: boolean;
   // 2nd Folder
-  f2Enabled: boolean; f2Qty: number; f2FoldType: string; f2BaseSpeed: number; f2Complexity: number; f2SetupMin: number; f2MachineRate: number; f2OperatorRate: number;
+  f2Enabled: boolean; f2Qty: number; f2FoldType: string; f2BaseSpeed: number; f2Complexity: number; f2SetupMin: number; f2MinMin: number; f2MachineRate: number; f2OperatorRate: number; f2HelpEnabled: boolean;
   // Stitcher (Mueller saddle binder) — auto sigs/passes (Mary 5/27)
   stEnabled: boolean; stQty: number; stPages: number; stPagesPerSig: number; stPockets: number; stCoverFeeder: boolean;
   stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
@@ -531,9 +532,9 @@ const defaultForm: FormState = {
   cutterMachineRate: 45,
   cutterOperatorRate: 0,
   // Folder rates from E&M (Baum 26×40): $48/hr machine, $15/hr help, setup
-  // 5 min/job + 20 min/form (≈25). Run speeds PENDING from Mary — editable.
-  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 20000, f1Complexity: 1.0, f1SetupMin: 25, f1MachineRate: 48, f1OperatorRate: 15,
-  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 18000, f2Complexity: 1.0, f2SetupMin: 25, f2MachineRate: 48, f2OperatorRate: 15,
+  // 5 min/job + 20 min/form (≈25), min 15 min on folder. Help off by default.
+  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 20000, f1Complexity: 1.0, f1SetupMin: 25, f1MinMin: 15, f1MachineRate: 48, f1OperatorRate: 15, f1HelpEnabled: false,
+  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 18000, f2Complexity: 1.0, f2SetupMin: 25, f2MinMin: 15, f2MachineRate: 48, f2OperatorRate: 15, f2HelpEnabled: false,
   // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr,
   // slowest 3000/hr, setup 5/job + 15/pocket, 7 auto + 1 hand = 8 pockets.
   stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
@@ -1032,9 +1033,10 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
 type SpeedMachineCfg = {
   enabled: keyof FormState; qty: keyof FormState; baseSpeed: keyof FormState;
   complexity: keyof FormState; setupMin: keyof FormState; machineRate: keyof FormState; operatorRate: keyof FormState;
+  minMin?: keyof FormState; helpEnabled?: keyof FormState;
 };
-const FOLDER1_CFG: SpeedMachineCfg = { enabled: "f1Enabled", qty: "f1Qty", baseSpeed: "f1BaseSpeed", complexity: "f1Complexity", setupMin: "f1SetupMin", machineRate: "f1MachineRate", operatorRate: "f1OperatorRate" };
-const FOLDER2_CFG: SpeedMachineCfg = { enabled: "f2Enabled", qty: "f2Qty", baseSpeed: "f2BaseSpeed", complexity: "f2Complexity", setupMin: "f2SetupMin", machineRate: "f2MachineRate", operatorRate: "f2OperatorRate" };
+const FOLDER1_CFG: SpeedMachineCfg = { enabled: "f1Enabled", qty: "f1Qty", baseSpeed: "f1BaseSpeed", complexity: "f1Complexity", setupMin: "f1SetupMin", machineRate: "f1MachineRate", operatorRate: "f1OperatorRate", minMin: "f1MinMin", helpEnabled: "f1HelpEnabled" };
+const FOLDER2_CFG: SpeedMachineCfg = { enabled: "f2Enabled", qty: "f2Qty", baseSpeed: "f2BaseSpeed", complexity: "f2Complexity", setupMin: "f2SetupMin", machineRate: "f2MachineRate", operatorRate: "f2OperatorRate", minMin: "f2MinMin", helpEnabled: "f2HelpEnabled" };
 
 function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
   const num = (k: keyof FormState) => Number(form[k]) || 0;
@@ -1044,8 +1046,13 @@ function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
   const adjSpeed = baseSpeed / complexity;
   const runHours = adjSpeed > 0 ? qty / adjSpeed : 0;
   const setupHours = num(cfg.setupMin) / 60;
-  const cost = (runHours + setupHours) * (num(cfg.machineRate) + num(cfg.operatorRate));
-  return { adjSpeed, runHours, setupHours, cost };
+  // E&M floors total machine time at the per-machine minimum (Mary 5/27).
+  const minHours = cfg.minMin ? num(cfg.minMin) / 60 : 0;
+  const billedHours = Math.max(runHours + setupHours, minHours);
+  // Help/operator is optional — only billed when toggled on.
+  const helpOn = cfg.helpEnabled ? !!form[cfg.helpEnabled] : true;
+  const cost = billedHours * (num(cfg.machineRate) + (helpOn ? num(cfg.operatorRate) : 0));
+  return { adjSpeed, runHours, setupHours, billedHours, cost };
 }
 
 const FOLD_TYPES = ["half", "letter", "z", "double_parallel", "gate", "roll", "engineering", "continuous"];
@@ -1091,18 +1098,32 @@ function SpeedMachineSection({ form, set, title, unit, qtyLabel, cfg, complexity
             <Field label="Setup (min)">
               <Input type="number" value={Number(form[cfg.setupMin]) || ""} onChange={(e) => setK(cfg.setupMin, Number(e.target.value))} min={0} />
             </Field>
+            {cfg.minMin && (
+              <Field label="Min time on machine (min)" hint="E&M floor — billed time can't drop below this">
+                <Input type="number" value={Number(form[cfg.minMin]) || ""} onChange={(e) => setK(cfg.minMin!, Number(e.target.value))} min={0} />
+              </Field>
+            )}
             <Field label="Machine rate ($/hr)">
               <Input type="number" step="0.01" value={Number(form[cfg.machineRate]) || ""} onChange={(e) => setK(cfg.machineRate, Number(e.target.value))} />
             </Field>
-            <Field label="Operator rate ($/hr)">
+            <Field label={cfg.helpEnabled ? "Help rate ($/hr)" : "Operator rate ($/hr)"}>
               <Input type="number" step="0.01" value={Number(form[cfg.operatorRate]) || ""} onChange={(e) => setK(cfg.operatorRate, Number(e.target.value))} />
             </Field>
+            {cfg.helpEnabled && (
+              <Field label="Help needed?">
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input type="checkbox" checked={!!form[cfg.helpEnabled]} onChange={(e) => setK(cfg.helpEnabled!, e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+                  <span className="text-sm text-gray-700">Add help rate to cost</span>
+                </label>
+              </Field>
+            )}
           </div>
           <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div><span className="text-gray-600">Adjusted speed:</span> <strong>{Math.round(m.adjSpeed).toLocaleString()} {unit}</strong></div>
               <div><span className="text-gray-600">Run time:</span> <strong>{m.runHours.toFixed(2)} hr</strong></div>
               <div><span className="text-gray-600">Setup time:</span> <strong>{m.setupHours.toFixed(2)} hr</strong></div>
+              <div><span className="text-gray-600">Billed time:</span> <strong>{m.billedHours.toFixed(2)} hr</strong></div>
               <div><span className="text-gray-600">Cost:</span> <strong className="text-blue-900">${m.cost.toFixed(2)}</strong></div>
             </div>
           </div>
