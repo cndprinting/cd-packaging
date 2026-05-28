@@ -333,6 +333,7 @@ interface FormState {
   f2Enabled: boolean; f2Qty: number; f2FoldType: string; f2BaseSpeed: number; f2Complexity: number; f2SetupMin: number; f2MinMin: number; f2MachineRate: number; f2OperatorRate: number; f2HelpEnabled: boolean;
   // Stitcher (Mueller saddle binder) — auto sigs/passes (Mary 5/27)
   stEnabled: boolean; stQty: number; stPages: number; stPagesPerSig: number; stPockets: number; stCoverFeeder: boolean;
+  stHelpEnabled: boolean;
   stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
   // Commercial Print + Offset
   plateCostEach: number;
@@ -538,6 +539,7 @@ const defaultForm: FormState = {
   // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr,
   // slowest 3000/hr, setup 5/job + 15/pocket, 7 auto + 1 hand = 8 pockets.
   stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
+  stHelpEnabled: false,
   stBaseSpeed: 8000, stComplexity: 1.0, stSetupMin: 30, stMachineRate: 95, stOperatorRate: 20,
   plateCostEach: 0,
   paperWeight: 100,
@@ -1144,13 +1146,17 @@ function stitcherMath(form: FormState) {
   const cover = form.stCoverFeeder ? 1 : 0;
   const sigs = Math.ceil(pages / pagesPerSig);
   const passes = Math.max(1, Math.ceil(sigs / pockets));
-  const pocketSetups = sigs + cover;
-  const setupMin = 5 + 15 * pocketSetups; // E&M: 5 min/job + 15 min/pocket
+  // E&M: 5 min/job + 15 min/pocket. Cover feeder is a separate device — NOT
+  // a pocket — so it doesn't add to pocket setups (Mary 5/27).
+  const pocketSetups = sigs;
+  const setupMin = 5 + 15 * pocketSetups;
   const adjSpeed = Math.max(3000, Number(form.stBaseSpeed) || 0); // floor 3000/hr
   const runHours = passes * (adjSpeed > 0 ? books / adjSpeed : 0);
   const totalHours = Math.max(15 / 60, setupMin / 60 + runHours);
-  const cost = totalHours * ((Number(form.stMachineRate) || 0) + (Number(form.stOperatorRate) || 0));
-  return { sigs, passes, pocketSetups, setupMin, adjSpeed, runHours, totalHours, cost };
+  // Help is optional — E&M only adds the helper rate when called for.
+  const helpOn = !!form.stHelpEnabled;
+  const cost = totalHours * ((Number(form.stMachineRate) || 0) + (helpOn ? (Number(form.stOperatorRate) || 0) : 0));
+  return { sigs, passes, pocketSetups, setupMin, adjSpeed, runHours, totalHours, cost, cover };
 }
 
 function StitcherSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -1177,10 +1183,16 @@ function StitcherSection({ form, set }: { form: FormState; set: EstimatorSetFn }
             <Field label="Pockets" hint="E&M: 7 auto + 1 hand = 8">
               <Input type="number" value={form.stPockets || ""} onChange={(e) => set("stPockets", Number(e.target.value))} min={1} />
             </Field>
-            <Field label="Cover feeder">
+            <Field label="Cover feeder" hint="Separate device — doesn't count as a pocket setup">
               <label className="flex items-center gap-2 mt-2 cursor-pointer">
                 <input type="checkbox" checked={form.stCoverFeeder} onChange={(e) => set("stCoverFeeder", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
                 <span className="text-sm text-gray-700">Self/separate cover</span>
+              </label>
+            </Field>
+            <Field label="Helper needed?">
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" checked={form.stHelpEnabled} onChange={(e) => set("stHelpEnabled", e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+                <span className="text-sm text-gray-700">Add helper rate to cost</span>
               </label>
             </Field>
             <Field label="Speed (books/hr)" hint="E&M max 8000, floor 3000">
