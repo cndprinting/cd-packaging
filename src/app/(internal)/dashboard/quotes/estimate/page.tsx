@@ -880,10 +880,12 @@ function finishingCutterMath(form: FormState) {
   // E&M sizes the lift by WEIGHT (Mary 5/27). Sheets/lift derives from the
   // stock M-weight (lbs per 1000 sheets) and the max lbs the cutter takes.
   // When the user leaves M-weight blank/0, auto-compute from basis weight +
-  // paper type + sheet area. Board stocks (no basic-size area) need manual.
+  // paper type + sheet area. If neither is available (digital paths don't
+  // capture structured paper spec yet), fall back to 200 (a mid-range
+  // default — Mary 5/27 fix vs. earlier 0.01 fallback that broke the math).
   const manualMW = Number(form.cutterMWeight) || 0;
   const autoMW = computeAutoMWeight(form);
-  const mWeight = Math.max(0.01, manualMW > 0 ? manualMW : autoMW || 0.01); // lbs / 1000 sheets
+  const mWeight = manualMW > 0 ? manualMW : (autoMW > 0 ? autoMW : 200);
   const maxLbs = Math.max(0.01, Number(form.cutterMaxLbsPerLift) || 40);
   const weightPerSheet = mWeight / 1000;
   const sheetsPerLift = Math.max(1, Math.floor(maxLbs / weightPerSheet));
@@ -897,7 +899,7 @@ function finishingCutterMath(form: FormState) {
   const totalMin = setupMin + cutMinutes + loadMinutes;
   const runHours = totalMin / 60;
   const cost = runHours * (Number(form.cutterMachineRate) || 0);
-  return { lifts, sheetsPerLift, totalWeight, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
+  return { lifts, sheetsPerLift, totalWeight, mWeight, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
 }
 
 function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -915,10 +917,12 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
             <Field label="Sheets to cut" hint="Press/parent sheets being cut">
               <Input type="number" value={form.cutterSheetsToCut || ""} onChange={(e) => set("cutterSheetsToCut", Number(e.target.value))} min={0} />
             </Field>
-            <Field label="Lbs / 1000 sheets" hint={autoMW > 0
-              ? `Auto: ${autoMW.toFixed(1)} (from basis wt + paper type) — type to override`
-              : "Manual (board stocks). Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88"}>
-              <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "e.g. 200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+            <Field label="Lbs / 1000 sheets" hint={(() => {
+              if (Number(form.cutterMWeight) > 0) return `Using ${Number(form.cutterMWeight).toFixed(1)} (manual)`;
+              if (autoMW > 0) return `Auto: ${autoMW.toFixed(1)} from basis wt + paper type · type to override`;
+              return "No paper spec found — using 200 fallback. Type the real M-weight. Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88";
+            })()}>
+              <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
             </Field>
             <Field label="Max lbs / lift" hint="E&M: 40">
               <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
