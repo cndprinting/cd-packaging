@@ -1048,9 +1048,11 @@ function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
   const adjSpeed = baseSpeed / complexity;
   const runHours = adjSpeed > 0 ? qty / adjSpeed : 0;
   const setupHours = num(cfg.setupMin) / 60;
-  // E&M floors total machine time at the per-machine minimum (Mary 5/27).
+  // E&M floors RUN time at the per-machine minimum (Mary 5/27 — not total).
+  // Setup time is always added on top.
   const minHours = cfg.minMin ? num(cfg.minMin) / 60 : 0;
-  const billedHours = Math.max(runHours + setupHours, minHours);
+  const billedRunHours = Math.max(runHours, minHours);
+  const billedHours = billedRunHours + setupHours;
   // Help/operator is optional — only billed when toggled on.
   const helpOn = cfg.helpEnabled ? !!form[cfg.helpEnabled] : true;
   const cost = billedHours * (num(cfg.machineRate) + (helpOn ? num(cfg.operatorRate) : 0));
