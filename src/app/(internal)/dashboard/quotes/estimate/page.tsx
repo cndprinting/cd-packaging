@@ -813,7 +813,21 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Parent sheet cost ($ each)">
           <Input type="number" step="0.01" value={form.digitalParentSheetCost || ""} onChange={(e) => set("digitalParentSheetCost", Number(e.target.value))} />
         </Field>
-        <Field label="Parent sheet paper" hint="Stock description — brand / weight / finish" className="sm:col-span-2">
+        <Field label="Paper type" hint="Drives basic-size for M-weight">
+          <select value={form.paperType} onChange={(e) => set("paperType", e.target.value as any)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="">— select —</option>
+            <option value="cover">Cover (20×26)</option>
+            <option value="text">Text (25×38)</option>
+            <option value="bond">Bond (17×22)</option>
+            <option value="index">Index (25.5×30.5)</option>
+            <option value="board_c1s">Board C1S (caliper — enter M-wt manually)</option>
+            <option value="board_c2s">Board C2S (caliper — enter M-wt manually)</option>
+          </select>
+        </Field>
+        <Field label="Basis weight (lb)" hint="e.g. 100 for 100# cover">
+          <Input type="number" step="1" value={form.paperBasisWeight || ""} onChange={(e) => set("paperBasisWeight", Number(e.target.value))} placeholder="e.g. 100" />
+        </Field>
+        <Field label="Parent sheet paper" hint="Stock description — brand / finish (carries to job ticket)" className="sm:col-span-2">
           <Input value={form.digitalParentPaperDesc} onChange={(e) => set("digitalParentPaperDesc", e.target.value)} placeholder="e.g. 14pt C2S SBS, 100lb gloss cover" />
         </Field>
       </div>
