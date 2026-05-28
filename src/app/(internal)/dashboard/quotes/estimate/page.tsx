@@ -1182,7 +1182,7 @@ function StitcherSection({ form, set }: { form: FormState; set: EstimatorSetFn }
             <Field label="Pages per sig" hint="e.g. 8">
               <Input type="number" value={form.stPagesPerSig || ""} onChange={(e) => set("stPagesPerSig", Number(e.target.value))} min={1} />
             </Field>
-            <Field label="Pockets" hint="E&M: 7 auto + 1 hand = 8">
+            <Field label="Pockets available" hint="Machine config — Mueller has 8 (7 auto + 1 hand). Don't reduce unless the machine has fewer.">
               <Input type="number" value={form.stPockets || ""} onChange={(e) => set("stPockets", Number(e.target.value))} min={1} />
             </Field>
             <Field label="Cover feeder" hint="Separate device — doesn't count as a pocket setup">
