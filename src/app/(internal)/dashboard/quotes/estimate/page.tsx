@@ -518,7 +518,7 @@ const defaultForm: FormState = {
   digitalParentPaperDesc: "",
   cutterEnabled: false,
   cutterSheetsToCut: 0,
-  cutterMWeight: 200,
+  cutterMWeight: 0,
   cutterMaxLbsPerLift: 40,
   cutterSheetsPerLift: 800,
   cutterCutsPerLift: 12,
@@ -853,12 +853,37 @@ const CUTTER_LOAD_UNLOAD: Record<number, string> = {
   1: '≤ 11×17', 2: '11×17 – 17×22', 3: '17×22 – 25×38', 4: '25×38 – 38×50', 5: '38×50 +',
 };
 const CUTTER_LOAD_MIN: Record<number, number> = { 1: 1.0, 2: 1.5, 3: 1.75, 4: 2.0, 5: 2.5 };
+
+// Basic-size area (sq in) per paper type — used to auto-compute M-weight from
+// basis weight (Mary 5/27). Board stocks aren't computable from basis weight,
+// so they fall back to manual entry.
+const PAPER_BASIC_AREA: Record<string, number> = {
+  cover: 20 * 26,
+  text: 25 * 38,
+  bond: 17 * 22,
+  index: 25.5 * 30.5,
+};
+function computeAutoMWeight(form: FormState): number {
+  const basis = Number(form.paperBasisWeight) || 0;
+  const basic = PAPER_BASIC_AREA[String(form.paperType)] || 0;
+  // Sheet being cut: digital run sheet if set, else offset sheet size.
+  const sheetW = Number(form.digitalRunW) || Number(form.sheetWidth) || 0;
+  const sheetH = Number(form.digitalRunH) || Number(form.sheetHeight) || 0;
+  const area = sheetW * sheetH;
+  if (basis <= 0 || basic <= 0 || area <= 0) return 0;
+  return basis * 2 * (area / basic);
+}
+
 function finishingCutterMath(form: FormState) {
   const sheets = Math.max(0, Number(form.cutterSheetsToCut) || 0);
   const cutsPerLift = Math.max(0, Number(form.cutterCutsPerLift) || 0);
   // E&M sizes the lift by WEIGHT (Mary 5/27). Sheets/lift derives from the
   // stock M-weight (lbs per 1000 sheets) and the max lbs the cutter takes.
-  const mWeight = Math.max(0.01, Number(form.cutterMWeight) || 0.01); // lbs / 1000 sheets
+  // When the user leaves M-weight blank/0, auto-compute from basis weight +
+  // paper type + sheet area. Board stocks (no basic-size area) need manual.
+  const manualMW = Number(form.cutterMWeight) || 0;
+  const autoMW = computeAutoMWeight(form);
+  const mWeight = Math.max(0.01, manualMW > 0 ? manualMW : autoMW || 0.01); // lbs / 1000 sheets
   const maxLbs = Math.max(0.01, Number(form.cutterMaxLbsPerLift) || 40);
   const weightPerSheet = mWeight / 1000;
   const sheetsPerLift = Math.max(1, Math.floor(maxLbs / weightPerSheet));
@@ -877,6 +902,7 @@ function finishingCutterMath(form: FormState) {
 
 function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
   const c = finishingCutterMath(form);
+  const autoMW = computeAutoMWeight(form);
   return (
     <Section title="Cutter (trim to size)" icon={Scissors} defaultOpen={false}>
       <label className="flex items-center gap-3 cursor-pointer mb-3">
@@ -889,8 +915,10 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
             <Field label="Sheets to cut" hint="Press/parent sheets being cut">
               <Input type="number" value={form.cutterSheetsToCut || ""} onChange={(e) => set("cutterSheetsToCut", Number(e.target.value))} min={0} />
             </Field>
-            <Field label="Lbs / 1000 sheets" hint="20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88">
-              <Input type="number" step="0.1" value={form.cutterMWeight || ""} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+            <Field label="Lbs / 1000 sheets" hint={autoMW > 0
+              ? `Auto: ${autoMW.toFixed(1)} (from basis wt + paper type) — type to override`
+              : "Manual (board stocks). Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88"}>
+              <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "e.g. 200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
             </Field>
             <Field label="Max lbs / lift" hint="E&M: 40">
               <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
