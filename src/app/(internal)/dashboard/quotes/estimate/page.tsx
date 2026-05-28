@@ -1298,46 +1298,10 @@ function FinishingBinderySection({
             <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
           </Field>
         </div>
-        {/* Saddle stitch + perfect bind — Mary 4/30: auto-calculate
-            from the rate × qty formula instead of forcing a manual $ */}
+        {/* Saddle-stitch legacy fields hidden (Mary 5/27) — the dedicated
+            Stitcher (Mueller) section below replaces them with the real
+            sigs/passes/rates calc. */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mt-3 pt-3 border-t border-blue-200">
-          <Field
-            label="Saddle stitch (qty)"
-            hint={plantStandards
-              ? `Mueller @ $${plantStandards.saddleStitch1Rate || 95}/hr, ${plantStandards.saddleStitch1Speed || 8000}/hr → ${(() => {
-                  const rate = Number(plantStandards.saddleStitch1Rate) || 95;
-                  const speed = Number(plantStandards.saddleStitch1Speed) || 8000;
-                  const cost = (Number(form.saddleStitchCost) > 0 && !form.saddleStitchAuto)
-                    ? Number(form.saddleStitchCost)
-                    : ((Number(form.saddleStitchQty) || 0) * rate / Math.max(speed, 1));
-                  return `auto-calc = $${cost.toFixed(2)}`;
-                })()}`
-              : "Pieces saddle-stitched"}
-          >
-            <Input
-              type="number"
-              value={form.saddleStitchQty || ""}
-              placeholder={String(form.quantity || "0")}
-              onChange={(e) => {
-                const qty = Number(e.target.value) || 0;
-                const rate = Number(plantStandards?.saddleStitch1Rate) || 95;
-                const speed = Number(plantStandards?.saddleStitch1Speed) || 8000;
-                const cost = qty * rate / Math.max(speed, 1);
-                setForm(p => ({ ...p, saddleStitchQty: qty, saddleStitchCost: cost, saddleStitchAuto: true } as any));
-              }}
-              min={0}
-            />
-          </Field>
-          <Field label="Or override ($)" hint="Manual saddle stitch $ (overrides qty calc)">
-            <Input
-              type="number"
-              step="0.01"
-              value={form.saddleStitchAuto ? "" : (form.saddleStitchCost || "")}
-              placeholder={form.saddleStitchAuto ? `Auto: $${(Number(form.saddleStitchCost) || 0).toFixed(2)}` : "0.00"}
-              onChange={(e) => setForm(p => ({ ...p, saddleStitchCost: Number(e.target.value), saddleStitchAuto: false } as any))}
-              min={0}
-            />
-          </Field>
           <Field label="Perfect bind ($)" hint="Total cost (lump sum)">
             <Input
               type="text"
