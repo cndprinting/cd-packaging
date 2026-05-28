@@ -955,7 +955,12 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
               if (autoMW > 0) return `Auto: ${autoMW.toFixed(1)} from basis wt + paper type · type to override`;
               return "No paper spec found — using 200 fallback. Type the real M-weight. Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88";
             })()}>
-              <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+              <div className="flex items-center gap-2">
+                <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+                {Number(form.cutterMWeight) > 0 && autoMW > 0 && (
+                  <button type="button" onClick={() => set("cutterMWeight", 0)} className="text-xs font-medium text-brand-600 hover:text-brand-800 whitespace-nowrap">Use auto</button>
+                )}
+              </div>
             </Field>
             <Field label="Max lbs / lift" hint="E&M: 40">
               <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
