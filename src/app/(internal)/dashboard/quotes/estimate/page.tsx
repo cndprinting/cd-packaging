@@ -525,7 +525,7 @@ const defaultForm: FormState = {
   cutterSheetsPerLift: 800,
   cutterCutsPerLift: 12,
   cutterCutType: "chop",
-  cutterStockBand: 1,
+  cutterStockBand: 0,
   cutterCutsPerMin: 10,
   cutterSetupMin: 13,
   cutterMachineRate: 45,
@@ -871,6 +871,19 @@ const CUTTER_LOAD_UNLOAD: Record<number, string> = {
   1: '≤ 11×17', 2: '11×17 – 17×22', 3: '17×22 – 25×38', 4: '25×38 – 38×50', 5: '38×50 +',
 };
 const CUTTER_LOAD_MIN: Record<number, number> = { 1: 1.0, 2: 1.5, 3: 1.75, 4: 2.0, 5: 2.5 };
+// Auto-pick the band from the sheet being cut (run sheet for digital, press
+// sheet for offset). Long side first → smallest band that fits both dims.
+function cutterAutoBand(form: FormState): number {
+  const w = Number(form.digitalRunW) || Number(form.sheetWidth) || 0;
+  const h = Number(form.digitalRunH) || Number(form.sheetHeight) || 0;
+  if (w <= 0 || h <= 0) return 1;
+  const long = Math.max(w, h), short = Math.min(w, h);
+  if (long <= 17 && short <= 11) return 1;
+  if (long <= 22 && short <= 17) return 2;
+  if (long <= 38 && short <= 25) return 3;
+  if (long <= 50 && short <= 38) return 4;
+  return 5;
+}
 
 // Basic-size area (sq in) per paper type — used to auto-compute M-weight from
 // basis weight (Mary 5/27). Board stocks aren't computable from basis weight,
@@ -925,7 +938,10 @@ function finishingCutterMath(form: FormState) {
   const totalWeight = sheets * weightPerSheet;
   const lifts = Math.ceil(sheets / sheetsPerLift);
   const perCutMin = form.cutterCutType === "bleed" ? 0.7 : 0.5; // E&M chop vs bleed
-  const loadMinPerLift = CUTTER_LOAD_MIN[Number(form.cutterStockBand) || 1] ?? 1.0;
+  // If band is 0, auto-pick from sheet size; otherwise use the manual choice.
+  const bandSel = Number(form.cutterStockBand) || 0;
+  const band = bandSel > 0 ? bandSel : cutterAutoBand(form);
+  const loadMinPerLift = CUTTER_LOAD_MIN[band] ?? 1.0;
   const cutMinutes = cutsPerLift * lifts * perCutMin;
   const loadMinutes = lifts * loadMinPerLift;
   const setupMin = Number(form.cutterSetupMin) || 0;
@@ -974,10 +990,16 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
                 <option value="bleed">Cut with bleeds (0.7 min)</option>
               </select>
             </Field>
-            <Field label="Stock size band" hint="Load/unload time per lift">
+            <Field label="Load/unload per lift" hint={(() => {
+              const b = Number(form.cutterStockBand) || 0;
+              if (b > 0) return `Manual: ${CUTTER_LOAD_UNLOAD[b]} → ${CUTTER_LOAD_MIN[b]} min/lift`;
+              const auto = cutterAutoBand(form);
+              return `Auto from sheet size: ${CUTTER_LOAD_UNLOAD[auto]} → ${CUTTER_LOAD_MIN[auto]} min/lift`;
+            })()}>
               <select value={String(form.cutterStockBand)} onChange={(e) => set("cutterStockBand", Number(e.target.value))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                <option value="0">Auto (from sheet size)</option>
                 {[1, 2, 3, 4, 5].map((b) => (
-                  <option key={b} value={b}>{CUTTER_LOAD_UNLOAD[b]} ({CUTTER_LOAD_MIN[b]} min)</option>
+                  <option key={b} value={b}>{CUTTER_LOAD_UNLOAD[b]} → {CUTTER_LOAD_MIN[b]} min</option>
                 ))}
               </select>
             </Field>
