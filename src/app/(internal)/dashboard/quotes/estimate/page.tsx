@@ -307,6 +307,7 @@ interface FormState {
   digitalClickFee: number;       // flat $/run sheet (default 0.378 = 4/4 process)
   digitalParentSheetCost: number; // $ per parent sheet of stock
   digitalParentPaperDesc: string; // parent stock description (brand/weight/finish)
+  digitalPaperType: string;       // Mary's list (uncoated_text, coated_cover, etc.) — drives basic-size for auto M-weight
   // ── Finishing machine: Cutter — real E&M rates (Mary 5/27) ──
   // lifts = ceil(sheets / sheets-per-lift); cut time = cuts × lifts × per-cut
   // (0.5 chop / 0.7 bleed); + load/unload per lift by stock size; + setup.
@@ -516,6 +517,7 @@ const defaultForm: FormState = {
   digitalClickFee: 0.378,
   digitalParentSheetCost: 0,
   digitalParentPaperDesc: "",
+  digitalPaperType: "",
   cutterEnabled: false,
   cutterSheetsToCut: 0,
   cutterMWeight: 0,
@@ -813,15 +815,17 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Parent sheet cost ($ each)">
           <Input type="number" step="0.01" value={form.digitalParentSheetCost || ""} onChange={(e) => set("digitalParentSheetCost", Number(e.target.value))} />
         </Field>
-        <Field label="Paper type" hint="Drives basic-size for M-weight">
-          <select value={form.paperType} onChange={(e) => set("paperType", e.target.value as any)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+        <Field label="Paper type" hint="Drives the basic-size for auto M-weight">
+          <select value={form.digitalPaperType} onChange={(e) => set("digitalPaperType", e.target.value)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
             <option value="">— select —</option>
-            <option value="cover">Cover (20×26)</option>
-            <option value="text">Text (25×38)</option>
-            <option value="bond">Bond (17×22)</option>
-            <option value="index">Index (25.5×30.5)</option>
-            <option value="board_c1s">Board C1S (caliper — enter M-wt manually)</option>
-            <option value="board_c2s">Board C2S (caliper — enter M-wt manually)</option>
+            <option value="uncoated_text">Uncoated text</option>
+            <option value="coated_text">Coated text</option>
+            <option value="uncoated_cover">Uncoated cover</option>
+            <option value="coated_cover">Coated cover</option>
+            <option value="envelopes">Envelopes</option>
+            <option value="label_stock">Label stock (enter M-wt manually)</option>
+            <option value="c1s">Coated one side / C1S (enter M-wt manually)</option>
+            <option value="carbonless">Carbonless</option>
           </select>
         </Field>
         <Field label="Basis weight (lb)" hint="e.g. 100 for 100# cover">
@@ -871,7 +875,20 @@ const CUTTER_LOAD_MIN: Record<number, number> = { 1: 1.0, 2: 1.5, 3: 1.75, 4: 2.
 // Basic-size area (sq in) per paper type — used to auto-compute M-weight from
 // basis weight (Mary 5/27). Board stocks aren't computable from basis weight,
 // so they fall back to manual entry.
+// Basic-size areas (sq in) per paper type. Mary's digital list (5/27) lives
+// alongside the legacy offset values so each path keeps its dropdown.
+// Label / C1S have no standard basic size — user enters M-weight manually.
 const PAPER_BASIC_AREA: Record<string, number> = {
+  // Mary's digital types
+  uncoated_text: 25 * 38,
+  coated_text: 25 * 38,
+  uncoated_cover: 20 * 26,
+  coated_cover: 20 * 26,
+  envelopes: 17 * 22,
+  carbonless: 17 * 22,
+  label_stock: 0,
+  c1s: 0,
+  // Legacy offset values (PaperSpecFields still uses these)
   cover: 20 * 26,
   text: 25 * 38,
   bond: 17 * 22,
@@ -879,7 +896,9 @@ const PAPER_BASIC_AREA: Record<string, number> = {
 };
 function computeAutoMWeight(form: FormState): number {
   const basis = Number(form.paperBasisWeight) || 0;
-  const basic = PAPER_BASIC_AREA[String(form.paperType)] || 0;
+  // Prefer the digital paper-type field; fall back to legacy paperType.
+  const typeKey = String(form.digitalPaperType || form.paperType || "");
+  const basic = PAPER_BASIC_AREA[typeKey] || 0;
   // Sheet being cut: digital run sheet if set, else offset sheet size.
   const sheetW = Number(form.digitalRunW) || Number(form.sheetWidth) || 0;
   const sheetH = Number(form.digitalRunH) || Number(form.sheetHeight) || 0;
