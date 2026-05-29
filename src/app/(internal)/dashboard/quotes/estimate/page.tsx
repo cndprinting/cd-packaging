@@ -2110,11 +2110,13 @@ function EstimateContent() {
     // slows the press — Darrin). If user already entered pressRunTime manually,
     // we divide by the multiplier to reflect the real duration.
     const adjustedPressRunTime = num("pressRunTime") / Math.max(coverageSpeedMultiplier, 0.01);
-    const laborCost =
+    // On digital paths, press labor is already inside the click fee (matches
+    // E&M — Mary 5/27 Cybake). Prepress + plate labor still apply.
+    const isDigitalPath = isCartonDigital || isCommDigital;
+    const pressLabor = isDigitalPath ? 0 :
       adjustedPressRunTime * num("pressOperatorRate") +
-      num("prepressTime") * num("prepressRate") +
-      num("setupTime") * num("pressOperatorRate") +
-      plateLaborCost;
+      num("setupTime") * num("pressOperatorRate");
+    const laborCost = pressLabor + num("prepressTime") * num("prepressRate") + plateLaborCost;
 
     const shippingCost = num("shippingCost");
 
