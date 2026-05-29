@@ -335,6 +335,12 @@ interface FormState {
   stEnabled: boolean; stQty: number; stPages: number; stPagesPerSig: number; stPockets: number; stCoverFeeder: boolean;
   stHelpEnabled: boolean;
   stBaseSpeed: number; stComplexity: number; stSetupMin: number; stMachineRate: number; stOperatorRate: number;
+  // Carton Pack (Mary 5/27 — E&M Cybake): material into Material bucket (18%
+  // markup), labor into Finishing → Labor markup bucket (40%).
+  cpEnabled: boolean; cpBooksPerCarton: number; cpMaterialPerCarton: number; cpMinPerCarton: number; cpLaborRate: number;
+  // Outside Finishing — single line for score / foil / die / etc. Outside
+  // bucket (0% markup, vendor pass-through).
+  ofEnabled: boolean; ofDescription: string; ofCost: number;
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -541,6 +547,11 @@ const defaultForm: FormState = {
   stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
   stHelpEnabled: false,
   stBaseSpeed: 8000, stComplexity: 1.0, stSetupMin: 30, stMachineRate: 95, stOperatorRate: 20,
+  // Carton Pack defaults — 11.25×8.75×10 carton at $0.93 each, ~84 books per
+  // carton, 2 min labor per carton at ~$39/hr (E&M Ctn Pack line).
+  cpEnabled: false, cpBooksPerCarton: 84, cpMaterialPerCarton: 0.93, cpMinPerCarton: 2, cpLaborRate: 39,
+  // Outside Finishing defaults — off.
+  ofEnabled: false, ofDescription: "", ofCost: 0,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -1225,7 +1236,79 @@ function StitcherSection({ form, set }: { form: FormState; set: EstimatorSetFn }
   );
 }
 
-// Renders all four finishing-machine calculators (Mary 5/25) — used on the
+// Carton Pack — boxes the finished books. E&M splits the cost: material (the
+// box itself) into Material 18% markup, labor (handling) into Labor 40%.
+function cartonPackMath(form: FormState) {
+  const books = Math.max(0, Number(form.quantity) || 0) * (Number(form.versions) || 1);
+  const perCarton = Math.max(1, Number(form.cpBooksPerCarton) || 1);
+  const cartons = Math.ceil(books / perCarton);
+  const materialCost = cartons * (Number(form.cpMaterialPerCarton) || 0);
+  const laborHours = cartons * (Number(form.cpMinPerCarton) || 0) / 60;
+  const laborCost = laborHours * (Number(form.cpLaborRate) || 0);
+  return { cartons, materialCost, laborCost, laborHours, totalCost: materialCost + laborCost };
+}
+
+function CartonPackSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const cp = cartonPackMath(form);
+  return (
+    <Section title="Carton Pack" icon={Package} defaultOpen={false}>
+      <label className="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" checked={form.cpEnabled} onChange={(e) => set("cpEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+        <span className="text-sm font-medium text-gray-700">Pack finished books in cartons</span>
+      </label>
+      {form.cpEnabled && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Field label="Books per carton" hint="Mary fits ~84 books in a 11.25×8.75×10">
+              <Input type="number" value={form.cpBooksPerCarton || ""} onChange={(e) => set("cpBooksPerCarton", Number(e.target.value))} min={1} />
+            </Field>
+            <Field label="Carton cost ($ each)" hint="11.25×8.75×10 = $0.93 · LTHD = $0.52">
+              <Input type="number" step="0.01" value={form.cpMaterialPerCarton || ""} onChange={(e) => set("cpMaterialPerCarton", Number(e.target.value))} />
+            </Field>
+            <Field label="Min / carton (labor)">
+              <Input type="number" step="0.5" value={form.cpMinPerCarton || ""} onChange={(e) => set("cpMinPerCarton", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Labor rate ($/hr)">
+              <Input type="number" step="0.01" value={form.cpLaborRate || ""} onChange={(e) => set("cpLaborRate", Number(e.target.value))} />
+            </Field>
+          </div>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div><span className="text-gray-600">Cartons:</span> <strong>{cp.cartons}</strong></div>
+              <div><span className="text-gray-600">Material:</span> <strong>${cp.materialCost.toFixed(2)}</strong></div>
+              <div><span className="text-gray-600">Labor:</span> <strong>${cp.laborCost.toFixed(2)}</strong></div>
+              <div><span className="text-gray-600">Total:</span> <strong className="text-blue-900">${cp.totalCost.toFixed(2)}</strong></div>
+            </div>
+          </div>
+        </>
+      )}
+    </Section>
+  );
+}
+
+// Outside Finishing — pass-through cost for score, foil, die, etc. (0% markup).
+function OutsideFinishingSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  return (
+    <Section title="Outside Finishing" icon={Truck} defaultOpen={false}>
+      <label className="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" checked={form.ofEnabled} onChange={(e) => set("ofEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+        <span className="text-sm font-medium text-gray-700">Add outside finishing (score, foil, die, etc.)</span>
+      </label>
+      {form.ofEnabled && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Description" className="sm:col-span-2">
+            <Input value={form.ofDescription} onChange={(e) => set("ofDescription", e.target.value)} placeholder="e.g. Score, Foil stamp, Die cut" />
+          </Field>
+          <Field label="Cost ($)" hint="Vendor pass-through — 0% markup">
+            <Input type="number" step="0.01" value={form.ofCost || ""} onChange={(e) => set("ofCost", Number(e.target.value))} min={0} />
+          </Field>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// Renders all six finishing items (Mary 5/25–5/27) — used on the
 // Carton→Digital, Comm→Digital, and Comm→Offset paths.
 function FinishingMachinesSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
   return (
@@ -1234,6 +1317,8 @@ function FinishingMachinesSection({ form, set }: { form: FormState; set: Estimat
       <SpeedMachineSection form={form} set={set} title="1st Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER1_CFG} complexityHint="gate 1.35 · coated 1.15 · tight reg 1.20" foldTypeKey="f1FoldType" speedPending />
       <SpeedMachineSection form={form} set={set} title="2nd Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER2_CFG} complexityHint="gate/pharma folds raise this" foldTypeKey="f2FoldType" speedPending />
       <StitcherSection form={form} set={set} />
+      <CartonPackSection form={form} set={set} />
+      <OutsideFinishingSection form={form} set={set} />
     </>
   );
 }
@@ -2005,6 +2090,13 @@ function EstimateContent() {
     if (form.f1Enabled) finishingCost += speedMachineMath(form, FOLDER1_CFG).cost;
     if (form.f2Enabled) finishingCost += speedMachineMath(form, FOLDER2_CFG).cost;
     if (form.stEnabled) finishingCost += stitcherMath(form).cost;
+    // Carton Pack (Mary 5/27) — material → Material bucket (18% markup);
+    // labor → Finishing (which now feeds Labor 40% markup).
+    if (form.cpEnabled) {
+      const cp = cartonPackMath(form);
+      materialsCost += cp.materialCost;
+      finishingCost += cp.laborCost;
+    }
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
@@ -2132,7 +2224,9 @@ function EstimateContent() {
     // Digital clicks are categorized as Outside to match E&M's Cybake quote
     // (Mary 5/27) — vendor pass-through, 0% markup bucket. The digital
     // branches above set digitalClicksOutside; we fold it in here.
-    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside;
+    // Outside Finishing (score / foil / die / etc.) also lives in Outside.
+    const outsideFinishingCost = form.ofEnabled ? (Number(form.ofCost) || 0) : 0;
+    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside + outsideFinishingCost;
 
     // Auto-calculate waste from press config waste curve
     let wasteSheets = 0;
