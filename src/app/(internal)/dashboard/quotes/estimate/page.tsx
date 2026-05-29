@@ -915,9 +915,11 @@ function computeAutoMWeight(form: FormState): number {
   // Prefer the digital paper-type field; fall back to legacy paperType.
   const typeKey = String(form.digitalPaperType || form.paperType || "");
   const basic = PAPER_BASIC_AREA[typeKey] || 0;
-  // Sheet being cut: digital run sheet if set, else offset sheet size.
-  const sheetW = Number(form.digitalRunW) || Number(form.sheetWidth) || 0;
-  const sheetH = Number(form.digitalRunH) || Number(form.sheetHeight) || 0;
+  // E&M sizes M-weight from the PARENT sheet (the stock you buy), not the
+  // run sheet. Mary 5/27 Cybake — 80# coated cover @ 19×25 parent → 147M.
+  // Falls back to run/offset sheet if parent dims aren't set.
+  const sheetW = Number(form.digitalParentW) || Number(form.digitalRunW) || Number(form.sheetWidth) || 0;
+  const sheetH = Number(form.digitalParentH) || Number(form.digitalRunH) || Number(form.sheetHeight) || 0;
   const area = sheetW * sheetH;
   if (basis <= 0 || basic <= 0 || area <= 0) return 0;
   return basis * 2 * (area / basic);
@@ -1803,6 +1805,8 @@ function EstimateContent() {
     let toolingCost = 0;
     let finishingCost = 0;
     let makeReadyCost = 0;
+    // Digital clicks flow into the Outside bucket (E&M convention — Mary 5/27).
+    let digitalClicksOutside = 0;
 
     // Carton round-up helper: if CSR entered sheets-per-carton and toggled
     // "round up to full cartons", bump the sheet count to the next carton.
@@ -1866,7 +1870,8 @@ function EstimateContent() {
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
-      materialsCost = paperCost + dm.totalClickFee;
+      materialsCost = paperCost;
+      digitalClicksOutside = dm.totalClickFee; // E&M categorizes clicks as Outside (Mary 5/27)
       const dieCutMinutes = dm.runSheets * num("digitalDieCuttingTime");
       // Bindery parity with offset (Mary 5/18) — gluing + window patching
       // roll into finishing; quantitative finishing is added for all paths below.
@@ -1903,7 +1908,9 @@ function EstimateContent() {
         clickFee: num("digitalClickFee") || 0.378,
       });
       const paperCost = dm.parentSheets * num("digitalParentSheetCost");
-      materialsCost = (paperCost + dm.totalClickFee) * (1 + num("rushSurchargePercent") / 100);
+      const rushMul = 1 + num("rushSurchargePercent") / 100;
+      materialsCost = paperCost * rushMul;
+      digitalClicksOutside = dm.totalClickFee * rushMul; // clicks → Outside (Mary 5/27)
       finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
         + num("gluingSetup") + num("windowPatching");
     }
@@ -2122,7 +2129,10 @@ function EstimateContent() {
     // Outside purchase line items
     const outsidePurchaseTotal = (form.outsidePurchases as { description: string; cost: number }[]).reduce((sum, op) => sum + (op.cost || 0), 0);
 
-    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal;
+    // Digital clicks are categorized as Outside to match E&M's Cybake quote
+    // (Mary 5/27) — vendor pass-through, 0% markup bucket. The digital
+    // branches above set digitalClicksOutside; we fold it in here.
+    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside;
 
     // Auto-calculate waste from press config waste curve
     let wasteSheets = 0;
