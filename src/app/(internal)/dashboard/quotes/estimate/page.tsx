@@ -2193,7 +2193,9 @@ function EstimateContent() {
 
     const paperMarkup = paperOnlyCost * (num("markupPaper") / 100);
     const materialMarkup = materialOnlyCost * (num("markupMaterial") / 100);
-    const laborMarkup = laborCost * (num("markupLabor") / 100);
+    // E&M groups bindery/finishing labor into the Labor markup base (40% in
+    // the Cybake quote). Match that — finishing machine cost is labor too.
+    const laborMarkup = (laborCost + finishingCost) * (num("markupLabor") / 100);
     const outsideMarkup = (shippingCost + outsideCost) * (num("markupOutside") / 100);
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
