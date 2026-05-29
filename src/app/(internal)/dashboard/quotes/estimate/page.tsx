@@ -4208,14 +4208,14 @@ function EstimateContent() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <CostRow label="Materials" sublabel="Substrate + ink + coating" amount={calc.materialsCost} icon={Droplets} />
+            <CostRow label="Materials" sublabel="Paper + carton + tooling materials" amount={calc.materialsCost} icon={Droplets} />
             <CostRow label="Tooling" sublabel="Dies, plates, tooling" amount={calc.toolingCost} icon={Settings} />
             <CostRow label="Labor" sublabel="Press + prepress + setup time" amount={calc.laborCost} icon={Users} />
-            <CostRow label="Finishing" sublabel="Bindery, gluing, patching" amount={calc.finishingCost} icon={Scissors} />
+            <CostRow label="Finishing" sublabel="Cutter, folders, stitcher, carton pack labor" amount={calc.finishingCost} icon={Scissors} />
             <CostRow label="Make-Ready / Waste" sublabel="Waste sheets at paper cost" amount={calc.makeReadyCost} icon={RotateCcw} />
             <CostRow label="Shipping" sublabel="Delivery cost" amount={calc.shippingCost} icon={Truck} />
             {calc.outsideCost > 0 && (
-              <CostRow label="Outside Services" sublabel="Coatings, mailing, sealing" amount={calc.outsideCost} icon={Package} />
+              <CostRow label="Outside" sublabel="Digital clicks + outside finishing (score, foil, etc.) — vendor pass-through" amount={calc.outsideCost} icon={Package} />
             )}
 
             <div className="my-3 border-t border-gray-200" />
@@ -4611,6 +4611,10 @@ function EstimateContent() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">Finishing</span>
                     <span className="font-medium">{fmtMoney(calc.finishingCost)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Outside</span>
+                    <span className="font-medium">{fmtMoney(calc.outsideCost)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Waste</span>
