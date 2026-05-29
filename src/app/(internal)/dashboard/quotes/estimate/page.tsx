@@ -4516,7 +4516,7 @@ function EstimateContent() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Job Estimator</h1>
-            <p className="text-sm text-gray-500">Build a detailed cost estimate</p>
+            <p className="text-sm text-gray-500">Build a detailed cost estimate <span className="text-xs text-gray-400">· v5.29.b</span></p>
           </div>
         </div>
         <Badge className="bg-brand-100 text-brand-700 border-brand-200">
