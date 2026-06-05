@@ -542,8 +542,9 @@ const defaultForm: FormState = {
   cutterOperatorRate: 0,
   // Folder rates from E&M (Baum 26×40): $48/hr machine, $15/hr help, setup
   // 5 min/job + 20 min/form (≈25), min 15 min on folder. Help off by default.
-  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 20000, f1Complexity: 1.0, f1SetupMin: 25, f1MinMin: 15, f1MachineRate: 48, f1OperatorRate: 15, f1HelpEnabled: false,
-  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 18000, f2Complexity: 1.0, f2SetupMin: 25, f2MinMin: 15, f2MachineRate: 48, f2OperatorRate: 15, f2HelpEnabled: false,
+  // Defaults match Mary's 6/3 letter/tri-fold spec (12K sph, 30 min setup).
+  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 12000, f1Complexity: 1.0, f1SetupMin: 30, f1MinMin: 15, f1MachineRate: 48, f1OperatorRate: 15, f1HelpEnabled: false,
+  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 12000, f2Complexity: 1.0, f2SetupMin: 30, f2MinMin: 15, f2MachineRate: 48, f2OperatorRate: 15, f2HelpEnabled: false,
   // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr,
   // slowest 3000/hr, setup 5/job + 15/pocket, 7 auto + 1 hand = 8 pockets.
   stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
@@ -1078,7 +1079,19 @@ function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
   return { adjSpeed, runHours, setupHours, billedHours, cost };
 }
 
-const FOLD_TYPES = ["half", "letter", "z", "double_parallel", "gate", "roll", "engineering", "continuous"];
+// Fold type → speed (pieces/hr) + setup (min) defaults from Mary 6/3.
+// Auto-fill base speed + setup when user picks a fold type; editable per job.
+// Mary: "Digital will be the same as commercial runs."
+const FOLD_DEFAULTS: Record<string, { label: string; speed: number; setupMin: number }> = {
+  half:              { label: "Bi-fold / half",              speed: 12000, setupMin: 30 },
+  letter:            { label: "Letter / tri-fold",           speed: 12000, setupMin: 30 },
+  tri_large:         { label: "Tri-fold larger (25.5×11)",   speed:  7000, setupMin: 30 },
+  double_parallel:   { label: "Double parallel",             speed:  8000, setupMin: 30 },
+  right_angle:       { label: "Right-angle (8pg)",           speed:  7500, setupMin: 45 },
+  closed_gate:       { label: "Closed gate",                 speed:  5000, setupMin: 50 },
+};
+const FOLD_TYPES = Object.keys(FOLD_DEFAULTS);
+
 function SpeedMachineSection({ form, set, title, unit, qtyLabel, cfg, complexityHint, foldTypeKey, speedPending }: {
   form: FormState; set: EstimatorSetFn; title: string; unit: string; qtyLabel: string;
   cfg: SpeedMachineCfg; complexityHint: string; foldTypeKey?: keyof FormState; speedPending?: boolean;
@@ -1094,20 +1107,27 @@ function SpeedMachineSection({ form, set, title, unit, qtyLabel, cfg, complexity
       </label>
       {enabled && (
         <>
-          {speedPending && (
-            <p className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-              Run speeds per fold type are pending from Mary — base speed below is an editable placeholder.
-            </p>
-          )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label={qtyLabel}>
               <Input type="number" value={Number(form[cfg.qty]) || ""} onChange={(e) => setK(cfg.qty, Number(e.target.value))} min={0} />
             </Field>
             {foldTypeKey && (
-              <Field label="Fold type">
-                <select value={String(form[foldTypeKey])} onChange={(e) => setK(foldTypeKey, e.target.value)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+              <Field label="Fold type" hint="Auto-fills speed + setup from C&D defaults (Mary 6/3)">
+                <select
+                  value={String(form[foldTypeKey])}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setK(foldTypeKey, v);
+                    const d = FOLD_DEFAULTS[v];
+                    if (d) {
+                      setK(cfg.baseSpeed, d.speed);
+                      setK(cfg.setupMin, d.setupMin);
+                    }
+                  }}
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                >
                   {FOLD_TYPES.map((ft) => (
-                    <option key={ft} value={ft}>{ft.replace(/_/g, " ")}</option>
+                    <option key={ft} value={ft}>{FOLD_DEFAULTS[ft].label}</option>
                   ))}
                 </select>
               </Field>
@@ -1320,8 +1340,8 @@ function FinishingMachinesSection({ form, set }: { form: FormState; set: Estimat
   return (
     <>
       <CutterSection form={form} set={set} />
-      <SpeedMachineSection form={form} set={set} title="1st Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER1_CFG} complexityHint="gate 1.35 · coated 1.15 · tight reg 1.20" foldTypeKey="f1FoldType" speedPending />
-      <SpeedMachineSection form={form} set={set} title="2nd Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER2_CFG} complexityHint="gate/pharma folds raise this" foldTypeKey="f2FoldType" speedPending />
+      <SpeedMachineSection form={form} set={set} title="1st Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER1_CFG} complexityHint="gate 1.35 · coated 1.15 · tight reg 1.20" foldTypeKey="f1FoldType" />
+      <SpeedMachineSection form={form} set={set} title="2nd Folder" unit="sph" qtyLabel="Sheets to fold" cfg={FOLDER2_CFG} complexityHint="gate/pharma folds raise this" foldTypeKey="f2FoldType" />
       <StitcherSection form={form} set={set} />
       <CartonPackSection form={form} set={set} />
       <OutsideFinishingSection form={form} set={set} />
