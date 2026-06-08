@@ -346,8 +346,11 @@ interface FormState {
   // markup), labor into Finishing → Labor markup bucket (40%).
   cpEnabled: boolean; cpBooksPerCarton: number; cpMaterialPerCarton: number; cpMinPerCarton: number; cpLaborRate: number;
   // Outside Finishing — single line for score / foil / die / etc. Outside
-  // bucket (0% markup, vendor pass-through).
+  // bucket (markup % editable per job — Mary 6/8: ID badges use 32%).
+  // ofTiers lets the vendor cost differ per quantity tier (Mary 6/8 reply);
+  // markup % is shared across tiers via the standard markupOutside.
   ofEnabled: boolean; ofDescription: string; ofCost: number;
+  ofTiers: { qty: number; cost: number }[];
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -562,6 +565,7 @@ const defaultForm: FormState = {
   cpEnabled: false, cpBooksPerCarton: 84, cpMaterialPerCarton: 0.93, cpMinPerCarton: 2, cpLaborRate: 39,
   // Outside Finishing defaults — off.
   ofEnabled: false, ofDescription: "", ofCost: 0,
+  ofTiers: [] as { qty: number; cost: number }[],
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -1466,23 +1470,77 @@ function CartonPackSection({ form, set }: { form: FormState; set: EstimatorSetFn
   );
 }
 
-// Outside Finishing — pass-through cost for score, foil, die, etc. (0% markup).
+// Pick the outside-finishing cost for a given quantity. Tiers (if defined)
+// take precedence — exact match if present, else closest tier qty. Falls back
+// to the single ofCost when no tier matches (Mary 6/8: ID badges have $161.60
+// at 500 and $291.71 at 1000 — vendor prices differ per tier).
+function outsideFinishingCostForQty(form: FormState, qty: number): number {
+  if (!form.ofEnabled) return 0;
+  const tiers = (form.ofTiers || []).filter(t => Number(t.qty) > 0 && Number(t.cost) >= 0);
+  if (tiers.length > 0) {
+    const exact = tiers.find(t => Number(t.qty) === qty);
+    if (exact) return Number(exact.cost);
+    // Closest tier qty (use the largest tier ≤ qty, else smallest tier).
+    const sorted = [...tiers].sort((a, b) => Number(a.qty) - Number(b.qty));
+    const lower = [...sorted].reverse().find(t => Number(t.qty) <= qty);
+    if (lower) return Number(lower.cost);
+    return Number(sorted[0].cost);
+  }
+  return Number(form.ofCost) || 0;
+}
+
+// Outside Finishing — pass-through cost for score, foil, die, etc.
+// Markup % is the standard "Outside" markup (editable per job — Mary 6/8).
 function OutsideFinishingSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const tiers = form.ofTiers || [];
+  const updateTier = (i: number, patch: any) => {
+    const next = [...tiers]; next[i] = { ...next[i], ...patch };
+    (set as any)("ofTiers", next);
+  };
+  const addTier = () => {
+    (set as any)("ofTiers", [...tiers, { qty: Number(form.quantity) || 0, cost: 0 }]);
+  };
+  const removeTier = (i: number) => {
+    (set as any)("ofTiers", tiers.filter((_, j) => j !== i));
+  };
   return (
     <Section title="Outside Finishing" icon={Truck} defaultOpen={false}>
       <label className="flex items-center gap-3 cursor-pointer mb-3">
         <input type="checkbox" checked={form.ofEnabled} onChange={(e) => set("ofEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
-        <span className="text-sm font-medium text-gray-700">Add outside finishing (score, foil, die, etc.)</span>
+        <span className="text-sm font-medium text-gray-700">Add outside finishing (score, foil, die, lamination, etc.)</span>
       </label>
       {form.ofEnabled && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Description" className="sm:col-span-2">
-            <Input value={form.ofDescription} onChange={(e) => set("ofDescription", e.target.value)} placeholder="e.g. Score, Foil stamp, Die cut" />
-          </Field>
-          <Field label="Cost ($)" hint="Vendor pass-through — 0% markup">
-            <Input type="number" step="0.01" value={form.ofCost || ""} onChange={(e) => set("ofCost", Number(e.target.value))} min={0} />
-          </Field>
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Description" className="sm:col-span-2">
+              <Input value={form.ofDescription} onChange={(e) => set("ofDescription", e.target.value)} placeholder="e.g. Score · Foil stamp · Lamination (Accurate)" />
+            </Field>
+            <Field label="Cost ($)" hint={tiers.length > 0 ? "Used only if no tier matches" : "Single vendor cost (or add per-tier rows below)"}>
+              <Input type="number" step="0.01" value={form.ofCost || ""} onChange={(e) => set("ofCost", Number(e.target.value))} min={0} />
+            </Field>
+          </div>
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-700">Per-quantity tier costs (optional)</p>
+              <button type="button" onClick={addTier} className="text-xs font-medium text-brand-600 hover:text-brand-800">+ Add tier</button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">When the vendor charges different amounts at different volumes (Mary 6/8 — ID badges: $161.60 at 500, $291.71 at 1,000). Markup % is shared across all tiers.</p>
+            {tiers.length === 0 && <p className="text-xs text-gray-400 italic">No tiers — using the single Cost above.</p>}
+            <div className="space-y-2">
+              {tiers.map((t, i) => (
+                <div key={i} className="grid grid-cols-3 gap-2 items-end">
+                  <Field label={i === 0 ? "Quantity" : ""}>
+                    <Input type="number" value={t.qty || ""} onChange={(e) => updateTier(i, { qty: Number(e.target.value) })} min={0} />
+                  </Field>
+                  <Field label={i === 0 ? "Vendor cost ($)" : ""}>
+                    <Input type="number" step="0.01" value={t.cost || ""} onChange={(e) => updateTier(i, { cost: Number(e.target.value) })} min={0} />
+                  </Field>
+                  <button type="button" onClick={() => removeTier(i)} className="text-xs text-red-600 hover:text-red-800 mb-2 text-left">Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </Section>
   );
@@ -2428,7 +2486,9 @@ function EstimateContent() {
     // (Mary 5/27) — vendor pass-through, 0% markup bucket. The digital
     // branches above set digitalClicksOutside; we fold it in here.
     // Outside Finishing (score / foil / die / etc.) also lives in Outside.
-    const outsideFinishingCost = form.ofEnabled ? (Number(form.ofCost) || 0) : 0;
+    // Mary 6/8: per-tier vendor costs — pick the matching tier for this qty,
+    // else fall back to the single ofCost.
+    const outsideFinishingCost = outsideFinishingCostForQty(form, q * v);
     const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside + outsideFinishingCost;
 
     // Auto-calculate waste from press config waste curve
@@ -2599,8 +2659,11 @@ function EstimateContent() {
 
       const laborCost = tierPressRunTime * num("pressOperatorRate") + num("prepressTime") * num("prepressRate") + num("setupTime") * num("pressOperatorRate");
       const shippingCost = num("shippingCost");
-      const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost;
-      const markupAmount = materialsCost * (num("markupPaper") / 100) + toolingCost * (num("markupMaterial") / 100) + laborCost * (num("markupLabor") / 100) + shippingCost * (num("markupOutside") / 100);
+      // Per-tier outside finishing (Mary 6/8) — vendor cost can differ at each
+      // quote tier; same markup % across tiers.
+      const outsideFinishingTier = outsideFinishingCostForQty(form, q * v);
+      const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideFinishingTier;
+      const markupAmount = materialsCost * (num("markupPaper") / 100) + toolingCost * (num("markupMaterial") / 100) + laborCost * (num("markupLabor") / 100) + (shippingCost + outsideFinishingTier) * (num("markupOutside") / 100);
       const commissionAmount = subtotal * (num("commissionPercent") / 100);
       const total = subtotal + markupAmount + commissionAmount;
       return { quantity: q, total, costPerUnit: total / q, costPer1000: (total / q) * 1000 };
