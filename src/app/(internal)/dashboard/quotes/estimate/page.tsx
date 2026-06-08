@@ -309,6 +309,12 @@ interface FormState {
   digitalParentSheetCost: number; // $ per parent sheet of stock
   digitalParentPaperDesc: string; // parent stock description (brand/weight/finish)
   digitalPaperType: string;       // Mary's list (uncoated_text, coated_cover, etc.) — drives basic-size for auto M-weight
+  // Digital multi-section / parts (Mary 6/8): books with cover + text body
+  // each printed on different stock with their own fold. Cutter + folder
+  // happen per part; stitcher + drilling + shrink-wrap + carton pack are
+  // whole-job (combine the parts). Each entry: name, pages, paper type,
+  // basis weight, parent cost override, fold type, spoilage %.
+  digitalParts: { name: string; pages: number; paperType: string; basisWeight: number; parentSheetCostOverride: number; foldType: string; spoilagePct: number }[];
   // ── Finishing machine: Cutter — real E&M rates (Mary 5/27) ──
   // lifts = ceil(sheets / sheets-per-lift); cut time = cuts × lifts × per-cut
   // (0.5 chop / 0.7 bleed); + load/unload per lift by stock size; + setup.
@@ -528,6 +534,7 @@ const defaultForm: FormState = {
   digitalParentSheetCost: 0,
   digitalParentPaperDesc: "",
   digitalPaperType: "",
+  digitalParts: [] as { name: string; pages: number; paperType: string; basisWeight: number; parentSheetCostOverride: number; foldType: string; spoilagePct: number }[],
   cutterEnabled: false,
   cutterSheetsToCut: 0,
   cutterMWeight: 0,
@@ -744,6 +751,153 @@ function digitalSheetMath(opts: {
   const totalClickFee = runSheets * (clickFee || 0);
   const perPieceClickFee = quantity > 0 ? totalClickFee / quantity : 0;
   return { runsPerParent, baseSheets, sheetsPerPiece, contentParents, runSheets, parentSheets, totalClickFee, perPieceClickFee };
+}
+
+// Digital multi-section math (Mary 6/8). For each part: paper at part's basis
+// weight / paper type / cost (or whole-job default); clicks for this part's
+// pages × qty. Per-part folder cost rolls into finishing. Whole-job (stitcher,
+// drilling, shrink-wrap, carton pack) is unchanged.
+function digitalPartsCost(form: FormState) {
+  const parts = (form.digitalParts || []) as FormState["digitalParts"];
+  if (!parts.length) return { used: false, paperCost: 0, clickCost: 0, folderCost: 0, parentSheets: 0, runSheets: 0, breakdown: [] as any[] };
+  const baseQty = (Number(form.quantity) || 0) * (Number(form.versions) || 1);
+  const parentW = form.digitalParentPreset === "custom" ? Number(form.digitalParentW) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[0] ?? 0);
+  const parentH = form.digitalParentPreset === "custom" ? Number(form.digitalParentH) || 0 : (DIGITAL_PARENT_PRESETS[form.digitalParentPreset]?.[1] ?? 0);
+  const runW = Number(form.digitalRunW) || 0;
+  const runH = Number(form.digitalRunH) || 0;
+  const pps = Math.max(1, Number(form.digitalPiecesPerSheet) || 1);
+  const pagesPerSheet = Math.max(1, Number(form.digitalPagesPerSheet) || 1);
+  const clickFee = Number(form.digitalClickFee) || 0.378;
+  const wholeMR = Number(form.makeReadySheets) || 0;
+  const wholeOvers = Number(form.digitalOvers) || 0;
+  const defaultParentCost = Number(form.digitalParentSheetCost) || 0;
+  let paperCost = 0, clickCost = 0, folderCost = 0, parentSheets = 0, runSheets = 0;
+  const breakdown: any[] = [];
+  parts.forEach((p, i) => {
+    const partQty = Math.ceil(baseQty * (1 + (Number(p.spoilagePct) || 0) / 100));
+    const dm = digitalSheetMath({
+      parentW, parentH, runW, runH, piecesPerSheet: pps,
+      quantity: partQty, pages: Math.max(1, Number(p.pages) || 1), pagesPerSheet,
+      // MR + overs split proportionally across parts so the whole-job count
+      // doesn't double-charge. Each part gets a share of the total.
+      makeReady: Math.round(wholeMR / parts.length), overs: Math.round(wholeOvers / parts.length),
+      clickFee,
+    });
+    const partParentCost = (Number(p.parentSheetCostOverride) > 0 ? Number(p.parentSheetCostOverride) : defaultParentCost);
+    const partPaper = dm.parentSheets * partParentCost;
+    const partClick = dm.totalClickFee;
+    // Per-part folder (if a real fold is picked)
+    const fd = p.foldType && p.foldType !== "none" ? FOLD_DEFAULTS[p.foldType] : null;
+    let partFolder = 0;
+    if (fd) {
+      // Sheets to fold = part's run sheets (each printed sheet folds).
+      const adjSpeed = Math.max(1, fd.speed);
+      const runHrs = dm.runSheets / adjSpeed;
+      const setupHrs = fd.setupMin / 60;
+      const billed = Math.max(15 / 60, runHrs + setupHrs);
+      partFolder = billed * 48; // E&M folder $48/hr — help off by default
+    }
+    paperCost += partPaper;
+    clickCost += partClick;
+    folderCost += partFolder;
+    parentSheets += dm.parentSheets;
+    runSheets += dm.runSheets;
+    breakdown.push({ name: p.name || `Part ${i+1}`, partQty, parentSheets: dm.parentSheets, runSheets: dm.runSheets, partPaper, partClick, partFolder, foldType: p.foldType });
+  });
+  return { used: true, paperCost, clickCost, folderCost, parentSheets, runSheets, breakdown };
+}
+
+function DigitalPartsSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  const parts = form.digitalParts || [];
+  const r = digitalPartsCost(form);
+  const updatePart = (i: number, patch: any) => {
+    const next = [...parts];
+    next[i] = { ...next[i], ...patch };
+    (set as any)("digitalParts", next);
+  };
+  const addPart = () => {
+    (set as any)("digitalParts", [...parts, { name: "", pages: 0, paperType: "", basisWeight: 0, parentSheetCostOverride: 0, foldType: "none", spoilagePct: 0 }]);
+  };
+  const removePart = (i: number) => {
+    (set as any)("digitalParts", parts.filter((_, j) => j !== i));
+  };
+  return (
+    <Section title={`Sections / Parts ${parts.length > 0 ? `(${parts.length})` : ""}`} icon={Layers} defaultOpen={parts.length > 0}>
+      <p className="text-xs text-gray-500 mb-3">
+        For books with a cover + text body, or any job split across stocks. Each section gets its own pages, paper, and fold; whole-job finishing (stitcher, drilling, shrink-wrap, carton pack) combines them after.
+      </p>
+      <div className="space-y-3">
+        {parts.map((p, i) => (
+          <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-gray-500">Section {i + 1}</span>
+                <Input className="font-medium w-64" value={p.name} placeholder="e.g. Cover, Text body" onChange={(e) => updatePart(i, { name: e.target.value })} />
+              </div>
+              <button type="button" onClick={() => removePart(i)} className="text-xs text-red-600 hover:text-red-800">Remove</button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label="# of pages">
+                <Input type="number" value={p.pages || ""} onChange={(e) => updatePart(i, { pages: Number(e.target.value) })} min={0} />
+              </Field>
+              <Field label="Paper type">
+                <select value={p.paperType} onChange={(e) => updatePart(i, { paperType: e.target.value })} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                  <option value="">— use job default —</option>
+                  <option value="uncoated_text">Uncoated text</option>
+                  <option value="coated_text">Coated text</option>
+                  <option value="uncoated_cover">Uncoated cover</option>
+                  <option value="coated_cover">Coated cover</option>
+                  <option value="envelopes">Envelopes</option>
+                  <option value="label_stock">Label stock</option>
+                  <option value="c1s">C1S</option>
+                  <option value="carbonless">Carbonless</option>
+                </select>
+              </Field>
+              <Field label="Basis weight (lb)">
+                <Input type="number" value={p.basisWeight || ""} onChange={(e) => updatePart(i, { basisWeight: Number(e.target.value) })} placeholder="e.g. 80" />
+              </Field>
+              <Field label="Parent cost override ($/each)" hint="Leave blank to use job default">
+                <Input type="number" step="0.0001" value={p.parentSheetCostOverride || ""} onChange={(e) => updatePart(i, { parentSheetCostOverride: Number(e.target.value) })} />
+              </Field>
+              <Field label="Fold type">
+                <select value={p.foldType} onChange={(e) => updatePart(i, { foldType: e.target.value })} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                  <option value="none">No fold</option>
+                  {FOLD_TYPES.map((ft) => (
+                    <option key={ft} value={ft}>{FOLD_DEFAULTS[ft].label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Spoilage %" hint="Extra above base qty">
+                <Input type="number" value={p.spoilagePct || ""} onChange={(e) => updatePart(i, { spoilagePct: Number(e.target.value) })} min={0} max={100} />
+              </Field>
+            </div>
+            {r.used && r.breakdown[i] && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/40 p-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div><span className="text-gray-600">Qty:</span> <strong>{r.breakdown[i].partQty.toLocaleString()}</strong></div>
+                <div><span className="text-gray-600">Parent sheets:</span> <strong>{r.breakdown[i].parentSheets.toLocaleString()}</strong></div>
+                <div><span className="text-gray-600">Run sheets:</span> <strong>{r.breakdown[i].runSheets.toLocaleString()}</strong></div>
+                <div><span className="text-gray-600">Paper:</span> <strong>${r.breakdown[i].partPaper.toFixed(2)}</strong></div>
+                <div><span className="text-gray-600">Clicks:</span> <strong>${r.breakdown[i].partClick.toFixed(2)}</strong></div>
+                <div><span className="text-gray-600">Folder:</span> <strong>${r.breakdown[i].partFolder.toFixed(2)}</strong></div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={addPart} className="mt-3 text-sm font-medium text-brand-600 hover:text-brand-800">+ Add Section</button>
+      {r.used && (
+        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+          <p className="text-xs font-semibold text-blue-900 mb-2">Sections subtotal — replaces whole-job Paper + Click + Folder</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div><span className="text-gray-600">Paper:</span> <strong>${r.paperCost.toFixed(2)}</strong></div>
+            <div><span className="text-gray-600">Clicks:</span> <strong>${r.clickCost.toFixed(2)}</strong></div>
+            <div><span className="text-gray-600">Per-part folders:</span> <strong>${r.folderCost.toFixed(2)}</strong></div>
+            <div><span className="text-gray-600">Total:</span> <strong className="text-blue-900">${(r.paperCost + r.clickCost + r.folderCost).toFixed(2)}</strong></div>
+          </div>
+        </div>
+      )}
+    </Section>
+  );
 }
 
 function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -1971,19 +2125,32 @@ function EstimateContent() {
       finishingCost = num("gluingSetup") + num("windowPatching");
       makeReadyCost = (num("makeReadySheets") / 1000) * num("paperCostPer1000");
     } else if (isCartonDigital) {
-      // Digital click-fee model (Mary 5/18): parent → run sheet → pieces-up
-      // sets the run-sheet count; click fee is a flat per-run-sheet charge.
-      const dm = digitalSheetMath({
-        parentW: num("digitalParentW"), parentH: num("digitalParentH"),
-        runW: num("digitalRunW"), runH: num("digitalRunH"),
-        piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"), overs: num("digitalOvers"),
-        clickFee: num("digitalClickFee") || 0.378,
-      });
-      const paperCost = dm.parentSheets * num("digitalParentSheetCost");
-      materialsCost = paperCost;
-      digitalClicksOutside = dm.totalClickFee; // E&M categorizes clicks as Outside (Mary 5/27)
-      const dieCutMinutes = dm.runSheets * num("digitalDieCuttingTime");
+      // Sections / parts override (Mary 6/8): when any digitalParts are
+      // defined, per-section paper + clicks + per-part folder cost replace
+      // the whole-job calc. Whole-job finishing (stitcher etc.) still applies.
+      const pc = digitalPartsCost(form);
+      let runSheetsForDieCut = 0;
+      if (pc.used) {
+        materialsCost = pc.paperCost;
+        digitalClicksOutside = pc.clickCost;
+        finishingCost += pc.folderCost;
+        runSheetsForDieCut = pc.runSheets;
+      } else {
+        // Digital click-fee model (Mary 5/18): parent → run sheet → pieces-up
+        // sets the run-sheet count; click fee is a flat per-run-sheet charge.
+        const dm = digitalSheetMath({
+          parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+          runW: num("digitalRunW"), runH: num("digitalRunH"),
+          piecesPerSheet: num("digitalPiecesPerSheet"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"), overs: num("digitalOvers"),
+          clickFee: num("digitalClickFee") || 0.378,
+        });
+        const paperCost = dm.parentSheets * num("digitalParentSheetCost");
+        materialsCost = paperCost;
+        digitalClicksOutside = dm.totalClickFee; // E&M categorizes clicks as Outside (Mary 5/27)
+        runSheetsForDieCut = dm.runSheets;
+      }
+      const dieCutMinutes = runSheetsForDieCut * num("digitalDieCuttingTime");
       // Bindery parity with offset (Mary 5/18) — gluing + window patching
       // roll into finishing; quantitative finishing is added for all paths below.
       finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
@@ -2010,18 +2177,26 @@ function EstimateContent() {
         num("binderySetupHours") * num("binderyRate");
       makeReadyCost = 0; // already included in sheetsPerForm above
     } else if (isCommDigital) {
-      // Digital click-fee model (Mary 5/18) — same as carton digital.
-      const dm = digitalSheetMath({
-        parentW: num("digitalParentW"), parentH: num("digitalParentH"),
-        runW: num("digitalRunW"), runH: num("digitalRunH"),
-        piecesPerSheet: num("digitalPiecesPerSheet"),
-        quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"), overs: num("digitalOvers"),
-        clickFee: num("digitalClickFee") || 0.378,
-      });
-      const paperCost = dm.parentSheets * num("digitalParentSheetCost");
+      // Sections / parts override (Mary 6/8) — same as carton digital.
+      const pc = digitalPartsCost(form);
       const rushMul = 1 + num("rushSurchargePercent") / 100;
-      materialsCost = paperCost * rushMul;
-      digitalClicksOutside = dm.totalClickFee * rushMul; // clicks → Outside (Mary 5/27)
+      if (pc.used) {
+        materialsCost = pc.paperCost * rushMul;
+        digitalClicksOutside = pc.clickCost * rushMul;
+        finishingCost += pc.folderCost;
+      } else {
+        // Digital click-fee model (Mary 5/18) — same as carton digital.
+        const dm = digitalSheetMath({
+          parentW: num("digitalParentW"), parentH: num("digitalParentH"),
+          runW: num("digitalRunW"), runH: num("digitalRunH"),
+          piecesPerSheet: num("digitalPiecesPerSheet"),
+          quantity: q * v, pages: isCarton ? 1 : (num("numPages") || 1), pagesPerSheet: num("digitalPagesPerSheet") || 1, makeReady: num("makeReadySheets"), overs: num("digitalOvers"),
+          clickFee: num("digitalClickFee") || 0.378,
+        });
+        const paperCost = dm.parentSheets * num("digitalParentSheetCost");
+        materialsCost = paperCost * rushMul;
+        digitalClicksOutside = dm.totalClickFee * rushMul; // clicks → Outside (Mary 5/27)
+      }
       finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
         + num("gluingSetup") + num("windowPatching");
     }
@@ -3825,6 +4000,8 @@ function EstimateContent() {
         <>
           <DigitalClickSection form={form} set={set} />
 
+          <DigitalPartsSection form={form} set={set} />
+
           <Section title="Digital Die-Cut & Coating" icon={Layers}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Digital Die-Cut Time (min/sheet)">
@@ -3944,6 +4121,8 @@ function EstimateContent() {
       {isCommDigital && (
         <>
           <DigitalClickSection form={form} set={set} />
+
+          <DigitalPartsSection form={form} set={set} />
 
           <Section title="Digital Costs" icon={Layers}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
