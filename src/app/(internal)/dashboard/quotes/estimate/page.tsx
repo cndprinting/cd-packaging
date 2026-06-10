@@ -351,6 +351,13 @@ interface FormState {
   // markup % is shared across tiers via the standard markupOutside.
   ofEnabled: boolean; ofDescription: string; ofCost: number;
   ofTiers: { qty: number; cost: number }[];
+  ofMarkupPct: number;          // per-item markup (Mary 6/9: pack-out ×27 @ 32% while clicks stay 0%)
+  // E&M labor lines present on every digital quote (Mary 6/9 five-quote audit):
+  paperHandlingHours: number;   // 0.1 hr standard → Labor bucket
+  paperHandlingRate: number;    // $26.70/hr from E&M ($2.67 per 0.1 hr)
+  deliveryHours: number;        // delivery LABOR → Labor bucket (freight $ stays Outside)
+  deliveryRate: number;         // $60/hr from E&M
+  mailSortPerPiece: number;     // mail sort $/pc → Outside (Q5: $0.02/pc)
   // Commercial Print + Offset
   plateCostEach: number;
   paperWeight: number;
@@ -566,6 +573,11 @@ const defaultForm: FormState = {
   // Outside Finishing defaults — off.
   ofEnabled: false, ofDescription: "", ofCost: 0,
   ofTiers: [] as { qty: number; cost: number }[],
+  ofMarkupPct: 0,
+  // E&M standard labor lines (Mary 6/9): paper handling on every job.
+  paperHandlingHours: 0.1, paperHandlingRate: 26.7,
+  deliveryHours: 0, deliveryRate: 60,
+  mailSortPerPiece: 0,
   plateCostEach: 0,
   paperWeight: 100,
   commPaperCostPer1000: 0,
@@ -988,7 +1000,7 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Overs (extra clicks)" hint="Impressions beyond content (E&M 'overs')">
           <Input type="number" value={form.digitalOvers || ""} onChange={(e) => set("digitalOvers", Number(e.target.value))} min={0} />
         </Field>
-        <Field label="Click fee ($ / run sheet)" hint="Default 0.378 = 4/4 process">
+        <Field label="Click fee ($ / run sheet)" hint="4/4 = .378 · 4/0 = .189 · 4/0+VD = .325">
           <Input type="number" step="0.001" value={form.digitalClickFee || ""} onChange={(e) => set("digitalClickFee", Number(e.target.value))} />
         </Field>
         <Field label="Parent sheet cost ($ each)">
@@ -1517,6 +1529,9 @@ function OutsideFinishingSection({ form, set }: { form: FormState; set: Estimato
             </Field>
             <Field label="Cost ($)" hint={tiers.length > 0 ? "Used only if no tier matches" : "Single vendor cost (or add per-tier rows below)"}>
               <Input type="number" step="0.01" value={form.ofCost || ""} onChange={(e) => set("ofCost", Number(e.target.value))} min={0} />
+            </Field>
+            <Field label="Markup % (this item)" hint="0 = pass-through · e.g. pack-out 32%">
+              <Input type="number" step="1" value={form.ofMarkupPct || ""} onChange={(e) => set("ofMarkupPct", Number(e.target.value))} min={0} max={100} />
             </Field>
           </div>
           <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3">
@@ -2369,7 +2384,13 @@ function EstimateContent() {
     const pressLabor = isDigitalPath ? 0 :
       adjustedPressRunTime * num("pressOperatorRate") +
       num("setupTime") * num("pressOperatorRate");
-    const laborCost = pressLabor + num("prepressTime") * num("prepressRate") + plateLaborCost;
+    // E&M standard labor lines (Mary 6/9 five-quote audit): paper handling
+    // (0.1 hr on every job) + delivery LABOR (driver time — freight $ stays
+    // in the Outside bucket). Both feed the Labor 40% markup like E&M.
+    const paperHandlingCost = num("paperHandlingHours") * num("paperHandlingRate");
+    const deliveryLaborCost = num("deliveryHours") * num("deliveryRate");
+    const laborCost = pressLabor + num("prepressTime") * num("prepressRate") + plateLaborCost
+      + paperHandlingCost + deliveryLaborCost;
 
     const shippingCost = num("shippingCost");
 
@@ -2489,7 +2510,9 @@ function EstimateContent() {
     // Mary 6/8: per-tier vendor costs — pick the matching tier for this qty,
     // else fall back to the single ofCost.
     const outsideFinishingCost = outsideFinishingCostForQty(form, q * v);
-    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside + outsideFinishingCost;
+    // Mail sort (Mary 6/9 Q5: $0.02/pc) → Outside, like E&M's Sort line.
+    const mailSortCost = (q * v) * num("mailSortPerPiece");
+    const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside + outsideFinishingCost + mailSortCost;
 
     // Auto-calculate waste from press config waste curve
     let wasteSheets = 0;
@@ -2548,12 +2571,18 @@ function EstimateContent() {
     }
     void inkSoftCost; // referenced for future ink-cost detail; suppress unused
 
-    const paperMarkup = paperOnlyCost * (num("markupPaper") / 100);
-    const materialMarkup = materialOnlyCost * (num("markupMaterial") / 100);
+    // E&M floors every bucket's markup at $1.00 minimum — all five 6/9 quotes
+    // show it (even Material $0.00 → $1.00 markup). Match exactly.
+    const muFloor = (x: number) => Math.max(1, x);
+    const paperMarkup = muFloor(paperOnlyCost * (num("markupPaper") / 100));
+    const materialMarkup = muFloor(materialOnlyCost * (num("markupMaterial") / 100));
     // E&M groups bindery/finishing labor into the Labor markup base (40% in
     // the Cybake quote). Match that — finishing machine cost is labor too.
-    const laborMarkup = (laborCost + finishingCost) * (num("markupLabor") / 100);
-    const outsideMarkup = (shippingCost + outsideCost) * (num("markupOutside") / 100);
+    const laborMarkup = muFloor((laborCost + finishingCost) * (num("markupLabor") / 100));
+    // Outside Finishing can carry its OWN markup % (Mary 6/9 Q4: pack-out ×27
+    // @ 32% while clicks stay 0%) — excluded from the global outside base.
+    const ofOwnMarkup = outsideFinishingCost * (num("ofMarkupPct") / 100);
+    const outsideMarkup = muFloor((shippingCost + outsideCost - outsideFinishingCost) * (num("markupOutside") / 100) + ofOwnMarkup);
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
     const commissionAmount = subtotal * (num("commissionPercent") / 100);
@@ -2657,13 +2686,17 @@ function EstimateContent() {
         if (speed > 0) tierPressRunTime = sheetsNeeded / speed;
       }
 
-      const laborCost = tierPressRunTime * num("pressOperatorRate") + num("prepressTime") * num("prepressRate") + num("setupTime") * num("pressOperatorRate");
+      const laborCost = tierPressRunTime * num("pressOperatorRate") + num("prepressTime") * num("prepressRate") + num("setupTime") * num("pressOperatorRate")
+        + num("paperHandlingHours") * num("paperHandlingRate") + num("deliveryHours") * num("deliveryRate");
       const shippingCost = num("shippingCost");
       // Per-tier outside finishing (Mary 6/8) — vendor cost can differ at each
-      // quote tier; same markup % across tiers.
+      // quote tier; same markup % across tiers (own % — Mary 6/9 Q4).
       const outsideFinishingTier = outsideFinishingCostForQty(form, q * v);
-      const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideFinishingTier;
-      const markupAmount = materialsCost * (num("markupPaper") / 100) + toolingCost * (num("markupMaterial") / 100) + laborCost * (num("markupLabor") / 100) + (shippingCost + outsideFinishingTier) * (num("markupOutside") / 100);
+      const mailSortTier = (q * v) * num("mailSortPerPiece");
+      const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideFinishingTier + mailSortTier;
+      const muFloor = (x: number) => Math.max(1, x);
+      const markupAmount = muFloor(materialsCost * (num("markupPaper") / 100)) + muFloor(toolingCost * (num("markupMaterial") / 100)) + muFloor(laborCost * (num("markupLabor") / 100))
+        + muFloor((shippingCost + mailSortTier) * (num("markupOutside") / 100) + outsideFinishingTier * (num("ofMarkupPct") / 100));
       const commissionAmount = subtotal * (num("commissionPercent") / 100);
       const total = subtotal + markupAmount + commissionAmount;
       return { quantity: q, total, costPerUnit: total / q, costPer1000: (total / q) * 1000 };
@@ -4243,6 +4276,12 @@ function EstimateContent() {
           <Field label="Setup / Make-Ready (hours)">
             <Input type="number" step="0.25" value={form.setupTime || ""} onChange={(e) => set("setupTime", Number(e.target.value))} />
           </Field>
+          <Field label="Paper handling (hrs)" hint="E&M standard: 0.1 hr on every job">
+            <Input type="number" step="0.05" value={form.paperHandlingHours || ""} onChange={(e) => set("paperHandlingHours", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="Paper handling rate ($/hr)" hint="E&M: $26.70">
+            <Input type="number" step="0.1" value={form.paperHandlingRate || ""} onChange={(e) => set("paperHandlingRate", Number(e.target.value))} min={0} />
+          </Field>
         </div>
         {isOffset && (
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -4362,7 +4401,10 @@ function EstimateContent() {
 
       {/* ── Mailing & Wafer Sealing (Outside Services) ─── Mary 5/1: coating
            moved to the Paper & Ink section. This section is mailing-only now. */}
-      <Section title="Mailing" icon={Truck} defaultOpen={false}>
+      <Section title="Mailing — Inserting · Secap · Sort" icon={Truck} defaultOpen={false}>
+        <p className="text-xs text-gray-500 mb-3">
+          Inserting, wafer seal / inkjet (Secap), and mail sort — these calculate automatically and flow into the Outside bucket (like E&amp;M&apos;s Insert/Seacap/Sort lines).
+        </p>
         <div className="mb-4">
           <p className="text-sm font-medium text-gray-700 mb-3">Mail Inserting</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -4405,12 +4447,27 @@ function EstimateContent() {
             )}
           </div>
         </div>
+
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-3">Mail Sort</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="Sort ($/piece)" hint="E&M: $0.02/pc · 0 = no sort">
+              <Input type="number" step="0.005" value={form.mailSortPerPiece || ""} onChange={(e) => set("mailSortPerPiece", Number(e.target.value))} min={0} />
+            </Field>
+          </div>
+        </div>
       </Section>
 
       <Section title="Shipping & Markup" icon={Truck}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Shipping / Delivery ($)">
+          <Field label="Outside freight ($)" hint="Vendor freight $ — Outside bucket (0% MU)">
             <Input type="number" step="0.01" value={form.shippingCost || ""} onChange={(e) => set("shippingCost", Number(e.target.value))} />
+          </Field>
+          <Field label="Delivery labor (hrs)" hint="Driver time — Labor bucket (40% MU), like E&M">
+            <Input type="number" step="0.1" value={form.deliveryHours || ""} onChange={(e) => set("deliveryHours", Number(e.target.value))} min={0} />
+          </Field>
+          <Field label="Delivery rate ($/hr)" hint="E&M: $60">
+            <Input type="number" step="1" value={form.deliveryRate || ""} onChange={(e) => set("deliveryRate", Number(e.target.value))} min={0} />
           </Field>
         </div>
         <div className="mt-4">
