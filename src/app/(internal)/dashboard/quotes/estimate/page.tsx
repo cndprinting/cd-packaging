@@ -1790,15 +1790,24 @@ function FinishingBinderySection({
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   plantStandards: PlantStandardsData | null;
 }) {
+  // Machine calculators (Cutter/Folders/Stitcher/Ctn Pack) exist on every
+  // path EXCEPT Carton→Offset — warn against double-entering on those paths.
+  const hasMachines = !(form.productType === "FOLDING_CARTON" && form.pressType === "OFFSET");
+  const dup = (s: string) => hasMachines ? `⚠ Also in the ${s} section — enter in ONE place only` : undefined;
   return (
     <Section title="Finishing & Bindery" icon={Scissors}>
+      {hasMachines && (
+        <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          ⚠ Cuts, folds, trim, and packing are now handled by the <strong>Cutter / Folder / Stitcher / Carton Pack</strong> sections above. Fields marked ⚠ below duplicate them — use one or the other, not both.
+        </p>
+      )}
       {/* ── Phase 1 + II: Quantitative finishing (Mary + Darrin) ── */}
       <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 mb-4">
         <p className="text-xs font-medium text-blue-900 mb-2">
           Quantitative finishing — enter counts, system calculates time &amp; cost using Plant Standards rates.
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="# of cuts" hint={(() => {
+          <Field label="# of cuts" hint={dup("Cutter") ?? (() => {
             const cal = Number(form.paperCaliperInches) || 0.005;
             const lh = plantStandards?.cutLiftHeightInches ?? 6;
             const lifts = Math.max(1, Math.ceil((form.quantity * cal) / lh));
@@ -1808,7 +1817,7 @@ function FinishingBinderySection({
           })()}>
             <Input type="number" value={form.numCuts || ""} onChange={(e) => set("numCuts", Number(e.target.value))} min={0} />
           </Field>
-          <Field label="Fold type">
+          <Field label="Fold type" hint={dup("Folder")}>
             <select
               value={form.foldType}
               onChange={(e) => set("foldType", e.target.value as any)}
@@ -1827,7 +1836,7 @@ function FinishingBinderySection({
               <option value="custom">Custom</option>
             </select>
           </Field>
-          <Field label="# of folds per sheet" hint={plantStandards ? `${plantStandards.foldTimePerFoldSec}s/fold` : "Auto"}>
+          <Field label="# of folds per sheet" hint={dup("Folder") ?? (plantStandards ? `${plantStandards.foldTimePerFoldSec}s/fold` : "Auto")}>
             <Input type="number" value={form.numFolds || ""} onChange={(e) => set("numFolds", Number(e.target.value))} min={0} max={10} />
           </Field>
           <Field label="# of drill holes" hint={plantStandards ? `${plantStandards.drillTimePerHoleSec}s/hole @ $${plantStandards.drillingRate}/hr` : "Auto"}>
@@ -1855,7 +1864,7 @@ function FinishingBinderySection({
           <Field label="Wrap length / bundle (in)" hint={plantStandards ? `$${plantStandards.wrapFilmCostPerFoot}/ft film + labor` : "Inches of film per bundle"}>
             <Input type="number" value={form.wrapLengthPerBundleInches || ""} onChange={(e) => set("wrapLengthPerBundleInches", Number(e.target.value))} min={0} />
           </Field>
-          <Field label="% solids coverage" hint={plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press"}>
+          <Field label="% solids coverage" hint={form.pressType === "DIGITAL" ? "⚠ Offset press concept — no effect on digital quotes" : (plantStandards ? `>${plantStandards.heavyCoverageThresholdPct}% caps press @ ${plantStandards.solidCoveragePressSpeed} SPH` : "Heavy coverage slows press")}>
             <Input type="number" value={form.coverageSolidsPct || ""} onChange={(e) => set("coverageSolidsPct", Number(e.target.value))} min={0} max={100} />
           </Field>
         </div>
@@ -1872,7 +1881,7 @@ function FinishingBinderySection({
               onChange={(e) => { const v = parseFloat(e.target.value); set("perfectBindingCost", isNaN(v) ? 0 : v); }}
             />
           </Field>
-          <Field label="Final trim to size ($)" hint="Lump-sum cost for final trimming">
+          <Field label="Final trim to size ($)" hint={dup("Cutter") ?? "Lump-sum cost for final trimming"}>
             <Input
               type="text"
               inputMode="decimal"
@@ -1918,7 +1927,7 @@ function FinishingBinderySection({
       <div className="mt-4 border-t border-gray-100 pt-4">
         <p className="text-sm font-medium text-gray-700 mb-3">Packing</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Carton Type">
+          <Field label="Carton Type" hint={dup("Carton Pack")}>
             <Select
               value={String(form.cartonType)}
               onChange={(e) => set("cartonType", Number(e.target.value))}
@@ -4206,10 +4215,10 @@ function EstimateContent() {
 
           <Section title="Digital Die-Cut & Coating" icon={Layers} defaultOpen={false}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Digital Die-Cut Time (min/sheet)">
+              <Field label="Digital Die-Cut Time (min/sheet)" hint="⚠ Overlaps the Cutter section — use for digital die-cutting only, not guillotine trim">
                 <Input type="number" step="0.1" value={form.digitalDieCuttingTime || ""} onChange={(e) => set("digitalDieCuttingTime", Number(e.target.value))} />
               </Field>
-              <Field label="Digital Cutter Rate ($/hr)">
+              <Field label="Digital Cutter Rate ($/hr)" hint="⚠ Pairs with die-cut time above — not the guillotine">
                 <Input type="number" step="0.01" value={form.digitalCutterRate || ""} onChange={(e) => set("digitalCutterRate", Number(e.target.value))} />
               </Field>
               <Field label="Coating / Lamination Cost ($)">
