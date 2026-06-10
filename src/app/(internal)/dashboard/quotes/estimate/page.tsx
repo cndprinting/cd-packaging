@@ -4530,6 +4530,89 @@ function EstimateContent() {
         </CardHeader>
       </Card>
 
+      {/* ── E&M-style Cost Summary (Mary 6/9) — same lines, same order, same
+          five-bucket table as the Parsec page-3 sheet she's read for years. */}
+      {!isOffset && (() => {
+        const cutter = form.cutterEnabled ? finishingCutterMath(form) : null;
+        const f1 = form.f1Enabled ? speedMachineMath(form, FOLDER1_CFG) : null;
+        const f2 = form.f2Enabled ? speedMachineMath(form, FOLDER2_CFG) : null;
+        const st = form.stEnabled ? stitcherMath(form) : null;
+        const cp = form.cpEnabled ? cartonPackMath(form) : null;
+        const machinesTotal = (cutter?.cost || 0) + (f1?.cost || 0) + (f2?.cost || 0) + (st?.cost || 0) + (cp?.laborCost || 0);
+        const otherBindery = Math.max(0, calc.finishingCost - machinesTotal);
+        const handling = (Number(form.paperHandlingHours) || 0) * (Number(form.paperHandlingRate) || 0);
+        const prep = (Number(form.prepressTime) || 0) * (Number(form.prepressRate) || 0);
+        const delivLabor = (Number(form.deliveryHours) || 0) * (Number(form.deliveryRate) || 0);
+        const finishOutside = calc.outsideCost; // clicks + outside finishing + purchases + sort
+        const emOutsideBucket = calc.outsideCost + calc.shippingCost; // E&M folds freight in
+        const emLaborBucket = calc.laborCost + calc.finishingCost;
+        const Row = ({ label, hrs, mat, amt }: { label: string; hrs?: number; mat?: number; amt: number }) => (
+          <div className="flex items-center justify-between py-0.5 font-mono text-[13px]">
+            <span className="text-gray-700">{label}{hrs !== undefined ? `  ${hrs.toFixed(1)} Hrs` : ""}{mat !== undefined && mat > 0 ? `  ·  $${mat.toFixed(2)}` : ""}</span>
+            <span className="font-semibold text-gray-900">{fmtMoney(amt)}</span>
+          </div>
+        );
+        const Bar = ({ t }: { t: string }) => (
+          <div className="my-1 border-t border-gray-300 pt-1 text-center text-[11px] font-mono tracking-widest text-gray-500">[ {t} ]</div>
+        );
+        const bucketRows: [string, number, number, number][] = [
+          ["Paper", calc.paperCost, Number(form.markupPaper) || 0, calc.paperMarkup],
+          ["Material", calc.materialCost, Number(form.markupMaterial) || 0, calc.materialMarkup],
+          ["Outside", emOutsideBucket, Number(form.markupOutside) || 0, calc.outsideMarkup],
+          ["Labor", emLaborBucket, Number(form.markupLabor) || 0, calc.laborMarkup],
+        ];
+        return (
+          <Card className="border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-5 w-5 text-blue-600" /> Cost Summary — E&amp;M layout
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Row label="Paper handling" hrs={Number(form.paperHandlingHours) || 0} amt={handling + calc.paperCost} mat={calc.paperCost} />
+              <Bar t="Prep" />
+              <Row label="Design/Art" hrs={Number(form.prepressTime) || 0} amt={prep} />
+              <Bar t="Press" />
+              <Row label="Digital press (in click fee)" amt={0} />
+              <Bar t="Bindery" />
+              {cutter && <Row label={`Load Cutter  ${cutter.lifts} lift${cutter.lifts !== 1 ? "s" : ""} · Trim to Size`} amt={cutter.cost} />}
+              {f1 && <Row label="Fold Setup · Folding (1st folder)" amt={f1.cost} />}
+              {f2 && <Row label="Folding (2nd folder)" amt={f2.cost} />}
+              {st && <Row label={`Saddlebind  ${st.sigs} sigs · ${st.passes} pass${st.passes !== 1 ? "es" : ""}`} amt={st.cost} />}
+              {cp && <Row label={`Ctn Pack  ${cp.cartons} ctn`} mat={cp.materialCost} amt={cp.materialCost + cp.laborCost} />}
+              {otherBindery > 0.005 && <Row label="Other bindery (hand/wrap/die-cut)" amt={otherBindery} />}
+              <Row label="Finish Outside (clicks · OF · sort)" amt={finishOutside} />
+              <Row label="Delivery" hrs={Number(form.deliveryHours) || 0} mat={calc.shippingCost} amt={delivLabor + calc.shippingCost} />
+              <div className="mt-3 border-t-2 border-gray-900 pt-2">
+                <div className="grid grid-cols-4 gap-1 font-mono text-[12px] text-gray-500 mb-1">
+                  <span></span><span className="text-right">Cost</span><span className="text-right">Markup</span><span className="text-right">Selling</span>
+                </div>
+                {bucketRows.map(([label, cost, pct, mu]) => (
+                  <div key={label} className="grid grid-cols-4 gap-1 font-mono text-[13px] py-0.5">
+                    <span className="text-gray-700">{label}</span>
+                    <span className="text-right">{cost.toFixed(2)}</span>
+                    <span className="text-right text-gray-500">{pct}% → {mu.toFixed(2)}</span>
+                    <span className="text-right font-semibold">{(cost + mu).toFixed(2)}</span>
+                  </div>
+                ))}
+                <div className="grid grid-cols-4 gap-1 font-mono text-[13px] py-0.5">
+                  <span className="text-gray-700">Commission</span>
+                  <span className="text-right"></span>
+                  <span className="text-right text-gray-500">{form.commissionPercent}% → {calc.commissionAmount.toFixed(2)}</span>
+                  <span className="text-right font-semibold">{calc.commissionAmount.toFixed(2)}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 font-mono text-sm py-1 mt-1 border-t border-gray-300 font-bold">
+                  <span>Totals</span>
+                  <span className="text-right">{calc.subtotal.toFixed(2)}</span>
+                  <span className="text-right">{(calc.markupAmount + calc.commissionAmount).toFixed(2)}</span>
+                  <span className="text-right text-brand-700">{calc.total.toFixed(2)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* Cost Breakdown */}
       <Card>
         <CardHeader>
