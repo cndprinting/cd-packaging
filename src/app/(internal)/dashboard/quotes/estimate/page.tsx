@@ -1561,6 +1561,100 @@ function OutsideFinishingSection({ form, set }: { form: FormState; set: Estimato
   );
 }
 
+// Mailing — Inserting · Secap · Sort. Rendered in E&M position for digital
+// (right after the bindery machines) and at the legacy spot for offset.
+function MailingSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  return (
+    <Section title="Mailing — Inserting · Secap · Sort" icon={Truck} defaultOpen={false}>
+      <p className="text-xs text-gray-500 mb-3">
+        Inserting, wafer seal / inkjet (Secap), and mail sort — these calculate automatically and flow into the Outside bucket (like E&amp;M&apos;s Insert/Seacap/Sort lines).
+      </p>
+      <div className="mb-4">
+        <p className="text-sm font-medium text-gray-700 mb-3">Mail Inserting</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Inserter Pockets" hint="0 = no inserting">
+            <Input type="number" value={form.inserterPockets || ""} onChange={(e) => set("inserterPockets", Number(e.target.value))} min={0} max={6} />
+          </Field>
+          {(form.inserterPockets as number) > 0 && (
+            <Field label="Mail Type">
+              <Select
+                value={form.inserterMailType as string}
+                onChange={(e) => set("inserterMailType", e.target.value)}
+                options={[
+                  { value: "regular", label: "Regular ($35/hr)" },
+                  { value: "match", label: "Match Mail ($50/hr)" },
+                ]}
+              />
+            </Field>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <p className="text-sm font-medium text-gray-700 mb-3">Wafer Sealing & Inkjet</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Wafer Seal Tabs" hint="0 = no sealing">
+            <Input type="number" value={form.secapTabs || ""} onChange={(e) => set("secapTabs", Number(e.target.value))} min={0} />
+          </Field>
+          {(form.secapTabs as number) > 0 && (
+            <Field label="Inkjet Addressing">
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.secapInkjet as boolean}
+                  onChange={(e) => set("secapInkjet", e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                />
+                <span className="text-sm text-gray-700">Add inkjet ($0.005/piece)</span>
+              </label>
+            </Field>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <p className="text-sm font-medium text-gray-700 mb-3">Mail Sort</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Field label="Sort ($/piece)" hint="E&M: $0.02/pc · 0 = no sort">
+            <Input type="number" step="0.005" value={form.mailSortPerPiece || ""} onChange={(e) => set("mailSortPerPiece", Number(e.target.value))} min={0} />
+          </Field>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// Prep — digital paths only (E&M's [Prep] block: Design/Art + paper handling).
+// On digital, press labor is zero, so these are the whole Labor bucket besides
+// delivery; surfacing them here matches the E&M sheet order (Mary 6/9).
+function DigitalPrepSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
+  return (
+    <Section title="Prep — Design/Art · Paper Handling" icon={Clock} defaultOpen={false}>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Field label="Design/Art (minutes)" hint={`= ${((Number(form.prepressTime) || 0) * 60).toFixed(0)} min (E&M Prep line)`}>
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={form.prepressTime > 0 ? Math.round(form.prepressTime * 60) : ""}
+            placeholder="e.g. 18 = 0.3 hr"
+            onChange={(e) => {
+              const mins = parseFloat(e.target.value);
+              set("prepressTime", isNaN(mins) ? 0 : mins / 60);
+            }}
+          />
+        </Field>
+        <Field label="Design/Art rate ($/hr)" hint="E&M: $50">
+          <Input type="number" step="1" value={form.prepressRate || ""} onChange={(e) => set("prepressRate", Number(e.target.value))} min={0} />
+        </Field>
+        <Field label="Paper handling (hrs)" hint="E&M standard: 0.1 on every job">
+          <Input type="number" step="0.05" value={form.paperHandlingHours || ""} onChange={(e) => set("paperHandlingHours", Number(e.target.value))} min={0} />
+        </Field>
+        <Field label="Handling rate ($/hr)" hint="E&M: $26.70">
+          <Input type="number" step="0.1" value={form.paperHandlingRate || ""} onChange={(e) => set("paperHandlingRate", Number(e.target.value))} min={0} />
+        </Field>
+      </div>
+    </Section>
+  );
+}
+
 // Renders all six finishing items (Mary 5/25–5/27) — used on the
 // Carton→Digital, Comm→Digital, and Comm→Offset paths.
 function FinishingMachinesSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -4098,11 +4192,19 @@ function EstimateContent() {
       {/* ── Folding Carton + Digital ────────────────────────────────── */}
       {isCartonDigital && (
         <>
+          {/* E&M sheet order (Mary 6/9): Paper → Prep → Bindery machines →
+              Mailing → extras. Legacy sections collapsed at the bottom. */}
           <DigitalClickSection form={form} set={set} />
 
           <DigitalPartsSection form={form} set={set} />
 
-          <Section title="Digital Die-Cut & Coating" icon={Layers}>
+          <DigitalPrepSection form={form} set={set} />
+
+          <FinishingMachinesSection form={form} set={set} />
+
+          <MailingSection form={form} set={set} />
+
+          <Section title="Digital Die-Cut & Coating" icon={Layers} defaultOpen={false}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Digital Die-Cut Time (min/sheet)">
                 <Input type="number" step="0.1" value={form.digitalDieCuttingTime || ""} onChange={(e) => set("digitalDieCuttingTime", Number(e.target.value))} />
@@ -4116,12 +4218,7 @@ function EstimateContent() {
             </div>
           </Section>
 
-          {/* Paper lives in the Paper & Click Fee section above (Mary 5/19) —
-              no separate spec block so the parent/run sheet sizes aren't
-              entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
-
-          <FinishingMachinesSection form={form} set={set} />
 
           <Section title="Variable Data" icon={Hash} defaultOpen={false}>
             <div className="space-y-3">
@@ -4220,11 +4317,19 @@ function EstimateContent() {
       {/* ── Commercial Print + Digital ──────────────────────────────── */}
       {isCommDigital && (
         <>
+          {/* E&M sheet order (Mary 6/9): Paper → Prep → Bindery machines →
+              Mailing → extras. Legacy sections collapsed at the bottom. */}
           <DigitalClickSection form={form} set={set} />
 
           <DigitalPartsSection form={form} set={set} />
 
-          <Section title="Digital Costs" icon={Layers}>
+          <DigitalPrepSection form={form} set={set} />
+
+          <FinishingMachinesSection form={form} set={set} />
+
+          <MailingSection form={form} set={set} />
+
+          <Section title="Digital Costs — Rush · VDP" icon={Layers} defaultOpen={false}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Rush Surcharge (%)">
                 <Input type="number" step="1" value={form.rushSurchargePercent || ""} onChange={(e) => set("rushSurchargePercent", Number(e.target.value))} min={0} max={100} />
@@ -4238,16 +4343,14 @@ function EstimateContent() {
             </div>
           </Section>
 
-          {/* Paper lives in the Paper & Click Fee section above (Mary 5/19) —
-              no separate spec block so the parent/run sheet sizes aren't
-              entered twice. */}
           <FinishingBinderySection form={form} set={set} setForm={setForm} plantStandards={plantStandards} />
-
-          <FinishingMachinesSection form={form} set={set} />
         </>
       )}
 
-      {/* ── Universal: Labor & Overhead ─────────────────────────────── */}
+      {/* ── Labor & Overhead — OFFSET only. Digital paths use the Prep
+          section above (E&M order, Mary 6/9); press/prepress/handling for
+          digital are covered there + in the click fee. ─────────────── */}
+      {isOffset && (
       <Section title="Labor & Time" icon={Clock}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {/* Press operator rate + run time are offset-press concepts — for
@@ -4314,6 +4417,7 @@ function EstimateContent() {
           </div>
         )}
       </Section>
+      )}
 
       {/* ── Print Finishing (Todd's Calculator) ──────────────────── */}
       <Section title="Print Finishing" icon={Scissors} defaultOpen={false}>
@@ -4403,64 +4507,8 @@ function EstimateContent() {
         </div>
       </Section>
 
-      {/* ── Mailing & Wafer Sealing (Outside Services) ─── Mary 5/1: coating
-           moved to the Paper & Ink section. This section is mailing-only now. */}
-      <Section title="Mailing — Inserting · Secap · Sort" icon={Truck} defaultOpen={false}>
-        <p className="text-xs text-gray-500 mb-3">
-          Inserting, wafer seal / inkjet (Secap), and mail sort — these calculate automatically and flow into the Outside bucket (like E&amp;M&apos;s Insert/Seacap/Sort lines).
-        </p>
-        <div className="mb-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Mail Inserting</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <Field label="Inserter Pockets" hint="0 = no inserting">
-              <Input type="number" value={form.inserterPockets || ""} onChange={(e) => set("inserterPockets", Number(e.target.value))} min={0} max={6} />
-            </Field>
-            {(form.inserterPockets as number) > 0 && (
-              <Field label="Mail Type">
-                <Select
-                  value={form.inserterMailType as string}
-                  onChange={(e) => set("inserterMailType", e.target.value)}
-                  options={[
-                    { value: "regular", label: "Regular ($35/hr)" },
-                    { value: "match", label: "Match Mail ($50/hr)" },
-                  ]}
-                />
-              </Field>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-gray-100 pt-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Wafer Sealing & Inkjet</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <Field label="Wafer Seal Tabs" hint="0 = no sealing">
-              <Input type="number" value={form.secapTabs || ""} onChange={(e) => set("secapTabs", Number(e.target.value))} min={0} />
-            </Field>
-            {(form.secapTabs as number) > 0 && (
-              <Field label="Inkjet Addressing">
-                <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.secapInkjet as boolean}
-                    onChange={(e) => set("secapInkjet", e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600"
-                  />
-                  <span className="text-sm text-gray-700">Add inkjet ($0.005/piece)</span>
-                </label>
-              </Field>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-gray-100 pt-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Mail Sort</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <Field label="Sort ($/piece)" hint="E&M: $0.02/pc · 0 = no sort">
-              <Input type="number" step="0.005" value={form.mailSortPerPiece || ""} onChange={(e) => set("mailSortPerPiece", Number(e.target.value))} min={0} />
-            </Field>
-          </div>
-        </div>
-      </Section>
+      {/* Mailing for offset — digital paths render it earlier in E&M order */}
+      {isOffset && <MailingSection form={form} set={set} />}
 
       <Section title="Shipping & Markup" icon={Truck}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
