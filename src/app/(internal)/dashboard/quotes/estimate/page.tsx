@@ -559,9 +559,10 @@ const defaultForm: FormState = {
   cutterOperatorRate: 0,
   // Folder rates from E&M (Baum 26×40): $48/hr machine, $15/hr help, setup
   // 5 min/job + 20 min/form (≈25), min 15 min on folder. Help off by default.
-  // Defaults match Mary's 6/3 letter/tri-fold spec (12K sph, 30 min setup).
-  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 12000, f1Complexity: 1.0, f1SetupMin: 30, f1MinMin: 15, f1MachineRate: 48, f1OperatorRate: 15, f1HelpEnabled: false,
-  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 12000, f2Complexity: 1.0, f2SetupMin: 30, f2MinMin: 15, f2MachineRate: 48, f2OperatorRate: 15, f2HelpEnabled: false,
+  // Letter/tri defaults per Mary 6/10 (Emerson's ticket + Parsec): 18 min
+  // setup, $40/hr folder rate (E&M screen said $48 but actual quotes bill $40).
+  f1Enabled: false, f1Qty: 0, f1FoldType: "letter", f1BaseSpeed: 12000, f1Complexity: 1.0, f1SetupMin: 18, f1MinMin: 15, f1MachineRate: 40, f1OperatorRate: 15, f1HelpEnabled: false,
+  f2Enabled: false, f2Qty: 0, f2FoldType: "letter", f2BaseSpeed: 12000, f2Complexity: 1.0, f2SetupMin: 18, f2MinMin: 15, f2MachineRate: 40, f2OperatorRate: 15, f2HelpEnabled: false,
   // Stitcher rates from E&M (Mueller): $95/hr, $20/hr helper, max 8000/hr,
   // slowest 3000/hr, setup 5/job + 15/pocket, 7 auto + 1 hand = 8 pockets.
   stEnabled: false, stQty: 0, stPages: 0, stPagesPerSig: 8, stPockets: 8, stCoverFeeder: true,
@@ -811,7 +812,7 @@ function digitalPartsCost(form: FormState) {
       const runHrs = dm.runSheets / adjSpeed;
       const setupHrs = fd.setupMin / 60;
       const billed = Math.max(15 / 60, runHrs + setupHrs);
-      partFolder = billed * 48; // E&M folder $48/hr — help off by default
+      partFolder = billed * 40; // $40/hr per actual E&M quotes (Mary 6/10) — help off by default
     }
     paperCost += partPaper;
     clickCost += partClick;
@@ -1253,8 +1254,10 @@ function speedMachineMath(form: FormState, cfg: SpeedMachineCfg) {
 // Auto-fill base speed + setup when user picks a fold type; editable per job.
 // Mary: "Digital will be the same as commercial runs."
 const FOLD_DEFAULTS: Record<string, { label: string; speed: number; setupMin: number }> = {
-  half:              { label: "Bi-fold / half",              speed: 12000, setupMin: 30 },
-  letter:            { label: "Letter / tri-fold",           speed: 12000, setupMin: 30 },
+  // Letter setup 18 min — Mary 6/10: Emerson's real job ticket + Parsec both
+  // show 18 (her 6/3 table said 30; "Parsec is the closer of the 2").
+  half:              { label: "Bi-fold / half",              speed: 12000, setupMin: 18 },
+  letter:            { label: "Letter / tri-fold",           speed: 12000, setupMin: 18 },
   tri_large:         { label: "Tri-fold larger (25.5×11)",   speed:  7000, setupMin: 30 },
   double_parallel:   { label: "Double parallel",             speed:  8000, setupMin: 30 },
   right_angle:       { label: "Right-angle (8pg)",           speed:  7500, setupMin: 45 },
