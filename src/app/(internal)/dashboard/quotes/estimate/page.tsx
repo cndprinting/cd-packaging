@@ -2228,7 +2228,9 @@ function EstimateContent() {
       // roll into finishing; quantitative finishing is added for all paths below.
       finishingCost = (dieCutMinutes / 60) * num("digitalCutterRate") + num("digitalCoatingCost")
         + num("gluingSetup") + num("windowPatching");
-      if (form.variableData) materialsCost += num("vdpComplexitySurcharge");
+      // VD setup is part of the digital vendor charge → Outside bucket
+      // (E&M Q5 6/9: "Digital w/vd 408.20" = clicks + $65 VD, 0% markup).
+      if (form.variableData) digitalClicksOutside += num("vdpComplexitySurcharge");
     } else if (isCommOffset) {
       const totalColors = num("inkColorsFront") + num("inkColorsBack");
       // Calculate forms (signatures) for multi-page books
@@ -2509,7 +2511,10 @@ function EstimateContent() {
     // Outside Finishing (score / foil / die / etc.) also lives in Outside.
     // Mary 6/8: per-tier vendor costs — pick the matching tier for this qty,
     // else fall back to the single ofCost.
-    const outsideFinishingCost = outsideFinishingCostForQty(form, q * v);
+    // E&M folds the item's own markup INTO the outside cost line ("Finish
+    // Out" = vendor $ + item markup), so commission applies to it (Q4 6/9).
+    // Match: OF cost carries its own markup % here, not in markupAmount.
+    const outsideFinishingCost = outsideFinishingCostForQty(form, q * v) * (1 + num("ofMarkupPct") / 100);
     // Mail sort (Mary 6/9 Q5: $0.02/pc) → Outside, like E&M's Sort line.
     const mailSortCost = (q * v) * num("mailSortPerPiece");
     const outsideCost = coatingCost + inserterCost + secapCost + outsidePurchaseTotal + digitalClicksOutside + outsideFinishingCost + mailSortCost;
@@ -2579,10 +2584,9 @@ function EstimateContent() {
     // E&M groups bindery/finishing labor into the Labor markup base (40% in
     // the Cybake quote). Match that — finishing machine cost is labor too.
     const laborMarkup = muFloor((laborCost + finishingCost) * (num("markupLabor") / 100));
-    // Outside Finishing can carry its OWN markup % (Mary 6/9 Q4: pack-out ×27
-    // @ 32% while clicks stay 0%) — excluded from the global outside base.
-    const ofOwnMarkup = outsideFinishingCost * (num("ofMarkupPct") / 100);
-    const outsideMarkup = muFloor((shippingCost + outsideCost - outsideFinishingCost) * (num("markupOutside") / 100) + ofOwnMarkup);
+    // OF's own markup is already inside outsideCost (E&M "Finish Out" style),
+    // so the global outside % applies to the rest (usually 0% → $1 floor).
+    const outsideMarkup = muFloor((shippingCost + outsideCost - outsideFinishingCost) * (num("markupOutside") / 100));
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
     const commissionAmount = subtotal * (num("commissionPercent") / 100);
@@ -2691,12 +2695,12 @@ function EstimateContent() {
       const shippingCost = num("shippingCost");
       // Per-tier outside finishing (Mary 6/8) — vendor cost can differ at each
       // quote tier; same markup % across tiers (own % — Mary 6/9 Q4).
-      const outsideFinishingTier = outsideFinishingCostForQty(form, q * v);
+      const outsideFinishingTier = outsideFinishingCostForQty(form, q * v) * (1 + num("ofMarkupPct") / 100);
       const mailSortTier = (q * v) * num("mailSortPerPiece");
       const subtotal = materialsCost + toolingCost + laborCost + finishingCost + makeReadyCost + shippingCost + outsideFinishingTier + mailSortTier;
       const muFloor = (x: number) => Math.max(1, x);
       const markupAmount = muFloor(materialsCost * (num("markupPaper") / 100)) + muFloor(toolingCost * (num("markupMaterial") / 100)) + muFloor(laborCost * (num("markupLabor") / 100))
-        + muFloor((shippingCost + mailSortTier) * (num("markupOutside") / 100) + outsideFinishingTier * (num("ofMarkupPct") / 100));
+        + muFloor((shippingCost + mailSortTier) * (num("markupOutside") / 100));
       const commissionAmount = subtotal * (num("commissionPercent") / 100);
       const total = subtotal + markupAmount + commissionAmount;
       return { quantity: q, total, costPerUnit: total / q, costPer1000: (total / q) * 1000 };
