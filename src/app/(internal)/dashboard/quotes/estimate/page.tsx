@@ -321,6 +321,11 @@ interface FormState {
   // cost = total minutes / 60 × cost-per-hour ($45, all-in).
   cutterEnabled: boolean;
   cutterSheetsToCut: number;
+  // Lift basis (Mary 6/11): "inches" = lift height ÷ caliper (4–6" stack);
+  // "lbs" = the earlier weight model. Inches is now the default.
+  cutterLiftBasis: string;      // "inches" | "lbs"
+  cutterLiftHeightIn: number;   // usable lift height (default 5")
+  cutterCaliper: number;        // manual caliper override (0 = auto from paper spec)
   cutterMWeight: number;        // lbs per 1000 sheets (M-weight) of the run stock
   cutterMaxLbsPerLift: number;  // E&M caps the lift by weight (40 lb)
   cutterCutsPerLift: number;
@@ -345,6 +350,9 @@ interface FormState {
   // Carton Pack (Mary 5/27 — E&M Cybake): material into Material bucket (18%
   // markup), labor into Finishing → Labor markup bucket (40%).
   cpEnabled: boolean; cpBooksPerCarton: number; cpMaterialPerCarton: number; cpMinPerCarton: number; cpLaborRate: number;
+  // Shrink wrap (Mary 6/11 — couldn't find it; E&M Q4 "Wrapping 25/pkg").
+  // Defaults verified vs E&M: 291 pkgs × 0.25 min @ $35/hr = $42.45 ≈ $42.41.
+  swEnabled: boolean; swPiecesPerPackage: number; swMinPerPackage: number; swRate: number;
   // Outside Finishing — single line for score / foil / die / etc. Outside
   // bucket (markup % editable per job — Mary 6/8: ID badges use 32%).
   // ofTiers lets the vendor cost differ per quantity tier (Mary 6/8 reply);
@@ -547,6 +555,9 @@ const defaultForm: FormState = {
   digitalParts: [] as { name: string; pages: number; paperType: string; basisWeight: number; parentSheetCostOverride: number; foldType: string; spoilagePct: number }[],
   cutterEnabled: false,
   cutterSheetsToCut: 0,
+  cutterLiftBasis: "inches",
+  cutterLiftHeightIn: 5,
+  cutterCaliper: 0,
   cutterMWeight: 0,
   cutterMaxLbsPerLift: 40,
   cutterSheetsPerLift: 800,
@@ -571,6 +582,7 @@ const defaultForm: FormState = {
   // Carton Pack defaults — 11.25×8.75×10 carton at $0.93 each, ~84 books per
   // carton, 2 min labor per carton at ~$39/hr (E&M Ctn Pack line).
   cpEnabled: false, cpBooksPerCarton: 84, cpMaterialPerCarton: 0.93, cpMinPerCarton: 2, cpLaborRate: 39,
+  swEnabled: false, swPiecesPerPackage: 25, swMinPerPackage: 0.25, swRate: 35,
   // Outside Finishing defaults — off.
   ofEnabled: false, ofDescription: "", ofCost: 0,
   ofTiers: [] as { qty: number; cost: number }[],
@@ -873,8 +885,8 @@ function DigitalPartsSection({ form, set }: { form: FormState; set: EstimatorSet
               <Field label="Basis weight (lb)">
                 <Input type="number" value={p.basisWeight || ""} onChange={(e) => updatePart(i, { basisWeight: Number(e.target.value) })} placeholder="e.g. 80" />
               </Field>
-              <Field label="Parent cost override ($/each)" hint="Leave blank to use job default">
-                <Input type="number" step="0.0001" value={p.parentSheetCostOverride || ""} onChange={(e) => updatePart(i, { parentSheetCostOverride: Number(e.target.value) })} />
+              <Field label="Parent cost override ($/1000)" hint="Leave blank to use job default">
+                <Input type="number" step="0.01" value={p.parentSheetCostOverride ? Math.round(p.parentSheetCostOverride * 100000) / 100 : ""} placeholder="e.g. 140.70" onChange={(e) => updatePart(i, { parentSheetCostOverride: (Number(e.target.value) || 0) / 1000 })} />
               </Field>
               <Field label="Fold type">
                 <select value={p.foldType} onChange={(e) => updatePart(i, { foldType: e.target.value })} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
@@ -1004,8 +1016,13 @@ function DigitalClickSection({ form, set }: { form: FormState; set: EstimatorSet
         <Field label="Click fee ($ / run sheet)" hint="4/4 = .378 · 4/0 = .189 · 4/0+VD = .325">
           <Input type="number" step="0.001" value={form.digitalClickFee || ""} onChange={(e) => set("digitalClickFee", Number(e.target.value))} />
         </Field>
-        <Field label="Parent sheet cost ($ each)">
-          <Input type="number" step="0.01" value={form.digitalParentSheetCost || ""} onChange={(e) => set("digitalParentSheetCost", Number(e.target.value))} />
+        <Field label="Parent cost ($ / 1000 sheets)" hint={`E&M's per-M convention · = $${(Number(form.digitalParentSheetCost) || 0).toFixed(4)}/sheet`}>
+          <Input
+            type="number" step="0.01" min={0}
+            value={form.digitalParentSheetCost ? Math.round(form.digitalParentSheetCost * 100000) / 100 : ""}
+            placeholder="e.g. 98.33"
+            onChange={(e) => set("digitalParentSheetCost", (Number(e.target.value) || 0) / 1000)}
+          />
         </Field>
         <Field label="Paper type" hint="Drives the basic-size for auto M-weight">
           <select value={form.digitalPaperType} onChange={(e) => set("digitalPaperType", e.target.value)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
@@ -1114,21 +1131,35 @@ function computeAutoMWeight(form: FormState): number {
   return basis * 2 * (area / basic);
 }
 
+function computeAutoCaliper(form: FormState): number {
+  const basis = Number(form.paperBasisWeight) || 0;
+  if (basis <= 0) return 0;
+  const t = String(form.digitalPaperType || form.paperType || "");
+  const cat = t.includes("cover") ? "Cover" : t.includes("text") ? "Text" : undefined;
+  return lookupCaliper(String(basis), undefined, cat) ?? 0;
+}
+
 function finishingCutterMath(form: FormState) {
   const sheets = Math.max(0, Number(form.cutterSheetsToCut) || 0);
   const cutsPerLift = Math.max(0, Number(form.cutterCutsPerLift) || 0);
-  // E&M sizes the lift by WEIGHT (Mary 5/27). Sheets/lift derives from the
-  // stock M-weight (lbs per 1000 sheets) and the max lbs the cutter takes.
-  // When the user leaves M-weight blank/0, auto-compute from basis weight +
-  // paper type + sheet area. If neither is available (digital paths don't
-  // capture structured paper spec yet), fall back to 200 (a mid-range
-  // default — Mary 5/27 fix vs. earlier 0.01 fallback that broke the math).
+  // Lift sizing (Mary 6/11): default = INCHES — lift height ÷ caliper
+  // (e.g. 100# gloss text .0048 → 1000 sheets = 4.8" stack). "lbs" keeps
+  // the earlier E&M weight model (M-weight ÷ 40 lb max).
   const manualMW = Number(form.cutterMWeight) || 0;
   const autoMW = computeAutoMWeight(form);
   const mWeight = manualMW > 0 ? manualMW : (autoMW > 0 ? autoMW : 200);
-  const maxLbs = Math.max(0.01, Number(form.cutterMaxLbsPerLift) || 40);
   const weightPerSheet = mWeight / 1000;
-  const sheetsPerLift = Math.max(1, Math.floor(maxLbs / weightPerSheet));
+  let sheetsPerLift: number;
+  const manualCal = Number(form.cutterCaliper) || 0;
+  const autoCal = computeAutoCaliper(form);
+  const caliper = manualCal > 0 ? manualCal : (autoCal > 0 ? autoCal : 0.005);
+  if (form.cutterLiftBasis === "lbs") {
+    const maxLbs = Math.max(0.01, Number(form.cutterMaxLbsPerLift) || 40);
+    sheetsPerLift = Math.max(1, Math.floor(maxLbs / weightPerSheet));
+  } else {
+    const liftIn = Math.max(0.5, Number(form.cutterLiftHeightIn) || 5);
+    sheetsPerLift = Math.max(1, Math.floor(liftIn / caliper));
+  }
   const totalWeight = sheets * weightPerSheet;
   const lifts = Math.ceil(sheets / sheetsPerLift);
   const perCutMin = form.cutterCutType === "bleed" ? 0.7 : 0.5; // E&M chop vs bleed
@@ -1142,7 +1173,7 @@ function finishingCutterMath(form: FormState) {
   const totalMin = setupMin + cutMinutes + loadMinutes;
   const runHours = totalMin / 60;
   const cost = runHours * (Number(form.cutterMachineRate) || 0);
-  return { lifts, sheetsPerLift, totalWeight, mWeight, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
+  return { lifts, sheetsPerLift, totalWeight, mWeight, caliper, totalCuts: cutsPerLift * lifts, cutMinutes, loadMinutes, setupMin, totalMin, runHours, cost };
 }
 
 function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
@@ -1160,21 +1191,51 @@ function CutterSection({ form, set }: { form: FormState; set: EstimatorSetFn }) 
             <Field label="Sheets to cut" hint="Press/parent sheets being cut">
               <Input type="number" value={form.cutterSheetsToCut || ""} onChange={(e) => set("cutterSheetsToCut", Number(e.target.value))} min={0} />
             </Field>
-            <Field label="Lbs / 1000 sheets" hint={(() => {
-              if (Number(form.cutterMWeight) > 0) return `Using ${Number(form.cutterMWeight).toFixed(1)} (manual)`;
-              if (autoMW > 0) return `Auto: ${autoMW.toFixed(1)} from basis wt + paper type · type to override`;
-              return "No paper spec found — using 200 fallback. Type the real M-weight. Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88";
-            })()}>
-              <div className="flex items-center gap-2">
-                <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
-                {Number(form.cutterMWeight) > 0 && autoMW > 0 && (
-                  <button type="button" onClick={() => set("cutterMWeight", 0)} className="text-xs font-medium text-brand-600 hover:text-brand-800 whitespace-nowrap">Use auto</button>
-                )}
-              </div>
+            <Field label="Lift sizing" hint="Inches = lift height ÷ caliper (Mary 6/11)">
+              <select value={form.cutterLiftBasis} onChange={(e) => set("cutterLiftBasis", e.target.value)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                <option value="inches">By stack height (inches)</option>
+                <option value="lbs">By weight (lbs)</option>
+              </select>
             </Field>
-            <Field label="Max lbs / lift" hint="E&M: 40">
-              <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
-            </Field>
+            {form.cutterLiftBasis !== "lbs" && (
+              <>
+                <Field label="Lift height (in)" hint="Usable stack: 4–6 inches">
+                  <Input type="number" step="0.5" value={form.cutterLiftHeightIn || ""} onChange={(e) => set("cutterLiftHeightIn", Number(e.target.value))} min={1} />
+                </Field>
+                <Field label="Caliper (in/sheet)" hint={(() => {
+                  const auto = computeAutoCaliper(form);
+                  if (Number(form.cutterCaliper) > 0) return `Using ${form.cutterCaliper} (manual)`;
+                  if (auto > 0) return `Auto: ${auto} from basis wt + paper type · type to override`;
+                  return "e.g. 100# gloss text = .0048 · 100# gloss cover = .01";
+                })()}>
+                  <div className="flex items-center gap-2">
+                    <Input type="text" inputMode="decimal" value={form.cutterCaliper || ""} placeholder={(() => { const a = computeAutoCaliper(form); return a > 0 ? String(a) : ".0048"; })()} onChange={(e) => { const v = parseFloat(e.target.value); set("cutterCaliper", isNaN(v) ? 0 : v); }} />
+                    {Number(form.cutterCaliper) > 0 && computeAutoCaliper(form) > 0 && (
+                      <button type="button" onClick={() => set("cutterCaliper", 0)} className="text-xs font-medium text-brand-600 hover:text-brand-800 whitespace-nowrap">Use auto</button>
+                    )}
+                  </div>
+                </Field>
+              </>
+            )}
+            {form.cutterLiftBasis === "lbs" && (
+              <>
+                <Field label="Lbs / 1000 sheets" hint={(() => {
+                  if (Number(form.cutterMWeight) > 0) return `Using ${Number(form.cutterMWeight).toFixed(1)} (manual)`;
+                  if (autoMW > 0) return `Auto: ${autoMW.toFixed(1)} from basis wt + paper type · type to override`;
+                  return "No paper spec found — using 200 fallback. Examples 20×26: 24pt C2S≈293, 100# cover≈200, 80# text≈88";
+                })()}>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" step="0.1" value={form.cutterMWeight || ""} placeholder={autoMW > 0 ? autoMW.toFixed(1) : "200"} onChange={(e) => set("cutterMWeight", Number(e.target.value))} min={0} />
+                    {Number(form.cutterMWeight) > 0 && autoMW > 0 && (
+                      <button type="button" onClick={() => set("cutterMWeight", 0)} className="text-xs font-medium text-brand-600 hover:text-brand-800 whitespace-nowrap">Use auto</button>
+                    )}
+                  </div>
+                </Field>
+                <Field label="Max lbs / lift" hint="E&M: 40">
+                  <Input type="number" value={form.cutterMaxLbsPerLift || ""} onChange={(e) => set("cutterMaxLbsPerLift", Number(e.target.value))} min={1} />
+                </Field>
+              </>
+            )}
             <Field label="Cuts per lift" hint="Cuts in the program">
               <Input type="number" value={form.cutterCutsPerLift || ""} onChange={(e) => set("cutterCutsPerLift", Number(e.target.value))} min={0} />
             </Field>
@@ -1447,13 +1508,24 @@ function cartonPackMath(form: FormState) {
   return { cartons, materialCost, laborCost, laborHours, totalCost: materialCost + laborCost };
 }
 
+// Shrink wrap (Mary 6/11): packages = qty ÷ pieces-per-pkg; labor = pkgs ×
+// min/pkg × rate. Defaults match E&M Q4's Wrapping line ($35/hr, 0.25 min).
+function shrinkWrapMath(form: FormState) {
+  const qty = Math.max(0, Number(form.quantity) || 0) * (Number(form.versions) || 1);
+  const perPkg = Math.max(1, Number(form.swPiecesPerPackage) || 1);
+  const packages = Math.ceil(qty / perPkg);
+  const cost = packages * (Number(form.swMinPerPackage) || 0) / 60 * (Number(form.swRate) || 0);
+  return { packages, cost };
+}
+
 function CartonPackSection({ form, set }: { form: FormState; set: EstimatorSetFn }) {
   const cp = cartonPackMath(form);
+  const sw = shrinkWrapMath(form);
   return (
-    <Section title="Carton Pack" icon={Package} defaultOpen={false}>
+    <Section title="Carton Pack · Shrink Wrap" icon={Package} defaultOpen={false}>
       <label className="flex items-center gap-3 cursor-pointer mb-3">
         <input type="checkbox" checked={form.cpEnabled} onChange={(e) => set("cpEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
-        <span className="text-sm font-medium text-gray-700">Pack finished books in cartons</span>
+        <span className="text-sm font-medium text-gray-700">Pack finished pieces in cartons</span>
       </label>
       {form.cpEnabled && (
         <>
@@ -1481,6 +1553,31 @@ function CartonPackSection({ form, set }: { form: FormState; set: EstimatorSetFn
           </div>
         </>
       )}
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <label className="flex items-center gap-3 cursor-pointer mb-3">
+          <input type="checkbox" checked={form.swEnabled} onChange={(e) => set("swEnabled", e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-brand-600" />
+          <span className="text-sm font-medium text-gray-700">Shrink wrap in packages</span>
+        </label>
+        {form.swEnabled && (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Field label="Pieces per package" hint="E&M Q4: 25 per package">
+                <Input type="number" value={form.swPiecesPerPackage || ""} onChange={(e) => set("swPiecesPerPackage", Number(e.target.value))} min={1} />
+              </Field>
+              <Field label="Min / package" hint="E&M: 0.25 min (15 sec)">
+                <Input type="number" step="0.05" value={form.swMinPerPackage || ""} onChange={(e) => set("swMinPerPackage", Number(e.target.value))} min={0} />
+              </Field>
+              <Field label="Rate ($/hr)" hint="E&M: $35 (incl. film)">
+                <Input type="number" step="1" value={form.swRate || ""} onChange={(e) => set("swRate", Number(e.target.value))} min={0} />
+              </Field>
+            </div>
+            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3 grid grid-cols-2 gap-2 text-sm">
+              <div><span className="text-gray-600">Packages:</span> <strong>{sw.packages.toLocaleString()}</strong></div>
+              <div><span className="text-gray-600">Wrap cost:</span> <strong className="text-blue-900">${sw.cost.toFixed(2)}</strong></div>
+            </div>
+          </>
+        )}
+      </div>
     </Section>
   );
 }
@@ -1598,19 +1695,17 @@ function MailingSection({ form, set }: { form: FormState; set: EstimatorSetFn })
           <Field label="Wafer Seal Tabs" hint="0 = no sealing">
             <Input type="number" value={form.secapTabs || ""} onChange={(e) => set("secapTabs", Number(e.target.value))} min={0} />
           </Field>
-          {(form.secapTabs as number) > 0 && (
-            <Field label="Inkjet Addressing">
-              <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.secapInkjet as boolean}
-                  onChange={(e) => set("secapInkjet", e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-brand-600"
-                />
-                <span className="text-sm text-gray-700">Add inkjet ($0.005/piece)</span>
-              </label>
-            </Field>
-          )}
+          <Field label="Inkjet Addressing" hint="Works alone — no tabs needed (window envelopes, indicia)">
+            <label className="flex items-center gap-2 mt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.secapInkjet as boolean}
+                onChange={(e) => set("secapInkjet", e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-brand-600"
+              />
+              <span className="text-sm text-gray-700">Add inkjet ($0.005/piece)</span>
+            </label>
+          </Field>
         </div>
       </div>
       <div className="mt-4 border-t border-gray-100 pt-4">
@@ -1935,6 +2030,7 @@ function FinishingBinderySection({
               value={String(form.cartonType)}
               onChange={(e) => set("cartonType", Number(e.target.value))}
               options={[
+                { value: "0", label: "None — no cartons (e.g. post office delivery)" },
                 { value: "1", label: "11.25x8.75x10 ($0.93)" },
                 { value: "2", label: "11x9x10 ($0.75)" },
                 { value: "3", label: "LTHD BOX ($0.52)" },
@@ -2378,7 +2474,10 @@ function EstimateContent() {
         materialsCost = paperCost * rushMul;
         digitalClicksOutside = dm.totalClickFee * rushMul; // clicks → Outside (Mary 5/27)
       }
-      finishingCost = num("simpleFinishingCost") + num("personalizationSurcharge")
+      // VD setup / list maintenance is part of the digital vendor charge →
+      // Outside bucket like E&M's "Digital w/vd" (Mary 6/11).
+      digitalClicksOutside += num("personalizationSurcharge");
+      finishingCost = num("simpleFinishingCost")
         + num("gluingSetup") + num("windowPatching");
     }
 
@@ -2479,6 +2578,8 @@ function EstimateContent() {
       materialsCost += cp.materialCost;
       finishingCost += cp.laborCost;
     }
+    // Shrink wrap (Mary 6/11) — labor incl. film → Finishing.
+    if (form.swEnabled) finishingCost += shrinkWrapMath(form).cost;
     // Proof cost is a prepress item → add to materialsCost bucket (simplest)
     materialsCost += proofCost;
 
@@ -2595,17 +2696,22 @@ function EstimateContent() {
       inserterCost = setup + (q / speed) * rate;
     }
 
-    // Outside services: Secap (wafer seal + inkjet)
+    // Outside services: Secap (wafer seal + inkjet). Inkjet is independent
+    // of wafer seal (Mary 6/11 — window-envelope jobs inkjet the indicia
+    // with NO tabs). Run cost applies when either operation runs.
     let secapCost = 0;
     const tabs = num("secapTabs");
     if (tabs > 0) {
       const secapSetup = 70;
       const tabCost = q * tabs * 0.002;
-      const runCost = (q / 1600) * 35;
-      secapCost = secapSetup + tabCost + runCost;
-      if (form.secapInkjet) {
-        secapCost += q * 0.005;
-      }
+      secapCost = secapSetup + tabCost;
+    }
+    if (form.secapInkjet) {
+      if (tabs === 0) secapCost += 70; // setup still applies for inkjet-only
+      secapCost += q * 0.005;
+    }
+    if (tabs > 0 || form.secapInkjet) {
+      secapCost += (q / 1600) * 35; // machine run time
     }
 
     // Outside purchase line items
@@ -4244,7 +4350,7 @@ function EstimateContent() {
                 <span className="text-sm font-medium text-gray-700">Variable Data Printing (VDP)</span>
               </label>
               {form.variableData && (
-                <Field label="VDP Complexity Surcharge ($)">
+                <Field label="VD setup / list maintenance ($)" hint="In addition to click charges (E&M: VD $65) — Outside bucket">
                   <Input type="number" step="0.01" value={form.vdpComplexitySurcharge || ""} onChange={(e) => set("vdpComplexitySurcharge", Number(e.target.value))} />
                 </Field>
               )}
@@ -4346,7 +4452,7 @@ function EstimateContent() {
               <Field label="Rush Surcharge (%)">
                 <Input type="number" step="1" value={form.rushSurchargePercent || ""} onChange={(e) => set("rushSurchargePercent", Number(e.target.value))} min={0} max={100} />
               </Field>
-              <Field label="Personalization / VDP ($)">
+              <Field label="VD setup / list maintenance ($)" hint="In addition to click charges (E&M: VD $65)">
                 <Input type="number" step="0.01" value={form.personalizationSurcharge || ""} onChange={(e) => set("personalizationSurcharge", Number(e.target.value))} />
               </Field>
               <Field label="Simple Finishing ($)" hint="Trim, fold, etc.">
