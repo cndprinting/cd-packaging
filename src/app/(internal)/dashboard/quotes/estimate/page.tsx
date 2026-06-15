@@ -2831,6 +2831,12 @@ function EstimateContent() {
       coatingCost,
       inserterCost,
       secapCost,
+      // Outside-bucket itemization (Mary 6/15 — so the Live Estimate can show
+      // WHICH outside line is driving the number, not one opaque total).
+      outsideClicks: digitalClicksOutside,
+      outsideMailSort: mailSortCost,
+      outsideFinishingCost,
+      outsidePurchaseTotal,
       wasteSheets,
       total,
       costPerUnit,
@@ -5196,6 +5202,19 @@ function EstimateContent() {
                     <span className="text-gray-500">Outside</span>
                     <span className="font-medium">{fmtMoney(calc.outsideCost)}</span>
                   </div>
+                  {/* Outside itemization (Mary 6/15) — show which line drives
+                      it so a stray value is obvious, not hidden in one total. */}
+                  {calc.outsideCost > 0 && (
+                    <div className="pl-3 space-y-0.5 text-xs text-gray-400">
+                      {calc.outsideClicks > 0 && <div className="flex justify-between"><span>· Digital clicks</span><span>{fmtMoney(calc.outsideClicks)}</span></div>}
+                      {calc.outsideMailSort > 0 && <div className="flex justify-between"><span>· Mail sort</span><span>{fmtMoney(calc.outsideMailSort)}</span></div>}
+                      {calc.coatingCost > 0 && <div className="flex justify-between"><span>· Coating</span><span>{fmtMoney(calc.coatingCost)}</span></div>}
+                      {calc.inserterCost > 0 && <div className="flex justify-between"><span>· Inserting</span><span>{fmtMoney(calc.inserterCost)}</span></div>}
+                      {calc.secapCost > 0 && <div className="flex justify-between"><span>· Secap/inkjet</span><span>{fmtMoney(calc.secapCost)}</span></div>}
+                      {calc.outsideFinishingCost > 0 && <div className="flex justify-between"><span>· Outside finishing</span><span>{fmtMoney(calc.outsideFinishingCost)}</span></div>}
+                      {calc.outsidePurchaseTotal > 0 && <div className="flex justify-between"><span>· Outside purchases</span><span>{fmtMoney(calc.outsidePurchaseTotal)}</span></div>}
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Waste</span>
                     <span className="font-medium">{fmtMoney(calc.makeReadyCost)}</span>
