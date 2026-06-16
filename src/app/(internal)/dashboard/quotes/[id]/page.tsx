@@ -166,6 +166,16 @@ export default function QuoteDetailPage() {
 
         {/* Actions */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Edit — Mary 6/15: reopen a sent quote in the estimator with all
+              data prefilled (no re-entering). Hidden once converted to a job;
+              use the job's Change Order there instead. */}
+          {!quote.convertedJobId && quote.status !== "archived" && (
+            <Link href={`/dashboard/quotes/estimate?draftId=${quote.id}`}>
+              <Button variant="outline" className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+                <FileText className="h-4 w-4" /> Edit Quote
+              </Button>
+            </Link>
+          )}
           {(quote.status === "draft" || quote.status === "sent") && (
             <>
               <Button onClick={() => { setEmailType("customer"); setEmailTo(quote.contactEmail || ""); setShowEmailModal(true); }} disabled={updating} className="gap-2 bg-blue-600 hover:bg-blue-700">

@@ -103,8 +103,12 @@ export default function QuotesPage() {
                 <TableCell className="text-gray-500">{formatDate(q.validUntil)}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1">
-                    {/* Resume / edit a draft — Mary's feedback: be able to get back into in-progress quotes */}
+                    {/* Resume a draft / Edit a sent quote — Mary 6/15: once a
+                        quote is sent she still needs to change it without
+                        re-entering everything. The estimator reloads the full
+                        quote via ?draftId; saving updates it in place. */}
                     {q.status === "draft" && <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>}
+                    {(q.status === "sent" || q.status === "approved" || q.status === "rejected") && <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>}
                     {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "sent" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x)); }}><Send className="h-3.5 w-3.5" />Send</Button>}
                     {(q.status === "draft" || q.status === "sent") && <Button variant="ghost" size="sm" className="gap-1 text-gray-600" onClick={() => alert("Send to CSR/Salesperson — email integration coming soon")}><Mail className="h-3.5 w-3.5" /></Button>}
                     {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}
