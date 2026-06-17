@@ -2796,9 +2796,13 @@ function EstimateContent() {
     // E&M groups bindery/finishing labor into the Labor markup base (40% in
     // the Cybake quote). Match that — finishing machine cost is labor too.
     const laborMarkup = muFloor((laborCost + finishingCost) * (num("markupLabor") / 100));
-    // OF's own markup is already inside outsideCost (E&M "Finish Out" style),
-    // so the global outside % applies to the rest (usually 0% → $1 floor).
-    const outsideMarkup = muFloor((shippingCost + outsideCost - outsideFinishingCost) * (num("markupOutside") / 100));
+    // Outside markup (Mary 6/16): digital CLICKS are NEVER marked up (0% —
+    // vendor pass-through), but other outside services (sort, coating,
+    // inserting, secap, freight, purchases) DO get the outside markup %.
+    // So the global % applies to outside MINUS clicks MINUS outside-finishing
+    // (which carries its own markup folded into its cost already).
+    const outsideMarkupBase = shippingCost + outsideCost - outsideFinishingCost - digitalClicksOutside;
+    const outsideMarkup = muFloor(outsideMarkupBase * (num("markupOutside") / 100));
     const markupAmount = paperMarkup + materialMarkup + laborMarkup + outsideMarkup;
 
     const commissionAmount = subtotal * (num("commissionPercent") / 100);
