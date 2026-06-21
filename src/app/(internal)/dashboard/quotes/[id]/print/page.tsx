@@ -21,6 +21,8 @@ interface QuoteData {
   validUntil: string;
   notes: string | null;
   specs: string | null;
+  sourcingItems?: string | null;
+  sourcingMarkupPct?: number | null;
   createdAt: string;
 }
 
@@ -246,6 +248,32 @@ export default function PrintQuotePage() {
         <div className="spec-value">ST PETE / TAMPA area</div>
 
         <hr className="section-divider" />
+
+        {/* Per-SKU breakdown for outsourced/brokered quotes (Benjy 6/16) —
+            customer sees each item priced (landed × markup), then the total. */}
+        {(() => {
+          let items: any[] = [];
+          try { items = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; } catch {}
+          items = items.filter((it) => Number(it.landedCost) > 0);
+          if (items.length < 1) return null;
+          const mk = 1 + (Number(quote.sourcingMarkupPct) || 0) / 100;
+          return (
+            <table className="pricing-table" style={{ marginBottom: 8 }}>
+              <thead>
+                <tr><th>Item</th><th className="amt">Qty</th><th className="amt">Price</th></tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i}>
+                    <td><strong>{it.sku || `Item ${i + 1}`}</strong></td>
+                    <td className="amt">{Number(it.quantity || 0).toLocaleString()}</td>
+                    <td className="amt">{fmtMoney((Number(it.landedCost) || 0) * mk)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        })()}
 
         {/* Pricing Table */}
         <table className="pricing-table">

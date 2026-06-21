@@ -64,7 +64,7 @@ export default function VendorSourcingPage() {
   );
 }
 
-type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; vendorNotes?: string };
+type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
 
 function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => void }) {
   const initialLines: Line[] = (() => {
@@ -73,27 +73,27 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
     return [{ id: "legacy", sku: req.productName, quantity: req.quantity, artworkUrl: req.sourcingArtworkUrl || undefined, artworkName: req.sourcingArtworkName || undefined, landedCost: req.vendorLandedCost || undefined, vendorNotes: req.vendorQuoteNotes || undefined }];
   })();
   const [lines, setLines] = useState<Line[]>(initialLines);
-  const [fileUrl, setFileUrl] = useState(req.vendorQuoteFileUrl || "");
-  const [fileName, setFileName] = useState(req.vendorQuoteFileName || "");
-  const [uploading, setUploading] = useState(false);
+  const [uploadRow, setUploadRow] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const updateLine = (id: string, patch: Partial<Line>) => setLines((p) => p.map((l) => l.id === id ? { ...l, ...patch } : l));
+  // Total landed for a line = per-unit × qty (vendor enters per-unit, Benjy 6/16).
+  const lineTotal = (l: Line) => (Number(l.unitCost) || 0) * (Number(l.quantity) || 0);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLineFile = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true); setError("");
+    setUploadRow(id); setError("");
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const d = await res.json();
       if (!res.ok) { setError(d.message || d.error || "Upload failed"); return; }
-      setFileUrl(d.url); setFileName(d.fileName);
+      updateLine(id, { fileUrl: d.url, fileName: d.fileName });
     } catch { setError("Upload failed — try again"); }
-    finally { setUploading(false); }
+    finally { setUploadRow(null); }
   };
 
   const save = async () => {
@@ -104,9 +104,12 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: req.id, vendorUpload: true,
-          items: lines.map((l) => ({ id: l.id, landedCost: l.landedCost, vendorNotes: l.vendorNotes })),
-          vendorLandedCost: lines.reduce((s, l) => s + (Number(l.landedCost) || 0), 0),
-          vendorQuoteFileUrl: fileUrl, vendorQuoteFileName: fileName,
+          items: lines.map((l) => ({
+            id: l.id, unitCost: l.unitCost, landedCost: lineTotal(l),
+            leadTime: l.leadTime, moq: l.moq, fileUrl: l.fileUrl, fileName: l.fileName,
+            vendorNotes: l.vendorNotes,
+          })),
+          vendorLandedCost: lines.reduce((s, l) => s + lineTotal(l), 0),
         }),
       });
       if (!res.ok) { const d = await res.json(); setError(d.error || "Save failed"); return; }
@@ -132,11 +135,12 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
           <span className="text-xs text-gray-400">{formatDate(req.createdAt)}</span>
         </div>
 
-        {/* Per-SKU rows: download that SKU's artwork, enter landed cost + notes */}
+        {/* Per-SKU rows: download artwork, enter per-unit price, lead time,
+            MOQ, attach a quote/spec file, and notes. (Benjy 6/16) */}
         <div className="space-y-3">
           {lines.map((l) => (
-            <div key={l.id} className="rounded-md border border-gray-200 p-3">
-              <div className="flex items-center justify-between mb-2">
+            <div key={l.id} className="rounded-md border border-gray-200 p-3 space-y-3">
+              <div className="flex items-center justify-between">
                 <span className="font-medium text-gray-800">{l.sku || "Item"}{l.quantity ? ` · qty ${l.quantity.toLocaleString()}` : ""}</span>
                 {l.artworkUrl && (
                   <a href={l.artworkUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
@@ -144,29 +148,43 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
                   </a>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Landed cost ($, to St. Pete)</label>
-                  <Input type="number" step="0.01" value={l.landedCost ?? ""} onChange={(e) => updateLine(l.id, { landedCost: Number(e.target.value) })} placeholder="e.g. 4250.00" />
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Price per unit ($)</label>
+                  <Input type="number" step="0.0001" value={l.unitCost ?? ""} onChange={(e) => updateLine(l.id, { unitCost: Number(e.target.value) })} placeholder="e.g. 1.85" />
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Notes (lead time, MOQ, etc.)</label>
-                  <Input value={l.vendorNotes || ""} onChange={(e) => updateLine(l.id, { vendorNotes: e.target.value })} placeholder="e.g. 3 wk lead, min 5,000, FOB St. Pete" />
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Total (auto)</label>
+                  <div className="h-9 flex items-center px-2 text-sm font-semibold text-gray-700">${lineTotal(l).toFixed(2)}</div>
                 </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Lead time</label>
+                  <Input value={l.leadTime || ""} onChange={(e) => updateLine(l.id, { leadTime: e.target.value })} placeholder="e.g. 3 weeks" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">MOQ</label>
+                  <Input type="number" value={l.moq ?? ""} onChange={(e) => updateLine(l.id, { moq: Number(e.target.value) })} placeholder="e.g. 5000" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Notes</label>
+                <textarea rows={2} value={l.vendorNotes || ""} onChange={(e) => updateLine(l.id, { vendorNotes: e.target.value })} placeholder="Anything else C&D should know — terms, substitutions, FOB point, etc." className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-800">
+                  <Upload className="h-4 w-4" />
+                  {uploadRow === l.id ? "Uploading…" : l.fileName ? "Replace quote file" : "Attach quote file (PDF or Excel)"}
+                  <input type="file" className="hidden" accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => handleLineFile(l.id, e)} disabled={uploadRow === l.id} />
+                </label>
+                {l.fileName && <a href={l.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline inline-flex items-center gap-1"><FileText className="h-3.5 w-3.5" />{l.fileName}</a>}
               </div>
             </div>
           ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 mt-3">
-          <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-800">
-            <Upload className="h-4 w-4" />
-            {uploading ? "Uploading…" : fileName ? "Replace quote file" : "Attach quote file (PDF or Excel)"}
-            <input type="file" className="hidden" accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleFile} disabled={uploading} />
-          </label>
-          {fileName && <span className="text-xs text-gray-500 inline-flex items-center gap-1"><FileText className="h-3.5 w-3.5" />{fileName}</span>}
           <div className="flex-1" />
-          <Button onClick={save} disabled={saving || uploading || (!lines.some((l) => Number(l.landedCost) > 0) && !fileUrl)}>
+          <Button onClick={save} disabled={saving || !!uploadRow || !lines.some((l) => lineTotal(l) > 0)}>
             {saving ? "Saving…" : submitted ? "Update quote" : "Submit quote to C&D"}
           </Button>
         </div>

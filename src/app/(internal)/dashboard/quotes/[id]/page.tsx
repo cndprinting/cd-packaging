@@ -622,7 +622,7 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
 // Outsourced sourcing card (Benjy 6/16). Assign the quote to a vendor (MWI)
 // to source; once the vendor uploads a landed cost via their portal, it shows
 // here with the markup → customer price math.
-type SourcingItem = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; vendorNotes?: string };
+type SourcingItem = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
 
 function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
   // Known sourcing vendors — friendly label, value matches the vendor login's
@@ -742,7 +742,15 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
               </div>
               <Input className="col-span-2 sm:col-span-2 text-right" type="number" step="0.01" value={it.landedCost ?? ""} placeholder="—" onChange={(e) => updateRow(it.id, { landedCost: Number(e.target.value) })} onBlur={() => saveItems(items)} />
               <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeRow(it.id)} disabled={items.length <= 1}>×</button>
-              {it.vendorNotes && <p className="col-span-12 text-xs text-gray-500 pl-1">Vendor: {it.vendorNotes}</p>}
+              {(it.unitCost || it.leadTime || it.moq || it.fileUrl || it.vendorNotes) && (
+                <p className="col-span-12 text-xs text-gray-500 pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {it.unitCost ? <span>Unit ${Number(it.unitCost).toFixed(4)}</span> : null}
+                  {it.leadTime ? <span>Lead: {it.leadTime}</span> : null}
+                  {it.moq ? <span>MOQ: {Number(it.moq).toLocaleString()}</span> : null}
+                  {it.fileUrl ? <a href={it.fileUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-3 w-3" />{it.fileName || "vendor file"}</a> : null}
+                  {it.vendorNotes ? <span className="w-full">Vendor: {it.vendorNotes}</span> : null}
+                </p>
+              )}
             </div>
           ))}
           <button type="button" onClick={addRow} className="text-sm font-medium text-brand-600 hover:text-brand-800">+ Add SKU</button>
