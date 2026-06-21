@@ -240,8 +240,9 @@ export default function QuoteDetailPage() {
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Overview Cards — "Per 1,000" is a manufacturing metric, hidden for
+          outsourced/wholesale quotes (Benjy 6/20). */}
+      <div className={`grid grid-cols-2 ${quote.sourcingVendor ? "md:grid-cols-3" : "md:grid-cols-4"} gap-4`}>
         <Card className="p-4 text-center">
           <p className="text-xs text-gray-500 mb-1">Quantity</p>
           <p className="text-2xl font-bold text-gray-900">{quote.quantity.toLocaleString()}</p>
@@ -254,12 +255,14 @@ export default function QuoteDetailPage() {
           <p className="text-xs text-gray-500 mb-1">Total Price</p>
           <p className="text-2xl font-bold text-brand-600">{formatCurrency(quote.totalPrice)}</p>
         </Card>
-        <Card className="p-4 text-center">
-          <p className="text-xs text-gray-500 mb-1">Per 1,000</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {quote.quantity > 0 ? formatCurrency((quote.totalPrice / quote.quantity) * 1000) : "—"}
-          </p>
-        </Card>
+        {!quote.sourcingVendor && (
+          <Card className="p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">Per 1,000</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {quote.quantity > 0 ? formatCurrency((quote.totalPrice / quote.quantity) * 1000) : "—"}
+            </p>
+          </Card>
+        )}
       </div>
 
       {/* Details */}
@@ -635,6 +638,22 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   const [busy, setBusy] = useState(false);
   const [priceBusy, setPriceBusy] = useState(false);
   const [artRow, setArtRow] = useState<string | null>(null);
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState("");
+
+  const notifyVendor = async () => {
+    setNotifyBusy(true); setNotifyMsg("");
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quote.id, notifyVendor: true }),
+      });
+      const d = await res.json();
+      setNotifyMsg(d.notified > 0 ? `✓ Notified (${d.notified})` : "No vendor email found");
+      setTimeout(() => setNotifyMsg(""), 4000);
+    } catch { setNotifyMsg("Failed"); }
+    finally { setNotifyBusy(false); }
+  };
 
   const [items, setItems] = useState<SourcingItem[]>(() => {
     try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) return p; } catch {}
@@ -724,6 +743,11 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
             <Badge className={quote.sourcingStatus === "quoted" || priceLocked ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
               {priceLocked ? "Priced" : quote.sourcingStatus === "quoted" ? "Quote received" : "Awaiting vendor quote"}
             </Badge>
+          )}
+          {quote.sourcingVendor === vendor && quote.sourcingVendor && (
+            <Button variant="outline" disabled={notifyBusy} onClick={notifyVendor}>
+              {notifyBusy ? "Sending…" : notifyMsg || "Notify vendor"}
+            </Button>
           )}
         </div>
 
