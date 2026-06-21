@@ -149,8 +149,8 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
         <div className="flex flex-wrap items-center gap-3 mt-3">
           <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-800">
             <Upload className="h-4 w-4" />
-            {uploading ? "Uploading…" : fileName ? "Replace quote file" : "Attach quote file (PDF)"}
-            <input type="file" className="hidden" onChange={handleFile} disabled={uploading} />
+            {uploading ? "Uploading…" : fileName ? "Replace quote file" : "Attach quote file (PDF or Excel)"}
+            <input type="file" className="hidden" accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleFile} disabled={uploading} />
           </label>
           {fileName && <span className="text-xs text-gray-500 inline-flex items-center gap-1"><FileText className="h-3.5 w-3.5" />{fileName}</span>}
           <div className="flex-1" />
