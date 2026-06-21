@@ -104,11 +104,10 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: req.id, vendorUpload: true,
-          items: lines.map((l) => ({
-            id: l.id, unitCost: l.unitCost, landedCost: lineTotal(l),
-            leadTime: l.leadTime, moq: l.moq, fileUrl: l.fileUrl, fileName: l.fileName,
-            vendorNotes: l.vendorNotes,
-          })),
+          // Send the FULL line objects (incl. sku/qty/artwork the portal
+          // loaded) so the server can upsert even if C&D's stored items were
+          // empty or ids don't line up (Benjy 6/20 — was dropping costs).
+          items: lines.map((l) => ({ ...l, landedCost: lineTotal(l) })),
           vendorLandedCost: lines.reduce((s, l) => s + lineTotal(l), 0),
         }),
       });

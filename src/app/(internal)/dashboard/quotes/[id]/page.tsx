@@ -638,6 +638,11 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
     try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) return p; } catch {}
     return [{ id: `sku-${Date.now()}`, sku: "", quantity: quote.quantity || 0 }];
   });
+  // Re-sync when the quote is refetched (e.g. after Martin submits) — the
+  // useState initializer only runs on mount (Benjy 6/20).
+  useEffect(() => {
+    try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) setItems(p); } catch {}
+  }, [quote.sourcingItems]);
 
   const totalLanded = items.reduce((s, it) => s + (Number(it.landedCost) || 0), 0);
   const sell = totalLanded * (1 + markupPct / 100);
