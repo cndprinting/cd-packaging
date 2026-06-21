@@ -747,6 +747,7 @@ model Quote {
   sourcingStatus       String?    // requested | quoted | priced
   sourcingArtworkUrl   String?    // artwork C&D uploads for the vendor to quote
   sourcingArtworkName  String?
+  sourcingMarkupPct    Float?     // C&D's internal markup on the vendor landed cost
   vendorLandedCost     Float?     // landed cost the vendor returns (to St. Pete)
   vendorQuoteFileUrl   String?    // vendor-uploaded quote file (Blob URL)
   vendorQuoteFileName  String?

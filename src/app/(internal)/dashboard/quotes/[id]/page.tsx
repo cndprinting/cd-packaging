@@ -37,6 +37,7 @@ interface QuoteData {
   sourcingStatus?: string | null;
   sourcingArtworkUrl?: string | null;
   sourcingArtworkName?: string | null;
+  sourcingMarkupPct?: number | null;
   vendorLandedCost?: number | null;
   vendorQuoteFileUrl?: string | null;
   vendorQuoteFileName?: string | null;
@@ -620,12 +621,30 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
 // to source; once the vendor uploads a landed cost via their portal, it shows
 // here with the markup → customer price math.
 function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
+  // Known sourcing vendors — friendly label, value matches the vendor login's
+  // vendorName (Benjy 6/16). Add more here as vendors are onboarded.
+  const VENDORS = [{ value: "MWI", label: "MWI — Mel Waxman Industries" }];
   const [vendor, setVendor] = useState(quote.sourcingVendor || "");
-  const [markupPct, setMarkupPct] = useState(30);
+  const [markupPct, setMarkupPct] = useState(quote.sourcingMarkupPct ?? 20);
   const [busy, setBusy] = useState(false);
   const [artBusy, setArtBusy] = useState(false);
+  const [priceBusy, setPriceBusy] = useState(false);
   const landed = quote.vendorLandedCost || 0;
   const sell = landed * (1 + markupPct / 100);
+  const marginDollars = sell - landed;
+  const marginPct = sell > 0 ? (marginDollars / sell) * 100 : 0;
+  const priceLocked = quote.sourcingStatus === "priced";
+
+  const setCustomerPrice = async () => {
+    setPriceBusy(true);
+    try {
+      await fetch("/api/quotes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quote.id, setSourcingPrice: true, markupPct, customerPrice: sell }),
+      });
+      onChange();
+    } finally { setPriceBusy(false); }
+  };
 
   const assign = async (name: string) => {
     setBusy(true);
@@ -666,7 +685,10 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Sourcing vendor</label>
-            <Input className="w-48" value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. MWI" />
+            <select className="w-64 rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={vendor} onChange={(e) => setVendor(e.target.value)}>
+              <option value="">— select vendor —</option>
+              {VENDORS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+            </select>
           </div>
           {quote.sourcingVendor !== vendor && (
             <Button variant="outline" disabled={busy || !vendor} onClick={() => assign(vendor)}>
@@ -696,20 +718,29 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
           </div>
         )}
 
-        {quote.sourcingStatus === "quoted" && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm items-end">
-              <div><span className="text-gray-600 block text-xs">Vendor landed cost</span><strong>{formatCurrency(landed)}</strong></div>
+        {(quote.sourcingStatus === "quoted" || priceLocked) && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm items-end">
+              <div><span className="text-gray-600 block text-xs">Vendor landed cost (our cost)</span><strong>{formatCurrency(landed)}</strong></div>
               <div>
                 <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
                 <Input type="number" className="h-8" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
               </div>
               <div><span className="text-gray-600 block text-xs">Customer price</span><strong className="text-emerald-800">{formatCurrency(sell)}</strong></div>
+              <div><span className="text-gray-600 block text-xs">Our margin</span><strong className="text-emerald-800">{formatCurrency(marginDollars)} ({marginPct.toFixed(0)}%)</strong></div>
               {quote.vendorQuoteFileUrl && (
                 <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
               )}
             </div>
             {quote.vendorQuoteNotes && <p className="text-xs text-gray-600">Vendor notes: {quote.vendorQuoteNotes}</p>}
+            <div className="flex items-center gap-3 border-t border-emerald-200 pt-3">
+              <Button onClick={setCustomerPrice} disabled={priceBusy || sell <= 0}>
+                {priceBusy ? "Saving…" : priceLocked ? "Update customer quote price" : "Set as customer quote price"}
+              </Button>
+              {priceLocked
+                ? <span className="text-xs text-emerald-700">✓ Quote price set to {formatCurrency(quote.totalPrice)} — use "Send to…" / Print Quote above to send the customer.</span>
+                : <span className="text-xs text-gray-500">Locks this price into the quote so the normal Send/Print goes to the customer.</span>}
+            </div>
           </div>
         )}
       </CardContent>
