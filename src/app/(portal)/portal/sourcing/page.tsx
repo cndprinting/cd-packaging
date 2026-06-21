@@ -11,6 +11,8 @@ import { formatDate } from "@/lib/utils";
 interface SourcingRequest {
   id: string;
   quoteNumber: string;
+  customerName: string;
+  status: string;
   productName: string;
   description: string | null;
   quantity: number;
@@ -28,9 +30,19 @@ interface SourcingRequest {
 
 // Vendor portal (Benjy 6/16) — MWI/Martin sees sourcing requests assigned to
 // their vendor, uploads a landed-cost quote against each specific request.
+// Bucket a request: Lost = customer declined; Closed = won (converted) or
+// archived; Active = everything still in play (Benjy 6/20).
+function bucketOf(r: SourcingRequest): "active" | "closed" | "lost" {
+  if (r.status === "rejected") return "lost";
+  if (r.status === "converted" || r.status === "archived") return "closed";
+  return "active";
+}
+
 export default function VendorSourcingPage() {
   const [reqs, setReqs] = useState<SourcingRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"active" | "closed" | "lost">("active");
+  const [search, setSearch] = useState("");
 
   const load = () => {
     fetch("/api/quotes")
@@ -43,6 +55,18 @@ export default function VendorSourcingPage() {
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
+  const counts = { active: 0, closed: 0, lost: 0 };
+  reqs.forEach((r) => { counts[bucketOf(r)]++; });
+
+  const q = search.trim().toLowerCase();
+  const visible = reqs
+    .filter((r) => bucketOf(r) === tab)
+    .filter((r) => !q || `${r.customerName} ${r.productName} ${r.quoteNumber} ${r.description || ""}`.toLowerCase().includes(q));
+
+  const TABS: { key: "active" | "closed" | "lost"; label: string }[] = [
+    { key: "active", label: "Active" }, { key: "closed", label: "Closed" }, { key: "lost", label: "Lost" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -50,15 +74,28 @@ export default function VendorSourcingPage() {
         <p className="text-sm text-gray-500 mt-1">Upload your landed-cost quote (shipped to St. Pete) for each request from C&amp;D Printing.</p>
       </div>
 
-      {reqs.length === 0 && (
+      {/* Tabs + search */}
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+          {TABS.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+              {t.label} <span className="text-xs text-gray-400">({counts[t.key]})</span>
+            </button>
+          ))}
+        </div>
+        <Input className="w-full sm:w-72" placeholder="Search customer, item, or request #…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      {visible.length === 0 && (
         <Card><CardContent className="py-12 text-center text-gray-500">
           <Package className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-          No open sourcing requests right now.
+          {q ? "No requests match your search." : `No ${tab} requests right now.`}
         </CardContent></Card>
       )}
 
       <div className="space-y-4">
-        {reqs.map((r) => <RequestCard key={r.id} req={r} onSaved={load} />)}
+        {visible.map((r) => <RequestCard key={r.id} req={r} onSaved={load} />)}
       </div>
     </div>
   );
@@ -127,11 +164,11 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
         <div className="flex items-start justify-between mb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900">{req.productName}</span>
+              <span className="font-semibold text-gray-900">{req.customerName || req.productName}</span>
               <Badge className="bg-gray-100 text-gray-600">{req.quoteNumber}</Badge>
               {submitted && <Badge className="bg-emerald-100 text-emerald-700"><Check className="h-3 w-3 mr-1" />Quote submitted</Badge>}
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{req.description || `${lines.length} item${lines.length !== 1 ? "s" : ""} to quote`}</p>
+            <p className="text-sm text-gray-500 mt-0.5">{req.productName}{req.description && req.description !== req.productName ? ` · ${req.description}` : ""}</p>
           </div>
           <span className="text-xs text-gray-400">{formatDate(req.createdAt)}</span>
         </div>
