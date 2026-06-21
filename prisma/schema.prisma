@@ -24,6 +24,7 @@ enum Role {
   SHIPPING           // Shipping page only
   OPERATOR           // Plant floor timer only — nothing else
   CUSTOMER           // Customer portal only
+  VENDOR             // Vendor portal only — sees sourcing requests assigned to their vendorName, uploads landed-cost quotes (Benjy 6/16, MWI/Martin)
 }
 
 enum JobStatus {
@@ -104,6 +105,9 @@ model User {
   avatarUrl      String?
   companyId      String?
   company        Company? @relation(fields: [companyId], references: [id])
+  // Scopes a VENDOR-role login to the sourcing requests for this vendor name
+  // (e.g. "MWI"). Matched against Quote.sourcingVendor (Benjy 6/16).
+  vendorName     String?
   isActive       Boolean  @default(true)
   // TOTP 2FA — Mary 5/5 ask after Mike's email hack. Authenticator-app
   // 6-digit codes (Microsoft Authenticator / Google Authenticator / etc.)
@@ -735,6 +739,17 @@ model Quote {
   parentQuoteId  String?
   revision       Int         @default(1)
   changeOrderNote String?    // what changed in this revision
+  // Outsourced / brokered sourcing (Benjy 6/16) — C&D wholesales items it
+  // can't produce (oversized cartons, corrugated) via a vendor (e.g. MWI).
+  // C&D uploads artwork, vendor returns a LANDED cost + their quote file via
+  // the vendor portal, then C&D marks it up to the customer price.
+  sourcingVendor       String?    // vendor name assigned to source (e.g. "MWI")
+  sourcingStatus       String?    // requested | quoted | priced
+  vendorLandedCost     Float?     // landed cost the vendor returns (to St. Pete)
+  vendorQuoteFileUrl   String?    // vendor-uploaded quote file (Blob URL)
+  vendorQuoteFileName  String?
+  vendorQuoteNotes     String?    // vendor's notes (lead time, MOQ, etc.)
+  vendorQuoteUploadedAt DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -742,6 +757,7 @@ model Quote {
   @@index([quoteNumber])
   @@index([convertedJobId])
   @@index([parentQuoteId])
+  @@index([sourcingVendor])
 }
 
 // ─── PLANT STANDARDS ────────────────────────────────────

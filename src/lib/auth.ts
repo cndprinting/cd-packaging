@@ -12,7 +12,8 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
-  role: "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
+  role: "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER" | "VENDOR" | "PREPRESS_MANAGER";
   companyId: string | null;
   companyName: string | null;
+  vendorName?: string | null;
 }

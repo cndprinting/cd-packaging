@@ -74,6 +74,7 @@ async function handleLogin(body: { email: string; password: string }) {
         role: user.role,
         companyId: user.companyId || null,
         companyName: user.companyName || null,
+        vendorName: user.vendorName || null,
       };
 
       await createSession(sessionUser);

@@ -33,6 +33,13 @@ interface QuoteData {
   customerNotes: string | null;
   specs: string | null;
   convertedJobId: string | null;
+  sourcingVendor?: string | null;
+  sourcingStatus?: string | null;
+  vendorLandedCost?: number | null;
+  vendorQuoteFileUrl?: string | null;
+  vendorQuoteFileName?: string | null;
+  vendorQuoteNotes?: string | null;
+  vendorQuoteUploadedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -354,6 +361,13 @@ export default function QuoteDetailPage() {
         </Card>
       )}
 
+      {/* Outsourced sourcing (Benjy 6/16) — assign to a vendor (e.g. MWI) to
+          source items C&D can't produce; vendor returns landed cost via portal. */}
+      <SourcingCard quote={quote} onChange={async () => {
+        const r = await fetch(`/api/quotes/${quote.id}`); const d = await r.json();
+        if (d.quote) setQuote(d.quote);
+      }} />
+
       {/* Notes */}
       {quote.notes && (
         <Card>
@@ -597,6 +611,72 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
       </div>
       <span className="text-sm font-semibold text-gray-900">{formatCurrency(amount)}</span>
     </div>
+  );
+}
+
+// Outsourced sourcing card (Benjy 6/16). Assign the quote to a vendor (MWI)
+// to source; once the vendor uploads a landed cost via their portal, it shows
+// here with the markup → customer price math.
+function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
+  const [vendor, setVendor] = useState(quote.sourcingVendor || "");
+  const [markupPct, setMarkupPct] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const landed = quote.vendorLandedCost || 0;
+  const sell = landed * (1 + markupPct / 100);
+
+  const assign = async (name: string) => {
+    setBusy(true);
+    try {
+      await fetch("/api/quotes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quote.id, assignVendor: name }),
+      });
+      onChange();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card className="border-amber-200">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Truck className="h-4 w-4 text-amber-600" /> Outsourced Sourcing</CardTitle>
+        <p className="text-xs text-gray-500 mt-1">For items C&amp;D wholesales (oversized cartons, corrugated). Assign a vendor; they upload a landed cost via their portal, then mark it up for the customer.</p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Sourcing vendor</label>
+            <Input className="w-48" value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. MWI" />
+          </div>
+          {quote.sourcingVendor !== vendor && (
+            <Button variant="outline" disabled={busy || !vendor} onClick={() => assign(vendor)}>
+              {busy ? "Saving…" : "Assign for sourcing"}
+            </Button>
+          )}
+          {quote.sourcingVendor && (
+            <Badge className={quote.sourcingStatus === "quoted" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
+              {quote.sourcingStatus === "quoted" ? "Quote received" : "Awaiting vendor quote"}
+            </Badge>
+          )}
+        </div>
+
+        {quote.sourcingStatus === "quoted" && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm items-end">
+              <div><span className="text-gray-600 block text-xs">Vendor landed cost</span><strong>{formatCurrency(landed)}</strong></div>
+              <div>
+                <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
+                <Input type="number" className="h-8" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
+              </div>
+              <div><span className="text-gray-600 block text-xs">Customer price</span><strong className="text-emerald-800">{formatCurrency(sell)}</strong></div>
+              {quote.vendorQuoteFileUrl && (
+                <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
+              )}
+            </div>
+            {quote.vendorQuoteNotes && <p className="text-xs text-gray-600">Vendor notes: {quote.vendorQuoteNotes}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

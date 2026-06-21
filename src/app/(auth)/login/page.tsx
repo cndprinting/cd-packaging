@@ -71,7 +71,10 @@ function LoginPageInner() {
         return;
       }
 
-      router.push("/dashboard");
+      // Vendors land on their sourcing lane; customers in the portal;
+      // everyone else in the dashboard.
+      const role = data.user?.role;
+      router.push(role === "VENDOR" ? "/portal/sourcing" : role === "CUSTOMER" ? "/portal" : "/dashboard");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

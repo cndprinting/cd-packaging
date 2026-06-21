@@ -48,6 +48,12 @@ const customerNav = [
   { label: "Account", href: "/portal/account", icon: Settings },
 ];
 
+// Vendor portal (Benjy 6/16) — MWI/Martin: just the sourcing-request lane.
+const vendorNav = [
+  { label: "Sourcing Requests", href: "/portal/sourcing", icon: FileCheck },
+  { label: "Account", href: "/portal/account", icon: Settings },
+];
+
 interface SidebarProps {
   isCustomer?: boolean;
   userRole?: string;
@@ -59,7 +65,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
 
   // Filter nav items by role
   const filteredNav = React.useMemo(() => {
-    if (isCustomer) return customerNav;
+    if (isCustomer) return userRole === "VENDOR" ? vendorNav : customerNav;
     if (!userRole) return internalNav;
 
     const role = userRole as import("@/lib/permissions").AppRole;
@@ -122,7 +128,7 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">C&D Packaging</p>
-            <p className="text-xs text-gray-500 truncate">{isCustomer ? "Customer Portal" : "Godzilla"}</p>
+            <p className="text-xs text-gray-500 truncate">{isCustomer ? (userRole === "VENDOR" ? "Vendor Portal" : "Customer Portal") : "Godzilla"}</p>
           </div>
         )}
       </div>
