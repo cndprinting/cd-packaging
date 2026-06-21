@@ -745,6 +745,8 @@ model Quote {
   // the vendor portal, then C&D marks it up to the customer price.
   sourcingVendor       String?    // vendor name assigned to source (e.g. "MWI")
   sourcingStatus       String?    // requested | quoted | priced
+  sourcingArtworkUrl   String?    // artwork C&D uploads for the vendor to quote
+  sourcingArtworkName  String?
   vendorLandedCost     Float?     // landed cost the vendor returns (to St. Pete)
   vendorQuoteFileUrl   String?    // vendor-uploaded quote file (Blob URL)
   vendorQuoteFileName  String?

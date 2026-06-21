@@ -15,6 +15,8 @@ interface SourcingRequest {
   description: string | null;
   quantity: number;
   sourcingStatus: string | null;
+  sourcingArtworkUrl: string | null;
+  sourcingArtworkName: string | null;
   vendorLandedCost: number | null;
   vendorQuoteFileUrl: string | null;
   vendorQuoteFileName: string | null;
@@ -126,10 +128,10 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
           <span className="text-xs text-gray-400">{formatDate(req.createdAt)}</span>
         </div>
 
-        {/* Artwork from C&D (if attached in specs) */}
-        {specs.artworkUrl && (
-          <a href={specs.artworkUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline mb-3">
-            <FileText className="h-4 w-4" /> Download artwork from C&D
+        {/* Artwork from C&D */}
+        {req.sourcingArtworkUrl && (
+          <a href={req.sourcingArtworkUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline mb-3">
+            <FileText className="h-4 w-4" /> Download artwork from C&D{req.sourcingArtworkName ? ` (${req.sourcingArtworkName})` : ""}
           </a>
         )}
 

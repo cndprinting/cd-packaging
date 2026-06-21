@@ -35,6 +35,8 @@ interface QuoteData {
   convertedJobId: string | null;
   sourcingVendor?: string | null;
   sourcingStatus?: string | null;
+  sourcingArtworkUrl?: string | null;
+  sourcingArtworkName?: string | null;
   vendorLandedCost?: number | null;
   vendorQuoteFileUrl?: string | null;
   vendorQuoteFileName?: string | null;
@@ -621,6 +623,7 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   const [vendor, setVendor] = useState(quote.sourcingVendor || "");
   const [markupPct, setMarkupPct] = useState(30);
   const [busy, setBusy] = useState(false);
+  const [artBusy, setArtBusy] = useState(false);
   const landed = quote.vendorLandedCost || 0;
   const sell = landed * (1 + markupPct / 100);
 
@@ -633,6 +636,24 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
       });
       onChange();
     } finally { setBusy(false); }
+  };
+
+  const uploadArtwork = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArtBusy(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const up = await fetch("/api/upload", { method: "POST", body: fd });
+      const d = await up.json();
+      if (!up.ok) { alert(d.message || d.error || "Upload failed"); return; }
+      await fetch("/api/quotes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quote.id, sourcingArtwork: { url: d.url, name: d.fileName } }),
+      });
+      onChange();
+    } catch { alert("Upload failed — try again"); }
+    finally { setArtBusy(false); }
   };
 
   return (
@@ -658,6 +679,22 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
             </Badge>
           )}
         </div>
+
+        {/* Artwork for the vendor to quote against */}
+        {quote.sourcingVendor && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-800">
+              <FileText className="h-4 w-4" />
+              {artBusy ? "Uploading…" : quote.sourcingArtworkUrl ? "Replace artwork for vendor" : "Attach artwork for vendor"}
+              <input type="file" className="hidden" onChange={uploadArtwork} disabled={artBusy} />
+            </label>
+            {quote.sourcingArtworkUrl && (
+              <a href={quote.sourcingArtworkUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline inline-flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5" />{quote.sourcingArtworkName || "artwork"}
+              </a>
+            )}
+          </div>
+        )}
 
         {quote.sourcingStatus === "quoted" && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-2">

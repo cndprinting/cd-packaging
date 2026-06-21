@@ -34,6 +34,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         // Outsourced sourcing (Benjy 6/16)
         sourcingVendor: quote.sourcingVendor,
         sourcingStatus: quote.sourcingStatus,
+        sourcingArtworkUrl: quote.sourcingArtworkUrl,
+        sourcingArtworkName: quote.sourcingArtworkName,
         vendorLandedCost: quote.vendorLandedCost,
         vendorQuoteFileUrl: quote.vendorQuoteFileUrl,
         vendorQuoteFileName: quote.vendorQuoteFileName,
