@@ -64,7 +64,9 @@ export default function VendorSourcingPage() {
   );
 }
 
-type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
+// unitCost/moq are stored as raw strings while typing (avoids the React
+// number-input leading-zero bug — Benjy 6/20); Number()'d for math.
+type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number | string; leadTime?: string; moq?: number | string; fileUrl?: string; fileName?: string; vendorNotes?: string };
 
 function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => void }) {
   const initialLines: Line[] = (() => {
@@ -150,7 +152,7 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Price per unit ($)</label>
-                  <Input type="number" step="0.0001" value={l.unitCost ?? ""} onChange={(e) => updateLine(l.id, { unitCost: Number(e.target.value) })} placeholder="e.g. 1.85" />
+                  <Input type="text" inputMode="decimal" value={l.unitCost ?? ""} onChange={(e) => updateLine(l.id, { unitCost: e.target.value })} placeholder="e.g. 1.85" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Total (auto)</label>
@@ -162,7 +164,7 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">MOQ</label>
-                  <Input type="number" value={l.moq ?? ""} onChange={(e) => updateLine(l.id, { moq: Number(e.target.value) })} placeholder="e.g. 5000" />
+                  <Input type="text" inputMode="numeric" value={l.moq ?? ""} onChange={(e) => updateLine(l.id, { moq: e.target.value })} placeholder="e.g. 5000" />
                 </div>
               </div>
               <div>

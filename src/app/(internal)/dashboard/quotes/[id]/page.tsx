@@ -622,7 +622,9 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
 // Outsourced sourcing card (Benjy 6/16). Assign the quote to a vendor (MWI)
 // to source; once the vendor uploads a landed cost via their portal, it shows
 // here with the markup → customer price math.
-type SourcingItem = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
+// quantity/landedCost stored as raw strings while typing (avoids the React
+// number-input leading-zero bug — Benjy 6/20); Number()'d for math.
+type SourcingItem = { id: string; sku: string; quantity: number | string; artworkUrl?: string; artworkName?: string; landedCost?: number | string; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
 
 function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
   // Known sourcing vendors — friendly label, value matches the vendor login's
@@ -737,7 +739,7 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
           {items.map((it) => (
             <div key={it.id} className="grid grid-cols-12 gap-2 items-center">
               <Input className="col-span-12 sm:col-span-4" value={it.sku} placeholder="e.g. Coffee box" onChange={(e) => updateRow(it.id, { sku: e.target.value })} onBlur={() => saveItems(items)} />
-              <Input className="col-span-4 sm:col-span-2" type="number" value={it.quantity || ""} placeholder="Qty" onChange={(e) => updateRow(it.id, { quantity: Number(e.target.value) })} onBlur={() => saveItems(items)} />
+              <Input className="col-span-4 sm:col-span-2" type="text" inputMode="numeric" value={it.quantity ?? ""} placeholder="Qty" onChange={(e) => updateRow(it.id, { quantity: e.target.value })} onBlur={() => saveItems(items)} />
               <div className="col-span-5 sm:col-span-3 text-xs">
                 <label className="inline-flex items-center gap-1 cursor-pointer text-brand-600 hover:text-brand-800">
                   <FileText className="h-3.5 w-3.5" />{artRow === it.id ? "Uploading…" : it.artworkUrl ? "Replace" : "Attach"}
@@ -745,7 +747,7 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                 </label>
                 {it.artworkUrl && <a href={it.artworkUrl} target="_blank" rel="noopener noreferrer" className="block text-gray-400 hover:underline truncate">{it.artworkName}</a>}
               </div>
-              <Input className="col-span-2 sm:col-span-2 text-right" type="number" step="0.01" value={it.landedCost ?? ""} placeholder="—" onChange={(e) => updateRow(it.id, { landedCost: Number(e.target.value) })} onBlur={() => saveItems(items)} />
+              <Input className="col-span-2 sm:col-span-2 text-right" type="text" inputMode="decimal" value={it.landedCost ?? ""} placeholder="—" onChange={(e) => updateRow(it.id, { landedCost: e.target.value })} onBlur={() => saveItems(items)} />
               <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeRow(it.id)} disabled={items.length <= 1}>×</button>
               {(it.unitCost || it.leadTime || it.moq || it.fileUrl || it.vendorNotes) && (
                 <p className="col-span-12 text-xs text-gray-500 pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
