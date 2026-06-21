@@ -30,18 +30,21 @@ interface SourcingRequest {
 
 // Vendor portal (Benjy 6/16) — MWI/Martin sees sourcing requests assigned to
 // their vendor, uploads a landed-cost quote against each specific request.
-// Bucket a request: Lost = customer declined; Closed = won (converted) or
-// archived; Active = everything still in play (Benjy 6/20).
-function bucketOf(r: SourcingRequest): "active" | "closed" | "lost" {
-  if (r.status === "rejected") return "lost";
-  if (r.status === "converted" || r.status === "archived") return "closed";
+// Bucket a request (Benjy 6/20) — Active = NOT yet quoted (Martin's to-do);
+// Quoted = he's submitted, awaiting outcome; Won = converted; Lost =
+// rejected/archived. Keeps his Active list to just open work.
+type Bucket = "active" | "quoted" | "won" | "lost";
+function bucketOf(r: SourcingRequest): Bucket {
+  if (r.status === "rejected" || r.status === "archived") return "lost";
+  if (r.status === "converted") return "won";
+  if (r.sourcingStatus === "quoted" || r.sourcingStatus === "priced") return "quoted";
   return "active";
 }
 
 export default function VendorSourcingPage() {
   const [reqs, setReqs] = useState<SourcingRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"active" | "closed" | "lost">("active");
+  const [tab, setTab] = useState<Bucket>("active");
   const [search, setSearch] = useState("");
 
   const load = () => {
@@ -55,7 +58,7 @@ export default function VendorSourcingPage() {
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
-  const counts = { active: 0, closed: 0, lost: 0 };
+  const counts: Record<Bucket, number> = { active: 0, quoted: 0, won: 0, lost: 0 };
   reqs.forEach((r) => { counts[bucketOf(r)]++; });
 
   const q = search.trim().toLowerCase();
@@ -63,8 +66,9 @@ export default function VendorSourcingPage() {
     .filter((r) => bucketOf(r) === tab)
     .filter((r) => !q || `${r.customerName} ${r.productName} ${r.quoteNumber} ${r.description || ""}`.toLowerCase().includes(q));
 
-  const TABS: { key: "active" | "closed" | "lost"; label: string }[] = [
-    { key: "active", label: "Active" }, { key: "closed", label: "Closed" }, { key: "lost", label: "Lost" },
+  const TABS: { key: Bucket; label: string }[] = [
+    { key: "active", label: "Active" }, { key: "quoted", label: "Quoted" },
+    { key: "won", label: "Won" }, { key: "lost", label: "Lost" },
   ];
 
   return (
