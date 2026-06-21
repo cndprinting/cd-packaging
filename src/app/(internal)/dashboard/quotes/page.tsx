@@ -107,8 +107,14 @@ export default function QuotesPage() {
                         quote is sent she still needs to change it without
                         re-entering everything. The estimator reloads the full
                         quote via ?draftId; saving updates it in place. */}
-                    {q.status === "draft" && <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>}
-                    {(q.status === "sent" || q.status === "approved" || q.status === "rejected") && <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>}
+                    {/* Outsourced (wholesale) quotes edit on their detail page
+                        (sourcing card), not the estimator — Benjy 6/16. */}
+                    {q.status === "draft" && ((q as any).sourcingVendor
+                      ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>
+                      : <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>)}
+                    {(q.status === "sent" || q.status === "approved" || q.status === "rejected") && ((q as any).sourcingVendor
+                      ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>
+                      : <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>)}
                     {q.status === "draft" && <Button variant="ghost" size="sm" className="gap-1 text-blue-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "sent" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "sent" } : x)); }}><Send className="h-3.5 w-3.5" />Send</Button>}
                     {(q.status === "draft" || q.status === "sent") && <Button variant="ghost" size="sm" className="gap-1 text-gray-600" onClick={() => alert("Send to CSR/Salesperson — email integration coming soon")}><Mail className="h-3.5 w-3.5" /></Button>}
                     {q.status === "approved" && <Button variant="ghost" size="sm" className="gap-1 text-purple-600" onClick={async () => { await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: q.id, status: "converted" }) }).catch(() => {}); setQuotes(p => p.map(x => x.id === q.id ? { ...x, status: "converted" } : x)); }}><Package className="h-3.5 w-3.5" />Convert</Button>}

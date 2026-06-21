@@ -745,9 +745,14 @@ model Quote {
   // the vendor portal, then C&D marks it up to the customer price.
   sourcingVendor       String?    // vendor name assigned to source (e.g. "MWI")
   sourcingStatus       String?    // requested | quoted | priced
-  sourcingArtworkUrl   String?    // artwork C&D uploads for the vendor to quote
+  sourcingArtworkUrl   String?    // (legacy) single job-level artwork
   sourcingArtworkName  String?
   sourcingMarkupPct    Float?     // C&D's internal markup on the vendor landed cost
+  // Multi-SKU sourcing (Benjy 6/16) — one quote to a vendor can carry several
+  // SKUs (e.g. coffee box + label). JSON array of line items, each with its
+  // own artwork + the vendor's per-line landed cost:
+  // [{ id, sku, quantity, artworkUrl, artworkName, landedCost, vendorNotes }]
+  sourcingItems        String?
   vendorLandedCost     Float?     // landed cost the vendor returns (to St. Pete)
   vendorQuoteFileUrl   String?    // vendor-uploaded quote file (Blob URL)
   vendorQuoteFileName  String?

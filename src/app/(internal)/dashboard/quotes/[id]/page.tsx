@@ -38,6 +38,7 @@ interface QuoteData {
   sourcingArtworkUrl?: string | null;
   sourcingArtworkName?: string | null;
   sourcingMarkupPct?: number | null;
+  sourcingItems?: string | null;
   vendorLandedCost?: number | null;
   vendorQuoteFileUrl?: string | null;
   vendorQuoteFileName?: string | null;
@@ -177,9 +178,10 @@ export default function QuoteDetailPage() {
         {/* Actions */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Edit — Mary 6/15: reopen a sent quote in the estimator with all
-              data prefilled (no re-entering). Hidden once converted to a job;
-              use the job's Change Order there instead. */}
-          {!quote.convertedJobId && quote.status !== "archived" && (
+              data prefilled. Outsourced (wholesale) quotes have no estimating,
+              so they edit via the Outsourced Sourcing card on this page instead
+              of the estimator (Benjy 6/16). Hidden once converted to a job. */}
+          {!quote.convertedJobId && quote.status !== "archived" && !quote.sourcingVendor && (
             <Link href={`/dashboard/quotes/estimate?draftId=${quote.id}`}>
               <Button variant="outline" className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
                 <FileText className="h-4 w-4" /> Edit Quote
@@ -620,6 +622,8 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
 // Outsourced sourcing card (Benjy 6/16). Assign the quote to a vendor (MWI)
 // to source; once the vendor uploads a landed cost via their portal, it shows
 // here with the markup → customer price math.
+type SourcingItem = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; vendorNotes?: string };
+
 function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
   // Known sourcing vendors — friendly label, value matches the vendor login's
   // vendorName (Benjy 6/16). Add more here as vendors are onboarded.
@@ -627,17 +631,60 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   const [vendor, setVendor] = useState(quote.sourcingVendor || "");
   const [markupPct, setMarkupPct] = useState(quote.sourcingMarkupPct ?? 20);
   const [busy, setBusy] = useState(false);
-  const [artBusy, setArtBusy] = useState(false);
   const [priceBusy, setPriceBusy] = useState(false);
-  const landed = quote.vendorLandedCost || 0;
-  const sell = landed * (1 + markupPct / 100);
-  const marginDollars = sell - landed;
+  const [artRow, setArtRow] = useState<string | null>(null);
+
+  const [items, setItems] = useState<SourcingItem[]>(() => {
+    try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) return p; } catch {}
+    return [{ id: `sku-${Date.now()}`, sku: "", quantity: quote.quantity || 0 }];
+  });
+
+  const totalLanded = items.reduce((s, it) => s + (Number(it.landedCost) || 0), 0);
+  const sell = totalLanded * (1 + markupPct / 100);
+  const marginDollars = sell - totalLanded;
   const marginPct = sell > 0 ? (marginDollars / sell) * 100 : 0;
   const priceLocked = quote.sourcingStatus === "priced";
+  const hasCosts = totalLanded > 0;
+
+  const saveItems = async (next: SourcingItem[]) => {
+    setItems(next);
+    await fetch("/api/quotes", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: quote.id, sourcingItems: next }),
+    }).catch(() => {});
+  };
+  const updateRow = (id: string, patch: Partial<SourcingItem>) => setItems((p) => p.map((it) => it.id === id ? { ...it, ...patch } : it));
+  const addRow = () => saveItems([...items, { id: `sku-${Date.now()}`, sku: "", quantity: 0 }]);
+  const removeRow = (id: string) => saveItems(items.filter((it) => it.id !== id));
+
+  const assign = async (name: string) => {
+    setBusy(true);
+    try {
+      // Persist current line items first, then assign the vendor.
+      await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, sourcingItems: items }) }).catch(() => {});
+      await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, assignVendor: name }) });
+      onChange();
+    } finally { setBusy(false); }
+  };
+
+  const uploadRowArtwork = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArtRow(id);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const up = await fetch("/api/upload", { method: "POST", body: fd });
+      const d = await up.json();
+      if (!up.ok) { alert(d.message || d.error || "Upload failed"); return; }
+      await saveItems(items.map((it) => it.id === id ? { ...it, artworkUrl: d.url, artworkName: d.fileName } : it));
+    } catch { alert("Upload failed — try again"); }
+    finally { setArtRow(null); }
+  };
 
   const setCustomerPrice = async () => {
     setPriceBusy(true);
     try {
+      await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, sourcingItems: items }) }).catch(() => {});
       await fetch("/api/quotes", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quote.id, setSourcingPrice: true, markupPct, customerPrice: sell }),
@@ -646,42 +693,13 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
     } finally { setPriceBusy(false); }
   };
 
-  const assign = async (name: string) => {
-    setBusy(true);
-    try {
-      await fetch("/api/quotes", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quote.id, assignVendor: name }),
-      });
-      onChange();
-    } finally { setBusy(false); }
-  };
-
-  const uploadArtwork = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setArtBusy(true);
-    try {
-      const fd = new FormData(); fd.append("file", file);
-      const up = await fetch("/api/upload", { method: "POST", body: fd });
-      const d = await up.json();
-      if (!up.ok) { alert(d.message || d.error || "Upload failed"); return; }
-      await fetch("/api/quotes", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quote.id, sourcingArtwork: { url: d.url, name: d.fileName } }),
-      });
-      onChange();
-    } catch { alert("Upload failed — try again"); }
-    finally { setArtBusy(false); }
-  };
-
   return (
     <Card className="border-amber-200">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2"><Truck className="h-4 w-4 text-amber-600" /> Outsourced Sourcing</CardTitle>
-        <p className="text-xs text-gray-500 mt-1">For items C&amp;D wholesales (oversized cartons, corrugated). Assign a vendor; they upload a landed cost via their portal, then mark it up for the customer.</p>
+        <p className="text-xs text-gray-500 mt-1">For items C&amp;D wholesales (oversized cartons, corrugated). Add the SKUs, attach artwork, assign a vendor — they return a landed cost per SKU via their portal, then mark it up for the customer.</p>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Sourcing vendor</label>
@@ -696,32 +714,45 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
             </Button>
           )}
           {quote.sourcingVendor && (
-            <Badge className={quote.sourcingStatus === "quoted" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
-              {quote.sourcingStatus === "quoted" ? "Quote received" : "Awaiting vendor quote"}
+            <Badge className={quote.sourcingStatus === "quoted" || priceLocked ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
+              {priceLocked ? "Priced" : quote.sourcingStatus === "quoted" ? "Quote received" : "Awaiting vendor quote"}
             </Badge>
           )}
         </div>
 
-        {/* Artwork for the vendor to quote against */}
-        {quote.sourcingVendor && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-800">
-              <FileText className="h-4 w-4" />
-              {artBusy ? "Uploading…" : quote.sourcingArtworkUrl ? "Replace artwork for vendor" : "Attach artwork for vendor"}
-              <input type="file" className="hidden" onChange={uploadArtwork} disabled={artBusy} />
-            </label>
-            {quote.sourcingArtworkUrl && (
-              <a href={quote.sourcingArtworkUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline inline-flex items-center gap-1">
-                <FileText className="h-3.5 w-3.5" />{quote.sourcingArtworkName || "artwork"}
-              </a>
-            )}
+        {/* SKU line items */}
+        <div className="space-y-2">
+          <div className="hidden sm:grid grid-cols-12 gap-2 text-xs text-gray-500 px-1">
+            <span className="col-span-4">SKU / item</span>
+            <span className="col-span-2">Qty</span>
+            <span className="col-span-3">Artwork</span>
+            <span className="col-span-2 text-right">Landed cost</span>
+            <span className="col-span-1"></span>
           </div>
-        )}
+          {items.map((it) => (
+            <div key={it.id} className="grid grid-cols-12 gap-2 items-center">
+              <Input className="col-span-12 sm:col-span-4" value={it.sku} placeholder="e.g. Coffee box" onChange={(e) => updateRow(it.id, { sku: e.target.value })} onBlur={() => saveItems(items)} />
+              <Input className="col-span-4 sm:col-span-2" type="number" value={it.quantity || ""} placeholder="Qty" onChange={(e) => updateRow(it.id, { quantity: Number(e.target.value) })} onBlur={() => saveItems(items)} />
+              <div className="col-span-5 sm:col-span-3 text-xs">
+                <label className="inline-flex items-center gap-1 cursor-pointer text-brand-600 hover:text-brand-800">
+                  <FileText className="h-3.5 w-3.5" />{artRow === it.id ? "Uploading…" : it.artworkUrl ? "Replace" : "Attach"}
+                  <input type="file" className="hidden" onChange={(e) => uploadRowArtwork(it.id, e)} disabled={artRow === it.id} />
+                </label>
+                {it.artworkUrl && <a href={it.artworkUrl} target="_blank" rel="noopener noreferrer" className="block text-gray-400 hover:underline truncate">{it.artworkName}</a>}
+              </div>
+              <Input className="col-span-2 sm:col-span-2 text-right" type="number" step="0.01" value={it.landedCost ?? ""} placeholder="—" onChange={(e) => updateRow(it.id, { landedCost: Number(e.target.value) })} onBlur={() => saveItems(items)} />
+              <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeRow(it.id)} disabled={items.length <= 1}>×</button>
+              {it.vendorNotes && <p className="col-span-12 text-xs text-gray-500 pl-1">Vendor: {it.vendorNotes}</p>}
+            </div>
+          ))}
+          <button type="button" onClick={addRow} className="text-sm font-medium text-brand-600 hover:text-brand-800">+ Add SKU</button>
+        </div>
 
-        {(quote.sourcingStatus === "quoted" || priceLocked) && (
+        {/* Pricing — shows once any landed cost exists */}
+        {(hasCosts || priceLocked) && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm items-end">
-              <div><span className="text-gray-600 block text-xs">Vendor landed cost (our cost)</span><strong>{formatCurrency(landed)}</strong></div>
+              <div><span className="text-gray-600 block text-xs">Total landed (our cost)</span><strong>{formatCurrency(totalLanded)}</strong></div>
               <div>
                 <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
                 <Input type="number" className="h-8" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
@@ -732,7 +763,6 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                 <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
               )}
             </div>
-            {quote.vendorQuoteNotes && <p className="text-xs text-gray-600">Vendor notes: {quote.vendorQuoteNotes}</p>}
             <div className="flex items-center gap-3 border-t border-emerald-200 pt-3">
               <Button onClick={setCustomerPrice} disabled={priceBusy || sell <= 0}>
                 {priceBusy ? "Saving…" : priceLocked ? "Update customer quote price" : "Set as customer quote price"}
