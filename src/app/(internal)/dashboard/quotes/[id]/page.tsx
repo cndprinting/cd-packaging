@@ -655,6 +655,17 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
     finally { setNotifyBusy(false); }
   };
 
+  const setOutcome = async (outcome: "won" | "lost" | "reopen") => {
+    setBusy(true);
+    try {
+      await fetch("/api/quotes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quote.id, sourcingOutcome: outcome }),
+      });
+      onChange();
+    } finally { setBusy(false); }
+  };
+
   const [items, setItems] = useState<SourcingItem[]>(() => {
     try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) return p; } catch {}
     return [{ id: `sku-${Date.now()}`, sku: "", quantity: quote.quantity || 0 }];
@@ -773,9 +784,13 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
               </div>
               <Input className="col-span-2 sm:col-span-2 text-right" type="text" inputMode="decimal" value={it.landedCost ?? ""} placeholder="—" onChange={(e) => updateRow(it.id, { landedCost: e.target.value })} onBlur={() => saveItems(items)} />
               <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeRow(it.id)} disabled={items.length <= 1}>×</button>
-              {(it.unitCost || it.leadTime || it.moq || it.fileUrl || it.vendorNotes) && (
+              {(Number(it.landedCost) > 0 || it.leadTime || it.moq || it.fileUrl || it.vendorNotes) && (
                 <p className="col-span-12 text-xs text-gray-500 pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                  {it.unitCost ? <span>Unit ${Number(it.unitCost).toFixed(4)}</span> : null}
+                  {Number(it.landedCost) > 0 && (
+                    <span className="font-medium text-gray-600">
+                      {Number(it.quantity) || 0} × ${(Number(it.unitCost) || (Number(it.landedCost) / (Number(it.quantity) || 1))).toFixed(4)} = ${Number(it.landedCost).toFixed(2)} landed → ${(Number(it.landedCost) * (1 + markupPct / 100)).toFixed(2)} customer
+                    </span>
+                  )}
                   {it.leadTime ? <span>Lead: {it.leadTime}</span> : null}
                   {it.moq ? <span>MOQ: {Number(it.moq).toLocaleString()}</span> : null}
                   {it.fileUrl ? <a href={it.fileUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-3 w-3" />{it.fileName || "vendor file"}</a> : null}
@@ -802,13 +817,27 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                 <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
               )}
             </div>
-            <div className="flex items-center gap-3 border-t border-emerald-200 pt-3">
+            <div className="flex flex-wrap items-center gap-3 border-t border-emerald-200 pt-3">
               <Button onClick={setCustomerPrice} disabled={priceBusy || sell <= 0}>
                 {priceBusy ? "Saving…" : priceLocked ? "Update customer quote price" : "Set as customer quote price"}
               </Button>
               {priceLocked
                 ? <span className="text-xs text-emerald-700">✓ Quote price set to {formatCurrency(quote.totalPrice)} — use "Send to…" / Print Quote above to send the customer.</span>
                 : <span className="text-xs text-gray-500">Locks this price into the quote so the normal Send/Print goes to the customer.</span>}
+            </div>
+            {/* Outcome — drives Martin's Won/Lost tabs (Benjy 6/20) */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-3">
+              <span className="text-xs text-gray-600 mr-1">Outcome:</span>
+              {quote.sourcingStatus === "won"
+                ? <Badge className="bg-emerald-100 text-emerald-700">Won</Badge>
+                : <Button variant="outline" size="sm" className="text-emerald-700 border-emerald-300" disabled={busy} onClick={() => setOutcome("won")}>Mark Won</Button>}
+              {quote.sourcingStatus === "lost"
+                ? <Badge className="bg-red-100 text-red-700">Lost</Badge>
+                : <Button variant="outline" size="sm" className="text-red-600 border-red-200" disabled={busy} onClick={() => setOutcome("lost")}>Mark Lost</Button>}
+              {(quote.sourcingStatus === "won" || quote.sourcingStatus === "lost") && (
+                <Button variant="ghost" size="sm" className="text-gray-500" disabled={busy} onClick={() => setOutcome("reopen")}>Reopen</Button>
+              )}
+              <span className="text-[11px] text-gray-400">Won/Lost moves it out of MWI&apos;s active list.</span>
             </div>
           </div>
         )}

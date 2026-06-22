@@ -35,8 +35,8 @@ interface SourcingRequest {
 // rejected/archived. Keeps his Active list to just open work.
 type Bucket = "active" | "quoted" | "won" | "lost";
 function bucketOf(r: SourcingRequest): Bucket {
-  if (r.status === "rejected" || r.status === "archived") return "lost";
-  if (r.status === "converted") return "won";
+  if (r.sourcingStatus === "lost" || r.status === "rejected" || r.status === "archived") return "lost";
+  if (r.sourcingStatus === "won" || r.status === "converted") return "won";
   if (r.sourcingStatus === "quoted" || r.sourcingStatus === "priced") return "quoted";
   return "active";
 }
