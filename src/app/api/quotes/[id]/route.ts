@@ -38,6 +38,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         sourcingArtworkName: quote.sourcingArtworkName,
         sourcingMarkupPct: quote.sourcingMarkupPct,
         sourcingItems: quote.sourcingItems,
+        sourcingFulfillment: quote.sourcingFulfillment,
         vendorLandedCost: quote.vendorLandedCost,
         vendorQuoteFileUrl: quote.vendorQuoteFileUrl,
         vendorQuoteFileName: quote.vendorQuoteFileName,

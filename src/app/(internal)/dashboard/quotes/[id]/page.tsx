@@ -39,6 +39,7 @@ interface QuoteData {
   sourcingArtworkName?: string | null;
   sourcingMarkupPct?: number | null;
   sourcingItems?: string | null;
+  sourcingFulfillment?: string | null;
   vendorLandedCost?: number | null;
   vendorQuoteFileUrl?: string | null;
   vendorQuoteFileName?: string | null;
@@ -666,6 +667,22 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
     } finally { setBusy(false); }
   };
 
+  // Light wholesale fulfillment checklist — lives on the quote, no Job.
+  type Fulfill = { poSent?: boolean; received?: boolean; shipped?: boolean; tracking?: string; invoiced?: boolean; vendorPaid?: boolean };
+  const [fulfill, setFulfill] = useState<Fulfill>(() => {
+    try { return quote.sourcingFulfillment ? JSON.parse(quote.sourcingFulfillment) : {}; } catch { return {}; }
+  });
+  useEffect(() => {
+    try { setFulfill(quote.sourcingFulfillment ? JSON.parse(quote.sourcingFulfillment) : {}); } catch {}
+  }, [quote.sourcingFulfillment]);
+  const saveFulfill = async (next: Fulfill) => {
+    setFulfill(next);
+    await fetch("/api/quotes", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: quote.id, sourcingFulfillment: next }),
+    }).catch(() => {});
+  };
+
   const [items, setItems] = useState<SourcingItem[]>(() => {
     try { const p = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; if (Array.isArray(p) && p.length) return p; } catch {}
     return [{ id: `sku-${Date.now()}`, sku: "", quantity: quote.quantity || 0 }];
@@ -840,6 +857,44 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                 <Button variant="ghost" size="sm" className="text-gray-500" disabled={busy} onClick={() => setOutcome("reopen")}>Reopen</Button>
               )}
               <span className="text-[11px] text-gray-400">Won/Lost moves it out of MWI&apos;s active list.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Wholesale fulfillment — only after Won. Lives here on the quote, no
+            manufacturing Job, so it never touches internal production. */}
+        {quote.sourcingStatus === "won" && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-2">
+            <p className="text-sm font-semibold text-gray-800">Wholesale fulfillment</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+              {[
+                { key: "poSent", label: "PO sent to MWI" },
+                { key: "received", label: "Goods received at St. Pete" },
+                { key: "shipped", label: "Shipped to customer" },
+                { key: "invoiced", label: "Customer invoiced" },
+              ].map((step) => (
+                <label key={step.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                    checked={!!(fulfill as any)[step.key]}
+                    onChange={(e) => saveFulfill({ ...fulfill, [step.key]: e.target.checked })} />
+                  <span className="text-gray-700">{step.label}</span>
+                </label>
+              ))}
+            </div>
+            {fulfill.shipped && (
+              <div className="pl-6">
+                <Input className="h-8 max-w-xs" placeholder="Tracking / carrier (optional)" value={fulfill.tracking || ""}
+                  onChange={(e) => setFulfill({ ...fulfill, tracking: e.target.value })} onBlur={() => saveFulfill(fulfill)} />
+              </div>
+            )}
+            <div className="flex items-center gap-2 border-t border-gray-200 pt-2 mt-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                  checked={!!fulfill.vendorPaid}
+                  onChange={(e) => saveFulfill({ ...fulfill, vendorPaid: e.target.checked })} />
+                <span className="text-gray-700">MWI paid</span>
+              </label>
+              <span className="text-xs text-gray-500">Payable to MWI: <strong>{formatCurrency(totalLanded)}</strong> (their landed cost)</span>
             </div>
           </div>
         )}
