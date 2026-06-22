@@ -788,7 +788,9 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                 <p className="col-span-12 text-xs text-gray-500 pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
                   {Number(it.landedCost) > 0 && (
                     <span className="font-medium text-gray-600">
-                      {Number(it.quantity) || 0} × ${(Number(it.unitCost) || (Number(it.landedCost) / (Number(it.quantity) || 1))).toFixed(4)} = ${Number(it.landedCost).toFixed(2)} landed → ${(Number(it.landedCost) * (1 + markupPct / 100)).toFixed(2)} customer
+                      {/* Unit derived from landed ÷ qty so the equation always
+                          reconciles even if C&D edits the landed cost (Benjy 6/20). */}
+                      {Number(it.quantity) || 0} × ${(Number(it.landedCost) / (Number(it.quantity) || 1)).toFixed(4)} = ${Number(it.landedCost).toFixed(2)} landed → ${(Number(it.landedCost) * (1 + markupPct / 100)).toFixed(2)} customer
                     </span>
                   )}
                   {it.leadTime ? <span>Lead: {it.leadTime}</span> : null}
