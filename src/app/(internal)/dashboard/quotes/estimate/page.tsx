@@ -3149,6 +3149,11 @@ function EstimateContent() {
     setForm({ ...defaultForm });
     setStep(1);
     setSaved(false);
+    // Start a genuinely fresh draft — otherwise the next auto-save would PUT
+    // onto the previous quote's draft and overwrite it (Benjy 6/21).
+    setDraftQuoteId(null);
+    setAutoSavedAt(null);
+    setCoRevision(null);
   };
 
   // ─── Step 1: Product + Press Selection ─────────────────────────────────────
