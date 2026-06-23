@@ -750,8 +750,12 @@ model Quote {
   sourcingMarkupPct    Float?     // C&D's internal markup on the vendor landed cost
   // Light wholesale fulfillment checklist (Benjy 6/20) — lives on the quote,
   // NOT a manufacturing Job, so it never touches internal production/plant
-  // floor. JSON: { poSent, received, shipped, tracking, invoiced, vendorPaid }
+  // floor. JSON: { poSent, received, receivedAt, shipped, shippedAt, carrier,
+  // tracking, vendorPaid }
   sourcingFulfillment  String?
+  // Customer invoice auto-created when a wholesale quote is marked Won
+  // (Benjy 6/23). Links the quote → Invoice and prevents duplicate creates.
+  sourcingInvoiceId    String?
   // Multi-SKU sourcing (Benjy 6/16) — one quote to a vendor can carry several
   // SKUs (e.g. coffee box + label). JSON array of line items, each with its
   // own artwork + the vendor's per-line landed cost:

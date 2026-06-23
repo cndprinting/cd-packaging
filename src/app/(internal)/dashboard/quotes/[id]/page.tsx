@@ -40,6 +40,7 @@ interface QuoteData {
   sourcingMarkupPct?: number | null;
   sourcingItems?: string | null;
   sourcingFulfillment?: string | null;
+  sourcingInvoiceId?: string | null;
   vendorLandedCost?: number | null;
   vendorQuoteFileUrl?: string | null;
   vendorQuoteFileName?: string | null;
@@ -691,7 +692,7 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   };
 
   // Light wholesale fulfillment checklist — lives on the quote, no Job.
-  type Fulfill = { poSent?: boolean; received?: boolean; shipped?: boolean; tracking?: string; invoiced?: boolean; vendorPaid?: boolean };
+  type Fulfill = { poSent?: boolean; received?: boolean; receivedAt?: string; shipped?: boolean; shippedAt?: string; carrier?: string; tracking?: string; vendorPaid?: boolean };
   const [fulfill, setFulfill] = useState<Fulfill>(() => {
     try { return quote.sourcingFulfillment ? JSON.parse(quote.sourcingFulfillment) : {}; } catch { return {}; }
   });
@@ -885,32 +886,71 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
         )}
 
         {/* Wholesale fulfillment — only after Won. Lives here on the quote, no
-            manufacturing Job, so it never touches internal production. */}
+            manufacturing Job, so it never touches internal production. Dated
+            steps track when goods land at C&D and ship to the customer. */}
         {quote.sourcingStatus === "won" && (
-          <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-2">
+          <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-3">
             <p className="text-sm font-semibold text-gray-800">Wholesale fulfillment</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-              {[
-                { key: "poSent", label: "PO sent to MWI" },
-                { key: "received", label: "Goods received at St. Pete" },
-                { key: "shipped", label: "Shipped to customer" },
-                { key: "invoiced", label: "Customer invoiced" },
-              ].map((step) => (
-                <label key={step.key} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
-                    checked={!!(fulfill as any)[step.key]}
-                    onChange={(e) => saveFulfill({ ...fulfill, [step.key]: e.target.checked })} />
-                  <span className="text-gray-700">{step.label}</span>
-                </label>
-              ))}
+
+            {/* PO to MWI */}
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                checked={!!fulfill.poSent}
+                onChange={(e) => saveFulfill({ ...fulfill, poSent: e.target.checked })} />
+              <span className="text-gray-700">PO sent to MWI</span>
+            </label>
+
+            {/* Arrived at C&D (inbound from MWI) */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                  checked={!!fulfill.received}
+                  onChange={(e) => saveFulfill({ ...fulfill, received: e.target.checked, receivedAt: e.target.checked ? (fulfill.receivedAt || new Date().toISOString().slice(0, 10)) : fulfill.receivedAt })} />
+                <span className="text-gray-700">Arrived at C&amp;D</span>
+              </label>
+              {fulfill.received && (
+                <Input type="date" className="h-8 w-40" value={fulfill.receivedAt || ""}
+                  onChange={(e) => saveFulfill({ ...fulfill, receivedAt: e.target.value })} />
+              )}
             </div>
-            {fulfill.shipped && (
-              <div className="pl-6">
-                <Input className="h-8 max-w-xs" placeholder="Tracking / carrier (optional)" value={fulfill.tracking || ""}
-                  onChange={(e) => setFulfill({ ...fulfill, tracking: e.target.value })} onBlur={() => saveFulfill(fulfill)} />
+
+            {/* Shipped to customer (outbound) */}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                    checked={!!fulfill.shipped}
+                    onChange={(e) => saveFulfill({ ...fulfill, shipped: e.target.checked, shippedAt: e.target.checked ? (fulfill.shippedAt || new Date().toISOString().slice(0, 10)) : fulfill.shippedAt })} />
+                  <span className="text-gray-700">Shipped to customer</span>
+                </label>
+                {fulfill.shipped && (
+                  <Input type="date" className="h-8 w-40" value={fulfill.shippedAt || ""}
+                    onChange={(e) => saveFulfill({ ...fulfill, shippedAt: e.target.value })} />
+                )}
               </div>
-            )}
-            <div className="flex items-center gap-2 border-t border-gray-200 pt-2 mt-1">
+              {fulfill.shipped && (
+                <div className="flex flex-wrap gap-2 pl-6">
+                  <Input className="h-8 w-40" placeholder="Carrier" value={fulfill.carrier || ""}
+                    onChange={(e) => setFulfill({ ...fulfill, carrier: e.target.value })} onBlur={() => saveFulfill(fulfill)} />
+                  <Input className="h-8 w-56" placeholder="Tracking #" value={fulfill.tracking || ""}
+                    onChange={(e) => setFulfill({ ...fulfill, tracking: e.target.value })} onBlur={() => saveFulfill(fulfill)} />
+                </div>
+              )}
+            </div>
+
+            {/* Customer invoice — auto-created on Win */}
+            <div className="border-t border-gray-200 pt-2">
+              {quote.sourcingInvoiceId ? (
+                <Link href="/dashboard/invoices" className="text-sm text-emerald-700 hover:underline inline-flex items-center gap-1">
+                  <Check className="h-4 w-4" /> Customer invoice created — view in Invoices
+                </Link>
+              ) : (
+                <span className="text-xs text-amber-600">No customer invoice yet — set a customer quote price, then Reopen &amp; mark Won to generate it.</span>
+              )}
+            </div>
+
+            {/* MWI payable */}
+            <div className="flex items-center gap-2 border-t border-gray-200 pt-2">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-brand-600"
                   checked={!!fulfill.vendorPaid}
