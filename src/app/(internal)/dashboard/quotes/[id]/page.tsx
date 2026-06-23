@@ -154,6 +154,11 @@ export default function QuoteDetailPage() {
     try { specs = JSON.parse(quote.specs); } catch { /* ignore */ }
   }
 
+  // Wholesale/outsourced quotes are a different beast — no internal estimating,
+  // so the page leads with the sourcing workflow and hides the estimator-
+  // oriented cards/actions that confused sales (Benjy 6/23).
+  const isOutsourced = !!quote.sourcingVendor;
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
@@ -168,11 +173,12 @@ export default function QuoteDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{quote.quoteNumber}</h1>
+              {isOutsourced && <Badge className="bg-amber-100 text-amber-700"><Package className="h-3 w-3 mr-1" />Wholesale</Badge>}
               <Badge className={statusColors[quote.status] || "bg-gray-100 text-gray-600"}>
                 {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
               </Badge>
             </div>
-            <p className="text-sm text-gray-500">{quote.productName}</p>
+            <p className="text-sm text-gray-500">{isOutsourced ? `${quote.customerName} · sourcing from ${quote.sourcingVendor}` : quote.productName}</p>
           </div>
         </div>
 
@@ -197,15 +203,17 @@ export default function QuoteDetailPage() {
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
-              <Button variant="outline" onClick={() => {
-                setSelectedVolume(quote.quantity);
-                setShowConvertModal(true);
-              }} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
-                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
-              </Button>
+              {!isOutsourced && (
+                <Button variant="outline" onClick={() => {
+                  setSelectedVolume(quote.quantity);
+                  setShowConvertModal(true);
+                }} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
+                </Button>
+              )}
             </>
           )}
-          {quote.status === "sent" && (
+          {quote.status === "sent" && !isOutsourced && (
             <>
               <Button onClick={() => updateStatus("approved")} disabled={updating} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
                 <Check className="h-4 w-4" /> Approve
@@ -217,9 +225,11 @@ export default function QuoteDetailPage() {
           )}
           {quote.status === "approved" && (
             <>
-              <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
-              </Button>
+              {!isOutsourced && (
+                <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
+                </Button>
+              )}
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
@@ -240,6 +250,14 @@ export default function QuoteDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Wholesale: lead with the sourcing workflow (Benjy 6/23) */}
+      {isOutsourced && (
+        <SourcingCard quote={quote} onChange={async () => {
+          const r = await fetch(`/api/quotes/${quote.id}`); const d = await r.json();
+          if (d.quote) setQuote(d.quote);
+        }} />
+      )}
 
       {/* Overview Cards — "Per 1,000" is a manufacturing metric, hidden for
           outsourced/wholesale quotes (Benjy 6/20). */}
@@ -267,7 +285,7 @@ export default function QuoteDetailPage() {
       </div>
 
       {/* Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 ${isOutsourced ? "" : "md:grid-cols-2"} gap-6`}>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -278,17 +296,20 @@ export default function QuoteDetailPage() {
             <DetailRow icon={User} label="Customer" value={quote.customerName} />
             {quote.contactName && <DetailRow icon={User} label="Contact" value={quote.contactName} />}
             {quote.contactEmail && <DetailRow icon={Mail} label="Email" value={quote.contactEmail} />}
-            <DetailRow
-              icon={Layers}
-              label="Product Type"
-              value={quote.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"}
-            />
+            {!isOutsourced && (
+              <DetailRow
+                icon={Layers}
+                label="Product Type"
+                value={quote.productType === "FOLDING_CARTON" ? "Folding Carton" : "Commercial Print"}
+              />
+            )}
+            {isOutsourced && <DetailRow icon={Package} label="Vendor" value={quote.sourcingVendor || "—"} />}
             <DetailRow icon={Calendar} label="Created" value={formatDate(quote.createdAt)} />
             {quote.validUntil && <DetailRow icon={Clock} label="Valid Until" value={formatDate(quote.validUntil)} />}
           </CardContent>
         </Card>
 
-        <Card>
+        {!isOutsourced && <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <FileText className="h-4 w-4 text-brand-600" /> Job Specs
@@ -308,7 +329,7 @@ export default function QuoteDetailPage() {
               <p className="text-sm text-gray-400 italic">No specs recorded — use the Estimator to generate detailed specs.</p>
             )}
           </CardContent>
-        </Card>
+        </Card>}
       </div>
 
       {/* Cost Breakdown */}
@@ -370,12 +391,14 @@ export default function QuoteDetailPage() {
         </Card>
       )}
 
-      {/* Outsourced sourcing (Benjy 6/16) — assign to a vendor (e.g. MWI) to
-          source items C&D can't produce; vendor returns landed cost via portal. */}
-      <SourcingCard quote={quote} onChange={async () => {
-        const r = await fetch(`/api/quotes/${quote.id}`); const d = await r.json();
-        if (d.quote) setQuote(d.quote);
-      }} />
+      {/* Non-wholesale quotes can still be sent to a vendor later — show the
+          sourcing card at the bottom. Wholesale quotes show it up top instead. */}
+      {!isOutsourced && (
+        <SourcingCard quote={quote} onChange={async () => {
+          const r = await fetch(`/api/quotes/${quote.id}`); const d = await r.json();
+          if (d.quote) setQuote(d.quote);
+        }} />
+      )}
 
       {/* Notes */}
       {quote.notes && (
@@ -773,8 +796,8 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
             </Badge>
           )}
           {quote.sourcingVendor === vendor && quote.sourcingVendor && (
-            <Button variant="outline" disabled={notifyBusy} onClick={notifyVendor}>
-              {notifyBusy ? "Sending…" : notifyMsg || "Notify vendor"}
+            <Button className="gap-2 bg-blue-600 hover:bg-blue-700" disabled={notifyBusy} onClick={notifyVendor}>
+              <Send className="h-4 w-4" /> {notifyBusy ? "Sending…" : notifyMsg || `Send to ${quote.sourcingVendor}`}
             </Button>
           )}
         </div>
