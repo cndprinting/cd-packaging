@@ -24,11 +24,16 @@ export default function QuotesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [showOutsource, setShowOutsource] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [form, setForm] = useState({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "", outsourced: false, sourcingVendor: "MWI" });
+  const [form, setForm] = useState({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "" });
   const update = (f: string, v: string) => setForm(p => ({ ...p, [f]: v }));
+  // Outsource (wholesale → vendor) is its own lean path — just a customer.
+  // Everything else (SKUs, artwork, Excel, qty, dates) happens on the
+  // sourcing page (Benjy 6/23).
+  const [outsourceForm, setOutsourceForm] = useState({ customerName: "", sourcingVendor: "MWI" });
 
   const [companies, setCompanies] = useState<Company[]>([]);
   useEffect(() => {
@@ -56,18 +61,40 @@ export default function QuotesPage() {
     if (!form.customerName || !form.productName || !form.quantity) { setError("Customer, product, and quantity are required"); return; }
     setCreating(true);
     try {
-      // Wholesale quotes carry the sourcing vendor from the start (Benjy 6/20)
-      // so they're flagged outsourced immediately and skip the estimator.
-      const payload = { ...form, sourcingVendor: form.outsourced ? form.sourcingVendor : undefined };
-      const res = await fetch("/api/quotes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch("/api/quotes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const data = await res.json();
       if (res.ok) {
-        // Outsourced → jump straight to the quote's sourcing card to add SKUs/artwork.
-        if (form.outsourced && data.quote?.id) { window.location.href = `/dashboard/quotes/${data.quote.id}`; return; }
         setQuotes(p => [data.quote, ...p]); setShowModal(false);
-        setForm({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "", outsourced: false, sourcingVendor: "MWI" });
+        setForm({ customerName: "", productType: "FOLDING_CARTON", productName: "", description: "", quantity: "", unitPrice: "", validUntil: "" });
       }
       else setError(data.error || "Failed");
+    } catch { setError("Something went wrong"); }
+    setCreating(false);
+  };
+
+  // Outsource path — only needs a customer. Creates the wholesale quote
+  // (flagged with the vendor) and drops straight onto its sourcing page.
+  const handleCreateOutsource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!outsourceForm.customerName) { setError("Customer is required"); return; }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: outsourceForm.customerName,
+          productType: "FOLDING_CARTON", // placeholder — wholesale has no internal product type
+          productName: `${outsourceForm.customerName} — wholesale`,
+          description: "",
+          quantity: "0",
+          unitPrice: "0",
+          sourcingVendor: outsourceForm.sourcingVendor,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.quote?.id) { window.location.href = `/dashboard/quotes/${data.quote.id}`; return; }
+      setError(data.error || "Failed");
     } catch { setError("Something went wrong"); }
     setCreating(false);
   };
@@ -76,7 +103,7 @@ export default function QuotesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3"><DollarSign className="h-6 w-6 text-brand-600" /><div><h1 className="text-2xl font-bold text-gray-900">Quotes & Estimates</h1><p className="text-sm text-gray-500">{quotes.length} quotes</p></div></div>
-        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
+        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button variant="outline" className="gap-2" onClick={() => { setError(""); setShowOutsource(true); }}><Package className="h-4 w-4" />Outsource</Button><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -161,21 +188,34 @@ export default function QuotesPage() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit Price ($)</label><Input type="number" step="0.01" value={form.unitPrice} onChange={(e) => update("unitPrice", e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Valid Until</label><Input type="date" value={form.validUntil} onChange={(e) => update("validUntil", e.target.value)} /></div>
                 </div>
-                {/* Outsourced / wholesale — flag it up front, skip the estimator (Benjy 6/20) */}
-                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-800">
-                    <input type="checkbox" checked={form.outsourced} onChange={(e) => update("outsourced", e.target.checked as any)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
-                    Outsourced / wholesale — we&apos;re sourcing this from a vendor (no internal estimating)
-                  </label>
-                  {form.outsourced && (
-                    <div className="mt-3">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Sourcing vendor</label>
-                      <Select value={form.sourcingVendor} onChange={(e) => update("sourcingVendor", e.target.value)} options={[{ value: "MWI", label: "MWI — Mel Waxman Industries" }]} />
-                      <p className="text-xs text-gray-500 mt-1">Creates the quote and opens its sourcing card to add SKUs + artwork.</p>
-                    </div>
-                  )}
+                <p className="text-xs text-gray-400 -mt-1">Sourcing an item from a vendor instead? Use the <span className="font-medium text-gray-500">Outsource</span> button.</p>
+                <div className="flex gap-2 pt-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Quote"}</Button></div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Outsource — wholesale to a vendor. Just a customer; everything else
+          (SKUs, artwork, Excel, qty, dates) is on the sourcing page. */}
+      {showOutsource && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowOutsource(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1"><h2 className="text-lg font-semibold flex items-center gap-2"><Package className="h-5 w-5 text-brand-600" />Outsource to vendor</h2><button onClick={() => setShowOutsource(false)}><X className="h-5 w-5 text-gray-400" /></button></div>
+              <p className="text-sm text-gray-500 mb-4">Wholesaling an item (carton, label, corrugated, rigid…) instead of making it. Pick the customer — you&apos;ll add the SKUs, artwork, files and quantities on the next page, then send it to the vendor.</p>
+              <form onSubmit={handleCreateOutsource} className="space-y-4">
+                {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
+                  <Combobox value={outsourceForm.customerName} onChange={(_id, label) => setOutsourceForm(p => ({ ...p, customerName: label }))} options={companies.map(c => ({ id: c.id, label: c.name, subtitle: c.industry }))} placeholder="Select customer..." allowCreate duplicateCheck={(name) => { const match = companies.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && c.name.toLowerCase() !== name.toLowerCase()); return match ? { id: match.id, label: match.name, subtitle: match.industry } : null; }} />
                 </div>
-                <div className="flex gap-2 pt-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : (form.outsourced ? "Create & Source" : "Create Quote")}</Button></div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
+                  <Select value={outsourceForm.sourcingVendor} onChange={(e) => setOutsourceForm(p => ({ ...p, sourcingVendor: e.target.value }))} options={[{ value: "MWI", label: "MWI — Mel Waxman Industries" }]} />
+                </div>
+                <div className="flex gap-2 pt-2"><Button type="button" variant="outline" className="flex-1" onClick={() => setShowOutsource(false)}>Cancel</Button><Button type="submit" className="flex-1" disabled={creating}>{creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue to sourcing →"}</Button></div>
               </form>
             </div>
           </div>
