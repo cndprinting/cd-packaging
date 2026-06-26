@@ -91,6 +91,14 @@ export default function PrintQuotePage() {
   const pressDisplay = specs.pressName ? `${specs.pressName}${specs.pressConfig ? ` - ${specs.pressConfig}` : ""}` : "";
   const stockDisplay = specs.stockType ? (specs.stockType.charAt(0).toUpperCase() + specs.stockType.slice(1)) : "";
 
+  // Wholesale volume pricing (Benjy 6/23) — when MWI gave volume breaks, the
+  // customer quote shows the marked-up per-tier pricing instead of one total.
+  let sourcingItemsArr: any[] = [];
+  try { sourcingItemsArr = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; } catch { /* ignore */ }
+  const markupMult = 1 + (Number(quote.sourcingMarkupPct) || 0) / 100;
+  const tierItems = sourcingItemsArr.filter((it) => (it.tiers || []).some((t: any) => Number(t.unitCost) > 0));
+  const hasVolumeTiers = tierItems.length > 0;
+
   return (
     <>
       <style>{`
@@ -249,9 +257,40 @@ export default function PrintQuotePage() {
 
         <hr className="section-divider" />
 
-        {/* Per-SKU breakdown for outsourced/brokered quotes (Benjy 6/16) —
-            customer sees each item priced (landed × markup), then the total. */}
-        {(() => {
+        {/* Wholesale VOLUME pricing (Benjy 6/23) — one table per item showing
+            the marked-up per-unit price at each order quantity, the way MWI
+            quotes (100k / 250k / 500k breaks). */}
+        {hasVolumeTiers && tierItems.map((it, idx) => (
+          <div key={idx}>
+            <div style={{ fontWeight: "bold", fontSize: 11, marginTop: idx > 0 ? 10 : 0, color: "#ED1C24" }}>{it.sku || `Item ${idx + 1}`} &mdash; Volume Pricing</div>
+            <table className="pricing-table">
+              <thead>
+                <tr><th>Order Quantity</th><th className="amt">Unit Price</th><th className="amt">Subtotal</th><th className="amt">Sales Tax (7%)</th><th className="amt">Total</th></tr>
+              </thead>
+              <tbody>
+                {(it.tiers || []).filter((t: any) => Number(t.unitCost) > 0).map((t: any, ti: number) => {
+                  const q = Number(t.quantity) || 0;
+                  const unit = (Number(t.unitCost) || 0) * markupMult;
+                  const sub = q * unit;
+                  const tax = sub * SALES_TAX_RATE;
+                  return (
+                    <tr key={ti}>
+                      <td><strong>{q.toLocaleString()}</strong> units</td>
+                      <td className="amt">{fmtMoney(unit)}</td>
+                      <td className="amt">{fmtMoney(sub)}</td>
+                      <td className="amt" style={{ color: "#666" }}>{fmtMoney(tax)}</td>
+                      <td className="amt">{fmtMoney(sub + tax)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+
+        {/* Per-SKU breakdown for outsourced/brokered quotes WITHOUT volume
+            tiers (Benjy 6/16) — each item priced (landed × markup). */}
+        {!hasVolumeTiers && (() => {
           let items: any[] = [];
           try { items = quote.sourcingItems ? JSON.parse(quote.sourcingItems) : []; } catch {}
           items = items.filter((it) => Number(it.landedCost) > 0);
@@ -275,8 +314,8 @@ export default function PrintQuotePage() {
           );
         })()}
 
-        {/* Pricing Table */}
-        <table className="pricing-table">
+        {/* Pricing Table — single-total view, hidden when showing volume tiers */}
+        {!hasVolumeTiers && <table className="pricing-table">
           <thead>
             <tr>
               <th>Quantity</th>
@@ -299,7 +338,7 @@ export default function PrintQuotePage() {
               );
             })}
           </tbody>
-        </table>
+        </table>}
 
         {/* Additional Products */}
         {specs.additionalProducts && specs.additionalProducts.length > 0 && (

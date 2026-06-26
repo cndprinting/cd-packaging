@@ -727,6 +727,18 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   const priceLocked = quote.sourcingStatus === "priced";
   const hasCosts = totalLanded > 0;
 
+  // Volume-tier quotes (Benjy 6/23): pricing is per-quantity, not one total.
+  // The representative total = each SKU's largest-volume tier, marked up —
+  // used for the list/overview + Win→invoice (customer's likely top volume).
+  const hasTiers = items.some((it) => (it.tiers || []).some((t) => Number(t.unitCost) > 0));
+  const tierRep = items.reduce((sum, it) => {
+    const ts = (it.tiers || []).filter((t) => Number(t.unitCost) > 0);
+    if (!ts.length) return sum;
+    const top = ts.reduce((a, b) => (Number(b.quantity) || 0) > (Number(a.quantity) || 0) ? b : a);
+    return sum + (Number(top.quantity) || 0) * (Number(top.unitCost) || 0) * (1 + markupPct / 100);
+  }, 0);
+  const customerTotal = hasTiers ? tierRep : sell;
+
   const saveItems = async (next: SourcingItem[]) => {
     setItems(next);
     await fetch("/api/quotes", {
@@ -777,7 +789,7 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
       await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: quote.id, sourcingItems: items }) }).catch(() => {});
       await fetch("/api/quotes", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quote.id, setSourcingPrice: true, markupPct, customerPrice: sell }),
+        body: JSON.stringify({ id: quote.id, setSourcingPrice: true, markupPct, customerPrice: customerTotal }),
       });
       onChange();
     } finally { setPriceBusy(false); }
@@ -895,28 +907,41 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
           <button type="button" onClick={addRow} className="text-sm font-medium text-brand-600 hover:text-brand-800">+ Add SKU</button>
         </div>
 
-        {/* Pricing — shows once any landed cost exists */}
-        {(hasCosts || priceLocked) && (
+        {/* Pricing — shows once any landed cost or volume tier exists */}
+        {(hasCosts || priceLocked || hasTiers) && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm items-end">
-              <div><span className="text-gray-600 block text-xs">Total landed (our cost)</span><strong>{formatCurrency(totalLanded)}</strong></div>
-              <div>
-                <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
-                <Input type="number" className="h-8" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
+            {hasTiers ? (
+              <div className="flex flex-wrap items-end gap-4 text-sm">
+                <div>
+                  <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
+                  <Input type="number" className="h-8 w-24" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
+                </div>
+                <p className="text-xs text-gray-600 max-w-md">Volume pricing — per-quantity customer price &amp; margin are in each SKU&apos;s table above. Markup applies to every tier.</p>
+                {quote.vendorQuoteFileUrl && (
+                  <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
+                )}
               </div>
-              <div><span className="text-gray-600 block text-xs">Customer price</span><strong className="text-emerald-800">{formatCurrency(sell)}</strong></div>
-              <div><span className="text-gray-600 block text-xs">Our margin</span><strong className="text-emerald-800">{formatCurrency(marginDollars)} ({marginPct.toFixed(0)}%)</strong></div>
-              {quote.vendorQuoteFileUrl && (
-                <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
-              )}
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm items-end">
+                <div><span className="text-gray-600 block text-xs">Total landed (our cost)</span><strong>{formatCurrency(totalLanded)}</strong></div>
+                <div>
+                  <label className="text-gray-600 block text-xs mb-1">C&D markup %</label>
+                  <Input type="number" className="h-8" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} />
+                </div>
+                <div><span className="text-gray-600 block text-xs">Customer price</span><strong className="text-emerald-800">{formatCurrency(sell)}</strong></div>
+                <div><span className="text-gray-600 block text-xs">Our margin</span><strong className="text-emerald-800">{formatCurrency(marginDollars)} ({marginPct.toFixed(0)}%)</strong></div>
+                {quote.vendorQuoteFileUrl && (
+                  <a href={quote.vendorQuoteFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"><FileText className="h-4 w-4" />{quote.vendorQuoteFileName || "Vendor quote"}</a>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-3 border-t border-emerald-200 pt-3">
-              <Button onClick={setCustomerPrice} disabled={priceBusy || sell <= 0}>
+              <Button onClick={setCustomerPrice} disabled={priceBusy || customerTotal <= 0}>
                 {priceBusy ? "Saving…" : priceLocked ? "Update customer quote price" : "Set as customer quote price"}
               </Button>
               {priceLocked
-                ? <span className="text-xs text-emerald-700">✓ Quote price set to {formatCurrency(quote.totalPrice)} — use "Send to…" / Print Quote above to send the customer.</span>
-                : <span className="text-xs text-gray-500">Locks this price into the quote so the normal Send/Print goes to the customer.</span>}
+                ? <span className="text-xs text-emerald-700">✓ Quote {hasTiers ? "volume pricing set" : `price set to ${formatCurrency(quote.totalPrice)}`} — use "Send to…" / Print Quote above to send the customer.</span>
+                : <span className="text-xs text-gray-500">{hasTiers ? "Locks the volume pricing into the quote — Print/Send shows the customer each quantity tier." : "Locks this price into the quote so the normal Send/Print goes to the customer."}</span>}
             </div>
             {/* Outcome — drives Martin's Won/Lost tabs (Benjy 6/20) */}
             <div className="flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-3">
