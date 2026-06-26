@@ -179,7 +179,9 @@ export default function PipelinePage() {
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     {active === "LEAD" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
+                    {active === "QUALIFIED" && <button onClick={() => move(l.id, "LEAD")} className="text-xs text-gray-500 hover:underline mr-3">← Lead</button>}
                     {active === "QUALIFIED" && <button onClick={() => convert(l.id)} className="text-xs text-emerald-700 hover:underline mr-3">Won → customer</button>}
+                    {active === "CUSTOMER" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-gray-500 hover:underline mr-3">← Qualified</button>}
                     {active === "CUSTOMER" && (l.companyId
                       ? <Link href={`/dashboard/customers`} className="text-xs text-brand-600 hover:underline mr-3 inline-flex items-center gap-1"><Link2 className="h-3 w-3" />Customer</Link>
                       : <button onClick={() => convert(l.id)} className="text-xs text-brand-600 hover:underline mr-3">Link customer</button>)}
