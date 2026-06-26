@@ -210,6 +210,9 @@ model Lead {
   ownerName       String?   // display name as in the sheet (Benjy/Albert/Nitay/Kelsey/TBD)
   ownerId         String?   // links to a User for per-rep scoping (future)
   volume          String?   // free-form: "250,000", "TBD", "70,700+6,500"
+  // Free-text scratchpad for dumping the many phone numbers we collect while
+  // chasing a prospect (Benjy 6/26) — not a structured field.
+  numbers         String?
   commentary      String?
   companyId       String?   // linked Godzilla customer once converted
   quoteId         String?   // optional linked quote
