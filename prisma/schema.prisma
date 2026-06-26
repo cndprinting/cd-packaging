@@ -214,6 +214,12 @@ model Lead {
   // chasing a prospect (Benjy 6/26) — not a structured field.
   numbers         String?
   commentary      String?
+  // Follow-up reminder (Benjy 6/26) — set a date + note to nudge a prospect;
+  // a daily cron emails the owner what's due. reminderSentAt guards against
+  // re-emailing the same due reminder.
+  followUpAt      DateTime?
+  followUpNote    String?
+  reminderSentAt  DateTime?
   companyId       String?   // linked Godzilla customer once converted
   quoteId         String?   // optional linked quote
   createdBy       String?

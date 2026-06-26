@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Fragment } from "react";
 import Link from "next/link";
-import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight } from "lucide-react";
+import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight, Bell } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,16 @@ type Lead = {
   website: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null;
+  followUpAt: string | null; followUpNote: string | null;
 };
+
+// Follow-up state: "due" = date is today or past, "upcoming" = future.
+function dueState(l: Lead): "due" | "upcoming" | null {
+  if (!l.followUpAt) return null;
+  const d = new Date(l.followUpAt); const end = new Date(); end.setHours(23, 59, 59, 999);
+  return d <= end ? "due" : "upcoming";
+}
+const fmtShort = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers"];
 const OWNERS = ["Benjy", "Albert", "Nitay", "Kelsey", "TBD"];
@@ -36,6 +45,7 @@ export default function PipelinePage() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [dueOnly, setDueOnly] = useState(false);
 
   const load = () => {
     fetch("/api/leads")
@@ -52,9 +62,12 @@ export default function PipelinePage() {
     return c;
   }, [leads]);
 
+  const dueCount = useMemo(() => leads.filter((l) => (l.pipelineStage === "LEAD" || l.pipelineStage === "QUALIFIED") && dueState(l) === "due").length, [leads]);
+
   const q = search.trim().toLowerCase();
   const visible = leads
     .filter((l) => l.pipelineStage === active)
+    .filter((l) => !dueOnly || dueState(l) === "due")
     .filter((l) => !q || `${l.companyName} ${l.endMarket || ""} ${l.ownerName || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
 
   // Optimistic inline patch.
@@ -93,6 +106,11 @@ export default function PipelinePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {dueCount > 0 && (
+            <button onClick={() => setDueOnly((v) => !v)} className={`inline-flex items-center gap-1.5 rounded-lg text-xs px-2.5 py-1.5 ${dueOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700"}`}>
+              <Bell className="h-3.5 w-3.5" /> {dueCount} follow-up{dueCount > 1 ? "s" : ""} due
+            </button>
+          )}
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-brand-700 text-xs px-2.5 py-1.5"><Lock className="h-3.5 w-3.5" /> Private · Benjy, Nitay, Albert</span>
           <Button onClick={() => setShowAdd(true)} className="gap-2"><Plus className="h-4 w-4" />Add lead</Button>
         </div>
@@ -135,7 +153,8 @@ export default function PipelinePage() {
                       <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expanded === l.id ? "rotate-90" : ""}`} />
                       <span>
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
-                        {l.endMarket && <span className="block text-xs text-gray-400">{l.endMarket}</span>}
+                        {(() => { const d = dueState(l); if (!d || !l.followUpAt) return l.endMarket ? <span className="block text-xs text-gray-400">{l.endMarket}</span> : null;
+                          return <span className={`block text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>{d === "due" ? "● Follow up due" : `Follow-up ${fmtShort(l.followUpAt)}`}</span>; })()}
                       </span>
                     </button>
                   </td>
@@ -200,6 +219,14 @@ export default function PipelinePage() {
                             <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => setLocal(l.id, f, e.target.value)} onBlur={(e) => patch(l.id, f, e.target.value)} />
                           </div>
                         ))}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Follow-up date <span className="text-gray-400 font-normal">— emails the owner when due</span></label>
+                          <Input type="date" className="h-8 text-xs" value={l.followUpAt ? l.followUpAt.slice(0, 10) : ""} onChange={(e) => patch(l.id, "followUpAt", e.target.value || null)} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Reminder note</label>
+                          <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => setLocal(l.id, "followUpNote", e.target.value)} onBlur={(e) => patch(l.id, "followUpNote", e.target.value)} />
+                        </div>
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Numbers <span className="text-gray-400 font-normal">— dump every number you collect here</span></label>
                           <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.numbers || ""} placeholder="e.g. 305-555-0100 (cell) · 727-555-0199 (office) · 954-555-0123 (Reid)" onChange={(e) => setLocal(l.id, "numbers", e.target.value)} onBlur={(e) => patch(l.id, "numbers", e.target.value)} />

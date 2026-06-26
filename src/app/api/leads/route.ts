@@ -107,6 +107,11 @@ export async function PUT(request: NextRequest) {
   }
   if ("priority" in body) data.priority = body.priority ? Number(body.priority) : null;
   if ("lastInteraction" in body) data.lastInteraction = body.lastInteraction ? new Date(body.lastInteraction) : null;
+  if ("followUpNote" in body) data.followUpNote = body.followUpNote || null;
+  if ("followUpAt" in body) {
+    data.followUpAt = body.followUpAt ? new Date(body.followUpAt) : null;
+    data.reminderSentAt = null; // new/changed date → allow the reminder to fire again
+  }
   const updated = await prisma.lead.update({ where: { id: body.id }, data });
   return NextResponse.json({ lead: updated });
 }
