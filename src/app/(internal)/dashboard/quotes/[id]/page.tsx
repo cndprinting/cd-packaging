@@ -652,7 +652,10 @@ function CostRow({ label, sublabel, amount, icon: Icon }: { label: string; subla
 // here with the markup → customer price math.
 // quantity/landedCost stored as raw strings while typing (avoids the React
 // number-input leading-zero bug — Benjy 6/20); Number()'d for math.
-type SourcingItem = { id: string; sku: string; quantity: number | string; artworkUrl?: string; artworkName?: string; landedCost?: number | string; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string };
+// A volume break — vendor's per-unit landed cost at a given order quantity.
+// Matches how MWI/Martin quotes (one item, multiple qty price breaks).
+type SourcingTier = { quantity: number | string; unitCost: number | string };
+type SourcingItem = { id: string; sku: string; quantity: number | string; artworkUrl?: string; artworkName?: string; landedCost?: number | string; unitCost?: number; leadTime?: string; moq?: number; fileUrl?: string; fileName?: string; vendorNotes?: string; tiers?: SourcingTier[] };
 
 function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => void }) {
   // Known sourcing vendors — friendly label, value matches the vendor login's
@@ -734,6 +737,15 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
   const updateRow = (id: string, patch: Partial<SourcingItem>) => setItems((p) => p.map((it) => it.id === id ? { ...it, ...patch } : it));
   const addRow = () => saveItems([...items, { id: `sku-${Date.now()}`, sku: "", quantity: 0 }]);
   const removeRow = (id: string) => saveItems(items.filter((it) => it.id !== id));
+
+  // Volume breaks per SKU (Benjy 6/23) — mirrors Martin's Excel: same item,
+  // multiple order quantities, each with its own per-unit landed cost.
+  const tiersOf = (it: SourcingItem) => it.tiers || [];
+  const setTiers = (id: string, tiers: SourcingTier[]) => saveItems(items.map((it) => it.id === id ? { ...it, tiers } : it));
+  const updateTier = (id: string, i: number, patch: Partial<SourcingTier>) =>
+    setItems((p) => p.map((it) => it.id === id ? { ...it, tiers: (it.tiers || []).map((t, j) => j === i ? { ...t, ...patch } : t) } : it));
+  const addTier = (id: string) => { const it = items.find((x) => x.id === id); setTiers(id, [...(it?.tiers || []), { quantity: "", unitCost: "" }]); };
+  const removeTier = (id: string, i: number) => { const it = items.find((x) => x.id === id); setTiers(id, (it?.tiers || []).filter((_, j) => j !== i)); };
 
   const assign = async (name: string) => {
     setBusy(true);
@@ -840,6 +852,44 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
                   {it.vendorNotes ? <span className="w-full">Vendor: {it.vendorNotes}</span> : null}
                 </p>
               )}
+
+              {/* Volume pricing / margin by quantity (Benjy 6/23) — review the
+                  vendor's per-unit at each order qty and the marked-up customer
+                  unit + margin, the way MWI quotes (100k/250k/500k breaks). */}
+              <div className="col-span-12 mt-1 rounded-md border border-gray-200 bg-white/70 p-2">
+                <p className="text-xs font-medium text-gray-600 mb-1.5">Volume pricing {tiersOf(it).length > 0 && <span className="text-gray-400">· margin at {markupPct}% markup</span>}</p>
+                {tiersOf(it).length > 0 && (
+                  <div className="grid grid-cols-12 gap-2 text-[11px] text-gray-400 px-1 mb-1">
+                    <span className="col-span-3">Order qty</span>
+                    <span className="col-span-2 text-right">Vendor unit</span>
+                    <span className="col-span-2 text-right">Your unit</span>
+                    <span className="col-span-2 text-right">Margin/unit</span>
+                    <span className="col-span-2 text-right">Margin %</span>
+                    <span className="col-span-1"></span>
+                  </div>
+                )}
+                {tiersOf(it).map((t, i) => {
+                  const vq = Number(t.quantity) || 0;
+                  const vu = Number(t.unitCost) || 0;
+                  const yourUnit = vu * (1 + markupPct / 100);
+                  const mUnit = yourUnit - vu;
+                  const mPct = yourUnit > 0 ? (mUnit / yourUnit) * 100 : 0;
+                  return (
+                    <div key={i} className="grid grid-cols-12 gap-2 items-center mb-1">
+                      <Input className="col-span-3 h-8" type="text" inputMode="numeric" placeholder="100000" value={t.quantity ?? ""} onChange={(e) => updateTier(it.id, i, { quantity: e.target.value })} onBlur={() => saveItems(items)} />
+                      <Input className="col-span-2 h-8 text-right" type="text" inputMode="decimal" placeholder="0.665" value={t.unitCost ?? ""} onChange={(e) => updateTier(it.id, i, { unitCost: e.target.value })} onBlur={() => saveItems(items)} />
+                      <span className="col-span-2 text-right text-sm font-medium text-emerald-800">{vu > 0 ? `$${yourUnit.toFixed(4)}` : "—"}</span>
+                      <span className="col-span-2 text-right text-xs text-gray-600">{vu > 0 ? `$${mUnit.toFixed(4)}` : "—"}</span>
+                      <span className="col-span-2 text-right text-xs text-gray-600">{vu > 0 ? `${mPct.toFixed(0)}%` : "—"}</span>
+                      <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeTier(it.id, i)}>×</button>
+                      {vq > 0 && vu > 0 && (
+                        <span className="col-span-12 text-[11px] text-gray-400 pl-1">{vq.toLocaleString()} units · landed ${(vq * vu).toLocaleString(undefined, { maximumFractionDigits: 2 })} → customer ${(vq * yourUnit).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <button type="button" onClick={() => addTier(it.id)} className="text-xs font-medium text-brand-600 hover:text-brand-800">+ Add volume break</button>
+              </div>
             </div>
           ))}
           <button type="button" onClick={addRow} className="text-sm font-medium text-brand-600 hover:text-brand-800">+ Add SKU</button>

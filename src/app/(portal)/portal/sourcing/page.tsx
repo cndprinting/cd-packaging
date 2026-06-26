@@ -107,7 +107,10 @@ export default function VendorSourcingPage() {
 
 // unitCost/moq are stored as raw strings while typing (avoids the React
 // number-input leading-zero bug — Benjy 6/20); Number()'d for math.
-type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number | string; leadTime?: string; moq?: number | string; fileUrl?: string; fileName?: string; vendorNotes?: string };
+// A volume break — per-unit price at a given order qty (matches MWI's Excel:
+// one item, multiple quantity breaks). Benjy 6/23.
+type Tier = { quantity: number | string; unitCost: number | string };
+type Line = { id: string; sku: string; quantity: number; artworkUrl?: string; artworkName?: string; landedCost?: number; unitCost?: number | string; leadTime?: string; moq?: number | string; fileUrl?: string; fileName?: string; vendorNotes?: string; tiers?: Tier[] };
 
 function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => void }) {
   const initialLines: Line[] = (() => {
@@ -123,6 +126,12 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
   const updateLine = (id: string, patch: Partial<Line>) => setLines((p) => p.map((l) => l.id === id ? { ...l, ...patch } : l));
   // Total landed for a line = per-unit × qty (vendor enters per-unit, Benjy 6/16).
   const lineTotal = (l: Line) => (Number(l.unitCost) || 0) * (Number(l.quantity) || 0);
+
+  // Volume breaks (Benjy 6/23) — Martin enters the same shape as his Excel.
+  const updateTier = (id: string, i: number, patch: Partial<Tier>) =>
+    setLines((p) => p.map((l) => l.id === id ? { ...l, tiers: (l.tiers || []).map((t, j) => j === i ? { ...t, ...patch } : t) } : l));
+  const addTier = (id: string) => setLines((p) => p.map((l) => l.id === id ? { ...l, tiers: [...(l.tiers || []), { quantity: "", unitCost: "" }] } : l));
+  const removeTier = (id: string, i: number) => setLines((p) => p.map((l) => l.id === id ? { ...l, tiers: (l.tiers || []).filter((_, j) => j !== i) } : l));
 
   const handleLineFile = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -208,6 +217,29 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
                   <Input type="text" inputMode="numeric" value={l.moq ?? ""} onChange={(e) => updateLine(l.id, { moq: e.target.value })} placeholder="e.g. 5000" />
                 </div>
               </div>
+
+              {/* Volume pricing — same shape as your Excel: one row per order
+                  quantity with its per-unit price (Benjy 6/23). */}
+              <div className="rounded-md border border-gray-200 bg-gray-50/60 p-2.5">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">Volume pricing <span className="text-gray-400">— add a row per order quantity (optional)</span></p>
+                {(l.tiers || []).length > 0 && (
+                  <div className="grid grid-cols-12 gap-2 text-[11px] text-gray-400 px-1 mb-1">
+                    <span className="col-span-5">Order quantity</span>
+                    <span className="col-span-5">Price per unit ($)</span>
+                    <span className="col-span-2 text-right">Total</span>
+                  </div>
+                )}
+                {(l.tiers || []).map((t, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 items-center mb-1.5">
+                    <Input className="col-span-5 h-9" type="text" inputMode="numeric" placeholder="100,000" value={t.quantity ?? ""} onChange={(e) => updateTier(l.id, i, { quantity: e.target.value })} />
+                    <Input className="col-span-5 h-9" type="text" inputMode="decimal" placeholder="0.665" value={t.unitCost ?? ""} onChange={(e) => updateTier(l.id, i, { unitCost: e.target.value })} />
+                    <span className="col-span-1 text-right text-xs text-gray-600">${((Number(t.quantity) || 0) * (Number(t.unitCost) || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <button type="button" className="col-span-1 text-red-500 hover:text-red-700 text-sm" onClick={() => removeTier(l.id, i)}>×</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => addTier(l.id)} className="text-xs font-medium text-brand-600 hover:text-brand-800">+ Add quantity break</button>
+              </div>
+
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-700">Notes</label>
                 <textarea rows={2} value={l.vendorNotes || ""} onChange={(e) => updateLine(l.id, { vendorNotes: e.target.value })} placeholder="Anything else C&D should know — terms, substitutions, FOB point, etc." className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
@@ -226,7 +258,7 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
 
         <div className="flex flex-wrap items-center gap-3 mt-3">
           <div className="flex-1" />
-          <Button onClick={save} disabled={saving || !!uploadRow || !lines.some((l) => lineTotal(l) > 0)}>
+          <Button onClick={save} disabled={saving || !!uploadRow || !lines.some((l) => lineTotal(l) > 0 || (l.tiers || []).some((t) => Number(t.unitCost) > 0))}>
             {saving ? "Saving…" : submitted ? "Update quote" : "Submit quote to C&D"}
           </Button>
         </div>
