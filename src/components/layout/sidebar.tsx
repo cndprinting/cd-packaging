@@ -8,8 +8,12 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid, HelpCircle,
+  LayoutGrid, HelpCircle, TrendingUp,
 } from "lucide-react";
+
+// Proprietary sales pipeline (Benjy 6/26) — only shown to users with the
+// pipelineAccess flag (Benjy/Nitay/Albert), regardless of role.
+const PIPELINE_NAV = { label: "Sales Pipeline", href: "/dashboard/pipeline", icon: TrendingUp };
 
 const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -57,9 +61,10 @@ const vendorNav = [
 interface SidebarProps {
   isCustomer?: boolean;
   userRole?: string;
+  pipelineAccess?: boolean;
 }
 
-export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
+export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
 
@@ -118,7 +123,15 @@ export function Sidebar({ isCustomer = false, userRole }: SidebarProps) {
     return internalNav;
   }, [isCustomer, userRole]);
 
-  const nav = filteredNav;
+  // Inject the proprietary pipeline link for flagged internal users only.
+  const nav = React.useMemo(() => {
+    if (isCustomer || !pipelineAccess) return filteredNav;
+    if (filteredNav.some((i) => i.href === PIPELINE_NAV.href)) return filteredNav;
+    const next = [...filteredNav];
+    const at = next.findIndex((i) => i.href === "/dashboard/quotes");
+    next.splice(at >= 0 ? at + 1 : 1, 0, PIPELINE_NAV);
+    return next;
+  }, [filteredNav, isCustomer, pipelineAccess]);
 
   return (
     <aside className={cn("flex flex-col bg-white border-r border-gray-200 transition-all duration-200 h-full", collapsed ? "w-16" : "w-60")}>

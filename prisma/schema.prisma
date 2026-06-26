@@ -108,6 +108,10 @@ model User {
   // Scopes a VENDOR-role login to the sourcing requests for this vendor name
   // (e.g. "MWI"). Matched against Quote.sourcingVendor (Benjy 6/16).
   vendorName     String?
+  // Sales pipeline (CRM) access — proprietary lead list managed only by the
+  // owners + Albert (Benjy 6/26). A per-user flag, NOT a role, so it can't
+  // drift if someone else becomes ADMIN later.
+  pipelineAccess Boolean  @default(false)
   isActive       Boolean  @default(true)
   // TOTP 2FA — Mary 5/5 ask after Mike's email hack. Authenticator-app
   // 6-digit codes (Microsoft Authenticator / Google Authenticator / etc.)
@@ -182,6 +186,39 @@ model Contact {
   createdAt   DateTime @default(now())
 
   @@index([companyId])
+}
+
+// ─── SALES PIPELINE (proprietary CRM — Benjy/Nitay/Albert) ───────
+// One record per prospect, moving through stages (LEAD → QUALIFIED →
+// CUSTOMER → LOST). Mirrors the owners' Google Doc; converting to CUSTOMER
+// links to a real Company. FK columns are plain strings (no relations) so
+// the model stays self-contained. (Benjy 6/26)
+model Lead {
+  id              String    @id @default(cuid())
+  companyName     String
+  endMarket       String?
+  productCategory String?
+  website         String?
+  contactName     String?
+  contactTitle    String?
+  contactEmail    String?
+  contactPhone    String?
+  lastInteraction DateTime?
+  priority        Int?      // 1 / 2 / 3
+  stage           String?   // sub-status: Break in, Quoting, With C&D, etc.
+  pipelineStage   String    @default("LEAD") // LEAD | QUALIFIED | CUSTOMER | LOST
+  ownerName       String?   // display name as in the sheet (Benjy/Albert/Nitay/Kelsey/TBD)
+  ownerId         String?   // links to a User for per-rep scoping (future)
+  volume          String?   // free-form: "250,000", "TBD", "70,700+6,500"
+  commentary      String?
+  companyId       String?   // linked Godzilla customer once converted
+  quoteId         String?   // optional linked quote
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([pipelineStage])
+  @@index([ownerId])
 }
 
 // ─── ORDERS & JOBS ───────────────────────────────────────

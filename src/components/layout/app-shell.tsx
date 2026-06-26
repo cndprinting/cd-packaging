@@ -11,7 +11,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, isCustomer = false }: AppShellProps) {
-  const [user, setUser] = React.useState<{ name: string; email: string; companyName: string | null; role: string } | null>(null);
+  const [user, setUser] = React.useState<{ name: string; email: string; companyName: string | null; role: string; pipelineAccess?: boolean } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -22,7 +22,7 @@ export function AppShell({ children, isCustomer = false }: AppShellProps) {
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar isCustomer={isCustomer} userRole={user?.role} />
+        <Sidebar isCustomer={isCustomer} userRole={user?.role} pipelineAccess={user?.pipelineAccess} />
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -30,7 +30,7 @@ export function AppShell({ children, isCustomer = false }: AppShellProps) {
         <>
           <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileMenuOpen(false)} />
           <div className="fixed inset-y-0 left-0 z-50 md:hidden">
-            <Sidebar isCustomer={isCustomer} userRole={user?.role} />
+            <Sidebar isCustomer={isCustomer} userRole={user?.role} pipelineAccess={user?.pipelineAccess} />
           </div>
         </>
       )}
