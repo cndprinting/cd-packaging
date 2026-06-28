@@ -117,7 +117,12 @@ export async function POST(req: NextRequest) {
   const isBizCard = /business\s*card/i.test(`${productField} ${otherType}`);
   const assumed = assertDefaults(productCategory, `${productField} ${otherType} ${size} ${color} ${finishing}`, isBizCard);
 
+  // Potential major client (Claude judgment) → flag it loud and bump priority.
+  const isVip = !!claude?.vip;
+  const vipBanner = isVip ? `⭐ POTENTIAL MAJOR CLIENT — owners review before quoting. ${claude?.vipReason || ""}`.trim() : null;
+
   const summary = [
+    vipBanner,
     "Inbound web lead.",
     inquiry ? `Looking for: ${inquiry}` : null,
     productField ? `Product: ${productField}${otherType ? ` · ${otherType}` : ""}` : null,
@@ -143,7 +148,7 @@ export async function POST(req: NextRequest) {
       contactEmail: email,
       contactPhone: phone,
       website: null,
-      priority: 3,                 // spec: posts as a priority-3 record
+      priority: isVip ? 1 : 3,     // major client → priority 1; otherwise routine priority 3
       ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
       stage: "New",                // agent status spine starts here
       pipelineStage: "LEAD",

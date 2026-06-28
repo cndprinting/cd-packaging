@@ -25,6 +25,8 @@ export type IntakeEnrichment = {
   assumptions: string[];   // "field → asserted house default" for vague/missing answers
   missing: string[];       // required fields the customer didn't give
   summary: string;         // clean recap for Mary, exact-where-given vs assumed
+  vip: boolean;            // potentially a major/high-value client → owners review before quote
+  vipReason: string;       // why (recognized brand, large company, high-volume potential)
 };
 
 // Classify lane + product, detect non-answers, assert house defaults. Returns
@@ -37,9 +39,10 @@ export async function enrichIntake(fields: Record<string, string>): Promise<Inta
 Classify the lane (packaging vs print) and product. If genuinely unclear, set lane "unclear".
 A vague or low-confidence answer ("thick paper", "Regular", qty 1, an answer that describes the goal not a spec, design/artwork text in a spec field) is NOT a real spec — treat it as an assumption. Assert C&D house-standard defaults for vague terms (e.g. "thick" business card → 14pt C2S; "sturdy box" → 18pt SBS C1S board; "glossy" → gloss UV) and list each as "what they said → what we'll assume".
 List required fields the customer did not provide. Write a short summary for Mary the estimator that clearly separates exact-where-given from assumed-where-inferred. Be concise.
+Also judge whether this is potentially a MAJOR / high-value client worth an owner's eyes before any quote goes out. Set vip=true if the company is a recognizable national/global brand, a large company (many employees / multiple locations), part of a bigger parent/holding company, or the inquiry implies high volume or an ongoing program. Examples of vip=true: Lavazza, Integer Holdings, any Fortune-1000 or well-known consumer brand. Set vip=false for clearly small/local/one-off jobs. If unsure, lean false but say why in vipReason. Use what you know about the company from its name.
 
 Respond with ONLY a JSON object (no prose, no markdown fences) of exactly this shape:
-{"lane":"packaging|print|unclear","productCategory":"Folding Carton|Commercial Print|Flexible Packaging|Packaging|Mailers","normalizedProduct":"string","assumptions":["what they said → what we'll assume"],"missing":["field"],"summary":"string"}`;
+{"lane":"packaging|print|unclear","productCategory":"Folding Carton|Commercial Print|Flexible Packaging|Packaging|Mailers","normalizedProduct":"string","assumptions":["what they said → what we'll assume"],"missing":["field"],"summary":"string","vip":true|false,"vipReason":"string"}`;
   try {
     const msg = await client.messages.create({
       model: MODEL,

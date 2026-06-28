@@ -18,8 +18,16 @@ const BASE = "https://packaging.cndprinting.com";
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
 // run (leak fixed) while the owners watch before turning the emails on.
 export const agentEnabled = () => process.env.AGENT_ENABLED === "true";
-// When true, the customer quote auto-sends instead of waiting for approval.
+// When true, the agent may auto-send quotes (training-wheels off). Even then,
+// whales and large quotes still route to the owners first (see onMaryQuote).
 const autoSend = () => process.env.AGENT_AUTOSEND === "true";
+// Quotes at/above this dollar amount always get owner review before sending.
+const QUOTE_REVIEW_THRESHOLD = 5000;
+// Pull the order value out of Mary's free-text quote (largest $ figure wins).
+function quoteAmount(q: string): number {
+  const nums = (q.match(/\$\s?[\d,]+(?:\.\d{1,2})?/g) || []).map((s) => parseFloat(s.replace(/[^0-9.]/g, ""))).filter((n) => !isNaN(n));
+  return nums.length ? Math.max(...nums) : 0;
+}
 
 const newToken = () => randomBytes(16).toString("hex");
 const link = (id: string, token: string, action: string) => `${BASE}/agent?id=${id}&token=${token}&do=${action}`;
@@ -105,13 +113,26 @@ export async function onMaryQuote(prisma: any, lead: any, quote: string): Promis
     where: { id: lead.id },
     data: { agentQuote: quote, agentStatus: "quote_received", stage: "Quote received", agentNextAt: addBusinessDays(new Date(), 1), agentLog: logLine(lead.agentLog, "Quote received from Mary") },
   });
-  if (autoSend()) { await sendCustomerQuote(prisma, { ...lead, agentQuote: quote }); return; }
-  const body = wrap(`
-    <p>Mary quoted <strong>${lead.companyName}</strong>. Review and send to the customer:</p>
+  // Decide whether this quote can auto-send or needs owner eyes first.
+  // Gate when: training wheels on (autoSend off), OR a flagged major client
+  // (priority 1), OR the order is >= the review threshold, OR we can't read a
+  // dollar amount (play it safe). Otherwise small & routine → auto-send.
+  const amount = quoteAmount(quote);
+  const vip = lead.priority === 1;
+  const small = amount > 0 && amount < QUOTE_REVIEW_THRESHOLD;
+  const mustGate = !autoSend() || vip || !small;
+  if (!mustGate) { await sendCustomerQuote(prisma, { ...lead, agentQuote: quote }); return; }
+
+  const banner = vip
+    ? `<p style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px;"><strong>⭐ Potential major client — review carefully before this goes out.</strong></p>`
+    : "";
+  const why = vip ? " (major client)" : (amount >= QUOTE_REVIEW_THRESHOLD ? ` (over $${QUOTE_REVIEW_THRESHOLD.toLocaleString()})` : "");
+  const body = wrap(`${banner}
+    <p>Mary quoted <strong>${lead.companyName}</strong>${why}. Review and send to the customer:</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${quote.replace(/</g, "&lt;")}</pre>
     <p>To: ${lead.contactName || "customer"} · ${lead.contactEmail || "(no email on file)"}</p>
     <p>${btn(link(lead.id, lead.agentToken, "approve"), "Approve &amp; send to customer")}</p>`);
-  await agentSend({to: OWNERS, subject: `Approve quote: ${lead.companyName}`, body });
+  await agentSend({to: OWNERS, subject: `${vip ? "⭐ " : ""}Approve quote: ${lead.companyName}`, body });
 }
 
 // ── Send the quote to the customer → start the follow-up clock ─────────────
