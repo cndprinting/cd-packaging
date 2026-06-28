@@ -99,6 +99,11 @@ export async function POST(req: NextRequest) {
     else if (dl.length) dupNote = `⚠ Already in the pipeline (${dl.map((x) => x.pipelineStage.toLowerCase()).join(", ")}) — possible duplicate.`;
   }
 
+  // Assert house-standard defaults for any vague terms (Mary confirms).
+  const { assertDefaults } = await import("@/lib/agent/spec-map");
+  const isBizCard = /business\s*card/i.test(`${productField} ${otherType}`);
+  const assumed = assertDefaults(productCategory, `${productField} ${otherType} ${size} ${color} ${finishing}`, isBizCard);
+
   const summary = [
     "Inbound web lead.",
     productField ? `Product: ${productField}${otherType ? ` · ${otherType}` : ""}` : null,
@@ -108,6 +113,7 @@ export async function POST(req: NextRequest) {
     finishing ? `Finishing: ${finishing}` : null,
     services ? `Services: ${services}` : null,
     artwork ? `Artwork: ${artwork}` : "Artwork: none uploaded",
+    assumed.length ? `Assumed (confirm): ${assumed.map((a) => `${a.found} → ${a.assume}`).join("; ")}` : null,
     dupNote || null,
   ].filter(Boolean).join("\n");
 
