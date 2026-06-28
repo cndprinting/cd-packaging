@@ -9,7 +9,10 @@ import { sendEmail } from "@/lib/email/graph-client";
 
 export const MARY = "mbitting@cndprinting.com";
 export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
-export const SENDER = "bwaxman@cndprinting.com"; // a real C&D mailbox the app can send as
+// Customer-facing identity: the agent sends AS Albert (sales manager) and reads
+// his mailbox for replies, so what the customer sees matches the lead owner.
+export const SENDER = "awaxman@cndprinting.com";
+export const SIGNOFF = "Albert Waxman<br>C&amp;D Printing &amp; Packaging"; // email sign-off
 const BASE = "https://packaging.cndprinting.com";
 
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
@@ -86,7 +89,7 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
     <p>Thank you for reaching out to C&amp;D Printing. To put together an accurate quote for your ${lead.productName || "project"}, could you share a few details:</p>
     <ul>${missing.map((m) => `<li>${m.replace(/</g, "&lt;")}</li>`).join("")}</ul>
     <p>If you're not sure on any of these, just say so and we'll recommend what works best. Once we have these we'll turn a quote around quickly.</p>
-    <p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`);
+    <p>Best regards,<br>${SIGNOFF}</p>`);
   await agentSend({ to: lead.contactEmail, cc: OWNERS, subject: `A few quick details for your quote — C&D Printing`, body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -123,7 +126,7 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
       <p>Thank you for reaching out to C&amp;D Printing. Here's your quote:</p>
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
       <p>Happy to adjust quantities or specs — just reply and we'll take care of it.</p>
-      <p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`);
+      <p>Best regards,<br>${SIGNOFF}</p>`);
     await agentSend({to: lead.contactEmail, cc: OWNERS, subject: `Your quote from C&D Printing — ${lead.companyName}`, body });
   }
   await prisma.lead.update({
@@ -152,7 +155,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
       if (l.agentStatus === "awaiting_customer_info") {
         // Customer hasn't sent the details yet — nudge once.
         if (l.contactEmail) {
-          await agentSend({ to: l.contactEmail, cc: OWNERS, subject: `Following up — your C&D Printing quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works — happy to help.</p><p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`) });
+          await agentSend({ to: l.contactEmail, cc: OWNERS, subject: `Following up — your C&D Printing quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works — happy to help.</p><p>Best regards,<br>${SIGNOFF}</p>`) });
         }
         await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "info_nudge_1", agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for missing specs") } });
       } else if (l.agentStatus === "info_nudge_1") {
@@ -170,7 +173,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const step = FOLLOWUPS[l.agentStatus as string];
         if (step) {
           if (l.contactEmail) {
-            await agentSend({to: l.contactEmail, cc: OWNERS, subject: `Following up — ${l.companyName} quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>${step.msg}</p><p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`) });
+            await agentSend({to: l.contactEmail, cc: OWNERS, subject: `Following up — ${l.companyName} quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>${step.msg}</p><p>Best regards,<br>${SIGNOFF}</p>`) });
           }
           const next = step.days > 0 ? addBusinessDays(now, step.days) : null;
           const status = step.days > 0 ? step.next : "closed";
