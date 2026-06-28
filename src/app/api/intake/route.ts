@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkBlocked } from "@/lib/agent/blocklist";
 
 // Inbound web-form intake (Benjy 6/26). The website's Elementor form POSTs
 // here (Webhook action). We parse tolerantly — collect every field, best-effort
@@ -121,7 +122,16 @@ export async function POST(req: NextRequest) {
   const isVip = !!claude?.vip;
   const vipBanner = isVip ? `⭐ POTENTIAL MAJOR CLIENT — owners review before quoting. ${claude?.vipReason || ""}`.trim() : null;
 
+  // Fraud guards: a hard blocklist hit, or Claude's scam-sniff at high risk →
+  // the agent does NOT engage; the owners get alerted to decide.
+  const blockedReason = checkBlocked({ name: contactName, email, phone, company });
+  const scamHigh = claude?.scamRisk === "high";
+  const guardBanner = blockedReason
+    ? `🚫 BLOCKED — ${blockedReason}. Agent will NOT engage.`
+    : (scamHigh ? `⚠ POSSIBLE SCAM (${claude?.scamReason || "fraud signals"}) — agent paused; review before any contact.` : null);
+
   const summary = [
+    guardBanner,
     vipBanner,
     "Inbound web lead.",
     inquiry ? `Looking for: ${inquiry}` : null,
@@ -150,8 +160,9 @@ export async function POST(req: NextRequest) {
       website: null,
       priority: isVip ? 1 : 3,     // major client → priority 1; otherwise routine priority 3
       ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
-      stage: "New",                // agent status spine starts here
-      pipelineStage: "LEAD",
+      agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : null), // fraud guards park the lead so the agent never chases it
+      stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : "New"),
+      pipelineStage: blockedReason ? "LOST" : "LEAD",
       source: "inbound",
       volume: quantity,
       commentary: summary,
@@ -162,6 +173,20 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line no-console
   console.log("[Godzilla INTAKE] new lead", lead.id, company, productCategory);
+
+  // Fraud guard: blocked or high scam risk → the agent does NOT contact anyone.
+  // Alert the owners so a human can decide if it's actually legit.
+  if (blockedReason || scamHigh) {
+    try {
+      const { OWNERS, agentSend } = await import("@/lib/agent/agent");
+      await agentSend({
+        to: OWNERS,
+        subject: `${blockedReason ? "🚫 Blocked lead" : "⚠ Possible scam"}: ${lead.companyName}`,
+        body: `<p><strong>${lead.companyName}</strong>${contactName ? ` · ${contactName}` : ""}${email ? ` · ${email}` : ""}${phone ? ` · ${phone}` : ""}</p><p>${guardBanner}</p><p>The agent did <strong>not</strong> contact them and did not hand off to Mary. If you believe it's legitimate, follow up manually from the pipeline.</p>`,
+      });
+    } catch (e) { console.error("[Godzilla INTAKE] guard alert failed", e); }
+    return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude, blocked: !!blockedReason, scam: scamHigh });
+  }
 
   // Hand off to the sales agent — only when AGENT_ENABLED=true. If Claude found
   // genuinely missing specs and we have an email, the agent asks the CUSTOMER
