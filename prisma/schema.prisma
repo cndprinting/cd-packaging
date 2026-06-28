@@ -220,6 +220,11 @@ model Lead {
   followUpAt      DateTime?
   followUpNote    String?
   reminderSentAt  DateTime?
+  // Where the lead came from (Benjy 6/26). "prospecting" = owners' manual
+  // list; "inbound" = website form via /api/intake. intakeRaw keeps the
+  // original web-form payload so nothing is lost if mapping misses a field.
+  source          String    @default("prospecting")
+  intakeRaw       String?
   companyId       String?   // linked Godzilla customer once converted
   quoteId         String?   // optional linked quote
   createdBy       String?
