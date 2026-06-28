@@ -33,32 +33,24 @@ export async function enrichIntake(fields: Record<string, string>): Promise<Inta
   const client = getClaude();
   if (!client) return null;
   const dump = Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n");
-  const schema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      lane: { type: "string", enum: ["packaging", "print", "unclear"] },
-      productCategory: { type: "string", enum: ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers"] },
-      normalizedProduct: { type: "string" },
-      assumptions: { type: "array", items: { type: "string" } },
-      missing: { type: "array", items: { type: "string" } },
-      summary: { type: "string" },
-    },
-    required: ["lane", "productCategory", "normalizedProduct", "assumptions", "missing", "summary"],
-  };
   const system = `You triage inbound print/packaging leads for C&D Printing & Packaging (St. Petersburg, FL — folding cartons, commercial print, mailers, labels, flexible/rigid packaging).
 Classify the lane (packaging vs print) and product. If genuinely unclear, set lane "unclear".
 A vague or low-confidence answer ("thick paper", "Regular", qty 1, an answer that describes the goal not a spec, design/artwork text in a spec field) is NOT a real spec — treat it as an assumption. Assert C&D house-standard defaults for vague terms (e.g. "thick" business card → 14pt C2S; "sturdy box" → 18pt SBS C1S board; "glossy" → gloss UV) and list each as "what they said → what we'll assume".
-List required fields the customer did not provide. Write a short summary for Mary the estimator that clearly separates exact-where-given from assumed-where-inferred. Be concise.`;
+List required fields the customer did not provide. Write a short summary for Mary the estimator that clearly separates exact-where-given from assumed-where-inferred. Be concise.
+
+Respond with ONLY a JSON object (no prose, no markdown fences) of exactly this shape:
+{"lane":"packaging|print|unclear","productCategory":"Folding Carton|Commercial Print|Flexible Packaging|Packaging|Mailers","normalizedProduct":"string","assumptions":["what they said → what we'll assume"],"missing":["field"],"summary":"string"}`;
   try {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      output_config: { format: { type: "json_schema", schema } } as any,
       system,
       messages: [{ role: "user", content: `Form submission:\n${dump}` }],
-    } as any);
-    return JSON.parse(firstText(msg));
+    });
+    let txt = firstText(msg).trim();
+    const m = txt.match(/\{[\s\S]*\}/);          // tolerate stray prose / fences
+    if (m) txt = m[0];
+    return JSON.parse(txt);
   } catch (e) {
     console.error("[agent] enrichIntake failed", e);
     return null;

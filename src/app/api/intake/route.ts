@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     await kickoffAgent(prisma, lead);
   } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
 
-  return NextResponse.json({ ok: true, id: lead.id });
+  return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude });
 }
 
 // A friendly GET so hitting the URL in a browser confirms it's live.
