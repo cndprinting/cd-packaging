@@ -35,15 +35,17 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   for (const m of items) {
     const from = m.from?.emailAddress?.address?.toLowerCase();
     if (!from) continue;
-    // Mark read first so a transient error below doesn't reprocess it forever.
-    try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
 
-    // Match to a lead the agent is actively chasing.
+    // Match to a lead the agent is actively chasing. We do NOT touch messages
+    // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
       where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["sent", "followup_1", "followup_2", "followup_3"] } },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
+
+    // Only now mark it read — it's a lead reply we're handling.
+    try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
 
     // Draft a reply (Claude) — falls back to a human handoff if no key.
     let draft: string | null = null;
