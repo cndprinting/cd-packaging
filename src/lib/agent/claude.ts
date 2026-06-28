@@ -57,6 +57,48 @@ Respond with ONLY a JSON object (no prose, no markdown fences) of exactly this s
   }
 }
 
+// Draft a short, friendly email to the customer asking for the missing specs
+// we need before we can quote. House voice. Returns null on no key / failure.
+export async function draftClarifyEmail(opts: { contactName?: string | null; productName: string; missing: string[]; assumptions?: string[] }): Promise<string | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You write short emails for C&D Printing & Packaging asking a prospective customer for the details we need to quote their job. House voice: understated, warm, professional — no hype, no exclamation points, no emoji. Open with a thank-you for reaching out. Ask ONLY for the genuinely missing items, phrased in plain language a non-printer understands (turn jargon into a friendly question — e.g. "dieline/style" → "what carton style you're after, like a straight or reverse tuck — or we can recommend one"). Group them as a short bullet list. If helpful, briefly note we can recommend a spec if they're not sure. Close by saying once we have these we'll turn a quote around quickly. Sign off "C&D Printing & Packaging". Output ONLY the inner HTML body (<p>, <ul>, <li>, <strong>, <br>). Do not invent prices or commitments.`;
+  const user = `Customer contact: ${opts.contactName || "there"}
+Product: ${opts.productName}
+Details still needed:
+${opts.missing.map((m) => `- ${m}`).join("\n")}`;
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1024, system, messages: [{ role: "user", content: user }] });
+    const html = firstText(msg).trim();
+    return html || null;
+  } catch (e) {
+    console.error("[agent] draftClarifyEmail failed", e);
+    return null;
+  }
+}
+
+// Merge a customer's reply (their answers to our questions) into an updated
+// brief for Mary. Returns a short plain-text summary, or null on failure.
+export async function mergeCustomerAnswers(opts: { productName: string; priorBrief: string; reply: string }): Promise<string | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You update a print/packaging job brief for Mary the estimator. You are given the prior brief (with assumptions) and the customer's reply answering our questions. Produce a concise, updated brief: fold the customer's answers in as confirmed specs, drop assumptions they've now overridden, and note anything still missing. Plain text, no markdown fences. Be brief.`;
+  const user = `Product: ${opts.productName}
+
+Prior brief:
+${opts.priorBrief}
+
+Customer's reply:
+${opts.reply}`;
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1024, system, messages: [{ role: "user", content: user }] });
+    return firstText(msg).trim() || null;
+  } catch (e) {
+    console.error("[agent] mergeCustomerAnswers failed", e);
+    return null;
+  }
+}
+
 // Draft the customer-facing quote email body (HTML) in C&D's understated
 // house voice, from Mary's price + terms. Returns null on no key / failure.
 export async function draftCustomerQuote(opts: { customerName: string; contactName?: string | null; productName: string; quote: string }): Promise<string | null> {

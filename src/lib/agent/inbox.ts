@@ -39,7 +39,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
-      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["sent", "followup_1", "followup_2", "followup_3"] } },
+      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3"] } },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
@@ -47,6 +47,26 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Only now mark it read — it's a lead reply we're handling.
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
 
+    // CASE 1: the customer answered our spec questions → fold the answers into
+    // the brief and hand a complete package to Mary to quote.
+    if (lead.agentStatus === "awaiting_customer_info" || lead.agentStatus === "info_nudge_1") {
+      let merged: string | null = null;
+      try {
+        const { mergeCustomerAnswers } = await import("@/lib/agent/claude");
+        merged = await mergeCustomerAnswers({ productName: lead.productCategory || "project", priorBrief: lead.commentary || "", reply: m.bodyPreview || "" });
+      } catch { /* fall back to raw append */ }
+      const commentary = merged
+        ? `${merged}\n\n[Customer's reply, verbatim] ${m.bodyPreview || ""}`.slice(0, 4000)
+        : `${lead.commentary || ""}\n\n[Customer answered] ${m.bodyPreview || ""}`.slice(0, 4000);
+      await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentLog: lead.agentLog } });
+      const fresh = await prisma.lead.findUnique({ where: { id: lead.id } });
+      const { kickoffAgent } = await import("@/lib/agent/agent");
+      await kickoffAgent(prisma, { ...fresh, productName: fresh.productCategory });
+      handled++;
+      continue;
+    }
+
+    // CASE 2: a reply after the quote went out — draft a response for approval.
     // Draft a reply (Claude) — falls back to a human handoff if no key.
     let draft: string | null = null;
     try {

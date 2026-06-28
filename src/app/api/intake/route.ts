@@ -157,11 +157,18 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line no-console
   console.log("[Godzilla INTAKE] new lead", lead.id, company, productCategory);
 
-  // Hand off to the sales agent (emails Mary, starts the chase) — only when
-  // AGENT_ENABLED=true, so intake can run while the owners watch first.
+  // Hand off to the sales agent — only when AGENT_ENABLED=true. If Claude found
+  // genuinely missing specs and we have an email, the agent asks the CUSTOMER
+  // for them first (then hands Mary a complete brief); otherwise it goes
+  // straight to Mary with house defaults asserted.
   try {
-    const { kickoffAgent } = await import("@/lib/agent/agent");
-    await kickoffAgent(prisma, lead);
+    const { kickoffAgent, askCustomer } = await import("@/lib/agent/agent");
+    const named = { ...lead, productName: claude?.normalizedProduct || productCategory };
+    if (claude?.missing?.length && email) {
+      await askCustomer(prisma, named, claude.missing);
+    } else {
+      await kickoffAgent(prisma, named);
+    }
   } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
 
   return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude });

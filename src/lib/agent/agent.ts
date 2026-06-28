@@ -67,6 +67,33 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   });
 }
 
+// ── Step 0 (when specs are missing): ask the CUSTOMER first ────────────────
+// Instead of handing Mary an assumption-heavy brief, the agent emails the lead
+// the missing-spec questions, waits for their reply (caught by the inbox loop),
+// then hands Mary a complete brief. Falls back to house defaults + Mary if the
+// customer goes quiet (see processDueAgentLeads). Benjy 6/28.
+export async function askCustomer(prisma: any, lead: any, missing: string[]): Promise<void> {
+  if (!agentEnabled()) return;
+  const token = lead.agentToken || newToken();
+  if (!lead.contactEmail) { await kickoffAgent(prisma, { ...lead, agentToken: token }); return; } // can't ask → Mary with defaults
+  let inner: string | null = null;
+  try {
+    const { draftClarifyEmail } = await import("@/lib/agent/claude");
+    inner = await draftClarifyEmail({ contactName: lead.contactName, productName: lead.productName, missing });
+  } catch { /* fall back */ }
+  const body = inner ? wrap(inner) : wrap(`
+    <p>Hi ${lead.contactName || "there"},</p>
+    <p>Thank you for reaching out to C&amp;D Printing. To put together an accurate quote for your ${lead.productName || "project"}, could you share a few details:</p>
+    <ul>${missing.map((m) => `<li>${m.replace(/</g, "&lt;")}</li>`).join("")}</ul>
+    <p>If you're not sure on any of these, just say so and we'll recommend what works best. Once we have these we'll turn a quote around quickly.</p>
+    <p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`);
+  await agentSend({ to: lead.contactEmail, cc: OWNERS, subject: `A few quick details for your quote — C&D Printing`, body });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { agentStatus: "awaiting_customer_info", agentToken: token, agentNextAt: addBusinessDays(new Date(), 2), stage: "Awaiting customer info", agentLog: logLine(lead.agentLog, "Asked customer for missing specs") },
+  });
+}
+
 // ── Mary submits her quote → notify owners to approve (or auto-send) ────────
 export async function onMaryQuote(prisma: any, lead: any, quote: string): Promise<void> {
   await prisma.lead.update({
@@ -116,13 +143,24 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
   if (!agentEnabled()) return { acted: 0 };
   const now = new Date();
   const due = await prisma.lead.findMany({
-    where: { agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_mary", "quote_received", "sent", "followup_1", "followup_2"] } },
+    where: { agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2"] } },
     take: 100,
   });
   let acted = 0;
   for (const l of due) {
     try {
-      if (l.agentStatus === "awaiting_mary") {
+      if (l.agentStatus === "awaiting_customer_info") {
+        // Customer hasn't sent the details yet — nudge once.
+        if (l.contactEmail) {
+          await agentSend({ to: l.contactEmail, cc: OWNERS, subject: `Following up — your C&D Printing quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works — happy to help.</p><p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`) });
+        }
+        await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "info_nudge_1", agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for missing specs") } });
+      } else if (l.agentStatus === "info_nudge_1") {
+        // Still silent — fall back to house defaults and hand Mary the brief.
+        await prisma.lead.update({ where: { id: l.id }, data: { commentary: `${l.commentary || ""}\n\n[No customer response to spec questions — proceeding with house defaults.]`.trim(), agentLog: logLine(l.agentLog, "Customer silent — falling back to house defaults") } });
+        const fresh = await prisma.lead.findUnique({ where: { id: l.id } });
+        await kickoffAgent(prisma, fresh);
+      } else if (l.agentStatus === "awaiting_mary") {
         await agentSend({to: MARY, cc: OWNERS, subject: `Reminder — quote needed: ${l.companyName}`, body: wrap(`<p>Still need a quote for <strong>${l.companyName}</strong>.</p><p>${btn(link(l.id, l.agentToken, "quote"), "Reply with the quote")}</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged Mary") } });
       } else if (l.agentStatus === "quote_received") {
