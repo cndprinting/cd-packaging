@@ -18,9 +18,10 @@ const BASE = "https://packaging.cndprinting.com";
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
 // run (leak fixed) while the owners watch before turning the emails on.
 export const agentEnabled = () => process.env.AGENT_ENABLED === "true";
-// When true, the agent may auto-send quotes (training-wheels off). Even then,
-// whales and large quotes still route to the owners first (see onMaryQuote).
-const autoSend = () => process.env.AGENT_AUTOSEND === "true";
+// Small routine orders auto-send by default (Mary still prices them — the agent
+// just sends without owner approval). Set AGENT_REVIEW_ALL=true to pause that
+// and route everything to the owners (training wheels).
+const reviewAll = () => process.env.AGENT_REVIEW_ALL === "true";
 // Quotes at/above this dollar amount always get owner review before sending.
 const QUOTE_REVIEW_THRESHOLD = 5000;
 // Pull the order value out of Mary's free-text quote (largest $ figure wins).
@@ -113,14 +114,13 @@ export async function onMaryQuote(prisma: any, lead: any, quote: string): Promis
     where: { id: lead.id },
     data: { agentQuote: quote, agentStatus: "quote_received", stage: "Quote received", agentNextAt: addBusinessDays(new Date(), 1), agentLog: logLine(lead.agentLog, "Quote received from Mary") },
   });
-  // Decide whether this quote can auto-send or needs owner eyes first.
-  // Gate when: training wheels on (autoSend off), OR a flagged major client
-  // (priority 1), OR the order is >= the review threshold, OR we can't read a
-  // dollar amount (play it safe). Otherwise small & routine → auto-send.
+  // Small routine orders go out fully autonomously (Benjy 6/28). Gate only when:
+  // a flagged major client (priority 1), OR the order is >= the review threshold,
+  // OR we can't read a dollar amount (play it safe), OR review-all is on.
   const amount = quoteAmount(quote);
   const vip = lead.priority === 1;
   const small = amount > 0 && amount < QUOTE_REVIEW_THRESHOLD;
-  const mustGate = !autoSend() || vip || !small;
+  const mustGate = reviewAll() || vip || !small;
   if (!mustGate) { await sendCustomerQuote(prisma, { ...lead, agentQuote: quote }); return; }
 
   const banner = vip
