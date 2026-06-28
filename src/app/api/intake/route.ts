@@ -61,11 +61,14 @@ export async function POST(req: NextRequest) {
   };
   const allText = entries.map(([k, v]) => `${k}: ${v}`).join("\n");
 
+  const company = pick("company", "business", "organization") || null;
   const first = pick("first");
   const last = pick("last");
-  const nameField = pick("name");
-  const contactName = [first, last].filter(Boolean).join(" ") || (nameField && !/company/i.test(nameField) ? nameField : "") || null;
-  const company = pick("company", "business", "organization") || null;
+  // Prefer an explicit "contact"; else first+last; else any "name" key that
+  // isn't the company name (fixes the marketing-materials form).
+  const contactExplicit = entries.find(([k]) => /contact/i.test(k) && /name/i.test(k))?.[1] || "";
+  const genericName = entries.find(([k]) => /name/i.test(k) && !/company|business|organization|form|user|first|last/i.test(k))?.[1] || "";
+  const contactName = contactExplicit || [first, last].filter(Boolean).join(" ") || genericName || null;
   let email = pick("email") || null;
   if (!email) { const m = allText.match(EMAIL_RE); email = m ? m[0] : null; }
   const phone = pick("phone", "tel", "mobile") || null;
@@ -77,11 +80,15 @@ export async function POST(req: NextRequest) {
   const color = pick("color", "colour");
   const finishing = pick("finishing", "additional print");
   const services = pick("services", "additional services");
+  // Free-text inquiry (the marketing-materials form's "What are you looking for?").
+  const inquiry = pick("looking for", "what are you", "message", "comments", "tell us", "details", "project", "describe your");
+  const sourceUrl = pick("page url", "source");
   let artwork = pick("upload", "file", "artwork", "pdf");
   if (!artwork) { const u = allText.match(/https?:\/\/\S+\.(pdf|ai|eps|png|jpe?g|zip)/i); artwork = u ? u[0] : ""; }
 
-  // Lane / product category from what they picked + any "other" text.
-  const blob = `${productField} ${otherType}`.toLowerCase();
+  // Lane / product category from what they picked + any "other" text + the
+  // free-text inquiry (so the simpler form can still hint packaging vs print).
+  const blob = `${productField} ${otherType} ${inquiry}`.toLowerCase();
   let productCategory = "Commercial Print";
   if (/mailer/.test(blob)) productCategory = "Mailers";
   else if (/folding|carton/.test(blob)) productCategory = "Folding Carton";
@@ -106,6 +113,7 @@ export async function POST(req: NextRequest) {
 
   const summary = [
     "Inbound web lead.",
+    inquiry ? `Looking for: ${inquiry}` : null,
     productField ? `Product: ${productField}${otherType ? ` · ${otherType}` : ""}` : null,
     quantity ? `Quantity: ${quantity}` : null,
     size ? `Size: ${size}` : null,
@@ -114,6 +122,7 @@ export async function POST(req: NextRequest) {
     services ? `Services: ${services}` : null,
     artwork ? `Artwork: ${artwork}` : "Artwork: none uploaded",
     assumed.length ? `Assumed (confirm): ${assumed.map((a) => `${a.found} → ${a.assume}`).join("; ")}` : null,
+    sourceUrl ? `From: ${sourceUrl}` : null,
     dupNote || null,
   ].filter(Boolean).join("\n");
 
