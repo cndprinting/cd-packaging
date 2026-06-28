@@ -132,6 +132,14 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line no-console
   console.log("[Godzilla INTAKE] new lead", lead.id, company, productCategory);
+
+  // Hand off to the sales agent (emails Mary, starts the chase) — only when
+  // AGENT_ENABLED=true, so intake can run while the owners watch first.
+  try {
+    const { kickoffAgent } = await import("@/lib/agent/agent");
+    await kickoffAgent(prisma, lead);
+  } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
+
   return NextResponse.json({ ok: true, id: lead.id });
 }
 

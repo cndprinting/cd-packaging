@@ -76,5 +76,14 @@ export async function GET(request: NextRequest) {
   if (sentLeadIds.length) {
     await prisma.lead.updateMany({ where: { id: { in: sentLeadIds } }, data: { reminderSentAt: now } });
   }
-  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length });
+
+  // Also drive the sales-agent chase engine (nudges, follow-ups) on the same
+  // daily tick (no-op unless AGENT_ENABLED=true).
+  let agent = { acted: 0 };
+  try {
+    const { processDueAgentLeads } = await import("@/lib/agent/agent");
+    agent = await processDueAgentLeads(prisma);
+  } catch (e) { console.error("[Godzilla CRON] agent processing failed", e); }
+
+  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted });
 }

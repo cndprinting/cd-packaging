@@ -225,6 +225,17 @@ model Lead {
   // original web-form payload so nothing is lost if mapping misses a field.
   source          String    @default("prospecting")
   intakeRaw       String?
+  // AI sales-agent chase engine (Benjy 6/26). The agent is a status machine
+  // on the lead with a clock — it hands off to Mary, nudges if anyone goes
+  // quiet, gates the customer send behind approval, then runs the follow-up
+  // sequence. agentToken makes the one-click email links work without a login.
+  agentStatus     String?   // new|awaiting_mary|quote_received|needs_info|sent|followup_1|followup_2|followup_3|closed|active
+  agentNextAt     DateTime? // when the cron should next act on this lead
+  agentToken      String?   // unguessable token for Mary/owner email-action links
+  agentQuote      String?   // Mary's returned price + terms
+  agentLog        String?   // JSON audit trail of agent actions
+
+  @@index([agentStatus, agentNextAt])
   companyId       String?   // linked Godzilla customer once converted
   quoteId         String?   // optional linked quote
   createdBy       String?
