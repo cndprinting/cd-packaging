@@ -106,7 +106,13 @@ export async function POST(req: NextRequest) {
     else if (dl.length) dupNote = `⚠ Already in the pipeline (${dl.map((x) => x.pipelineStage.toLowerCase()).join(", ")}) — possible duplicate.`;
   }
 
-  // Assert house-standard defaults for any vague terms (Mary confirms).
+  // Smart layer (Claude, gated on ANTHROPIC_API_KEY) — classify + assert house
+  // defaults + a Mary-ready recap. Falls back to the rule-based spec map.
+  let claude: import("@/lib/agent/claude").IntakeEnrichment | null = null;
+  try { const { enrichIntake } = await import("@/lib/agent/claude"); claude = await enrichIntake(flat); } catch { /* fall back */ }
+  if (claude?.productCategory) productCategory = claude.productCategory;
+
+  // Rule-based assertion (used when Claude isn't enabled).
   const { assertDefaults } = await import("@/lib/agent/spec-map");
   const isBizCard = /business\s*card/i.test(`${productField} ${otherType}`);
   const assumed = assertDefaults(productCategory, `${productField} ${otherType} ${size} ${color} ${finishing}`, isBizCard);
@@ -121,7 +127,10 @@ export async function POST(req: NextRequest) {
     finishing ? `Finishing: ${finishing}` : null,
     services ? `Services: ${services}` : null,
     artwork ? `Artwork: ${artwork}` : "Artwork: none uploaded",
-    assumed.length ? `Assumed (confirm): ${assumed.map((a) => `${a.found} → ${a.assume}`).join("; ")}` : null,
+    // Prefer Claude's analysis; otherwise the rule-based assumptions.
+    claude ? `\n— Agent analysis —\n${claude.summary}` : null,
+    claude?.assumptions?.length ? `Assumed (confirm): ${claude.assumptions.join("; ")}` : (assumed.length ? `Assumed (confirm): ${assumed.map((a) => `${a.found} → ${a.assume}`).join("; ")}` : null),
+    claude?.missing?.length ? `Missing: ${claude.missing.join("; ")}` : null,
     sourceUrl ? `From: ${sourceUrl}` : null,
     dupNote || null,
   ].filter(Boolean).join("\n");

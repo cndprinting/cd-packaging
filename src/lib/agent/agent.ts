@@ -73,7 +73,13 @@ export async function onMaryQuote(prisma: any, lead: any, quote: string): Promis
 // ── Send the quote to the customer → start the follow-up clock ─────────────
 export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
   if (lead.contactEmail) {
-    const body = wrap(`
+    // House-style draft via Claude when enabled; clean template otherwise.
+    let inner: string | null = null;
+    try {
+      const { draftCustomerQuote } = await import("@/lib/agent/claude");
+      inner = await draftCustomerQuote({ customerName: lead.companyName, contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "" });
+    } catch { /* fall back */ }
+    const body = inner ? wrap(inner) : wrap(`
       <p>Hi ${lead.contactName || "there"},</p>
       <p>Thank you for reaching out to C&amp;D Printing. Here's your quote:</p>
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
