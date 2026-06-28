@@ -233,6 +233,7 @@ model Lead {
   agentNextAt     DateTime? // when the cron should next act on this lead
   agentToken      String?   // unguessable token for Mary/owner email-action links
   agentQuote      String?   // Mary's returned price + terms
+  agentDraft      String?   // Claude-drafted reply to a customer's inbound email
   agentLog        String?   // JSON audit trail of agent actions
 
   @@index([agentStatus, agentNextAt])

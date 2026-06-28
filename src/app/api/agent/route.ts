@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ lead: {
     id: lead.id, companyName: lead.companyName, contactName: lead.contactName, contactEmail: lead.contactEmail,
     contactPhone: lead.contactPhone, commentary: lead.commentary, agentStatus: lead.agentStatus, agentQuote: lead.agentQuote,
+    agentDraft: lead.agentDraft,
   } });
 }
 
@@ -53,6 +54,19 @@ export async function POST(req: NextRequest) {
   if (body.action === "approve_send") {
     await sendCustomerQuote(prisma, lead);
     return NextResponse.json({ ok: true, message: "Sent to the customer. Follow-ups are now scheduled." });
+  }
+  // Owner reviewed the agent's drafted reply → send it to the customer and
+  // re-arm the chase so the back-and-forth continues.
+  if (body.action === "approve_reply") {
+    const reply = (body.reply || lead.agentDraft || "").trim();
+    if (!reply) return NextResponse.json({ error: "No reply to send" }, { status: 400 });
+    if (lead.contactEmail) {
+      const { agentSend } = await import("@/lib/agent/agent");
+      await agentSend({ to: lead.contactEmail, subject: `Re: Your quote from C&D Printing — ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">${reply}</div>` });
+    }
+    const next = new Date(); next.setDate(next.getDate() + 4); // re-arm follow-up clock
+    await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", agentDraft: null, agentNextAt: next } });
+    return NextResponse.json({ ok: true, message: "Reply sent to the customer. The agent will keep following up if they go quiet again." });
   }
   if (body.action === "mark_replied") {
     await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "active", stage: "Active (replied)", agentNextAt: null } });

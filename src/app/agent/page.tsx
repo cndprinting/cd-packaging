@@ -19,6 +19,7 @@ function Inner() {
   const [quote, setQuote] = useState("");
   const [missing, setMissing] = useState(false);
   const [note, setNote] = useState("");
+  const [replyText, setReplyText] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
 
@@ -26,7 +27,7 @@ function Inner() {
     if (!id || !token) { setErr("This link is missing its credentials."); setLoading(false); return; }
     fetch(`/api/agent?id=${id}&token=${token}`)
       .then((r) => r.ok ? r.json() : r.json().then((d) => Promise.reject(d.error)))
-      .then((d) => setLead(d.lead))
+      .then((d) => { setLead(d.lead); if (d.lead?.agentDraft) setReplyText(String(d.lead.agentDraft).replace(/<[^>]+>/g, "").trim()); })
       .catch((e) => setErr(typeof e === "string" ? e : "This link is no longer valid."))
       .finally(() => setLoading(false));
   }, [id, token]);
@@ -58,7 +59,16 @@ function Inner() {
         <div style={{ color: "#666", fontSize: 13 }}>{[lead.contactName, lead.contactEmail, lead.contactPhone].filter(Boolean).join(" · ")}</div>
       </div>
 
-      {doAction === "approve" ? (
+      {doAction === "reply" ? (
+        <>
+          <p style={{ fontWeight: "bold" }}>The customer replied. Review the agent's draft and send:</p>
+          <div style={pre}>{lead.commentary}</div>
+          <p style={{ fontWeight: "bold", marginTop: 16 }}>Reply to {lead.contactName || lead.companyName} ({lead.contactEmail || "no email"}):</p>
+          <textarea style={ta} value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Your reply to the customer…" />
+          {err && <p style={{ color: "#c00", fontSize: 13 }}>{err}</p>}
+          <button style={button} disabled={busy || !replyText.trim()} onClick={() => post("approve_reply", { reply: `<p>${replyText.replace(/\n/g, "<br>")}</p>` })}>{busy ? "Sending…" : "Send reply to customer"}</button>
+        </>
+      ) : doAction === "approve" ? (
         <>
           <p style={{ fontWeight: "bold" }}>Quote to send the customer:</p>
           <div style={pre}>{lead.agentQuote || "(no quote on file)"}</div>

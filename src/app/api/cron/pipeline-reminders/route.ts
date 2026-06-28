@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { followUpAt: "asc" },
   });
-  if (due.length === 0) return NextResponse.json({ ok: true, sent: 0, reminders: 0 });
+  // (No early return here — the agent chase engine below must run even when
+  // there are no follow-up reminders due. Bug fix, Benjy 6/26.)
 
   // Map owner display names → real mailbox emails.
   const users = await prisma.user.findMany({ where: { isActive: true }, select: { name: true, email: true } });
