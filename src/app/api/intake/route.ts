@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
       contactPhone: phone,
       website: null,
       priority: 3,                 // spec: posts as a priority-3 record
+      ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
       stage: "New",                // agent status spine starts here
       pipelineStage: "LEAD",
       source: "inbound",
