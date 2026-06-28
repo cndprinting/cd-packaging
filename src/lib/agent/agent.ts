@@ -36,6 +36,18 @@ function logLine(prev: string | null, event: string): string {
 }
 
 const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}<p style="color:#aaa;font-size:11px;margin-top:20px;">Godzilla sales agent · C&amp;D Printing</p></div>`;
+
+// All agent email goes through here. AGENT_TEST_TO redirects every message to
+// one inbox (the owner running the test) so a dry run never reaches Mary or a
+// real customer (Benjy 6/26).
+export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
+  const test = process.env.AGENT_TEST_TO;
+  if (test) {
+    const realTo = (Array.isArray(opts.to) ? opts.to.join(", ") : opts.to) + (opts.cc ? `, cc ${Array.isArray(opts.cc) ? opts.cc.join(", ") : opts.cc}` : "");
+    return sendEmail({ from: SENDER, to: test, subject: `[TEST] ${opts.subject}`, body: opts.body + `<p style="color:#bbb;font-size:11px;">[Test mode — in production this would go to: ${realTo}]</p>` });
+  }
+  return sendEmail({ from: SENDER, to: opts.to, cc: opts.cc, subject: opts.subject, body: opts.body });
+}
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
 // ── Step 1: hand a new lead to Mary ────────────────────────────────────────
@@ -48,7 +60,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
     <p>${btn(link(lead.id, token, "quote"), "Reply with the quote")}</p>
     <p style="font-size:12px;color:#888;">Click above to paste price + terms, or flag anything missing — no login needed.</p>`);
-  await sendEmail({ from: SENDER, to: MARY, subject: `Quote needed: ${lead.companyName}`, body });
+  await agentSend({to: MARY, subject: `Quote needed: ${lead.companyName}`, body });
   await prisma.lead.update({
     where: { id: lead.id },
     data: { agentStatus: "awaiting_mary", agentToken: token, agentNextAt: addBusinessDays(new Date(), 1), stage: "Awaiting Mary", agentLog: logLine(lead.agentLog, "Sent to Mary for quote") },
@@ -67,7 +79,7 @@ export async function onMaryQuote(prisma: any, lead: any, quote: string): Promis
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${quote.replace(/</g, "&lt;")}</pre>
     <p>To: ${lead.contactName || "customer"} · ${lead.contactEmail || "(no email on file)"}</p>
     <p>${btn(link(lead.id, lead.agentToken, "approve"), "Approve &amp; send to customer")}</p>`);
-  await sendEmail({ from: SENDER, to: OWNERS, subject: `Approve quote: ${lead.companyName}`, body });
+  await agentSend({to: OWNERS, subject: `Approve quote: ${lead.companyName}`, body });
 }
 
 // ── Send the quote to the customer → start the follow-up clock ─────────────
@@ -85,7 +97,7 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
       <p>Happy to adjust quantities or specs — just reply and we'll take care of it.</p>
       <p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`);
-    await sendEmail({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject: `Your quote from C&D Printing — ${lead.companyName}`, body });
+    await agentSend({to: lead.contactEmail, cc: OWNERS, subject: `Your quote from C&D Printing — ${lead.companyName}`, body });
   }
   await prisma.lead.update({
     where: { id: lead.id },
@@ -111,16 +123,16 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
   for (const l of due) {
     try {
       if (l.agentStatus === "awaiting_mary") {
-        await sendEmail({ from: SENDER, to: MARY, cc: OWNERS, subject: `Reminder — quote needed: ${l.companyName}`, body: wrap(`<p>Still need a quote for <strong>${l.companyName}</strong>.</p><p>${btn(link(l.id, l.agentToken, "quote"), "Reply with the quote")}</p>`) });
+        await agentSend({to: MARY, cc: OWNERS, subject: `Reminder — quote needed: ${l.companyName}`, body: wrap(`<p>Still need a quote for <strong>${l.companyName}</strong>.</p><p>${btn(link(l.id, l.agentToken, "quote"), "Reply with the quote")}</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged Mary") } });
       } else if (l.agentStatus === "quote_received") {
-        await sendEmail({ from: SENDER, to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
+        await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged owners to approve") } });
       } else {
         const step = FOLLOWUPS[l.agentStatus as string];
         if (step) {
           if (l.contactEmail) {
-            await sendEmail({ from: SENDER, to: l.contactEmail, cc: OWNERS, subject: `Following up — ${l.companyName} quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>${step.msg}</p><p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`) });
+            await agentSend({to: l.contactEmail, cc: OWNERS, subject: `Following up — ${l.companyName} quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>${step.msg}</p><p>Best regards,<br>C&amp;D Printing &amp; Packaging</p>`) });
           }
           const next = step.days > 0 ? addBusinessDays(now, step.days) : null;
           const status = step.days > 0 ? step.next : "closed";

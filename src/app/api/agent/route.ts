@@ -45,9 +45,8 @@ export async function POST(req: NextRequest) {
     } });
     // Best-effort: tell the owners a human needs to chase the customer.
     try {
-      const { OWNERS, SENDER } = await import("@/lib/agent/agent");
-      const { sendEmail } = await import("@/lib/email/graph-client");
-      await sendEmail({ from: SENDER, to: OWNERS, subject: `Needs info: ${lead.companyName}`, body: `<p>Mary needs more from <strong>${lead.companyName}</strong> before quoting:</p><p>${note}</p>` });
+      const { OWNERS, agentSend } = await import("@/lib/agent/agent");
+      await agentSend({ to: OWNERS, subject: `Needs info: ${lead.companyName}`, body: `<p>Mary needs more from <strong>${lead.companyName}</strong> before quoting:</p><p>${note}</p>` });
     } catch { /* ignore */ }
     return NextResponse.json({ ok: true, message: "Flagged — the team will follow up with the customer." });
   }
