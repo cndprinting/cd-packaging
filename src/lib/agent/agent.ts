@@ -46,8 +46,10 @@ const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-se
 export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
   const test = process.env.AGENT_TEST_TO;
   if (test) {
+    // AGENT_TEST_TO may be a comma-separated list so several owners can watch a dry run.
+    const testTo = test.split(",").map((s) => s.trim()).filter(Boolean);
     const realTo = (Array.isArray(opts.to) ? opts.to.join(", ") : opts.to) + (opts.cc ? `, cc ${Array.isArray(opts.cc) ? opts.cc.join(", ") : opts.cc}` : "");
-    return sendEmail({ from: SENDER, to: test, subject: `[TEST] ${opts.subject}`, body: opts.body + `<p style="color:#bbb;font-size:11px;">[Test mode — in production this would go to: ${realTo}]</p>` });
+    return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${opts.subject}`, body: opts.body + `<p style="color:#bbb;font-size:11px;">[Test mode — in production this would go to: ${realTo}]</p>` });
   }
   return sendEmail({ from: SENDER, to: opts.to, cc: opts.cc, subject: opts.subject, body: opts.body });
 }
