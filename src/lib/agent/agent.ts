@@ -42,6 +42,7 @@ function addBusinessDays(from: Date, n: number): Date {
   while (added < n) { d.setDate(d.getDate() + 1); const dow = d.getUTCDay(); if (dow !== 0 && dow !== 6) added++; }
   return d;
 }
+const addHours = (from: Date, h: number) => new Date(from.getTime() + h * 3600 * 1000);
 function logLine(prev: string | null, event: string): string {
   let arr: any[] = [];
   try { arr = prev ? JSON.parse(prev) : []; } catch { /* reset */ }
@@ -125,7 +126,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   await agentMarySend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
-    data: { agentStatus: "awaiting_mary", agentToken: token, agentNextAt: addBusinessDays(new Date(), 1), stage: "Awaiting Mary", agentLog: logLine(lead.agentLog, "Sent to Mary for quote") },
+    data: { agentStatus: "awaiting_mary", agentToken: token, agentNextAt: addHours(new Date(), 24), stage: "Awaiting Mary", agentLog: logLine(lead.agentLog, "Sent to Mary for quote") },
   });
 }
 
@@ -250,8 +251,10 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const fresh = await prisma.lead.findUnique({ where: { id: l.id } });
         await kickoffAgent(prisma, fresh);
       } else if (l.agentStatus === "awaiting_mary") {
-        await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Just bumping this one, did you get a chance to price <strong>${l.companyName}</strong>? No rush, just keeping it on the radar. Thanks,<br>Albert</p>`) });
-        await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged Mary") } });
+        // Chase Mary every ~24h until the quote is in. If she can't get to it
+        // right away, ask for a timeline so we can set the customer's expectations.
+        await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>Albert</p>`) });
+        await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
       } else if (l.agentStatus === "quote_received") {
         await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged owners to approve") } });

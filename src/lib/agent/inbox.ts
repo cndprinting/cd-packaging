@@ -49,8 +49,11 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         if (/\$/.test(reply)) {
           await onMaryQuote(prisma, ml, reply); // has a price → run it as the quote
         } else {
-          // No clear price — Mary's asking for something. Hand to a human.
-          await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (no clear price detected - may need a human):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.replace(/</g, "&lt;")}</blockquote></div>` });
+          // No price yet — likely a timeline/status. Note it for the owners, give
+          // Mary a little room, but keep following up until the quote arrives.
+          const grace = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+          await prisma.lead.update({ where: { id: ml.id }, data: { agentNextAt: grace } });
+          await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (timeline/status, no price yet):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.replace(/</g, "&lt;")}</blockquote><p>The agent will keep following up until the quote is in.</p></div>` });
         }
         handled++;
       }
@@ -105,7 +108,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     try {
       const claude = getClaude();
       if (claude) {
-        const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off as "Albert Waxman, C&D Printing & Packaging" (Albert is the sales manager). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote.`;
+        const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off as "Albert Waxman, C&D Printing & Packaging" (Albert is the sales manager). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote. If the customer asks about timing, our standard lead time is 2 to 3 weeks after we receive payment and final approval of the quote, and we can prioritize when they have a deadline.`;
         const u = `Customer ${lead.companyName} replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${m.bodyPreview || ""}`;
         const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system: sys, messages: [{ role: "user", content: u }] });
         const t: any = (r.content || []).find((b: any) => b.type === "text");
