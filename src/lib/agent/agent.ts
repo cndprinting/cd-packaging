@@ -227,12 +227,25 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
 // attached file rather than typing a price. Benjy 6/29.
 export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<void> {
   const product = lead.productName || lead.productCategory || "project";
-  const cover = wrap(`
+  // Read Mary's PDF and lay out a per-item pricing breakdown (house style); fall
+  // back to a plain cover note if Claude/PDF read isn't available.
+  let inner: string | null = null;
+  try {
+    if (lead.agentQuoteMsgId) {
+      const { getFirstPdfAttachment } = await import("@/lib/email/graph-client");
+      const pdf = await getFirstPdfAttachment(SENDER, lead.agentQuoteMsgId);
+      if (pdf?.contentBytes) {
+        const { draftQuoteBreakdown } = await import("@/lib/agent/claude");
+        inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: lead.companyName, contactName: lead.contactName, productName: product });
+      }
+    }
+  } catch { /* fall back */ }
+  const body = inner ? wrap(inner) : wrap(`
     <p>Hi ${firstName(lead.contactName)},</p>
     <p>Thank you for your patience. Please find our pricing for your ${product} attached.</p>
     <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
     <p>Best regards,<br>${SIGNOFF}</p>`);
-  await agentCustomerSend(prisma, lead, { body: cover, copyAttachmentsFrom: lead.agentQuoteMsgId });
+  await agentCustomerSend(prisma, lead, { body, copyAttachmentsFrom: lead.agentQuoteMsgId });
   await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote PDF sent to customer") } });
 }
 

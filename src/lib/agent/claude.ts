@@ -107,6 +107,38 @@ ${opts.reply}`;
   }
 }
 
+// Read Mary's quote PDF and lay it out as a customer-facing pricing breakdown in
+// C&D's house style (the Vivant format): warm intro, a per-item table of
+// Quantity / Total Price / Price per Unit, the one-time die set-up line, a short
+// close. Returns inner HTML, or null on failure. Benjy 6/29.
+export async function draftQuoteBreakdown(opts: { pdfBase64: string; customerName: string; contactName?: string | null; productName?: string }): Promise<string | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You write customer-facing quote emails for C&D Printing & Packaging in the owners' house style. You are given our estimator's quote as a PDF. Produce ONLY the inner HTML email body that presents the pricing as a clean breakdown, in this exact format:
+- Open with the customer's FIRST name, then one warm line thanking them for the opportunity to quote and inviting feedback (we are happy to talk through any changes).
+- For EACH item / SKU / option in the quote, put the item name in <b><u>bold underline</u></b>, then an HTML <table> with three column headers: Quantity, Total Price, Price per Unit, and one row per quantity tier. Right after each table, if there is a one-time die / tooling / plate / set-up charge, add an italic line like <i>One-time die set-up: $X (first order only)</i>.
+- Close with a brief friendly note. Say shipping is not included; for this job freight is being finalized and will follow separately. You may add: standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize on a deadline.
+- Sign off "Albert Waxman, C&D Printing & Packaging".
+HARD RULES: Use ONLY the numbers that appear in the PDF. Never invent, round, or alter any price, quantity, per-unit, or charge. If a value is not in the PDF, leave it out. If there is a single quantity, show a single-row table. Give tables a light 1px border. Output ONLY inner HTML (<p>, <b>, <u>, <i>, <table>, <tr>, <th>, <td>, <br>) with no <html>/<head>. No markdown, no code fences. Never use em dashes or en dashes; use commas or periods.`;
+  const user = `Customer: ${opts.customerName}${opts.contactName ? ` (contact: ${opts.contactName})` : ""}. Item/project: ${opts.productName || "their job"}. Our estimator's quote PDF is attached. Produce the customer-facing pricing breakdown email body now.`;
+  try {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system,
+      messages: [{ role: "user", content: [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: opts.pdfBase64 } },
+        { type: "text", text: user },
+      ] as any }],
+    });
+    const html = firstText(msg).trim();
+    return html || null;
+  } catch (e) {
+    console.error("[agent] draftQuoteBreakdown failed", e);
+    return null;
+  }
+}
+
 // Draft the customer-facing quote email body (HTML) in C&D's understated
 // house voice, from Mary's price + terms. Returns null on no key / failure.
 export async function draftCustomerQuote(opts: { customerName: string; contactName?: string | null; productName: string; quote: string }): Promise<string | null> {

@@ -97,6 +97,22 @@ export async function sendEmailGetConversation(options: SendEmailOptions): Promi
   }
 }
 
+// Pull the first real (non-inline) PDF attachment's bytes from a message.
+export async function getFirstPdfAttachment(from: string, messageId: string): Promise<{ name: string; contentType: string; contentBytes: string } | null> {
+  const client = getGraphClient();
+  if (!client) return null;
+  try {
+    const atts: any = await client.api(`/users/${from}/messages/${messageId}/attachments`).get();
+    const files = (atts.value || []).filter((a: any) => a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline);
+    const pdf = files.find((a: any) => /pdf$/i.test(a.name || "")) || files[0];
+    if (!pdf) return null;
+    return { name: pdf.name, contentType: pdf.contentType, contentBytes: pdf.contentBytes };
+  } catch (error: any) {
+    console.error("Graph getFirstPdfAttachment error:", error.message || error);
+    return null;
+  }
+}
+
 // Forward a message (keeping its attachments) to new recipients with a note.
 export async function forwardMessage(options: { from: string; messageId: string; to: string | string[]; cc?: string | string[]; comment?: string }): Promise<{ success: boolean; error?: string }> {
   const client = getGraphClient();
