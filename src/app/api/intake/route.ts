@@ -201,8 +201,10 @@ export async function POST(req: NextRequest) {
   try {
     const { kickoffAgent, askCustomer } = await import("@/lib/agent/agent");
     const named = { ...lead, productName: claude?.normalizedProduct || productCategory };
-    if (claude?.missing?.length && email) {
-      await askCustomer(prisma, named, claude.missing);
+    // Only ask the customer when a spec genuinely BLOCKS a quote. If it's
+    // quotable now (logistics like shipping/date can come later), go to Mary.
+    if (claude?.quoteBlockers?.length && email) {
+      await askCustomer(prisma, named, claude.quoteBlockers);
     } else {
       await kickoffAgent(prisma, named);
     }
