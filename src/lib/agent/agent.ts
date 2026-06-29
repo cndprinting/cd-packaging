@@ -84,7 +84,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
     <p>${btn(link(lead.id, token, "quote"), "Reply with the quote")}</p>
     <p style="font-size:12px;color:#888;">Click above to paste price + terms, or flag anything missing — no login needed.</p>`);
-  await agentSend({to: MARY, subject: `Quote needed: ${lead.companyName}`, body });
+  await agentSend({to: MARY, cc: OWNERS, subject: `Quote needed: ${lead.companyName}`, body });
   await prisma.lead.update({
     where: { id: lead.id },
     data: { agentStatus: "awaiting_mary", agentToken: token, agentNextAt: addBusinessDays(new Date(), 1), stage: "Awaiting Mary", agentLog: logLine(lead.agentLog, "Sent to Mary for quote") },
