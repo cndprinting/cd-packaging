@@ -236,6 +236,7 @@ model Lead {
   agentDraft      String?   // Claude-drafted reply to a customer's inbound email
   agentConvId     String?   // Graph conversationId — keeps all customer emails in one thread
   agentMaryConvId String?   // Graph conversationId for the Mary thread — all her emails in one place
+  agentQuoteMsgId String?   // Graph message id of Mary's quote email (PDF) to forward to the customer on approval
   agentLog        String?   // JSON audit trail of agent actions
 
   @@index([agentStatus, agentNextAt])

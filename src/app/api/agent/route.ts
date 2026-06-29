@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ lead: {
     id: lead.id, companyName: lead.companyName, contactName: lead.contactName, contactEmail: lead.contactEmail,
     contactPhone: lead.contactPhone, commentary: lead.commentary, agentStatus: lead.agentStatus, agentQuote: lead.agentQuote,
-    agentDraft: lead.agentDraft,
+    agentDraft: lead.agentDraft, hasPdfQuote: !!lead.agentQuoteMsgId,
   } });
 }
 
@@ -52,7 +52,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, message: "Flagged — the team will follow up with the customer." });
   }
   if (body.action === "approve_send") {
-    await sendCustomerQuote(prisma, lead);
+    if (lead.agentQuoteMsgId) {
+      // Mary quoted via an attached PDF → forward it with a cover note.
+      const { sendQuotePdfToCustomer } = await import("@/lib/agent/agent");
+      await sendQuotePdfToCustomer(prisma, lead);
+    } else {
+      await sendCustomerQuote(prisma, lead);
+    }
     return NextResponse.json({ ok: true, message: "Sent to the customer. Follow-ups are now scheduled." });
   }
   // Owner reviewed the agent's drafted reply → send it to the customer and

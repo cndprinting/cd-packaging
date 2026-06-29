@@ -12,6 +12,16 @@ import { getClaude } from "@/lib/agent/claude";
 const MAILBOX = SENDER; // bwaxman@cndprinting.com
 const BASE = "https://packaging.cndprinting.com";
 
+// Loose company match: Mary may title her quote "Mid-Pacific Flyer pricing"
+// rather than the full lead name, so match on a distinctive word too.
+const COMPANY_STOP = new Set(["club", "llc", "inc", "corp", "co", "the", "company", "ltd", "group", "and"]);
+function companyMatches(name: string | null, subjectLc: string): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  if (subjectLc.includes(n)) return true;
+  return n.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMPANY_STOP.has(w)).some((w) => subjectLc.includes(w));
+}
+
 export async function pollAgentInbox(prisma: any): Promise<{ checked: number; handled: number; error?: string }> {
   if (process.env.AGENT_ENABLED !== "true") return { checked: 0, handled: 0 };
   const client = getGraphClient();
@@ -47,13 +57,24 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       let ml: any = conv ? await prisma.lead.findFirst({ where: { agentStatus: "awaiting_mary", OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
       if (!ml) {
         const open = await prisma.lead.findMany({ where: { agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
-        ml = open.find((l: any) => l.companyName && subjectLc.includes(l.companyName.toLowerCase())) || null;
+        ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
       }
       if (!ml) continue; // unrelated Mary email — leave it untouched (and unread)
       try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+      const preview = (m.bodyPreview || "").trim();
 
-      // Pull her full message text (uniqueBody = just her new content, no quoted history).
-      let reply = (m.bodyPreview || "").trim();
+      // Mary quotes via an attached PDF → store it and route to the owners for
+      // one-click approval to forward it (with a cover note) to the customer.
+      if (m.hasAttachments) {
+        await prisma.lead.update({ where: { id: ml.id }, data: { agentStatus: "quote_received", stage: "Quote received", agentQuoteMsgId: m.id, agentNextAt: new Date(Date.now() + 24 * 3600 * 1000) } });
+        const link = `${BASE}/agent?id=${ml.id}&token=${ml.agentToken}&do=approve`;
+        await agentSend({ to: OWNERS, subject: `Approve quote: ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary sent the quote for <strong>${ml.companyName}</strong> (attached to her email).</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}<p>Review her email and attachment, then forward it to the customer:</p><p><a href="${link}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">Approve &amp; send to customer</a></p></div>` });
+        handled++;
+        continue;
+      }
+
+      // Otherwise pull her full message text (uniqueBody = just her new content).
+      let reply = preview;
       try {
         const full: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get();
         if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim();

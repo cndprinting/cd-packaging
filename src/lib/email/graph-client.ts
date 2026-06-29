@@ -128,7 +128,7 @@ export async function replyInConversation(options: { from: string; conversationI
       try {
         const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
         for (const a of (atts.value || [])) {
-          if (a["@odata.type"] === "#microsoft.graph.fileAttachment") {
+          if (a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline) {
             await client.api(`/users/${options.from}/messages/${reply.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
           }
         }

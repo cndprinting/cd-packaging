@@ -83,14 +83,14 @@ export const customerSubject = (lead: any) => `Your quote from C&D Printing - ${
 // All customer-facing email goes through here so it threads into ONE conversation.
 // First email starts the thread (and we store its conversationId); the rest reply
 // into it. Test mode falls back to the redirected dry-run send.
-export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?: string; body: string }): Promise<void> {
+export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?: string; body: string; copyAttachmentsFrom?: string }): Promise<void> {
   if (!lead.contactEmail) return;
   const subject = noEmDash(opts.subject || customerSubject(lead));
   const body = noEmDash(opts.body);
   if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: OWNERS, subject, body }); return; }
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentConvId) {
-    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body });
+    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return; // threaded
   }
   const r = await sendEmailGetConversation({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject, body });
@@ -220,6 +220,20 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
     where: { id: lead.id },
     data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, lead.contactEmail ? "Quote sent to customer" : "Approved — no customer email, manual send") },
   });
+}
+
+// Forward Mary's quote PDF to the customer with a clean cover note (Albert's
+// voice), threaded into the customer conversation. Used when Mary quotes via an
+// attached file rather than typing a price. Benjy 6/29.
+export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<void> {
+  const product = lead.productName || lead.productCategory || "project";
+  const cover = wrap(`
+    <p>Hi ${firstName(lead.contactName)},</p>
+    <p>Thank you for your patience. Please find our pricing for your ${product} attached.</p>
+    <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
+    <p>Best regards,<br>${SIGNOFF}</p>`);
+  await agentCustomerSend(prisma, lead, { body: cover, copyAttachmentsFrom: lead.agentQuoteMsgId });
+  await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote PDF sent to customer") } });
 }
 
 const FOLLOWUPS: Record<string, { next: string; days: number; msg: string }> = {

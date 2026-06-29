@@ -71,7 +71,7 @@ function Inner() {
       ) : doAction === "approve" ? (
         <>
           <p style={{ fontWeight: "bold" }}>Quote to send the customer:</p>
-          <div style={pre}>{lead.agentQuote || "(no quote on file)"}</div>
+          <div style={pre}>{lead.hasPdfQuote ? "Mary's quote is attached to her email. Approving will forward that PDF to the customer with a short cover note from Albert." : (lead.agentQuote || "(no quote on file)")}</div>
           <p style={{ fontSize: 13, color: "#666" }}>Sends to {lead.contactEmail || "(no email on file)"} and CCs the team.</p>
           {err && <p style={{ color: "#c00", fontSize: 13 }}>{err}</p>}
           <button style={button} disabled={busy} onClick={() => post("approve_send")}>{busy ? "Sending…" : "Approve & send to customer"}</button>
