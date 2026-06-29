@@ -97,6 +97,21 @@ export async function sendEmailGetConversation(options: SendEmailOptions): Promi
   }
 }
 
+// Forward a message (keeping its attachments) to new recipients with a note.
+export async function forwardMessage(options: { from: string; messageId: string; to: string | string[]; cc?: string | string[]; comment?: string }): Promise<{ success: boolean; error?: string }> {
+  const client = getGraphClient();
+  if (!client) return { success: false, error: "Email not configured" };
+  try {
+    const draft: any = await client.api(`/users/${options.from}/messages/${options.messageId}/createForward`).post({ comment: options.comment || "", toRecipients: toRecips(options.to) });
+    if (options.cc) await client.api(`/users/${options.from}/messages/${draft.id}`).patch({ ccRecipients: toRecips(options.cc) });
+    await client.api(`/users/${options.from}/messages/${draft.id}/send`).post({});
+    return { success: true };
+  } catch (error: any) {
+    console.error("Graph forwardMessage error:", error.message || error);
+    return { success: false, error: error.message || "Failed" };
+  }
+}
+
 // Reply inside an existing conversation so the email stays in the same thread.
 // We reply to one of our own messages in the thread and override the recipients.
 export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; body: string }): Promise<{ success: boolean; error?: string }> {

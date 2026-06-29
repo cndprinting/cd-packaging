@@ -60,13 +60,22 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
-      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3"] } },
+      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3"] } },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
 
     // Only now mark it read — it's a lead reply we're handling.
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+
+    // CASE 0: we're already quoting (Mary has it / owners reviewing). A customer
+    // reply here is usually artwork or more detail — forward it to Mary, copy owners.
+    if (lead.agentStatus === "awaiting_mary" || lead.agentStatus === "quote_received") {
+      const { forwardMessage } = await import("@/lib/email/graph-client");
+      await forwardMessage({ from: MAILBOX, messageId: m.id, to: MARY, cc: OWNERS, comment: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through. Please factor it into the quote. Thanks,<br>Albert</p></div>` });
+      handled++;
+      continue;
+    }
 
     // CASE 1: the customer answered our spec questions → fold the answers into
     // the brief and hand a complete package to Mary to quote.
