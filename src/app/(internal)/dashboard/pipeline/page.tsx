@@ -68,7 +68,7 @@ export default function PipelinePage() {
   const visible = leads
     .filter((l) => l.pipelineStage === active)
     .filter((l) => !dueOnly || dueState(l) === "due")
-    .filter((l) => !q || `${l.companyName} ${l.endMarket || ""} ${l.ownerName || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
+    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
 
   // Optimistic inline patch.
   const patch = async (id: string, field: string, value: any) => {
