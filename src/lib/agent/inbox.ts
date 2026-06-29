@@ -23,7 +23,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       .api(`/users/${MAILBOX}/mailFolders/Inbox/messages`)
       .filter("isRead eq false")
       .top(25)
-      .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments")
+      .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
       .get();
     items = res.value || [];
   } catch (e) {
@@ -40,23 +40,35 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // awaiting-Mary lead by the company name in the subject, and treat her reply
     // as the quote. (She just emails Albert back — never sees the system.)
     if (from === MARY.toLowerCase()) {
-      try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
-      const subject = (m.subject || "").toLowerCase();
-      const open = await prisma.lead.findMany({ where: { agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
-      const ml = open.find((l: any) => l.companyName && subject.includes(l.companyName.toLowerCase()));
-      if (ml) {
-        const reply = (m.bodyPreview || "").trim();
-        if (/\$/.test(reply)) {
-          await onMaryQuote(prisma, ml, reply); // has a price → run it as the quote
-        } else {
-          // No price yet — likely a timeline/status. Note it for the owners, give
-          // Mary a little room, but keep following up until the quote arrives.
-          const grace = new Date(Date.now() + 2 * 24 * 3600 * 1000);
-          await prisma.lead.update({ where: { id: ml.id }, data: { agentNextAt: grace } });
-          await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (timeline/status, no price yet):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.replace(/</g, "&lt;")}</blockquote><p>The agent will keep following up until the quote is in.</p></div>` });
-        }
-        handled++;
+      const conv = m.conversationId;
+      const subjectLc = (m.subject || "").toLowerCase();
+      // Match by conversation first — Mary may reply in her own thread OR in the
+      // customer thread — then fall back to company name in the subject.
+      let ml: any = conv ? await prisma.lead.findFirst({ where: { agentStatus: "awaiting_mary", OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
+      if (!ml) {
+        const open = await prisma.lead.findMany({ where: { agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
+        ml = open.find((l: any) => l.companyName && subjectLc.includes(l.companyName.toLowerCase())) || null;
       }
+      if (!ml) continue; // unrelated Mary email — leave it untouched (and unread)
+      try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+
+      // Pull her full message text (uniqueBody = just her new content, no quoted history).
+      let reply = (m.bodyPreview || "").trim();
+      try {
+        const full: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get();
+        if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim();
+      } catch { /* fall back to preview */ }
+
+      if (/\$/.test(reply)) {
+        await onMaryQuote(prisma, ml, reply); // has a price → run it as the quote
+      } else {
+        // No price yet (she's working it) — note it for owners, give Mary room,
+        // but keep following up until the actual quote arrives.
+        const grace = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+        await prisma.lead.update({ where: { id: ml.id }, data: { agentNextAt: grace } });
+        await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (working on it, no price yet):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.slice(0, 600).replace(/</g, "&lt;")}</blockquote><p>The agent will keep following up until the quote is in.</p></div>` });
+      }
+      handled++;
       continue;
     }
 
