@@ -52,15 +52,25 @@ const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-se
 // All agent email goes through here. AGENT_TEST_TO redirects every message to
 // one inbox (the owner running the test) so a dry run never reaches Mary or a
 // real customer (Benjy 6/26).
+// Strip em/en dashes from anything customer-facing — they read as an AI tell.
+// Replaces the dash (and its HTML entities) with a normal spaced hyphen.
+export function noEmDash(s: string): string {
+  return (s || "")
+    .replace(/&mdash;|&#8212;|&#x2014;|&ndash;|&#8211;|&#x2013;/gi, "—")
+    .replace(/\s*[—–]\s*/g, " - ");
+}
+
 export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
+  const subject = noEmDash(opts.subject);
+  const body = noEmDash(opts.body);
   const test = process.env.AGENT_TEST_TO;
   if (test) {
     // AGENT_TEST_TO may be a comma-separated list so several owners can watch a dry run.
     const testTo = test.split(",").map((s) => s.trim()).filter(Boolean);
     const realTo = (Array.isArray(opts.to) ? opts.to.join(", ") : opts.to) + (opts.cc ? `, cc ${Array.isArray(opts.cc) ? opts.cc.join(", ") : opts.cc}` : "");
-    return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${opts.subject}`, body: opts.body + `<p style="color:#bbb;font-size:11px;">[Test mode — in production this would go to: ${realTo}]</p>` });
+    return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${subject}`, body: body + `<p style="color:#bbb;font-size:11px;">[Test mode - in production this would go to: ${realTo}]</p>` });
   }
-  return sendEmail({ from: SENDER, to: opts.to, cc: opts.cc, subject: opts.subject, body: opts.body });
+  return sendEmail({ from: SENDER, to: opts.to, cc: opts.cc, subject, body });
 }
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
