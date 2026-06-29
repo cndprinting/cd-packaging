@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, SENDER, OWNERS, MARY, onMaryQuote } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, SENDER, OWNERS, MARY, onMaryQuote } from "@/lib/agent/agent";
 import { getClaude } from "@/lib/agent/claude";
 
 // Inbound reply handler (Benjy 6/26) — the second half of the lead↔agent
@@ -23,7 +23,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       .api(`/users/${MAILBOX}/mailFolders/Inbox/messages`)
       .filter("isRead eq false")
       .top(25)
-      .select("id,subject,from,bodyPreview,receivedDateTime")
+      .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments")
       .get();
     items = res.value || [];
   } catch (e) {
@@ -71,8 +71,11 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // CASE 0: we're already quoting (Mary has it / owners reviewing). A customer
     // reply here is usually artwork or more detail — forward it to Mary, copy owners.
     if (lead.agentStatus === "awaiting_mary" || lead.agentStatus === "quote_received") {
-      const { forwardMessage } = await import("@/lib/email/graph-client");
-      await forwardMessage({ from: MAILBOX, messageId: m.id, to: MARY, cc: OWNERS, comment: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through. Please factor it into the quote. Thanks,<br>Albert</p></div>` });
+      const preview = (m.bodyPreview || "").trim();
+      await agentMarySend(prisma, lead, {
+        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through${m.hasAttachments ? " (artwork attached)" : ""}. Please factor it into the quote. Thanks,<br>Albert</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
+        copyAttachmentsFrom: m.id,
+      });
       handled++;
       continue;
     }

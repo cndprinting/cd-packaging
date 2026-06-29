@@ -96,6 +96,22 @@ export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?
   if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentConvId: r.conversationId } }); } catch { /* ignore */ } }
 }
 
+// All email to Mary for a given lead threads into ONE conversation: the first
+// "Quote needed" starts it; reminders and forwarded customer info reply into it
+// (carrying any attachments). Test mode falls back to the redirected send.
+export async function agentMarySend(prisma: any, lead: any, opts: { subject?: string; body: string; copyAttachmentsFrom?: string }): Promise<void> {
+  const subject = noEmDash(opts.subject || `Quote needed: ${lead.companyName}`);
+  const body = noEmDash(opts.body);
+  if (process.env.AGENT_TEST_TO) { await agentSend({ to: MARY, cc: OWNERS, subject, body }); return; }
+  const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
+  if (lead.agentMaryConvId) {
+    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentMaryConvId, to: MARY, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+    if (r.success) return;
+  }
+  const r = await sendEmailGetConversation({ from: SENDER, to: MARY, cc: OWNERS, subject, body });
+  if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentMaryConvId: r.conversationId } }); } catch { /* ignore */ } }
+}
+
 // ── Step 1: hand a new lead to Mary ────────────────────────────────────────
 export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled()) return;
@@ -106,7 +122,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
     <p><strong>${lead.companyName}</strong>${lead.contactName ? ` · ${lead.contactName}` : ""}${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""}</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
     <p>Thanks,<br>Albert</p>`);
-  await agentSend({to: MARY, cc: OWNERS, subject: `Quote needed: ${lead.companyName}`, body });
+  await agentMarySend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
     data: { agentStatus: "awaiting_mary", agentToken: token, agentNextAt: addBusinessDays(new Date(), 1), stage: "Awaiting Mary", agentLog: logLine(lead.agentLog, "Sent to Mary for quote") },
@@ -234,7 +250,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const fresh = await prisma.lead.findUnique({ where: { id: l.id } });
         await kickoffAgent(prisma, fresh);
       } else if (l.agentStatus === "awaiting_mary") {
-        await agentSend({to: MARY, cc: OWNERS, subject: `Re: Quote needed: ${l.companyName}`, body: wrap(`<p>Hi Mary,</p><p>Just bumping this one, did you get a chance to price <strong>${l.companyName}</strong>? No rush, just keeping it on the radar. Thanks,<br>Albert</p>`) });
+        await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Just bumping this one, did you get a chance to price <strong>${l.companyName}</strong>? No rush, just keeping it on the radar. Thanks,<br>Albert</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged Mary") } });
       } else if (l.agentStatus === "quote_received") {
         await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });

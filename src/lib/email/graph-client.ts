@@ -114,7 +114,7 @@ export async function forwardMessage(options: { from: string; messageId: string;
 
 // Reply inside an existing conversation so the email stays in the same thread.
 // We reply to one of our own messages in the thread and override the recipients.
-export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; body: string }): Promise<{ success: boolean; error?: string }> {
+export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; body: string; copyAttachmentsFrom?: string }): Promise<{ success: boolean; error?: string }> {
   const client = getGraphClient();
   if (!client) return { success: false, error: "Email not configured" };
   try {
@@ -123,6 +123,17 @@ export async function replyInConversation(options: { from: string; conversationI
     if (!src) return { success: false, error: "conversation not found" };
     const reply: any = await client.api(`/users/${options.from}/messages/${src.id}/createReply`).post({});
     await client.api(`/users/${options.from}/messages/${reply.id}`).patch({ toRecipients: toRecips(options.to), ccRecipients: toRecips(options.cc), body: { contentType: "HTML", content: options.body } });
+    // Carry over file attachments from a source message (e.g. customer artwork → Mary's thread).
+    if (options.copyAttachmentsFrom) {
+      try {
+        const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
+        for (const a of (atts.value || [])) {
+          if (a["@odata.type"] === "#microsoft.graph.fileAttachment") {
+            await client.api(`/users/${options.from}/messages/${reply.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
+          }
+        }
+      } catch (e: any) { console.error("copy attachments failed:", e.message || e); }
+    }
     await client.api(`/users/${options.from}/messages/${reply.id}/send`).post({});
     return { success: true };
   } catch (error: any) {
