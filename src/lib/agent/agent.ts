@@ -118,6 +118,21 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
   });
 }
 
+// ── Always ask for artwork when it's missing — but never block the quote ────
+// Artwork clarifies colors, bleeds, finish and the actual look, so we request
+// it on every lead that didn't include it. When the specs are otherwise
+// complete, Mary quotes in parallel; this is just a side ask (Benjy 6/29).
+export async function requestArtwork(prisma: any, lead: any): Promise<void> {
+  if (!agentEnabled() || !lead.contactEmail) return;
+  const body = wrap(`
+    <p>Hi ${lead.contactName || "there"},</p>
+    <p>While we put your quote together, could you send over your print-ready artwork, or even a rough proof or mockup? It helps us confirm the exact look and details (colors, bleeds, finish) so the final piece comes out right.</p>
+    <p>If it isn't ready yet, no problem, just let us know and we can recommend specs in the meantime.</p>
+    <p>Best regards,<br>${SIGNOFF}</p>`);
+  await agentSend({ to: lead.contactEmail, cc: OWNERS, subject: `Artwork for your ${lead.productName || "project"}, C&D Printing`, body });
+  await prisma.lead.update({ where: { id: lead.id }, data: { agentLog: logLine(lead.agentLog, "Requested artwork from customer") } });
+}
+
 // ── Mary submits her quote → notify owners to approve (or auto-send) ────────
 export async function onMaryQuote(prisma: any, lead: any, quote: string): Promise<void> {
   await prisma.lead.update({

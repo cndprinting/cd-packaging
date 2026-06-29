@@ -199,14 +199,18 @@ export async function POST(req: NextRequest) {
   // for them first (then hands Mary a complete brief); otherwise it goes
   // straight to Mary with house defaults asserted.
   try {
-    const { kickoffAgent, askCustomer } = await import("@/lib/agent/agent");
+    const { kickoffAgent, askCustomer, requestArtwork } = await import("@/lib/agent/agent");
     const named = { ...lead, productName: claude?.normalizedProduct || productCategory };
-    // Only ask the customer when a spec genuinely BLOCKS a quote. If it's
-    // quotable now (logistics like shipping/date can come later), go to Mary.
-    if (claude?.quoteBlockers?.length && email) {
-      await askCustomer(prisma, named, claude.quoteBlockers);
+    const artworkMissing = !artwork;
+    const ARTWORK_ASK = "Your print-ready artwork (or a rough proof/mockup) so we can confirm the look and exact details";
+    const blockers = claude?.quoteBlockers || [];
+    // Only quote-blocking specs make us WAIT on the customer. Artwork is always
+    // asked for when missing, but it never blocks the quote.
+    if (blockers.length && email) {
+      await askCustomer(prisma, named, artworkMissing ? [...blockers, ARTWORK_ASK] : blockers);
     } else {
-      await kickoffAgent(prisma, named);
+      await kickoffAgent(prisma, named);              // quotable now → Mary
+      if (artworkMissing && email) await requestArtwork(prisma, named); // ask artwork in parallel
     }
   } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
 
