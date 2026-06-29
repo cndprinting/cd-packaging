@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, SENDER, OWNERS } from "@/lib/agent/agent";
+import { agentSend, SENDER, OWNERS, MARY, onMaryQuote } from "@/lib/agent/agent";
 import { getClaude } from "@/lib/agent/claude";
 
 // Inbound reply handler (Benjy 6/26) — the second half of the lead↔agent
@@ -35,6 +35,27 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   for (const m of items) {
     const from = m.from?.emailAddress?.address?.toLowerCase();
     if (!from) continue;
+
+    // Mary replied to a "Quote needed" handoff with her price. Match it to the
+    // awaiting-Mary lead by the company name in the subject, and treat her reply
+    // as the quote. (She just emails Albert back — never sees the system.)
+    if (from === MARY.toLowerCase()) {
+      try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+      const subject = (m.subject || "").toLowerCase();
+      const open = await prisma.lead.findMany({ where: { agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
+      const ml = open.find((l: any) => l.companyName && subject.includes(l.companyName.toLowerCase()));
+      if (ml) {
+        const reply = (m.bodyPreview || "").trim();
+        if (/\$/.test(reply)) {
+          await onMaryQuote(prisma, ml, reply); // has a price → run it as the quote
+        } else {
+          // No clear price — Mary's asking for something. Hand to a human.
+          await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (no clear price detected - may need a human):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.replace(/</g, "&lt;")}</blockquote></div>` });
+        }
+        handled++;
+      }
+      continue;
+    }
 
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.

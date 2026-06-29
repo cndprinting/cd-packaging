@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
   // Potential major client (Claude judgment) → flag it loud and bump priority.
   const isVip = !!claude?.vip;
-  const vipBanner = isVip ? `⭐ POTENTIAL MAJOR CLIENT — owners review before quoting. ${claude?.vipReason || ""}`.trim() : null;
+  const vipBanner = isVip ? `⭐ Potential major client - worth a closer look before this goes out. ${claude?.vipReason || ""}`.trim() : null;
 
   // Fraud guards: a hard blocklist hit, or Claude's scam-sniff at high risk →
   // the agent does NOT engage; the owners get alerted to decide.
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     services ? `Services: ${services}` : null,
     artwork ? `Artwork: ${artwork}` : "Artwork: none uploaded",
     // Prefer Claude's analysis; otherwise the rule-based assumptions.
-    claude ? `\n— Agent analysis —\n${claude.summary}` : null,
+    claude ? `\nNotes:\n${claude.summary}` : null,
     claude?.assumptions?.length ? `Assumed (confirm): ${claude.assumptions.join("; ")}` : (assumed.length ? `Assumed (confirm): ${assumed.map((a) => `${a.found} → ${a.assume}`).join("; ")}` : null),
     claude?.missing?.length ? `Missing: ${claude.missing.join("; ")}` : null,
     sourceUrl ? `From: ${sourceUrl}` : null,

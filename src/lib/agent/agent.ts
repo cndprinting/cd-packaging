@@ -79,11 +79,11 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled()) return;
   const token = lead.agentToken || newToken();
   const body = wrap(`
-    <p>New lead ready to quote — here's everything from the website:</p>
+    <p>Hi Mary,</p>
+    <p>Can you put a quote together for this one when you get a chance? Everything we have is below. Just reply to me with your price and terms, or let me know if you need anything else, and I'll take it from there.</p>
     <p><strong>${lead.companyName}</strong>${lead.contactName ? ` · ${lead.contactName}` : ""}${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""}</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
-    <p>${btn(link(lead.id, token, "quote"), "Reply with the quote")}</p>
-    <p style="font-size:12px;color:#888;">Click above to paste price + terms, or flag anything missing — no login needed.</p>`);
+    <p>Thanks,<br>Albert</p>`);
   await agentSend({to: MARY, cc: OWNERS, subject: `Quote needed: ${lead.companyName}`, body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -212,7 +212,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const fresh = await prisma.lead.findUnique({ where: { id: l.id } });
         await kickoffAgent(prisma, fresh);
       } else if (l.agentStatus === "awaiting_mary") {
-        await agentSend({to: MARY, cc: OWNERS, subject: `Reminder — quote needed: ${l.companyName}`, body: wrap(`<p>Still need a quote for <strong>${l.companyName}</strong>.</p><p>${btn(link(l.id, l.agentToken, "quote"), "Reply with the quote")}</p>`) });
+        await agentSend({to: MARY, cc: OWNERS, subject: `Re: Quote needed: ${l.companyName}`, body: wrap(`<p>Hi Mary,</p><p>Just bumping this one, did you get a chance to price <strong>${l.companyName}</strong>? No rush, just keeping it on the radar. Thanks,<br>Albert</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged Mary") } });
       } else if (l.agentStatus === "quote_received") {
         await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
