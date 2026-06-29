@@ -234,6 +234,7 @@ model Lead {
   agentToken      String?   // unguessable token for Mary/owner email-action links
   agentQuote      String?   // Mary's returned price + terms
   agentDraft      String?   // Claude-drafted reply to a customer's inbound email
+  agentConvId     String?   // Graph conversationId — keeps all customer emails in one thread
   agentLog        String?   // JSON audit trail of agent actions
 
   @@index([agentStatus, agentNextAt])

@@ -31,6 +31,8 @@ function quoteAmount(q: string): number {
 }
 
 const newToken = () => randomBytes(16).toString("hex");
+// Greet customers by first name only (full name reads stiff/automated).
+const firstName = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "there";
 const link = (id: string, token: string, action: string) => `${BASE}/agent?id=${id}&token=${token}&do=${action}`;
 
 // Business-day clock — skips weekends.
@@ -74,6 +76,26 @@ export async function agentSend(opts: { to: string | string[]; cc?: string | str
 }
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
+// One stable subject per customer so all their emails group into one thread.
+export const customerSubject = (lead: any) => `Your quote from C&D Printing - ${lead.companyName}`;
+
+// All customer-facing email goes through here so it threads into ONE conversation.
+// First email starts the thread (and we store its conversationId); the rest reply
+// into it. Test mode falls back to the redirected dry-run send.
+export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?: string; body: string }): Promise<void> {
+  if (!lead.contactEmail) return;
+  const subject = noEmDash(opts.subject || customerSubject(lead));
+  const body = noEmDash(opts.body);
+  if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: OWNERS, subject, body }); return; }
+  const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
+  if (lead.agentConvId) {
+    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body });
+    if (r.success) return; // threaded
+  }
+  const r = await sendEmailGetConversation({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject, body });
+  if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentConvId: r.conversationId } }); } catch { /* ignore */ } }
+}
+
 // ── Step 1: hand a new lead to Mary ────────────────────────────────────────
 export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled()) return;
@@ -106,12 +128,12 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
     inner = await draftClarifyEmail({ contactName: lead.contactName, productName: lead.productName, missing });
   } catch { /* fall back */ }
   const body = inner ? wrap(inner) : wrap(`
-    <p>Hi ${lead.contactName || "there"},</p>
+    <p>Hi ${firstName(lead.contactName)},</p>
     <p>Thank you for reaching out to C&amp;D Printing. To put together an accurate quote for your ${lead.productName || "project"}, could you share a few details:</p>
     <ul>${missing.map((m) => `<li>${m.replace(/</g, "&lt;")}</li>`).join("")}</ul>
     <p>If you're not sure on any of these, just say so and we'll recommend what works best. Once we have these we'll turn a quote around quickly.</p>
     <p>Best regards,<br>${SIGNOFF}</p>`);
-  await agentSend({ to: lead.contactEmail, cc: OWNERS, subject: `A few quick details for your quote — C&D Printing`, body });
+  await agentCustomerSend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
     data: { agentStatus: "awaiting_customer_info", agentToken: token, agentNextAt: addBusinessDays(new Date(), 2), stage: "Awaiting customer info", agentLog: logLine(lead.agentLog, "Asked customer for missing specs") },
@@ -125,11 +147,11 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
 export async function requestArtwork(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled() || !lead.contactEmail) return;
   const body = wrap(`
-    <p>Hi ${lead.contactName || "there"},</p>
+    <p>Hi ${firstName(lead.contactName)},</p>
     <p>While we put your quote together, could you send over your print-ready artwork, or even a rough proof or mockup? It helps us confirm the exact look and details (colors, bleeds, finish) so the final piece comes out right.</p>
     <p>If it isn't ready yet, no problem, just let us know and we can recommend specs in the meantime.</p>
     <p>Best regards,<br>${SIGNOFF}</p>`);
-  await agentSend({ to: lead.contactEmail, cc: OWNERS, subject: `Artwork for your ${lead.productName || "project"}, C&D Printing`, body });
+  await agentCustomerSend(prisma, lead, { body });
   await prisma.lead.update({ where: { id: lead.id }, data: { agentLog: logLine(lead.agentLog, "Requested artwork from customer") } });
 }
 
@@ -170,12 +192,12 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
       inner = await draftCustomerQuote({ customerName: lead.companyName, contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "" });
     } catch { /* fall back */ }
     const body = inner ? wrap(inner) : wrap(`
-      <p>Hi ${lead.contactName || "there"},</p>
+      <p>Hi ${firstName(lead.contactName)},</p>
       <p>Thank you for reaching out to C&amp;D Printing. Here's your quote:</p>
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
       <p>Happy to adjust quantities or specs — just reply and we'll take care of it.</p>
       <p>Best regards,<br>${SIGNOFF}</p>`);
-    await agentSend({to: lead.contactEmail, cc: OWNERS, subject: `Your quote from C&D Printing — ${lead.companyName}`, body });
+    await agentCustomerSend(prisma, lead, { body });
   }
   await prisma.lead.update({
     where: { id: lead.id },
@@ -203,7 +225,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
       if (l.agentStatus === "awaiting_customer_info") {
         // Customer hasn't sent the details yet — nudge once.
         if (l.contactEmail) {
-          await agentSend({ to: l.contactEmail, cc: OWNERS, subject: `Following up — your C&D Printing quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works — happy to help.</p><p>Best regards,<br>${SIGNOFF}</p>`) });
+          await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works, happy to help.</p><p>Best regards,<br>${SIGNOFF}</p>`) });
         }
         await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "info_nudge_1", agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for missing specs") } });
       } else if (l.agentStatus === "info_nudge_1") {
@@ -221,7 +243,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const step = FOLLOWUPS[l.agentStatus as string];
         if (step) {
           if (l.contactEmail) {
-            await agentSend({to: l.contactEmail, cc: OWNERS, subject: `Following up — ${l.companyName} quote`, body: wrap(`<p>Hi ${l.contactName || "there"},</p><p>${step.msg}</p><p>Best regards,<br>${SIGNOFF}</p>`) });
+            await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>${step.msg}</p><p>Best regards,<br>${SIGNOFF}</p>`) });
           }
           const next = step.days > 0 ? addBusinessDays(now, step.days) : null;
           const status = step.days > 0 ? step.next : "closed";

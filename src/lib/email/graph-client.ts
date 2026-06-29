@@ -74,3 +74,44 @@ export async function sendEmail(options: SendEmailOptions): Promise<{ success: b
     return { success: false, error: error.message || "Failed to send email" };
   }
 }
+
+const toRecips = (v?: string | string[]) => (v ? (Array.isArray(v) ? v : [v]) : []).map((address) => ({ emailAddress: { address } }));
+
+// Send via a draft so we can capture the conversationId — lets later emails to
+// the same customer thread into one conversation.
+export async function sendEmailGetConversation(options: SendEmailOptions): Promise<{ success: boolean; conversationId?: string; error?: string }> {
+  const client = getGraphClient();
+  if (!client) return { success: false, error: "Email not configured" };
+  try {
+    const draft: any = await client.api(`/users/${options.from}/messages`).post({
+      subject: options.subject,
+      body: { contentType: "HTML", content: options.body },
+      toRecipients: toRecips(options.to),
+      ccRecipients: toRecips(options.cc),
+    });
+    await client.api(`/users/${options.from}/messages/${draft.id}/send`).post({});
+    return { success: true, conversationId: draft.conversationId };
+  } catch (error: any) {
+    console.error("Graph sendEmailGetConversation error:", error.message || error);
+    return { success: false, error: error.message || "Failed" };
+  }
+}
+
+// Reply inside an existing conversation so the email stays in the same thread.
+// We reply to one of our own messages in the thread and override the recipients.
+export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; body: string }): Promise<{ success: boolean; error?: string }> {
+  const client = getGraphClient();
+  if (!client) return { success: false, error: "Email not configured" };
+  try {
+    const found: any = await client.api(`/users/${options.from}/messages`).filter(`conversationId eq '${options.conversationId}'`).select("id").top(1).get();
+    const src = (found.value || [])[0];
+    if (!src) return { success: false, error: "conversation not found" };
+    const reply: any = await client.api(`/users/${options.from}/messages/${src.id}/createReply`).post({});
+    await client.api(`/users/${options.from}/messages/${reply.id}`).patch({ toRecipients: toRecips(options.to), ccRecipients: toRecips(options.cc), body: { contentType: "HTML", content: options.body } });
+    await client.api(`/users/${options.from}/messages/${reply.id}/send`).post({});
+    return { success: true };
+  } catch (error: any) {
+    console.error("Graph replyInConversation error:", error.message || error);
+    return { success: false, error: error.message || "Failed" };
+  }
+}
