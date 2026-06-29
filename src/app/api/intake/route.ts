@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkBlocked } from "@/lib/agent/blocklist";
+import { checkBlocked, isTestSubmission } from "@/lib/agent/blocklist";
 
 // Inbound web-form intake (Benjy 6/26). The website's Elementor form POSTs
 // here (Webhook action). We parse tolerantly — collect every field, best-effort
@@ -73,6 +73,12 @@ export async function POST(req: NextRequest) {
   let email = pick("email") || null;
   if (!email) { const m = allText.match(EMAIL_RE); email = m ? m[0] : null; }
   const phone = pick("phone", "tel", "mobile") || null;
+
+  // Habib's QA test submissions — drop silently, never a lead.
+  if (isTestSubmission(email)) {
+    console.log("[Godzilla INTAKE] ignored test submission from", email);
+    return NextResponse.json({ ok: true, ignored: "test submission" });
+  }
 
   const productField = pick("what type", "type of product", "product");
   const otherType = entries.filter(([k]) => /if other|describe|specify|please describe/i.test(k)).map(([, v]) => v).filter(Boolean).join(" · ");

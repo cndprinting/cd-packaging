@@ -11,6 +11,22 @@ export const BLOCKLIST = {
   companies: [] as string[],  // company-name substring
 };
 
+// Test traffic from our own agency (Habib) — silently ignored at intake: no
+// lead created, no agent contact, no owner alert. NOT scammers, just tests.
+export const TEST_SUBMISSIONS = {
+  emails: ["sampleemail@hotmail.com", "habib@slashpie.com"],
+  domains: ["slashpie.com"],
+};
+
+export function isTestSubmission(email?: string | null): boolean {
+  const e = (email || "").toLowerCase();
+  if (!e) return false;
+  const domain = e.includes("@") ? e.split("@")[1] : "";
+  if (TEST_SUBMISSIONS.emails.some((x) => x && e.includes(x.toLowerCase()))) return true;
+  if (domain && TEST_SUBMISSIONS.domains.some((d) => d && domain.includes(d.toLowerCase()))) return true;
+  return false;
+}
+
 // Returns a human-readable reason if blocked, else null.
 export function checkBlocked(opts: { name?: string | null; email?: string | null; phone?: string | null; company?: string | null }): string | null {
   const name = (opts.name || "").toLowerCase();

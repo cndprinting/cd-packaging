@@ -47,7 +47,7 @@ function logLine(prev: string | null, event: string): string {
   return JSON.stringify(arr.slice(-50));
 }
 
-const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}<p style="color:#aaa;font-size:11px;margin-top:20px;">Godzilla sales agent · C&amp;D Printing</p></div>`;
+const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}</div>`;
 
 // All agent email goes through here. AGENT_TEST_TO redirects every message to
 // one inbox (the owner running the test) so a dry run never reaches Mary or a
