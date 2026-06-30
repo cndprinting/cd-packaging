@@ -140,7 +140,7 @@ export default function PipelinePage() {
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
-                {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-16" title="Check to stop the outbound agent from emailing this lead">Hold</th>}
+                {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
