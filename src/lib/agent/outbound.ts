@@ -73,6 +73,18 @@ function logLine(prev: string | null, event: string): string {
 }
 const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}</div>`;
 
+// Append a dated, human-readable line to the lead's Notes so owners see the
+// agent's activity in the pipeline, e.g. "[Agent] Intro email sent 6/27/2026".
+// Re-reads commentary right before writing to avoid clobbering manual edits.
+export async function appendNote(prisma: any, leadId: string, line: string): Promise<void> {
+  try {
+    const cur = await prisma.lead.findUnique({ where: { id: leadId }, select: { commentary: true } });
+    const stamp = new Date().toLocaleDateString("en-US");
+    const note = `${(cur?.commentary || "").trim()}\n[Agent] ${line} ${stamp}`.trim().slice(0, 8000);
+    await prisma.lead.update({ where: { id: leadId }, data: { commentary: note } });
+  } catch { /* ignore */ }
+}
+
 // ── Drafting ───────────────────────────────────────────────────────────────
 async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<string> {
   const contact = firstName(contactName);
@@ -141,6 +153,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       try {
         const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${l.companyName}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
         if (ok) {
+          await appendNote(prisma, l.id, `Follow-up sent to ${contact.name || contact.email}`);
           if (step.next === "done") {
             // Sequence for this contact is done with no reply. Roll to the next
             // contact (secondary) if there is one; otherwise close out.
@@ -175,6 +188,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, `C&D Printing & Packaging - ${l.companyName}`, body);
       if (sent) {
         await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, "Intro sent") } });
+        await appendNote(prisma, l.id, `Intro email sent to ${contact.name || contact.email}`);
         sends++; intros++;
       } else {
         previews++; // review mode — drafted to owner, state untouched

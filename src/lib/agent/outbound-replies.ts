@@ -1,6 +1,6 @@
 import { getGraphClient, replyInConversation, sendEmail } from "@/lib/email/graph-client";
 import { getClaude } from "@/lib/agent/claude";
-import { outboundEnabled } from "@/lib/agent/outbound";
+import { outboundEnabled, appendNote } from "@/lib/agent/outbound";
 import { noEmDash } from "@/lib/agent/agent";
 
 // Handles replies to outbound prospecting emails (Benjy 6/30). Scans each owner
@@ -61,13 +61,16 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
 
       if (cls === "unsubscribe") {
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "unsubscribed", agentHold: true, outreachNextAt: null } });
+        await appendNote(prisma, lead.id, "Prospect asked to opt out, marked do-not-contact");
         await notify(`Unsubscribe: ${lead.companyName}`, `<strong>${lead.companyName}</strong> asked to be removed. Marked do-not-contact, the agent will not email them again.`);
       } else if (cls === "interested") {
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "replied", outreachNextAt: null } });
+        await appendNote(prisma, lead.id, "Prospect replied interested, handed to owner");
         await notify(`HOT - ${lead.companyName} replied interested`, `<strong>${lead.companyName}</strong> replied with interest. Over to you, the agent has stopped its sequence.`);
       } else if (cls === "not_interested") {
         const recheck = new Date(Date.now() + SIX_MONTHS_DAYS * 24 * 3600 * 1000);
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "not_interested", outreachNextAt: null, followUpAt: recheck, followUpNote: `Recheck - said not interested ${new Date().toISOString().slice(0, 10)}` } });
+        await appendNote(prisma, lead.id, `Prospect not interested, recheck set ${recheck.toLocaleDateString("en-US")}`);
         // brief gracious note, threaded from the owner's mailbox
         if (lead.outreachConvId) {
           try { await replyInConversation({ from: mb, conversationId: lead.outreachConvId, to: lead.contactEmail, body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Totally understand, and thank you for letting me know. I will check back down the road. If anything changes in the meantime, we are here to help.</p><p>Best regards,<br>${ownerFull}<br>C&amp;D Printing &amp; Packaging</p></div>`) }); } catch { /* ignore */ }
@@ -75,6 +78,7 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
         await notify(`Not interested: ${lead.companyName}`, `<strong>${lead.companyName}</strong> passed for now. Recheck scheduled in ~6 months.`);
       } else {
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "replied", outreachNextAt: null } });
+        await appendNote(prisma, lead.id, "Prospect replied, needs review");
         await notify(`Reply: ${lead.companyName}`, `<strong>${lead.companyName}</strong> replied (needs your eyes - the agent could not clearly classify it).`);
       }
       handled++;
