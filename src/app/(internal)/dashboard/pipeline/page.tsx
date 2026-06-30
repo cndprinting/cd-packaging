@@ -11,7 +11,7 @@ type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
   website: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
-  ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null;
+  ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null;
 };
 
@@ -140,6 +140,7 @@ export default function PipelinePage() {
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
+                {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-16" title="Check to stop the outbound agent from emailing this lead">Hold</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -189,6 +190,11 @@ export default function PipelinePage() {
                         <option value="">—</option>
                         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
                       </select>
+                    </td>
+                  )}
+                  {active === "LEAD" && (
+                    <td className="px-3 py-2 text-center">
+                      <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
                   )}
                   {(active === "CUSTOMER" || active === "LOST") && (

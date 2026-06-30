@@ -237,6 +237,12 @@ model Lead {
   agentConvId     String?   // Graph conversationId — keeps all customer emails in one thread
   agentMaryConvId String?   // Graph conversationId for the Mary thread — all her emails in one place
   agentQuoteMsgId String?   // Graph message id of Mary's quote email (PDF) to forward to the customer on approval
+  // ── Outbound prospecting agent ──
+  agentHold       Boolean   @default(false) // "Don't email (agent)" — owner-set hold; outbound agent skips
+  outreachStatus  String?   // null | intro_sent | followup_1 | followup_2 | replied | not_interested | unsubscribed | done
+  outreachNextAt  DateTime? // clock for the next outbound action
+  outreachConvId  String?   // Graph conversationId for the prospect thread (sent from the owner's mailbox)
+  outreachLog     String?   // JSON audit trail of outbound actions
   agentLog        String?   // JSON audit trail of agent actions
 
   @@index([agentStatus, agentNextAt])

@@ -106,6 +106,7 @@ export async function PUT(request: NextRequest) {
     if (k in body) data[k] = body[k] || null;
   }
   if ("priority" in body) data.priority = body.priority ? Number(body.priority) : null;
+  if ("agentHold" in body) data.agentHold = !!body.agentHold; // outbound "Don't email (agent)" toggle
   if ("lastInteraction" in body) data.lastInteraction = body.lastInteraction ? new Date(body.lastInteraction) : null;
   if ("followUpNote" in body) data.followUpNote = body.followUpNote || null;
   if ("followUpAt" in body) {
