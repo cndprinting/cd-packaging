@@ -39,9 +39,20 @@ export function parseContacts(emailField?: string | null, nameField?: string | n
   return emails.map((e) => e.toLowerCase()).filter((e) => (seen.has(e) ? false : (seen.add(e), true)))
     .map((email, i) => ({ email, name: names[i] || names[0] || "" }));
 }
-// The contact we'll actually email for a lead (the first valid one = primary).
-function primaryContact(lead: any): Contact | null {
-  return parseContacts(lead.contactEmail, lead.contactName)[0] || null;
+// Ordered contacts for a lead: the structured primary/secondary fields, plus any
+// extra people parsed out of a combined field (e.g. "Ken | Reid"). De-duped.
+function contactList(lead: any): Contact[] {
+  const list = parseContacts(lead.contactEmail, lead.contactName);
+  if (lead.contactEmail2) {
+    for (const c of parseContacts(lead.contactEmail2, lead.contactName2)) {
+      if (!list.some((x) => x.email === c.email)) list.push(c);
+    }
+  }
+  return list;
+}
+// The contact the sequence is currently on (primary first, then secondary).
+function currentContact(lead: any): Contact | null {
+  return contactList(lead)[lead.outreachContact || 0] || null;
 }
 
 export const outboundEnabled = () => process.env.AGENT_OUTBOUND_ENABLED === "true";
@@ -122,7 +133,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     });
     for (const l of due) {
       if (sends >= limit) break;
-      const contact = primaryContact(l);
+      const contact = currentContact(l);
       if (!contact) continue;
       const owner = resolveOwner(l.ownerName);
       const step = FOLLOWUPS[l.outreachStatus as string];
@@ -130,8 +141,18 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       try {
         const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${l.companyName}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
         if (ok) {
-          const next = step.days > 0 ? addDays(now, step.days) : null;
-          await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: step.next, outreachNextAt: next, outreachLog: logLine(l.outreachLog, `Sent ${l.outreachStatus} follow-up`) } });
+          if (step.next === "done") {
+            // Sequence for this contact is done with no reply. Roll to the next
+            // contact (secondary) if there is one; otherwise close out.
+            const nextIdx = (l.outreachContact || 0) + 1;
+            if (contactList(l)[nextIdx]) {
+              await prisma.lead.update({ where: { id: l.id }, data: { outreachContact: nextIdx, outreachStatus: null, outreachConvId: null, outreachNextAt: null, outreachLog: logLine(l.outreachLog, `No reply, moving to contact ${nextIdx + 1}`) } });
+            } else {
+              await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "done", outreachNextAt: null, outreachLog: logLine(l.outreachLog, "Sequence complete, no response") } });
+            }
+          } else {
+            await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: step.next, outreachNextAt: addDays(now, step.days), outreachLog: logLine(l.outreachLog, `Sent ${l.outreachStatus} follow-up`) } });
+          }
           sends++; followups++;
         }
       } catch { /* skip */ }
@@ -145,7 +166,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   });
   for (const l of fresh) {
     if (sends >= limit) break;
-    const contact = primaryContact(l); // first valid email; handles multi-contact fields
+    const contact = currentContact(l); // primary, or secondary once we've rolled over
     if (!contact) continue;
     if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
     const owner = resolveOwner(l.ownerName);
