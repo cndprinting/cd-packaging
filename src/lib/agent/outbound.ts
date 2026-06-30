@@ -26,6 +26,24 @@ function resolveOwner(ownerName?: string | null): Owner {
 }
 const firstName = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "there";
 
+// Lead fields sometimes hold MULTIPLE people, pipe/comma/slash separated, e.g.
+// name "Ken Lorichio | Reid Barack", email "ken@sunnutra.com | rbarack27@gmail.com".
+// Pull out each valid email and pair it (by position) with the matching name.
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+type Contact = { name: string; email: string };
+export function parseContacts(emailField?: string | null, nameField?: string | null): Contact[] {
+  const emails = (emailField || "").match(EMAIL_RE) || [];
+  const names = (nameField || "").split(/\s*[|,;/]\s*|\s+and\s+/i).map((s) => s.trim()).filter(Boolean);
+  // de-dupe emails, keep order
+  const seen = new Set<string>();
+  return emails.map((e) => e.toLowerCase()).filter((e) => (seen.has(e) ? false : (seen.add(e), true)))
+    .map((email, i) => ({ email, name: names[i] || names[0] || "" }));
+}
+// The contact we'll actually email for a lead (the first valid one = primary).
+function primaryContact(lead: any): Contact | null {
+  return parseContacts(lead.contactEmail, lead.contactName)[0] || null;
+}
+
 export const outboundEnabled = () => process.env.AGENT_OUTBOUND_ENABLED === "true";
 const autoSend = () => process.env.AGENT_OUTBOUND_AUTOSEND === "true";
 const perRunLimit = () => parseInt(process.env.AGENT_OUTBOUND_LIMIT || "20", 10);
@@ -45,8 +63,8 @@ function logLine(prev: string | null, event: string): string {
 const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}</div>`;
 
 // ── Drafting ───────────────────────────────────────────────────────────────
-async function draftIntro(lead: any, owner: Owner): Promise<string> {
-  const contact = firstName(lead.contactName);
+async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<string> {
+  const contact = firstName(contactName);
   const fallback = wrap(`
     <p>Hi ${contact},</p>
     <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned custom packaging manufacturer in St. Petersburg, Florida. We make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
@@ -63,8 +81,8 @@ async function draftIntro(lead: any, owner: Owner): Promise<string> {
     return html ? wrap(html) : fallback;
   } catch { return fallback; }
 }
-function draftFollowup(lead: any, owner: Owner, step: string): string {
-  const contact = firstName(lead.contactName);
+function draftFollowup(lead: any, owner: Owner, step: string, contactName: string): string {
+  const contact = firstName(contactName);
   const msg = step === "intro_sent"
     ? `Just following up on my note below about packaging for ${lead.companyName}. Happy to send over a few samples or hop on a quick call if useful.`
     : `Last note from me for now. If custom packaging is ever on the radar for ${lead.companyName}, we would love the chance to help, just reply anytime.`;
@@ -72,19 +90,19 @@ function draftFollowup(lead: any, owner: Owner, step: string): string {
 }
 
 // ── Sending (threaded, from the owner's mailbox) ───────────────────────────
-async function outboundSend(prisma: any, lead: any, owner: Owner, subject: string, body: string): Promise<boolean> {
+async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, toName: string, subject: string, body: string): Promise<boolean> {
   const subj = noEmDash(subject);
   const html = noEmDash(body);
   // Review mode: redirect the draft to the owner's own inbox so they can see it.
   if (!autoSend()) {
-    await sendEmail({ from: owner.email, to: owner.email, subject: `[DRAFT → ${lead.contactEmail}] ${subj}`, body: html + `<p style="color:#bbb;font-size:11px;">[Outbound review mode — in production this would send to ${lead.contactName || lead.companyName} &lt;${lead.contactEmail}&gt; from ${owner.full}.]</p>` });
+    await sendEmail({ from: owner.email, to: owner.email, subject: `[DRAFT → ${to}] ${subj}`, body: html + `<p style="color:#bbb;font-size:11px;">[Outbound review mode — in production this would send to ${toName || lead.companyName} &lt;${to}&gt; from ${owner.full}.]</p>` });
     return false; // not actually sent to the prospect; state not advanced
   }
   if (lead.outreachConvId) {
-    const r = await replyInConversation({ from: owner.email, conversationId: lead.outreachConvId, to: lead.contactEmail, body: html });
+    const r = await replyInConversation({ from: owner.email, conversationId: lead.outreachConvId, to, body: html });
     if (r.success) return true;
   }
-  const r = await sendEmailGetConversation({ from: owner.email, to: lead.contactEmail, subject: subj, body: html });
+  const r = await sendEmailGetConversation({ from: owner.email, to, subject: subj, body: html });
   if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { outreachConvId: r.conversationId } }); } catch { /* ignore */ } }
   return !!r.success;
 }
@@ -104,11 +122,13 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     });
     for (const l of due) {
       if (sends >= limit) break;
+      const contact = primaryContact(l);
+      if (!contact) continue;
       const owner = resolveOwner(l.ownerName);
       const step = FOLLOWUPS[l.outreachStatus as string];
       if (!step) continue;
       try {
-        const ok = await outboundSend(prisma, l, owner, `Re: C&D Printing & Packaging - ${l.companyName}`, draftFollowup(l, owner, l.outreachStatus));
+        const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${l.companyName}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
         if (ok) {
           const next = step.days > 0 ? addDays(now, step.days) : null;
           await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: step.next, outreachNextAt: next, outreachLog: logLine(l.outreachLog, `Sent ${l.outreachStatus} follow-up`) } });
@@ -125,11 +145,13 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   });
   for (const l of fresh) {
     if (sends >= limit) break;
-    if (!l.contactEmail || checkBlocked({ name: l.contactName, email: l.contactEmail, phone: l.contactPhone, company: l.companyName })) continue;
+    const contact = primaryContact(l); // first valid email; handles multi-contact fields
+    if (!contact) continue;
+    if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
     const owner = resolveOwner(l.ownerName);
     try {
-      const body = await draftIntro(l, owner);
-      const sent = await outboundSend(prisma, l, owner, `C&D Printing & Packaging - ${l.companyName}`, body);
+      const body = await draftIntro(l, owner, contact.name);
+      const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, `C&D Printing & Packaging - ${l.companyName}`, body);
       if (sent) {
         await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, "Intro sent") } });
         sends++; intros++;
