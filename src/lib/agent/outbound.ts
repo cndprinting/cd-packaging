@@ -88,22 +88,39 @@ export async function appendNote(prisma: any, leadId: string, line: string): Pro
 }
 
 // ── Drafting ───────────────────────────────────────────────────────────────
-async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<string> {
+async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<{ subject: string; body: string }> {
   const contact = firstName(contactName);
-  const fallback = wrap(`
-    <p>Hi ${contact},</p>
-    <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned custom packaging manufacturer in St. Petersburg, Florida. We make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
-    <p>I came across ${lead.companyName} and thought our work might be a good fit. We'd be glad to send over a few samples, or set up a quick call whenever it's convenient.</p>
-    <p>Best regards,<br>${owner.full}<br>C&amp;D Printing &amp; Packaging</p>`);
+  const fallback = {
+    subject: `Family-built packaging from C&D, right here in St. Pete`,
+    body: wrap(`
+      <p>Hi ${contact},</p>
+      <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned folding carton manufacturer that has been in St. Petersburg, Florida for about 50 years. Our family, the Waxmans, and a team of 50-plus make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
+      <p>I came across ${lead.companyName} and thought we could be a good fit. What sets us apart is that working with us means working with our family directly. Would you be open to a quick call, or an in-person visit if you are nearby?</p>
+      <p>Best,<br>${owner.first}</p>`),
+  };
   const claude = getClaude();
   if (!claude) return fallback;
   try {
-    const system = `You write short, warm cold-intro emails for C&D Printing & Packaging, a family-owned custom packaging manufacturer in St. Petersburg, FL (folding cartons, custom boxes, retail packaging for cosmetics, skincare, nutraceutical, and CPG brands). You are writing AS ${owner.full}, a member of the C&D team, to a prospect. Goal: start a conversation, not hard-sell. When you know their market, note we specialize in that kind of product. Offer to send samples or set up a quick call. A few sentences only. Address the contact by FIRST name. No hype, no exclamation points, no emoji, no em dashes or en dashes (use commas/periods), and NO bold or <strong>/<b> tags — it should read like a plain personal email. Sign off "${owner.full}, C&D Printing & Packaging". Output ONLY the inner HTML body using <p> and <br> only.`;
-    const user = `Prospect company: ${lead.companyName}. End market: ${lead.endMarket || lead.productCategory || "unknown"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 500)}. Write the intro email body now.`;
-    const msg = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system, messages: [{ role: "user", content: user }] });
+    const system = `You write warm, personal cold-intro emails for C&D Printing & Packaging, in the voice of the Waxman family that owns it. C&D is a family-owned, roughly 50-year-old folding carton and packaging manufacturer in St. Petersburg, Florida (folding cartons, custom boxes, retail and printed packaging), with a team of 50-plus, serving cosmetics, skincare, nutraceutical, health-and-wellness, and other consumer brands and contract manufacturers. You are writing AS ${owner.full} (first name ${owner.first}), part of the C&D team.
+
+Model the tone on our best-performing emails:
+- Warm, personal, human. Never salesy or templated.
+- Open with something specific and genuine about THEIR company (their market, what they make, their family or story if evident) and tie it to C&D being a family, multi-generation manufacturer.
+- Lean on being local when it fits (St. Petersburg, Tampa, Orlando, "neighbors", "a short drive away", "an hour from you").
+- Emphasize that working with C&D means working directly with the family (and a 50-plus person team).
+- Soft call to action: offer a quick call or an in-person visit, and invite a reply.
+- A few short paragraphs.
+
+Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
+
+Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
+    const user = `Prospect company: ${lead.companyName}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
+    const msg = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1200, system, messages: [{ role: "user", content: user }] });
     const t: any = (msg.content || []).find((b: any) => b.type === "text");
-    const html = t?.text?.trim();
-    return html ? wrap(html) : fallback;
+    const raw = (t?.text || "").trim();
+    const m = raw.match(/^\s*SUBJECT:\s*(.+?)\s*\r?\n([\s\S]+)$/i);
+    if (m) return { subject: m[1].trim(), body: wrap(m[2].trim()) };
+    return raw ? { subject: fallback.subject, body: wrap(raw) } : fallback;
   } catch { return fallback; }
 }
 function draftFollowup(lead: any, owner: Owner, step: string, contactName: string): string {
@@ -186,8 +203,8 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
     const owner = resolveOwner(l.ownerName);
     try {
-      const body = await draftIntro(l, owner, contact.name);
-      const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, `C&D Printing & Packaging - ${l.companyName}`, body);
+      const draft = await draftIntro(l, owner, contact.name);
+      const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, draft.subject, draft.body);
       if (sent) {
         await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, "Intro sent") } });
         await appendNote(prisma, l.id, `Intro email sent to ${contact.name || contact.email}`);
