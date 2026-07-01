@@ -1,7 +1,7 @@
 import { getGraphClient, replyInConversation, sendEmail } from "@/lib/email/graph-client";
 import { getClaude } from "@/lib/agent/claude";
 import { outboundEnabled, appendNote } from "@/lib/agent/outbound";
-import { noEmDash, SIGNATURE } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE, OWNERS } from "@/lib/agent/agent";
 
 // Handles replies to outbound prospecting emails (Benjy 6/30). Scans each owner
 // mailbox, matches a reply to its lead, and classifies it: not interested →
@@ -70,7 +70,7 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
           try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
           await prisma.lead.update({ where: { id: bLead.id }, data: { outreachStatus: "bounced", outreachNextAt: null } });
           await appendNote(prisma, bLead.id, `Email to ${bad} bounced, needs a new address`);
-          await sendEmail({ from: mb, to: mb, subject: noEmDash(`Bounced: ${bLead.companyName}`), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>The outbound email to <strong>${bLead.companyName}</strong> bounced (<strong>${bad}</strong> is undeliverable). The agent stopped that sequence. Add or correct the email on the lead and it will pick up the new address automatically.</p></div>`) });
+          await sendEmail({ from: mb, to: OWNERS, subject: noEmDash(`Bounced: ${bLead.companyName}`), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>The outbound email to <strong>${bLead.companyName}</strong> bounced (<strong>${bad}</strong> is undeliverable). The agent stopped that sequence. Add or correct the email on the lead and it will pick up the new address automatically.</p></div>`) });
           handled++;
         }
         continue; // NDR handled (or not one of ours) — never run reply logic on it
@@ -85,8 +85,10 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
       const preview = (m.bodyPreview || "").trim();
       const cls = await classify(preview);
       const ownerFull = MAILBOXES[mb];
+      // Alert all three owners (Benjy, Nitay, Albert) on every reply, regardless
+      // of which mailbox the outreach was sent from.
       const notify = (subject: string, note: string) =>
-        sendEmail({ from: mb, to: mb, subject: noEmDash(subject), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${note}</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote></div>`) });
+        sendEmail({ from: mb, to: OWNERS, subject: noEmDash(subject), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${note}</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote></div>`) });
 
       if (cls === "unsubscribe") {
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "unsubscribed", agentHold: true, outreachNextAt: null } });
