@@ -13,8 +13,11 @@ export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awax
 // his mailbox for replies, so what the customer sees matches the lead owner.
 export const SENDER = "awaxman@cndprinting.com";
 export const SIGNOFF = "Albert Waxman"; // closing name; the signature card below is appended automatically
-// Company signature block appended to every customer-facing email.
-export const SIGNATURE = `<div style="font-family:Arial,Helvetica,sans-serif;color:#555;font-size:13px;line-height:1.5;margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;">C&amp;D Printing &amp; Packaging<br>12150 28th Street North, St. Petersburg, FL 33716<br>Office (727) 572-9999<br><a href="http://www.cndprinting.com/" style="color:#555;">cndprinting.com</a></div>`;
+// Company signature block appended to every customer-facing email. Matches
+// Benjy's real Outlook signature: logo, company, address, office line, and the
+// "C&D Printing Website" link, in gray (#333). Logo is hosted at the app root
+// (public/cd-logo.png) so it renders without a per-email attachment.
+export const SIGNATURE = `<div style="font-family:Arial,Helvetica,sans-serif;color:#333333;font-size:13px;line-height:1.5;margin-top:18px;"><img src="https://packaging.cndprinting.com/cd-logo.png" alt="C&amp;D Printing &amp; Packaging" width="200" height="75" style="display:block;border:0;margin-bottom:8px;"><span style="color:#333333;">C&amp;D Printing &amp; Packaging</span><br>12150 28th Street North, St. Petersburg, FL 33716<br>Office (727) 572-9999<br><a href="http://www.cndprinting.com/" style="color:#333333;">C&amp;D Printing Website</a></div>`;
 const BASE = "https://packaging.cndprinting.com";
 
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
