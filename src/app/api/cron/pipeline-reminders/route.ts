@@ -3,8 +3,8 @@ import { sendEmail } from "@/lib/email/graph-client";
 
 // Daily pipeline follow-up reminders (Benjy 6/26). Vercel Cron hits this once
 // a day; it emails each owner a digest of the leads whose follow-up date has
-// arrived, then marks them so they aren't re-sent. Uses app-level Graph mail,
-// so no logged-in user is required.
+// arrived, and keeps re-sending every morning until each is marked done
+// (Benjy 7/1). Uses app-level Graph mail, so no logged-in user is required.
 
 const SENDER = "bwaxman@cndprinting.com";      // a real C&D mailbox the app can send as
 const FALLBACK_TO = "bwaxman@cndprinting.com"; // where unowned/unknown reminders go
@@ -26,11 +26,15 @@ export async function GET(request: NextRequest) {
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
 
   const now = new Date();
-  // Active stages only — no point nudging won/lost.
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
+  // Active stages only — no point nudging won/lost. Re-nag every morning until
+  // the follow-up is marked done: send if not already reminded today, and skip
+  // any that are completed (followUpDoneAt set).
   const due = await prisma.lead.findMany({
     where: {
       followUpAt: { not: null, lte: now },
-      reminderSentAt: null,
+      followUpDoneAt: null,
+      OR: [{ reminderSentAt: null }, { reminderSentAt: { lt: startOfToday } }],
       pipelineStage: { in: ["LEAD", "QUALIFIED"] },
     },
     orderBy: { followUpAt: "asc" },

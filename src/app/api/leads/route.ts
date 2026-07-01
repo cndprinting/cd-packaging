@@ -111,7 +111,20 @@ export async function PUT(request: NextRequest) {
   if ("followUpNote" in body) data.followUpNote = body.followUpNote || null;
   if ("followUpAt" in body) {
     data.followUpAt = body.followUpAt ? new Date(body.followUpAt) : null;
-    data.reminderSentAt = null; // new/changed date → allow the reminder to fire again
+    data.reminderSentAt = null;     // new/changed date → allow the reminder to fire again
+    data.followUpDoneAt = null;     // setting/rescheduling a date reopens the follow-up
+  }
+  if ("followUpDoneAt" in body) data.followUpDoneAt = body.followUpDoneAt ? new Date(body.followUpDoneAt) : null;
+
+  // Light history: log a completed or (re)scheduled follow-up into Notes so the
+  // paper trail survives. Re-read commentary to avoid clobbering a concurrent edit.
+  let fuLog: string | null = null;
+  if ("followUpDoneAt" in body && body.followUpDoneAt) fuLog = "Follow-up completed";
+  else if ("followUpAt" in body && body.followUpAt) fuLog = `Follow-up set for ${new Date(body.followUpAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  if (fuLog && !("commentary" in body)) {
+    const cur = await prisma.lead.findUnique({ where: { id: body.id }, select: { commentary: true } });
+    const stamp = new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+    data.commentary = `${(cur?.commentary || "").trim()}\n[Follow-up] ${fuLog} ${stamp}`.trim().slice(0, 8000);
   }
   const updated = await prisma.lead.update({ where: { id: body.id }, data });
   return NextResponse.json({ lead: updated });

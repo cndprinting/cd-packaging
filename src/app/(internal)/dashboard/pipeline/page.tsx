@@ -12,7 +12,7 @@ type Lead = {
   website: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
-  followUpAt: string | null; followUpNote: string | null;
+  followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
   outreachStatus: string | null; outreachNextAt: string | null; outreachTo: string | null; outreachEmailed: string | null; outreachLog: string | null;
 };
 
@@ -29,6 +29,7 @@ const OUTREACH: Record<string, { label: string; cls: string }> = {
 
 // Follow-up state: "due" = date is today or past, "upcoming" = future.
 function dueState(l: Lead): "due" | "upcoming" | null {
+  if (l.followUpDoneAt) return null; // completed follow-ups drop off the due list
   if (!l.followUpAt) return null;
   const d = new Date(l.followUpAt); const end = new Date(); end.setHours(23, 59, 59, 999);
   return d <= end ? "due" : "upcoming";
@@ -192,7 +193,10 @@ export default function PipelinePage() {
                       <span>
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
                         {(() => { const d = dueState(l); if (!d || !l.followUpAt) return l.endMarket ? <span className="block text-xs text-gray-400">{l.endMarket}</span> : null;
-                          return <span className={`block text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>{d === "due" ? "● Follow up due" : `Follow-up ${fmtShort(l.followUpAt)}`}</span>; })()}
+                          return <span className={`flex items-center gap-2 text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>
+                            <span>{d === "due" ? "● Follow up due" : `Follow-up ${fmtShort(l.followUpAt)}`}</span>
+                            {d === "due" && <button onClick={(e) => { e.stopPropagation(); patch(l.id, "followUpDoneAt", new Date().toISOString()); }} className="text-green-600 hover:underline" title="Mark this follow-up done">✓ done</button>}
+                          </span>; })()}
                       </span>
                     </button>
                   </td>
@@ -270,8 +274,28 @@ export default function PipelinePage() {
                           </div>
                         ))}
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Follow-up date <span className="text-gray-400 font-normal">— emails the owner when due</span></label>
-                          <Input type="date" className="h-8 text-xs" value={l.followUpAt ? l.followUpAt.slice(0, 10) : ""} onChange={(e) => patch(l.id, "followUpAt", e.target.value || null)} />
+                          <div className="flex items-center gap-2 mb-1">
+                            <label className="block text-xs font-medium text-gray-500">Follow-up</label>
+                            {l.followUpDoneAt
+                              ? <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] text-green-700">Done {fmtShort(l.followUpDoneAt)}</span>
+                              : l.followUpAt
+                                ? (dueState(l) === "due"
+                                    ? <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">Outstanding</span>
+                                    : <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">Scheduled</span>)
+                                : null}
+                          </div>
+                          {l.followUpDoneAt ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Completed. </span>
+                              <button onClick={() => patch(l.id, "followUpDoneAt", null)} className="text-xs text-brand-600 hover:underline">Reopen / set new date</button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Input type="date" className="h-8 text-xs" value={l.followUpAt ? l.followUpAt.slice(0, 10) : ""} onChange={(e) => patch(l.id, "followUpAt", e.target.value || null)} title="Set or reschedule the follow-up date" />
+                              {l.followUpAt && <button onClick={() => patch(l.id, "followUpDoneAt", new Date().toISOString())} className="whitespace-nowrap rounded-md border border-green-300 bg-green-50 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100">✓ Done</button>}
+                            </div>
+                          )}
+                          <p className="mt-1 text-[11px] text-gray-400">{l.followUpDoneAt ? "The lead stays open; only the follow-up is cleared." : "Emails the owner every morning until marked done. Change the date to reschedule."}</p>
                         </div>
                         <div className="sm:col-span-2">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Reminder note</label>

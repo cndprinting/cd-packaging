@@ -215,10 +215,13 @@ model Lead {
   numbers         String?
   commentary      String?
   // Follow-up reminder (Benjy 6/26) — set a date + note to nudge a prospect;
-  // a daily cron emails the owner what's due. reminderSentAt guards against
-  // re-emailing the same due reminder.
+  // a daily cron emails the owner what's due, every morning until it's marked
+  // done (Benjy 7/1). reminderSentAt = last-reminded date (re-nag daily).
+  // followUpDoneAt set = the follow-up is completed (drops off due list/counter,
+  // stops the emails); the LEAD itself stays open.
   followUpAt      DateTime?
   followUpNote    String?
+  followUpDoneAt  DateTime?
   reminderSentAt  DateTime?
   // Where the lead came from (Benjy 6/26). "prospecting" = owners' manual
   // list; "inbound" = website form via /api/intake. intakeRaw keeps the
