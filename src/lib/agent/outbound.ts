@@ -58,9 +58,11 @@ function currentContact(lead: any): Contact | null {
 export const outboundEnabled = () => process.env.AGENT_OUTBOUND_ENABLED === "true";
 const autoSend = () => process.env.AGENT_OUTBOUND_AUTOSEND === "true";
 const perRunLimit = () => parseInt(process.env.AGENT_OUTBOUND_LIMIT || "20", 10);
-// Per-lead web research on the intro (Claude web search). On by default; set
-// AGENT_OUTBOUND_RESEARCH=false to disable (small per-search cost).
-const research = () => process.env.AGENT_OUTBOUND_RESEARCH !== "false";
+// Per-lead web research on the intro (Claude web search). OFF by default (Benjy
+// decided against the ~$0.10/lead research cost). Set AGENT_OUTBOUND_RESEARCH=true
+// to turn it back on. Without it, intros still personalize from the lead's own
+// data (company, market, notes) in the house voice — just no web-sourced specifics.
+const research = () => process.env.AGENT_OUTBOUND_RESEARCH === "true";
 
 const FOLLOWUPS: Record<string, { next: string; days: number }> = {
   intro_sent: { next: "followup_1", days: 3 },
