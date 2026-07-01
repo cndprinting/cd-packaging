@@ -1,6 +1,6 @@
 import { getClaude } from "@/lib/agent/claude";
 import { checkBlocked } from "@/lib/agent/blocklist";
-import { noEmDash } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE } from "@/lib/agent/agent";
 import { sendEmail, sendEmailGetConversation, replyInConversation } from "@/lib/email/graph-client";
 
 // Outbound prospecting agent (Benjy 6/30). Sweeps the Leads tab and sends a
@@ -99,18 +99,18 @@ async function draftIntro(lead: any, owner: Owner, contactName: string): Promise
     subject: `Family-built packaging from C&D, right here in St. Pete`,
     body: wrap(`
       <p>Hi ${contact},</p>
-      <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned folding carton manufacturer that has been in St. Petersburg, Florida for about 50 years. Our family, the Waxmans, and a team of 50-plus make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
+      <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned folding carton manufacturer in St. Petersburg, Florida with about 50 years of history behind it. Our family and a team of 50-plus make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
       <p>I came across ${lead.companyName} and thought we could be a good fit. What sets us apart is that working with us means working with our family directly. Would you be open to a quick call, or an in-person visit if you are nearby?</p>
       <p>Best,<br>${owner.first}</p>`),
   };
   const claude = getClaude();
   if (!claude) return fallback;
   try {
-    const system = `You write warm, personal cold-intro emails for C&D Printing & Packaging, in the voice of the Waxman family that owns it. C&D is a family-owned, roughly 50-year-old folding carton and packaging manufacturer in St. Petersburg, Florida (folding cartons, custom boxes, retail and printed packaging), with a team of 50-plus, serving cosmetics, skincare, nutraceutical, health-and-wellness, and other consumer brands and contract manufacturers. You are writing AS ${owner.full} (first name ${owner.first}), part of the C&D team.
+    const system = `You write warm, personal cold-intro emails for C&D Printing & Packaging, in the voice of the Waxman family that owns it. C&D is a family-owned folding carton and packaging manufacturer in St. Petersburg, Florida with roughly 50 years of history (folding cartons, custom boxes, retail and printed packaging), with a team of 50-plus, serving cosmetics, skincare, nutraceutical, health-and-wellness, and other consumer brands and contract manufacturers. IMPORTANT accuracy note: C&D the company is about 50 years old, but the Waxman family acquired it in 2025 and runs it hands-on now. Describe C&D as a 50-year-old company that is now family-owned. Do NOT claim the family has run or owned C&D for 50 years, and do NOT call it "multi-generation." You are writing AS ${owner.full} (first name ${owner.first}), part of the Waxman family that owns C&D.
 
 Model the tone on our best-performing emails:
 - Warm, personal, human. Never salesy or templated.
-- Open with something specific and genuine about THEIR company (their market, what they make, their family or story if evident) and tie it to C&D being a family, multi-generation manufacturer.
+- Open with something specific and genuine about THEIR company (their market, what they make, their family or story if evident) and tie it to C&D being a family-owned manufacturer.
 - Lean on being local when it fits (St. Petersburg, Tampa, Orlando, "neighbors", "a short drive away", "an hour from you").
 - Emphasize that working with C&D means working directly with the family (and a 50-plus person team).
 - Soft call to action: offer a quick call or an in-person visit, and invite a reply.
@@ -141,13 +141,13 @@ function draftFollowup(lead: any, owner: Owner, step: string, contactName: strin
   const msg = step === "intro_sent"
     ? `Just following up on my note below about packaging for ${lead.companyName}. Happy to send over a few samples or hop on a quick call if useful.`
     : `Last note from me for now. If custom packaging is ever on the radar for ${lead.companyName}, we would love the chance to help, just reply anytime.`;
-  return wrap(`<p>Hi ${contact},</p><p>${msg}</p><p>Best regards,<br>${owner.full}<br>C&amp;D Printing &amp; Packaging</p>`);
+  return wrap(`<p>Hi ${contact},</p><p>${msg}</p><p>Best,<br>${owner.first}</p>`);
 }
 
 // ── Sending (threaded, from the owner's mailbox) ───────────────────────────
 async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, toName: string, subject: string, body: string): Promise<boolean> {
   const subj = noEmDash(subject);
-  const html = stripBold(noEmDash(body));
+  const html = stripBold(noEmDash(body)) + SIGNATURE;
   // Review mode: redirect the draft to the owner's own inbox so they can see it.
   if (!autoSend()) {
     await sendEmail({ from: owner.email, to: owner.email, subject: `[DRAFT → ${to}] ${subj}`, body: html + `<p style="color:#bbb;font-size:11px;">[Outbound review mode — in production this would send to ${toName || lead.companyName} &lt;${to}&gt; from ${owner.full}.]</p>` });

@@ -12,7 +12,9 @@ export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awax
 // Customer-facing identity: the agent sends AS Albert (sales manager) and reads
 // his mailbox for replies, so what the customer sees matches the lead owner.
 export const SENDER = "awaxman@cndprinting.com";
-export const SIGNOFF = "Albert Waxman<br>C&amp;D Printing &amp; Packaging"; // email sign-off
+export const SIGNOFF = "Albert Waxman"; // closing name; the signature card below is appended automatically
+// Company signature block appended to every customer-facing email.
+export const SIGNATURE = `<div style="font-family:Arial,Helvetica,sans-serif;color:#555;font-size:13px;line-height:1.5;margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;">C&amp;D Printing &amp; Packaging<br>12150 28th Street North, St. Petersburg, FL 33716<br>Office (727) 572-9999<br><a href="http://www.cndprinting.com/" style="color:#555;">cndprinting.com</a></div>`;
 const BASE = "https://packaging.cndprinting.com";
 
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
@@ -86,7 +88,7 @@ export const customerSubject = (lead: any) => `Your quote from C&D Printing - ${
 export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?: string; body: string; copyAttachmentsFrom?: string }): Promise<void> {
   if (!lead.contactEmail) return;
   const subject = noEmDash(opts.subject || customerSubject(lead));
-  const body = noEmDash(opts.body);
+  const body = noEmDash(opts.body) + SIGNATURE;
   if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: OWNERS, subject, body }); return; }
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentConvId) {

@@ -1,7 +1,7 @@
 import { getGraphClient, replyInConversation, sendEmail } from "@/lib/email/graph-client";
 import { getClaude } from "@/lib/agent/claude";
 import { outboundEnabled, appendNote } from "@/lib/agent/outbound";
-import { noEmDash } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE } from "@/lib/agent/agent";
 
 // Handles replies to outbound prospecting emails (Benjy 6/30). Scans each owner
 // mailbox, matches a reply to its lead, and classifies it: not interested →
@@ -73,7 +73,7 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
         await appendNote(prisma, lead.id, `Prospect not interested, recheck set ${recheck.toLocaleDateString("en-US")}`);
         // brief gracious note, threaded from the owner's mailbox
         if (lead.outreachConvId) {
-          try { await replyInConversation({ from: mb, conversationId: lead.outreachConvId, to: lead.contactEmail, body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Totally understand, and thank you for letting me know. I will check back down the road. If anything changes in the meantime, we are here to help.</p><p>Best regards,<br>${ownerFull}<br>C&amp;D Printing &amp; Packaging</p></div>`) }); } catch { /* ignore */ }
+          try { await replyInConversation({ from: mb, conversationId: lead.outreachConvId, to: lead.contactEmail, body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Totally understand, and thank you for letting me know. I will check back down the road. If anything changes in the meantime, we are here to help.</p><p>Best,<br>${(ownerFull || "").split(" ")[0]}</p></div>`) + SIGNATURE }); } catch { /* ignore */ }
         }
         await notify(`Not interested: ${lead.companyName}`, `<strong>${lead.companyName}</strong> passed for now. Recheck scheduled in ~6 months.`);
       } else {
