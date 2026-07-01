@@ -13,6 +13,18 @@ type Lead = {
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null;
+  outreachStatus: string | null; outreachNextAt: string | null; outreachContact: number | null; outreachLog: string | null;
+};
+
+// Outbound-agent status → chip label + styling. null status = not yet emailed.
+const OUTREACH: Record<string, { label: string; cls: string }> = {
+  intro_sent:     { label: "Intro sent",     cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  followup_1:     { label: "Follow-up 1",    cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  followup_2:     { label: "Follow-up 2",    cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  replied:        { label: "Replied",        cls: "bg-green-50 text-green-700 border-green-200" },
+  not_interested: { label: "Recheck (6mo)",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  unsubscribed:   { label: "Do not contact", cls: "bg-gray-200 text-gray-600 border-gray-300" },
+  done:           { label: "Sequence done",  cls: "bg-gray-100 text-gray-500 border-gray-200" },
 };
 
 // Follow-up state: "due" = date is today or past, "upcoming" = future.
@@ -63,6 +75,19 @@ export default function PipelinePage() {
   }, [leads]);
 
   const dueCount = useMemo(() => leads.filter((l) => (l.pipelineStage === "LEAD" || l.pipelineStage === "QUALIFIED") && dueState(l) === "due").length, [leads]);
+
+  // Outbound-agent campaign counters (LEAD stage only).
+  const outreach = useMemo(() => {
+    const L = leads.filter((l) => l.pipelineStage === "LEAD");
+    const inSeq = ["intro_sent", "followup_1", "followup_2"];
+    return {
+      emailed: L.filter((l) => !!l.outreachStatus).length,
+      inSeq: L.filter((l) => inSeq.includes(l.outreachStatus || "")).length,
+      replied: L.filter((l) => l.outreachStatus === "replied").length,
+      done: L.filter((l) => l.outreachStatus === "done").length,
+      notContacted: L.filter((l) => !l.outreachStatus && !l.agentHold).length,
+    };
+  }, [leads]);
 
   const q = search.trim().toLowerCase();
   const visible = leads
@@ -129,6 +154,17 @@ export default function PipelinePage() {
 
       <Input placeholder="Search company, market, owner, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
 
+      {active === "LEAD" && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-gray-400">Outbound agent:</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700"><b className="text-gray-900">{outreach.emailed}</b> emailed</span>
+          <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-700"><b>{outreach.inSeq}</b> in sequence</span>
+          <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-green-700"><b>{outreach.replied}</b> replied</span>
+          <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-gray-500"><b>{outreach.done}</b> done</span>
+          <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-500"><b>{outreach.notContacted}</b> not yet contacted</span>
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -140,6 +176,7 @@ export default function PipelinePage() {
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
+                {active === "LEAD" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
                 {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
@@ -193,6 +230,13 @@ export default function PipelinePage() {
                     </td>
                   )}
                   {active === "LEAD" && (
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {l.outreachStatus && OUTREACH[l.outreachStatus]
+                        ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
+                  {active === "LEAD" && (
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
@@ -217,7 +261,7 @@ export default function PipelinePage() {
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={9} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
                         {([["website", "Website"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
                           <div key={f}>
@@ -237,6 +281,20 @@ export default function PipelinePage() {
                           <label className="block text-xs font-medium text-gray-500 mb-1">Numbers <span className="text-gray-400 font-normal">— dump every number you collect here</span></label>
                           <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.numbers || ""} placeholder="e.g. 305-555-0100 (cell) · 727-555-0199 (office) · 954-555-0123 (Reid)" onChange={(e) => setLocal(l.id, "numbers", e.target.value)} onBlur={(e) => patch(l.id, "numbers", e.target.value)} />
                         </div>
+                        {(l.outreachStatus || l.outreachLog) && (
+                          <div className="sm:col-span-3 rounded-md border border-gray-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-xs font-medium text-gray-500">Outbound agent</span>
+                              {l.outreachStatus && OUTREACH[l.outreachStatus] && <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>}
+                              {l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus || "") && <span className="text-xs text-gray-400">next action {fmtShort(l.outreachNextAt)}</span>}
+                              <span className="text-xs text-gray-400">· working {(l.outreachContact || 0) === 0 ? "primary" : "secondary"} contact</span>
+                            </div>
+                            <ol className="space-y-1 text-xs text-gray-600">
+                              {(() => { let a: any[] = []; try { a = l.outreachLog ? JSON.parse(l.outreachLog) : []; } catch { /* ignore */ } return a.slice().reverse().map((e: any, i: number) => (<li key={i} className="flex gap-2"><span className="text-gray-400 tabular-nums w-12 shrink-0">{fmtShort(e.at)}</span><span>{e.event}</span></li>)); })()}
+                              {!l.outreachLog && <li className="text-gray-400">No agent activity yet.</li>}
+                            </ol>
+                          </div>
+                        )}
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
                           <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.commentary || ""} onChange={(e) => setLocal(l.id, "commentary", e.target.value)} onBlur={(e) => patch(l.id, "commentary", e.target.value)} />
@@ -247,7 +305,7 @@ export default function PipelinePage() {
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={7} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>
