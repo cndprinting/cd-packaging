@@ -102,7 +102,7 @@ export async function PUT(request: NextRequest) {
 
   // Inline field updates (dropdowns, text, stage move).
   const data: any = {};
-  for (const k of ["companyName", "endMarket", "productCategory", "website", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary"]) {
+  for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary"]) {
     if (k in body) data[k] = body[k] || null;
   }
   if ("priority" in body) data.priority = body.priority ? Number(body.priority) : null;

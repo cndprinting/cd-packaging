@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 
 type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
-  website: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
+  website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
@@ -270,7 +270,7 @@ export default function PipelinePage() {
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
                     <td colSpan={9} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
+                        {([["website", "Website"], ["city", "City"], ["state", "State (e.g. FL, GA) — sets the agent's geography angle"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
                           <div key={f}>
                             <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
                             <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => setLocal(l.id, f, e.target.value)} onBlur={(e) => patch(l.id, f, e.target.value)} />
