@@ -21,6 +21,11 @@ const OWNERS_MAP: Record<string, Owner> = {
   nitay: { email: "nlaor@cndprinting.com", full: "Nitay Laor", first: "Nitay" },
 };
 const DEFAULT_OWNER = OWNERS_MAP.albert; // Kelsey / TBD / blank / unknown → Albert
+// Benjy, Nitay, Albert are BCC'd on every outbound send so they can monitor the
+// agent (invisible to the prospect). The sending owner is dropped since their
+// own copy already lands in Sent.
+const OWNER_BCC = [OWNERS_MAP.benjy.email, OWNERS_MAP.nitay.email, OWNERS_MAP.albert.email];
+const bccFor = (owner: Owner) => OWNER_BCC.filter((e) => e.toLowerCase() !== owner.email.toLowerCase());
 function resolveOwner(ownerName?: string | null): Owner {
   return OWNERS_MAP[(ownerName || "").trim().toLowerCase()] || DEFAULT_OWNER;
 }
@@ -172,11 +177,12 @@ async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, to
     await sendEmail({ from: owner.email, to: owner.email, subject: `[DRAFT → ${to}] ${subj}`, body: html + `<p style="color:#bbb;font-size:11px;">[Outbound review mode — in production this would send to ${toName || lead.companyName} &lt;${to}&gt; from ${owner.full}.]</p>` });
     return false; // not actually sent to the prospect; state not advanced
   }
+  const bcc = bccFor(owner);
   if (lead.outreachConvId) {
-    const r = await replyInConversation({ from: owner.email, conversationId: lead.outreachConvId, to, body: html });
+    const r = await replyInConversation({ from: owner.email, conversationId: lead.outreachConvId, to, bcc, body: html });
     if (r.success) return true;
   }
-  const r = await sendEmailGetConversation({ from: owner.email, to, subject: subj, body: html });
+  const r = await sendEmailGetConversation({ from: owner.email, to, bcc, subject: subj, body: html });
   if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { outreachConvId: r.conversationId } }); } catch { /* ignore */ } }
   return !!r.success;
 }

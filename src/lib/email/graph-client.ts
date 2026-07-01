@@ -29,6 +29,7 @@ export interface SendEmailOptions {
   from: string; // sender email (must be a C&D M365 mailbox)
   to: string | string[];
   cc?: string | string[];
+  bcc?: string | string[];
   subject: string;
   body: string; // HTML content
   attachments?: { name: string; contentType: string; base64Content: string }[];
@@ -50,11 +51,18 @@ export async function sendEmail(options: SendEmailOptions): Promise<{ success: b
       }))
     : [];
 
+  const bccRecipients = options.bcc
+    ? (Array.isArray(options.bcc) ? options.bcc : [options.bcc]).map((email) => ({
+        emailAddress: { address: email },
+      }))
+    : [];
+
   const message: Record<string, unknown> = {
     subject: options.subject,
     body: { contentType: "HTML", content: options.body },
     toRecipients,
     ccRecipients,
+    bccRecipients,
   };
 
   if (options.attachments?.length) {
@@ -88,6 +96,7 @@ export async function sendEmailGetConversation(options: SendEmailOptions): Promi
       body: { contentType: "HTML", content: options.body },
       toRecipients: toRecips(options.to),
       ccRecipients: toRecips(options.cc),
+      bccRecipients: toRecips(options.bcc),
     });
     await client.api(`/users/${options.from}/messages/${draft.id}/send`).post({});
     return { success: true, conversationId: draft.conversationId };
@@ -130,7 +139,7 @@ export async function forwardMessage(options: { from: string; messageId: string;
 
 // Reply inside an existing conversation so the email stays in the same thread.
 // We reply to one of our own messages in the thread and override the recipients.
-export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; body: string; copyAttachmentsFrom?: string }): Promise<{ success: boolean; error?: string }> {
+export async function replyInConversation(options: { from: string; conversationId: string; to: string | string[]; cc?: string | string[]; bcc?: string | string[]; body: string; copyAttachmentsFrom?: string }): Promise<{ success: boolean; error?: string }> {
   const client = getGraphClient();
   if (!client) return { success: false, error: "Email not configured" };
   try {
@@ -138,7 +147,7 @@ export async function replyInConversation(options: { from: string; conversationI
     const src = (found.value || [])[0];
     if (!src) return { success: false, error: "conversation not found" };
     const reply: any = await client.api(`/users/${options.from}/messages/${src.id}/createReply`).post({});
-    await client.api(`/users/${options.from}/messages/${reply.id}`).patch({ toRecipients: toRecips(options.to), ccRecipients: toRecips(options.cc), body: { contentType: "HTML", content: options.body } });
+    await client.api(`/users/${options.from}/messages/${reply.id}`).patch({ toRecipients: toRecips(options.to), ccRecipients: toRecips(options.cc), bccRecipients: toRecips(options.bcc), body: { contentType: "HTML", content: options.body } });
     // Carry over file attachments from a source message (e.g. customer artwork → Mary's thread).
     if (options.copyAttachmentsFrom) {
       try {
