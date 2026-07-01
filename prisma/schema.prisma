@@ -199,6 +199,8 @@ model Lead {
   endMarket       String?
   productCategory String?
   website         String?
+  city            String?   // prospect location — drives the outbound geography hook (FL local vs out-of-state)
+  state           String?   // 2-letter or name, e.g. "FL", "GA"
   contactName     String?
   contactTitle    String?
   contactEmail    String?

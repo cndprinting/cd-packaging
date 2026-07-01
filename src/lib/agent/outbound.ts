@@ -149,14 +149,20 @@ Model the tone on our best-performing emails:
 - Soft call to action: offer a quick call or an in-person visit, and invite a reply.
 - A few short paragraphs.
 
-You (${owner.first}) are based in Miami (Brickell); C&D's manufacturing plant is in St. Petersburg. Pick the stronger local hook: if the prospect is in South Florida (Miami, Fort Lauderdale, West Palm), say you are local to them in Miami and could easily meet in person; if they are near Tampa, St. Petersburg, or Orlando, note the plant is a short drive; otherwise keep geography light.
+You (${owner.first}) are based in Miami (Brickell); C&D's manufacturing plant is in St. Petersburg, Florida. Use the prospect's location (given below, or from the notes) to pick the RIGHT geography hook, and never claim to be local when you are not:
+- Prospect in South Florida (Miami, Fort Lauderdale, West Palm): say you are local to them in Miami and could easily meet in person.
+- Prospect near Tampa, St. Petersburg, or Orlando: note the plant is a short drive and you would be glad to visit.
+- Prospect elsewhere in Florida: mention you are a fellow Florida company, same state, easy to work with in person or by phone.
+- Prospect in Georgia or another state (i.e. NOT Florida): do NOT imply you are local or nearby. Instead lean on being a Southeast manufacturer that already works with brands across the region and ships nationwide, and offer a call or to send samples. For Georgia specifically you may note you are just down in Florida, a straightforward regional partner, but never say "local" or "neighbors."
+- If you genuinely cannot tell where they are, keep geography light and do not guess.
 
 Research the prospect first using web search: what they make, where they are based, their notable products or brands, and anything genuinely current. Weave in one or two specific, accurate details you find (for example the kinds of products they package). Use only facts you actually verify. Never guess or fabricate a product, location, or person.
 
 Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
 
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
-    const user = `Prospect company: ${lead.companyName}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
+    const loc = [lead.city, lead.state].filter(Boolean).join(", ") || "unknown (see notes)";
+    const user = `Prospect company: ${lead.companyName}. Location: ${loc}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
     const req: any = { model: "claude-opus-4-8", max_tokens: 2500, system, messages: [{ role: "user", content: user }] };
     if (research()) req.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }]; // newer variant (dynamic filtering) for Opus 4.8 — more token-efficient
     const msg = await claude.messages.create(req);
