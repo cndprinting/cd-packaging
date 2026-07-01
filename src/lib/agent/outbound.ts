@@ -58,6 +58,9 @@ function currentContact(lead: any): Contact | null {
 export const outboundEnabled = () => process.env.AGENT_OUTBOUND_ENABLED === "true";
 const autoSend = () => process.env.AGENT_OUTBOUND_AUTOSEND === "true";
 const perRunLimit = () => parseInt(process.env.AGENT_OUTBOUND_LIMIT || "20", 10);
+// Per-lead web research on the intro (Claude web search). On by default; set
+// AGENT_OUTBOUND_RESEARCH=false to disable (small per-search cost).
+const research = () => process.env.AGENT_OUTBOUND_RESEARCH !== "false";
 
 const FOLLOWUPS: Record<string, { next: string; days: number }> = {
   intro_sent: { next: "followup_1", days: 3 },
@@ -111,13 +114,21 @@ Model the tone on our best-performing emails:
 - Soft call to action: offer a quick call or an in-person visit, and invite a reply.
 - A few short paragraphs.
 
+You (${owner.first}) are based in Miami (Brickell); C&D's manufacturing plant is in St. Petersburg. Pick the stronger local hook: if the prospect is in South Florida (Miami, Fort Lauderdale, West Palm), say you are local to them in Miami and could easily meet in person; if they are near Tampa, St. Petersburg, or Orlando, note the plant is a short drive; otherwise keep geography light.
+
+Research the prospect first using web search: what they make, where they are based, their notable products or brands, and anything genuinely current. Weave in one or two specific, accurate details you find (for example the kinds of products they package). Use only facts you actually verify. Never guess or fabricate a product, location, or person.
+
 Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
 
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
     const user = `Prospect company: ${lead.companyName}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
-    const msg = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1200, system, messages: [{ role: "user", content: user }] });
-    const t: any = (msg.content || []).find((b: any) => b.type === "text");
-    const raw = (t?.text || "").trim();
+    const req: any = { model: "claude-opus-4-8", max_tokens: 2500, system, messages: [{ role: "user", content: user }] };
+    if (research()) req.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
+    const msg = await claude.messages.create(req);
+    // With web search there can be interim text between searches; the email is
+    // the LAST text block (the model's final answer after researching).
+    const texts = (msg.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text || "");
+    const raw = (texts[texts.length - 1] || "").trim();
     const m = raw.match(/^\s*SUBJECT:\s*(.+?)\s*\r?\n([\s\S]+)$/i);
     if (m) return { subject: m[1].trim(), body: wrap(m[2].trim()) };
     return raw ? { subject: fallback.subject, body: wrap(raw) } : fallback;
