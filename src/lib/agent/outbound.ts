@@ -50,9 +50,28 @@ function contactList(lead: any): Contact[] {
   }
   return list;
 }
-// The contact the sequence is currently on (primary first, then secondary).
-function currentContact(lead: any): Contact | null {
-  return contactList(lead)[lead.outreachContact || 0] || null;
+// Emails the agent has already reached out to on this lead (lowercased set).
+// This is tracked by ADDRESS, not list position, so editing/adding contacts
+// never causes a re-email and a newly added contact gets picked up cleanly.
+function emailedSet(lead: any): Set<string> {
+  try { return new Set((JSON.parse(lead.outreachEmailed || "[]") as string[]).map((e) => String(e).toLowerCase())); }
+  catch { return new Set(); }
+}
+function withEmailed(lead: any, email: string): string {
+  const s = emailedSet(lead); s.add(email.toLowerCase());
+  return JSON.stringify([...s].slice(-50));
+}
+// Next contact we have NOT emailed yet (primary first, then secondary/extras).
+// How a freshly-added contact triggers a new round.
+function nextUnemailedContact(lead: any): Contact | null {
+  const done = emailedSet(lead);
+  return contactList(lead).find((c) => c.email && !done.has(c.email.toLowerCase())) || null;
+}
+// The contact the current in-progress sequence is aimed at (matched by email).
+function sequenceContact(lead: any): Contact | null {
+  const list = contactList(lead);
+  if (lead.outreachTo) return list.find((c) => c.email.toLowerCase() === String(lead.outreachTo).toLowerCase()) || { email: String(lead.outreachTo), name: "" };
+  return list[0] || null;
 }
 
 export const outboundEnabled = () => process.env.AGENT_OUTBOUND_ENABLED === "true";
@@ -64,10 +83,10 @@ const perRunLimit = () => parseInt(process.env.AGENT_OUTBOUND_LIMIT || "20", 10)
 // data (company, market, notes) in the house voice — just no web-sourced specifics.
 const research = () => process.env.AGENT_OUTBOUND_RESEARCH === "true";
 
+// Sequence per contact: intro, then (+3d) follow-up #1, then (+7d) follow-up #2, done.
 const FOLLOWUPS: Record<string, { next: string; days: number }> = {
-  intro_sent: { next: "followup_1", days: 3 },
-  followup_1: { next: "followup_2", days: 7 },
-  followup_2: { next: "done", days: 0 },
+  intro_sent: { next: "followup_1", days: 7 },
+  followup_1: { next: "done", days: 0 },
 };
 const addDays = (from: Date, n: number) => new Date(from.getTime() + n * 24 * 3600 * 1000);
 function logLine(prev: string | null, event: string): string {
@@ -177,7 +196,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     });
     for (const l of due) {
       if (sends >= limit) break;
-      const contact = currentContact(l);
+      const contact = sequenceContact(l);
       if (!contact) continue;
       const owner = resolveOwner(l.ownerName);
       const step = FOLLOWUPS[l.outreachStatus as string];
@@ -187,11 +206,11 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
         if (ok) {
           await appendNote(prisma, l.id, `Follow-up sent to ${contact.name || contact.email}`);
           if (step.next === "done") {
-            // Sequence for this contact is done with no reply. Roll to the next
-            // contact (secondary) if there is one; otherwise close out.
-            const nextIdx = (l.outreachContact || 0) + 1;
-            if (contactList(l)[nextIdx]) {
-              await prisma.lead.update({ where: { id: l.id }, data: { outreachContact: nextIdx, outreachStatus: null, outreachConvId: null, outreachNextAt: null, outreachLog: logLine(l.outreachLog, `No reply, moving to contact ${nextIdx + 1}`) } });
+            // This contact's sequence is done with no reply. If there's another
+            // contact we haven't emailed yet (e.g. one just added), reset so the
+            // intro pass starts a fresh sequence to THEM; otherwise close out.
+            if (nextUnemailedContact(l)) {
+              await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: null, outreachTo: null, outreachConvId: null, outreachNextAt: null, outreachLog: logLine(l.outreachLog, "No reply, moving to next contact") } });
             } else {
               await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "done", outreachNextAt: null, outreachLog: logLine(l.outreachLog, "Sequence complete, no response") } });
             }
@@ -204,22 +223,25 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     }
   }
 
-  // New intros — never-contacted, has email, not held, not blocklisted.
+  // New intros — leads that are un-started OR finished-with-no-reply but now have
+  // a contact we haven't emailed yet (e.g. one you just added). Replied /
+  // not-interested / unsubscribed leads are intentionally left alone.
   const fresh = await prisma.lead.findMany({
-    where: { pipelineStage: "LEAD", agentHold: false, outreachStatus: null, contactEmail: { not: null } },
-    orderBy: { createdAt: "asc" }, take: limit * 2,
+    where: { pipelineStage: "LEAD", agentHold: false, OR: [{ outreachStatus: null }, { outreachStatus: "done" }] },
+    orderBy: { createdAt: "asc" }, take: limit * 3,
   });
   for (const l of fresh) {
     if (sends >= limit) break;
-    const contact = currentContact(l); // primary, or secondary once we've rolled over
-    if (!contact) continue;
+    const contact = nextUnemailedContact(l); // the first person on this lead we haven't emailed
+    if (!contact) continue; // nothing new to reach out to here
     if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
     const owner = resolveOwner(l.ownerName);
     try {
       const draft = await draftIntro(l, owner, contact.name);
+      l.outreachConvId = null; // an intro always opens a fresh thread for this person
       const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, draft.subject, draft.body);
       if (sent) {
-        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, "Intro sent") } });
+        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachTo: contact.email, outreachEmailed: withEmailed(l, contact.email), outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, `Intro sent to ${contact.name || contact.email}`) } });
         await appendNote(prisma, l.id, `Intro email sent to ${contact.name || contact.email}`);
         sends++; intros++;
       } else {

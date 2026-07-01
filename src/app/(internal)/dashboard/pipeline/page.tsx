@@ -13,7 +13,7 @@ type Lead = {
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null;
-  outreachStatus: string | null; outreachNextAt: string | null; outreachContact: number | null; outreachLog: string | null;
+  outreachStatus: string | null; outreachNextAt: string | null; outreachTo: string | null; outreachEmailed: string | null; outreachLog: string | null;
 };
 
 // Outbound-agent status → chip label + styling. null status = not yet emailed.
@@ -286,8 +286,9 @@ export default function PipelinePage() {
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className="text-xs font-medium text-gray-500">Outbound agent</span>
                               {l.outreachStatus && OUTREACH[l.outreachStatus] && <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>}
-                              {l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus || "") && <span className="text-xs text-gray-400">next action {fmtShort(l.outreachNextAt)}</span>}
-                              <span className="text-xs text-gray-400">· working {(l.outreachContact || 0) === 0 ? "primary" : "secondary"} contact</span>
+                              {l.outreachNextAt && ["intro_sent", "followup_1"].includes(l.outreachStatus || "") && <span className="text-xs text-gray-400">next action {fmtShort(l.outreachNextAt)}</span>}
+                              {l.outreachTo && ["intro_sent", "followup_1"].includes(l.outreachStatus || "") && <span className="text-xs text-gray-400">· emailing {l.outreachTo}</span>}
+                              {(() => { let n = 0; try { n = (JSON.parse(l.outreachEmailed || "[]") as any[]).length; } catch { /* ignore */ } return n > 1 ? <span className="text-xs text-gray-400">· {n} contacts emailed</span> : null; })()}
                             </div>
                             <ol className="space-y-1 text-xs text-gray-600">
                               {(() => { let a: any[] = []; try { a = l.outreachLog ? JSON.parse(l.outreachLog) : []; } catch { /* ignore */ } return a.slice().reverse().map((e: any, i: number) => (<li key={i} className="flex gap-2"><span className="text-gray-400 tabular-nums w-12 shrink-0">{fmtShort(e.at)}</span><span>{e.event}</span></li>)); })()}
