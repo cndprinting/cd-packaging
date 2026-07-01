@@ -14,7 +14,9 @@ const MAILBOXES: Record<string, string> = {
   "nlaor@cndprinting.com": "Nitay Laor",
 };
 const ACTIVE = ["intro_sent", "followup_1", "followup_2", "replied"];
+const ACTIVE_SEQ = ["intro_sent", "followup_1", "followup_2"]; // mid-sequence (can bounce)
 const SIX_MONTHS_DAYS = 182;
+const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 
 async function classify(text: string): Promise<"interested" | "not_interested" | "unsubscribe" | "other"> {
   const claude = getClaude();
@@ -47,6 +49,33 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
     for (const m of items) {
       const from = m.from?.emailAddress?.address?.toLowerCase();
       if (!from) continue;
+
+      // Bounce / NDR? Intercept before the reply logic — an NDR comes from
+      // postmaster (not the prospect) and can even carry the original
+      // conversationId, which would otherwise look like a reply.
+      const subj = (m.subject || "").trim();
+      if (/postmaster|mailer-daemon|microsoftexchange/i.test(from) || /^undeliverable/i.test(subj)) {
+        const pluck = (t: string) => Array.from(new Set((t.match(EMAIL_RE) || []).map((e) => e.toLowerCase())))
+          .filter((e) => !/postmaster|mailer-daemon|microsoftexchange/.test(e) && !MAILBOXES[e]);
+        let cands = pluck(`${subj}\n${m.bodyPreview || ""}`);
+        if (!cands.length) { // preview didn't carry the address — fetch the body
+          try { const full: any = await client.api(`/users/${mb}/messages/${m.id}`).select("body").get(); cands = pluck((full.body?.content || "").replace(/<[^>]+>/g, " ")); } catch { /* ignore */ }
+        }
+        let bLead: any = null, bad = "";
+        for (const c of cands) {
+          bLead = await prisma.lead.findFirst({ where: { outreachTo: { equals: c, mode: "insensitive" }, outreachStatus: { in: ACTIVE_SEQ } } });
+          if (bLead) { bad = c; break; }
+        }
+        if (bLead) {
+          try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+          await prisma.lead.update({ where: { id: bLead.id }, data: { outreachStatus: "bounced", outreachNextAt: null } });
+          await appendNote(prisma, bLead.id, `Email to ${bad} bounced, needs a new address`);
+          await sendEmail({ from: mb, to: mb, subject: noEmDash(`Bounced: ${bLead.companyName}`), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>The outbound email to <strong>${bLead.companyName}</strong> bounced (<strong>${bad}</strong> is undeliverable). The agent stopped that sequence. Add or correct the email on the lead and it will pick up the new address automatically.</p></div>`) });
+          handled++;
+        }
+        continue; // NDR handled (or not one of ours) — never run reply logic on it
+      }
+
       const conv = m.conversationId;
       let lead = conv ? await prisma.lead.findFirst({ where: { outreachConvId: conv, outreachStatus: { in: ACTIVE } } }) : null;
       if (!lead) lead = await prisma.lead.findFirst({ where: { contactEmail: { equals: from, mode: "insensitive" }, outreachStatus: { in: ACTIVE } } });

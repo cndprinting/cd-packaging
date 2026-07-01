@@ -233,7 +233,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   // a contact we haven't emailed yet (e.g. one you just added). Replied /
   // not-interested / unsubscribed leads are intentionally left alone.
   const fresh = await prisma.lead.findMany({
-    where: { pipelineStage: "LEAD", agentHold: false, source: { not: "inbound" }, OR: [{ outreachStatus: null }, { outreachStatus: "done" }] },
+    where: { pipelineStage: "LEAD", agentHold: false, source: { not: "inbound" }, OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
     orderBy: { createdAt: "asc" }, take: limit * 3,
   });
   for (const l of fresh) {

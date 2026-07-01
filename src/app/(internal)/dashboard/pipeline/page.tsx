@@ -23,6 +23,7 @@ const OUTREACH: Record<string, { label: string; cls: string }> = {
   followup_2:     { label: "Follow-up 2",    cls: "bg-blue-50 text-blue-700 border-blue-200" },
   replied:        { label: "Replied",        cls: "bg-green-50 text-green-700 border-green-200" },
   not_interested: { label: "Recheck (6mo)",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  bounced:        { label: "Bounced - needs email", cls: "bg-red-50 text-red-700 border-red-200" },
   unsubscribed:   { label: "Do not contact", cls: "bg-gray-200 text-gray-600 border-gray-300" },
   done:           { label: "Sequence done",  cls: "bg-gray-100 text-gray-500 border-gray-200" },
 };
@@ -86,6 +87,7 @@ export default function PipelinePage() {
       inSeq: L.filter((l) => inSeq.includes(l.outreachStatus || "")).length,
       replied: L.filter((l) => l.outreachStatus === "replied").length,
       done: L.filter((l) => l.outreachStatus === "done").length,
+      bounced: L.filter((l) => l.outreachStatus === "bounced").length,
       notContacted: L.filter((l) => !l.outreachStatus && !l.agentHold).length,
     };
   }, [leads]);
@@ -161,6 +163,7 @@ export default function PipelinePage() {
           <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700"><b className="text-gray-900">{outreach.emailed}</b> emailed</span>
           <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-700"><b>{outreach.inSeq}</b> in sequence</span>
           <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-green-700"><b>{outreach.replied}</b> replied</span>
+          {outreach.bounced > 0 && <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700"><b>{outreach.bounced}</b> bounced</span>}
           <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-gray-500"><b>{outreach.done}</b> done</span>
           <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-500"><b>{outreach.notContacted}</b> not yet contacted</span>
         </div>
