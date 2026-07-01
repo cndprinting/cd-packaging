@@ -87,6 +87,15 @@ const perRunLimit = () => parseInt(process.env.AGENT_OUTBOUND_LIMIT || "20", 10)
 // to turn it back on. Without it, intros still personalize from the lead's own
 // data (company, market, notes) in the house voice — just no web-sourced specifics.
 const research = () => process.env.AGENT_OUTBOUND_RESEARCH === "true";
+// Optional hold-until date (YYYY-MM-DD, UTC). Lets us arm the agent now but keep
+// it from sending until a chosen day, e.g. skip the July 4th holiday window.
+// Gates SENDING only — replies/bounces are still processed so live threads work.
+function beforeStart(): boolean {
+  const s = process.env.AGENT_OUTBOUND_START;
+  if (!s) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !isNaN(d.getTime()) && new Date() < d;
+}
 
 // Sequence per contact: intro, then (+3d) follow-up #1, then (+7d) follow-up #2, done.
 const FOLLOWUPS: Record<string, { next: string; days: number }> = {
@@ -190,6 +199,7 @@ async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, to
 // ── The sweep ──────────────────────────────────────────────────────────────
 export async function processOutbound(prisma: any): Promise<{ intros: number; followups: number; previews: number }> {
   if (!outboundEnabled()) return { intros: 0, followups: 0, previews: 0 };
+  if (beforeStart()) return { intros: 0, followups: 0, previews: 0 }; // armed, but holding until AGENT_OUTBOUND_START
   const now = new Date();
   const limit = perRunLimit();
   let sends = 0, intros = 0, followups = 0, previews = 0;
