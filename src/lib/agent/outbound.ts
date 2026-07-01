@@ -123,7 +123,7 @@ Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <str
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
     const user = `Prospect company: ${lead.companyName}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
     const req: any = { model: "claude-opus-4-8", max_tokens: 2500, system, messages: [{ role: "user", content: user }] };
-    if (research()) req.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
+    if (research()) req.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }]; // newer variant (dynamic filtering) for Opus 4.8 — more token-efficient
     const msg = await claude.messages.create(req);
     // With web search there can be interim text between searches; the email is
     // the LAST text block (the model's final answer after researching).
