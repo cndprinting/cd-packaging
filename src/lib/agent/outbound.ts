@@ -72,6 +72,8 @@ function logLine(prev: string | null, event: string): string {
   return JSON.stringify(arr.slice(-50));
 }
 const wrap = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">${inner}</div>`;
+// Outbound emails read like a plain personal note — strip any bold that slips in.
+const stripBold = (s: string) => (s || "").replace(/<\/?(?:b|strong)\b[^>]*>/gi, "");
 
 // Append a dated, human-readable line to the lead's Notes so owners see the
 // agent's activity in the pipeline, e.g. "[Agent] Intro email sent 6/27/2026".
@@ -96,7 +98,7 @@ async function draftIntro(lead: any, owner: Owner, contactName: string): Promise
   const claude = getClaude();
   if (!claude) return fallback;
   try {
-    const system = `You write short, warm cold-intro emails for C&D Printing & Packaging, a family-owned custom packaging manufacturer in St. Petersburg, FL (folding cartons, custom boxes, retail packaging for cosmetics, skincare, nutraceutical, and CPG brands). You are writing AS ${owner.full}, a member of the C&D team, to a prospect. Goal: start a conversation, not hard-sell. When you know their market, note we specialize in that kind of product. Offer to send samples or set up a quick call. A few sentences only. Address the contact by FIRST name. No hype, no exclamation points, no emoji, no em dashes or en dashes (use commas/periods). Sign off "${owner.full}, C&D Printing & Packaging". Output ONLY the inner HTML body (<p>, <strong>, <br>).`;
+    const system = `You write short, warm cold-intro emails for C&D Printing & Packaging, a family-owned custom packaging manufacturer in St. Petersburg, FL (folding cartons, custom boxes, retail packaging for cosmetics, skincare, nutraceutical, and CPG brands). You are writing AS ${owner.full}, a member of the C&D team, to a prospect. Goal: start a conversation, not hard-sell. When you know their market, note we specialize in that kind of product. Offer to send samples or set up a quick call. A few sentences only. Address the contact by FIRST name. No hype, no exclamation points, no emoji, no em dashes or en dashes (use commas/periods), and NO bold or <strong>/<b> tags — it should read like a plain personal email. Sign off "${owner.full}, C&D Printing & Packaging". Output ONLY the inner HTML body using <p> and <br> only.`;
     const user = `Prospect company: ${lead.companyName}. End market: ${lead.endMarket || lead.productCategory || "unknown"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 500)}. Write the intro email body now.`;
     const msg = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system, messages: [{ role: "user", content: user }] });
     const t: any = (msg.content || []).find((b: any) => b.type === "text");
@@ -115,7 +117,7 @@ function draftFollowup(lead: any, owner: Owner, step: string, contactName: strin
 // ── Sending (threaded, from the owner's mailbox) ───────────────────────────
 async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, toName: string, subject: string, body: string): Promise<boolean> {
   const subj = noEmDash(subject);
-  const html = noEmDash(body);
+  const html = stripBold(noEmDash(body));
   // Review mode: redirect the draft to the owner's own inbox so they can see it.
   if (!autoSend()) {
     await sendEmail({ from: owner.email, to: owner.email, subject: `[DRAFT → ${to}] ${subj}`, body: html + `<p style="color:#bbb;font-size:11px;">[Outbound review mode — in production this would send to ${toName || lead.companyName} &lt;${to}&gt; from ${owner.full}.]</p>` });
