@@ -118,6 +118,25 @@ ${opts.reply}`;
   }
 }
 
+// Compare two incoming quote requests for the same company and decide whether
+// they are the SAME job (a duplicate submission) or two genuinely different jobs.
+// Errs toward "not a duplicate" when unsure so a real job is never dropped. (Benjy 7/2)
+export async function isDuplicateQuote(opts: { a: string; b: string }): Promise<{ duplicate: boolean; reason: string } | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You compare two incoming quote requests to a print/packaging company from the same company/contact, and decide if they are the SAME job (a duplicate submission) or two DIFFERENT jobs. Compare product, specs, sizes, quantities, and intent. Treat them as the same job (duplicate) if they describe the same work, even when worded differently or one has less detail. Treat them as different when they are clearly separate projects (different product, different specs, a separate order). If you are genuinely unsure, answer NOT a duplicate, so a real job is never dropped. Output ONLY compact JSON, no markdown fences: {"duplicate": true or false, "reason": "one short sentence"}.`;
+  const user = `Request A (already being quoted):\n${opts.a || "(no details)"}\n\nRequest B (new):\n${opts.b || "(no details)"}`;
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 300, system, messages: [{ role: "user", content: user }] });
+    const raw = firstText(msg).trim();
+    const p = JSON.parse(raw.replace(/^```json\s*|\s*```$/gi, "").replace(/^```\s*|\s*```$/g, "").trim());
+    return { duplicate: p.duplicate === true, reason: String(p.reason || "").trim() };
+  } catch (e) {
+    console.error("[agent] isDuplicateQuote failed", e);
+    return null; // caller treats null as "not sure" → proceed (don't drop a real job)
+  }
+}
+
 // Read Mary's quote PDF and lay it out as a customer-facing pricing breakdown in
 // C&D's house style (the Vivant format): warm intro, a per-item table of
 // Quantity / Total Price / Price per Unit, the one-time die set-up line, a short

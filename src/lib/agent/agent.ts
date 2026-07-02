@@ -123,21 +123,29 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled()) return;
 
   // Duplicate guard (Benjy 7/2): if we ALREADY have an active quote in progress
-  // with Mary for this same company (or contact) in the last 30 days, do NOT send
-  // her a second request — it makes us look sloppy. Hold it and let the owners
-  // confirm whether it is genuinely a separate job.
+  // with Mary for this same company (or contact) in the last 30 days, compare the
+  // two briefs. If the agent judges it the same job, silently drop it (no second
+  // email to Mary, no owner ping). If it's a genuinely different job, proceed.
   try {
     const cutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000);
     const orMatch: any[] = [{ companyName: { equals: lead.companyName, mode: "insensitive" } }];
     if (lead.contactEmail) orMatch.push({ contactEmail: { equals: lead.contactEmail, mode: "insensitive" } });
     const dup = await prisma.lead.findFirst({
       where: { id: { not: lead.id }, agentStatus: { in: ["awaiting_mary", "quote_received"] }, createdAt: { gte: cutoff }, OR: orMatch },
-      select: { id: true, companyName: true, agentStatus: true },
+      select: { id: true, companyName: true, agentStatus: true, commentary: true },
     });
     if (dup) {
-      await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "possible_duplicate", agentNextAt: null, agentLog: logLine(lead.agentLog, `Possible duplicate of an active quote (${dup.agentStatus}) - not sent to Mary`) } });
-      await agentSend({ to: OWNERS, subject: `Possible duplicate: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>We already have an active quote in progress with Mary for <strong>${lead.companyName}</strong> (status: ${String(dup.agentStatus).replace(/_/g, " ")}). To avoid sending Mary the same job twice, I held this one and did not email her again.</p><p>If this is genuinely a separate job, forward it to Mary yourself and I will pick it back up. Otherwise it is safe to close this duplicate out.</p></div>` });
-      return;
+      let verdict: { duplicate: boolean; reason: string } | null = null;
+      try {
+        const { isDuplicateQuote } = await import("@/lib/agent/claude");
+        verdict = await isDuplicateQuote({ a: dup.commentary || "", b: lead.commentary || "" });
+      } catch { /* fall through → treat as separate */ }
+      if (verdict && verdict.duplicate) {
+        const note = `${lead.commentary || ""}\n\n[Agent] Duplicate of an active quote already with Mary for ${lead.companyName} - not sent again. ${verdict.reason || ""}`.slice(0, 4000);
+        await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate (${dup.agentStatus}); not sent to Mary. ${verdict.reason || ""}`) } });
+        return;
+      }
+      // Not a duplicate (or the agent couldn't tell) → proceed and send Mary.
     }
   } catch { /* if the dedup check fails, fall through and behave as before */ }
 
