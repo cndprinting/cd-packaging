@@ -98,7 +98,7 @@ export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?
     const r = await replyInConversation({ from: SENDER, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return; // threaded
   }
-  const r = await sendEmailGetConversation({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject, body });
+  const r = await sendEmailGetConversation({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
   if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentConvId: r.conversationId } }); } catch { /* ignore */ } }
 }
 

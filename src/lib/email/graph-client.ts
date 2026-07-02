@@ -87,7 +87,7 @@ const toRecips = (v?: string | string[]) => (v ? (Array.isArray(v) ? v : [v]) : 
 
 // Send via a draft so we can capture the conversationId — lets later emails to
 // the same customer thread into one conversation.
-export async function sendEmailGetConversation(options: SendEmailOptions): Promise<{ success: boolean; conversationId?: string; error?: string }> {
+export async function sendEmailGetConversation(options: SendEmailOptions & { copyAttachmentsFrom?: string }): Promise<{ success: boolean; conversationId?: string; error?: string }> {
   const client = getGraphClient();
   if (!client) return { success: false, error: "Email not configured" };
   try {
@@ -98,6 +98,17 @@ export async function sendEmailGetConversation(options: SendEmailOptions): Promi
       ccRecipients: toRecips(options.cc),
       bccRecipients: toRecips(options.bcc),
     });
+    // Carry over file attachments (e.g. Mary's quote PDF) onto this first email.
+    if (options.copyAttachmentsFrom) {
+      try {
+        const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
+        for (const a of (atts.value || [])) {
+          if (a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline) {
+            await client.api(`/users/${options.from}/messages/${draft.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
+          }
+        }
+      } catch { /* attachment copy is best-effort */ }
+    }
     await client.api(`/users/${options.from}/messages/${draft.id}/send`).post({});
     return { success: true, conversationId: draft.conversationId };
   } catch (error: any) {
