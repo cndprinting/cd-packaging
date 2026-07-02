@@ -87,10 +87,15 @@ ${opts.missing.map((m) => `- ${m}`).join("\n")}`;
 
 // Merge a customer's reply (their answers to our questions) into an updated
 // brief for Mary. Returns a short plain-text summary, or null on failure.
-export async function mergeCustomerAnswers(opts: { productName: string; priorBrief: string; reply: string }): Promise<string | null> {
+export async function mergeCustomerAnswers(opts: { productName: string; priorBrief: string; reply: string }): Promise<{ merged: string; quotable: boolean; reason: string } | null> {
   const client = getClaude();
   if (!client) return null;
-  const system = `You update a print/packaging job brief for Mary the estimator. You are given the prior brief (with assumptions) and the customer's reply answering our questions. Produce a concise, updated brief: fold the customer's answers in as confirmed specs, drop assumptions they've now overridden, and note anything still missing. Plain text, no markdown fences. Be brief.`;
+  const system = `You process a customer's reply to our questions about a print/packaging job, for Mary the estimator. Do TWO things:
+
+1) Decide if this reply is a GENUINE print or packaging quote request. Set "quotable": false when the sender is NOT actually seeking a printing/packaging quote - for example: they are trying to sell US a product or service (a vendor pitch, cold sales outreach, SaaS/agency/marketing offer), they say their message was misrouted or sent to the wrong place, they explicitly say they are not looking for a quote, or it is spam or recruiting. Otherwise set "quotable": true.
+2) Produce a concise updated brief for Mary: fold the customer's confirmed specs in, drop assumptions they've overridden, and note anything still missing.
+
+Output ONLY compact JSON, no markdown fences: {"quotable": true or false, "reason": "one short sentence", "brief": "the updated brief as plain text"}.`;
   const user = `Product: ${opts.productName}
 
 Prior brief:
@@ -99,8 +104,14 @@ ${opts.priorBrief}
 Customer's reply:
 ${opts.reply}`;
   try {
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1024, system, messages: [{ role: "user", content: user }] });
-    return firstText(msg).trim() || null;
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1200, system, messages: [{ role: "user", content: user }] });
+    const raw = firstText(msg).trim();
+    try {
+      const p = JSON.parse(raw.replace(/^```json\s*|\s*```$/gi, "").replace(/^```\s*|\s*```$/g, "").trim());
+      return { merged: String(p.brief || "").trim() || raw, quotable: p.quotable !== false, reason: String(p.reason || "").trim() };
+    } catch {
+      return { merged: raw, quotable: true, reason: "" }; // unparseable → proceed as before (never silently drop a real lead)
+    }
   } catch (e) {
     console.error("[agent] mergeCustomerAnswers failed", e);
     return null;

@@ -119,14 +119,24 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // CASE 1: the customer answered our spec questions → fold the answers into
     // the brief and hand a complete package to Mary to quote.
     if (lead.agentStatus === "awaiting_customer_info" || lead.agentStatus === "info_nudge_1") {
-      let merged: string | null = null;
+      let res: { merged: string; quotable: boolean; reason: string } | null = null;
       try {
         const { mergeCustomerAnswers } = await import("@/lib/agent/claude");
-        merged = await mergeCustomerAnswers({ productName: lead.productCategory || "project", priorBrief: lead.commentary || "", reply: m.bodyPreview || "" });
+        res = await mergeCustomerAnswers({ productName: lead.productCategory || "project", priorBrief: lead.commentary || "", reply: m.bodyPreview || "" });
       } catch { /* fall back to raw append */ }
-      const commentary = merged
-        ? `${merged}\n\n[Customer's reply, verbatim] ${m.bodyPreview || ""}`.slice(0, 4000)
+      const commentary = res?.merged
+        ? `${res.merged}\n\n[Customer's reply, verbatim] ${m.bodyPreview || ""}`.slice(0, 4000)
         : `${lead.commentary || ""}\n\n[Customer answered] ${m.bodyPreview || ""}`.slice(0, 4000);
+
+      // Not actually a print/packaging quote (vendor pitch, misrouted, spam)?
+      // Do NOT hand it to Mary — flag it for the owners to close out.
+      if (res && res.quotable === false) {
+        await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentStatus: "disqualified", agentNextAt: null } });
+        await agentSend({ to: OWNERS, subject: `Not a quote: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>Heads up - <strong>${lead.companyName}</strong> replied, and it is not a print or packaging inquiry, so I did not send it to Mary.</p><p><strong>Why:</strong> ${res.reason || "the sender is not seeking a printing or packaging quote."}</p><p><strong>Their reply:</strong> "${(m.bodyPreview || "").slice(0, 500)}"</p><p>Safe to close this one out (move to Lost) whenever.</p></div>` });
+        handled++;
+        continue;
+      }
+
       await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentLog: lead.agentLog } });
       const fresh = await prisma.lead.findUnique({ where: { id: lead.id } });
       const { kickoffAgent } = await import("@/lib/agent/agent");
