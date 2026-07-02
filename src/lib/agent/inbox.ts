@@ -131,7 +131,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       // Not actually a print/packaging quote (vendor pitch, misrouted, spam)?
       // Do NOT hand it to Mary — flag it for the owners to close out.
       if (res && res.quotable === false) {
-        await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentStatus: "disqualified", agentNextAt: null } });
+        await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentStatus: "disqualified", agentNextAt: null, pipelineStage: "LOST", stage: "Not a quote" } });
         await agentSend({ to: OWNERS, subject: `Not a quote: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>Heads up - <strong>${lead.companyName}</strong> replied, and it is not a print or packaging inquiry, so I did not send it to Mary.</p><p><strong>Why:</strong> ${res.reason || "the sender is not seeking a printing or packaging quote."}</p><p><strong>Their reply:</strong> "${(m.bodyPreview || "").slice(0, 500)}"</p><p>Safe to close this one out (move to Lost) whenever.</p></div>` });
         handled++;
         continue;

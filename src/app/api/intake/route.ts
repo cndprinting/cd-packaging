@@ -168,7 +168,9 @@ export async function POST(req: NextRequest) {
       ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
       agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : null), // fraud guards park the lead so the agent never chases it
       stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : "New"),
-      pipelineStage: blockedReason ? "LOST" : "LEAD",
+      // Keep blocked/scam junk out of the active Leads funnel — parked in Lost
+      // (agentStatus + notes preserve the reason for review). Benjy 7/2.
+      pipelineStage: (blockedReason || scamHigh) ? "LOST" : "LEAD",
       source: "inbound",
       volume: quantity,
       commentary: summary,

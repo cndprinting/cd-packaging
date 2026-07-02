@@ -142,7 +142,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
       } catch { /* fall through → treat as separate */ }
       if (verdict && verdict.duplicate) {
         const note = `${lead.commentary || ""}\n\n[Agent] Duplicate of an active quote already with Mary for ${lead.companyName} - not sent again. ${verdict.reason || ""}`.slice(0, 4000);
-        await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate (${dup.agentStatus}); not sent to Mary. ${verdict.reason || ""}`) } });
+        await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, pipelineStage: "LOST", stage: "Duplicate", commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate (${dup.agentStatus}); not sent to Mary. ${verdict.reason || ""}`) } });
         return;
       }
       // Not a duplicate (or the agent couldn't tell) → proceed and send Mary.
