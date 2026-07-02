@@ -121,6 +121,26 @@ export async function agentMarySend(prisma: any, lead: any, opts: { subject?: st
 // ── Step 1: hand a new lead to Mary ────────────────────────────────────────
 export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled()) return;
+
+  // Duplicate guard (Benjy 7/2): if we ALREADY have an active quote in progress
+  // with Mary for this same company (or contact) in the last 30 days, do NOT send
+  // her a second request — it makes us look sloppy. Hold it and let the owners
+  // confirm whether it is genuinely a separate job.
+  try {
+    const cutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const orMatch: any[] = [{ companyName: { equals: lead.companyName, mode: "insensitive" } }];
+    if (lead.contactEmail) orMatch.push({ contactEmail: { equals: lead.contactEmail, mode: "insensitive" } });
+    const dup = await prisma.lead.findFirst({
+      where: { id: { not: lead.id }, agentStatus: { in: ["awaiting_mary", "quote_received"] }, createdAt: { gte: cutoff }, OR: orMatch },
+      select: { id: true, companyName: true, agentStatus: true },
+    });
+    if (dup) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "possible_duplicate", agentNextAt: null, agentLog: logLine(lead.agentLog, `Possible duplicate of an active quote (${dup.agentStatus}) - not sent to Mary`) } });
+      await agentSend({ to: OWNERS, subject: `Possible duplicate: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>We already have an active quote in progress with Mary for <strong>${lead.companyName}</strong> (status: ${String(dup.agentStatus).replace(/_/g, " ")}). To avoid sending Mary the same job twice, I held this one and did not email her again.</p><p>If this is genuinely a separate job, forward it to Mary yourself and I will pick it back up. Otherwise it is safe to close this duplicate out.</p></div>` });
+      return;
+    }
+  } catch { /* if the dedup check fails, fall through and behave as before */ }
+
   const token = lead.agentToken || newToken();
   const body = wrap(`
     <p>Hi Mary,</p>
