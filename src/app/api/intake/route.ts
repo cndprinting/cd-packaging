@@ -132,9 +132,13 @@ export async function POST(req: NextRequest) {
   // the agent does NOT engage; the owners get alerted to decide.
   const blockedReason = checkBlocked({ name: contactName, email, phone, company });
   const scamHigh = claude?.scamRisk === "high";
+  // Not a real print/packaging request (someone selling us a service, spam,
+  // misrouted) → file to Lost, never engage. Benjy 7/2.
+  const notAQuote = !!claude?.notAQuote;
   const guardBanner = blockedReason
     ? `🚫 BLOCKED — ${blockedReason}. Agent will NOT engage.`
-    : (scamHigh ? `⚠ POSSIBLE SCAM (${claude?.scamReason || "fraud signals"}) — agent paused; review before any contact.` : null);
+    : (scamHigh ? `⚠ POSSIBLE SCAM (${claude?.scamReason || "fraud signals"}) — agent paused; review before any contact.`
+    : (notAQuote ? `🛈 NOT A QUOTE — ${claude?.notAQuoteReason || "a solicitation, not a print/packaging request"}. Filed to Lost; agent will not engage.` : null));
 
   const summary = [
     guardBanner,
@@ -166,11 +170,11 @@ export async function POST(req: NextRequest) {
       website: null,
       priority: isVip ? 1 : 3,     // major client → priority 1; otherwise routine priority 3
       ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
-      agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : null), // fraud guards park the lead so the agent never chases it
-      stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : "New"),
-      // Keep blocked/scam junk out of the active Leads funnel — parked in Lost
-      // (agentStatus + notes preserve the reason for review). Benjy 7/2.
-      pipelineStage: (blockedReason || scamHigh) ? "LOST" : "LEAD",
+      agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : (notAQuote ? "disqualified" : null)), // guards park the lead so the agent never chases it
+      stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : (notAQuote ? "Not a quote" : "New")),
+      // Keep blocked/scam/solicitation junk out of the active Leads funnel —
+      // parked in Lost (agentStatus + notes preserve the reason). Benjy 7/2.
+      pipelineStage: (blockedReason || scamHigh || notAQuote) ? "LOST" : "LEAD",
       source: "inbound",
       volume: quantity,
       commentary: summary,
@@ -194,6 +198,13 @@ export async function POST(req: NextRequest) {
       });
     } catch (e) { console.error("[Godzilla INTAKE] guard alert failed", e); }
     return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude, blocked: !!blockedReason, scam: scamHigh });
+  }
+
+  // Not a real inquiry (a solicitation selling us a service, spam, misrouted) →
+  // already filed to Lost above. Do NOT ask the customer or hand off to Mary.
+  if (notAQuote) {
+    console.log("[Godzilla INTAKE] not a quote — filed to Lost", lead.id, claude?.notAQuoteReason || "");
+    return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude, notAQuote: true });
   }
 
   // Hand off to the sales agent — only when AGENT_ENABLED=true. If Claude found
