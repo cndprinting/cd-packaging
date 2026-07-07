@@ -84,6 +84,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: "test submission" });
   }
 
+  // Empty / junk submission (blank form, bot POST, health-check) — nothing to
+  // quote and no way to follow up. Drop it: no lead, never Mary. Benjy 7/7.
+  const hasSubstance = !!(
+    email || phone || company || contactName
+    || pick("what type", "type of product", "product")
+    || pick("looking for", "what are you", "message", "comments", "tell us", "details", "project", "describe")
+    || pick("quantity", "qty") || pick("size", "dimension")
+  );
+  if (!hasSubstance) {
+    console.log("[Godzilla INTAKE] ignored empty submission");
+    return NextResponse.json({ ok: true, ignored: "empty submission" });
+  }
+
   // Everything below runs AFTER the fast reply below (dedup + Claude analysis +
   // lead create + agent emails). Keeps the webhook well under its ~5s timeout so
   // the customer never sees a false "submission failed". Benjy 7/7.
