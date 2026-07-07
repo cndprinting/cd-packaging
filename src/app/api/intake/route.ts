@@ -1,5 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { checkBlocked, isTestSubmission } from "@/lib/agent/blocklist";
+
+// The website's Elementor webhook times out at ~5s. Give the background work
+// (Claude analysis + agent emails) room to finish after we've already replied.
+export const maxDuration = 60;
 
 // Inbound web-form intake (Benjy 6/26). The website's Elementor form POSTs
 // here (Webhook action). We parse tolerantly — collect every field, best-effort
@@ -80,6 +84,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: "test submission" });
   }
 
+  // Everything below runs AFTER the fast reply below (dedup + Claude analysis +
+  // lead create + agent emails). Keeps the webhook well under its ~5s timeout so
+  // the customer never sees a false "submission failed". Benjy 7/7.
+  after(async () => {
+   try {
   const productField = pick("what type", "type of product", "product");
   const otherType = entries.filter(([k]) => /if other|describe|specify|please describe/i.test(k)).map(([, v]) => v).filter(Boolean).join(" · ");
   const quantity = pick("quantity", "qty") || null;
@@ -247,8 +256,11 @@ export async function POST(req: NextRequest) {
       if (artworkMissing && email) await requestArtwork(prisma, named); // ask artwork in parallel
     }
   } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
+   } catch (e) { console.error("[Godzilla INTAKE] background processing failed", e); }
+  });
 
-  return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude });
+  // Instant 200 so the website form never shows a false "submission failed".
+  return NextResponse.json({ ok: true });
 }
 
 // A friendly GET so hitting the URL in a browser confirms it's live.
