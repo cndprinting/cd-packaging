@@ -255,14 +255,19 @@ export async function POST(req: NextRequest) {
   // for them first (then hands Mary a complete brief); otherwise it goes
   // straight to Mary with house defaults asserted.
   try {
-    const { kickoffAgent, askCustomer, requestArtwork } = await import("@/lib/agent/agent");
+    const { kickoffAgent, askCustomer, requestArtwork, suggestFoldingCarton } = await import("@/lib/agent/agent");
     const named = { ...lead, productName: claude?.normalizedProduct || productCategory };
     const artworkMissing = !artwork;
     const ARTWORK_ASK = "Your print-ready artwork (or a rough proof/mockup) so we can confirm the look and exact details";
     const blockers = claude?.quoteBlockers || [];
-    // Only quote-blocking specs make us WAIT on the customer. Artwork is always
-    // asked for when missing, but it never blocks the quote.
-    if (blockers.length && email) {
+    // C&D does NOT do corrugated. If they asked for it, propose a heavier folding
+    // carton and ask if that works, instead of quoting something we can't make.
+    const wantsCorrugated = !!claude?.corrugated || /corrugat|e-?flute|b-?flute|c-?flute|\bflute\b|rsc box/i.test(`${productField} ${otherType} ${inquiry}`);
+    if (wantsCorrugated && email) {
+      await suggestFoldingCarton(prisma, named);
+    } else if (blockers.length && email) {
+      // Only quote-blocking specs make us WAIT on the customer. Artwork is always
+      // asked for when missing, but it never blocks the quote.
       await askCustomer(prisma, named, artworkMissing ? [...blockers, ARTWORK_ASK] : blockers);
     } else {
       await kickoffAgent(prisma, named);              // quotable now → Mary

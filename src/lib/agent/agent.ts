@@ -195,6 +195,28 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
   });
 }
 
+// ── Corrugated request → propose a folding carton (we don't do corrugated) ──
+// C&D makes folding cartons, not corrugated. Instead of quoting something we
+// can't produce, the agent proposes a heavier folding carton and asks if that
+// works. If the customer says yes, their reply loops back into the quote flow
+// (now tagged Folding Carton). Benjy 7/7.
+export async function suggestFoldingCarton(prisma: any, lead: any): Promise<void> {
+  if (!agentEnabled()) return;
+  if (await dropIfDuplicate(prisma, lead)) return;
+  const token = lead.agentToken || newToken();
+  if (!lead.contactEmail) { await kickoffAgent(prisma, { ...lead, agentToken: token }); return; }
+  const body = wrap(`
+    <p>Hi ${firstName(lead.contactName)},</p>
+    <p>Thank you for reaching out to C&amp;D Printing about your ${lead.productName || lead.productCategory || "project"}. One quick note: we specialize in folding cartons rather than corrugated. For a lot of projects, a heavier folding carton board gives you a sturdy box that works well in place of corrugated.</p>
+    <p>Would a heavier folding carton work for you, or do you specifically need corrugated? If a folding carton works, we'll put a quote together right away.</p>
+    <p>Best regards,<br>${SIGNOFF}</p>`);
+  await agentCustomerSend(prisma, lead, { body });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { agentStatus: "awaiting_customer_info", agentToken: token, productCategory: "Folding Carton", stage: "Proposed folding carton (no corrugated)", agentNextAt: addBusinessDays(new Date(), 3), commentary: `${lead.commentary || ""}\n\n[Agent] Customer asked for corrugated (we don't do corrugated). Proposed a heavier folding carton and asked if that works.`.slice(0, 4000), agentLog: logLine(lead.agentLog, "Proposed folding carton alternative (no corrugated)") },
+  });
+}
+
 // ── Always ask for artwork when it's missing — but never block the quote ────
 // Artwork clarifies colors, bleeds, finish and the actual look, so we request
 // it on every lead that didn't include it. When the specs are otherwise
