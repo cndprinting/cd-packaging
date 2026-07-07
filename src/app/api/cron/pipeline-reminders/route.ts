@@ -90,5 +90,44 @@ export async function GET(request: NextRequest) {
     agent = await processDueAgentLeads(prisma);
   } catch (e) { console.error("[Godzilla CRON] agent processing failed", e); }
 
-  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted });
+  // Daily "inbound leads needing a human" digest (Benjy 7/7) — the follow-up idea,
+  // but for inbound inquiries the agent can't advance on its own: owner approval,
+  // existing accounts, scam review, or threads that have stalled. So leads never
+  // just sit there unseen.
+  let inboundDigest = 0;
+  try {
+    const stale = new Date(now.getTime() - 3 * 24 * 3600 * 1000);
+    const inbound = await prisma.lead.findMany({
+      where: {
+        source: "inbound",
+        pipelineStage: { in: ["LEAD", "QUALIFIED"] },
+        OR: [
+          { agentStatus: { in: ["quote_received", "owner_handling", "needs_review", "needs_info", "needs_owner"] } },
+          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1"] }, agentNextAt: { lt: stale } },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+    if (inbound.length) {
+      const needLabel = (l: any): string => {
+        switch (l.agentStatus) {
+          case "quote_received": return "Approve &amp; send Mary's quote to the customer";
+          case "owner_handling": return "Existing account - reach out to them directly";
+          case "needs_review": return "Review - flagged possible scam";
+          case "needs_info":
+          case "needs_owner": return "Mary needs something / a decision from you";
+          case "awaiting_mary": return "Stalled - Mary hasn't quoted yet, give her a nudge";
+          default: return "Stalled - customer hasn't sent info, consider a personal nudge";
+        }
+      };
+      const rows = inbound.map((l: any) => `<li style="margin-bottom:10px;"><strong>${l.companyName}</strong>${l.contactName ? ` <span style="color:#888;">(${l.contactName})</span>` : ""}<br><span style="color:#27AAE1;">${needLabel(l)}</span>${l.stage ? ` <span style="color:#aaa;">· ${l.stage}</span>` : ""}</li>`).join("");
+      const body = `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>These inbound inquiries need a human - the agent has taken them as far as it can on its own:</p><ul style="padding-left:18px;">${rows}</ul><p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p><p style="color:#aaa;font-size:11px;margin-top:20px;">Automated to-do from Godzilla.</p></div>`;
+      const { OWNERS, agentSend } = await import("@/lib/agent/agent");
+      await agentSend({ to: OWNERS, subject: `Inbound leads needing your attention (${inbound.length})`, body });
+      inboundDigest = inbound.length;
+    }
+  } catch (e) { console.error("[Godzilla CRON] inbound digest failed", e); }
+
+  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted, inboundDigest });
 }

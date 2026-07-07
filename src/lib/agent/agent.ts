@@ -118,36 +118,40 @@ export async function agentMarySend(prisma: any, lead: any, opts: { subject?: st
   if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentMaryConvId: r.conversationId } }); } catch { /* ignore */ } }
 }
 
-// ── Step 1: hand a new lead to Mary ────────────────────────────────────────
-export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
-  if (!agentEnabled()) return;
-
-  // Duplicate guard (Benjy 7/2): if we ALREADY have an active quote in progress
-  // with Mary for this same company (or contact) in the last 30 days, compare the
-  // two briefs. If the agent judges it the same job, silently drop it (no second
-  // email to Mary, no owner ping). If it's a genuinely different job, proceed.
+// Shared duplicate guard (Benjy 7/2, expanded 7/7). If another active lead for
+// this same company/contact is already in progress in the last 30 days — with
+// Mary OR awaiting the customer — compare the two briefs; if it's the same job,
+// drop this one to Lost as a duplicate and return true. Covers BOTH the Mary
+// handoff and the ask-customer path, so a resubmission (one with specs, one
+// without) never creates two active leads.
+export async function dropIfDuplicate(prisma: any, lead: any): Promise<boolean> {
   try {
     const cutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000);
     const orMatch: any[] = [{ companyName: { equals: lead.companyName, mode: "insensitive" } }];
     if (lead.contactEmail) orMatch.push({ contactEmail: { equals: lead.contactEmail, mode: "insensitive" } });
     const dup = await prisma.lead.findFirst({
-      where: { id: { not: lead.id }, agentStatus: { in: ["awaiting_mary", "quote_received"] }, createdAt: { gte: cutoff }, OR: orMatch },
+      where: { id: { not: lead.id }, agentStatus: { in: ["awaiting_mary", "quote_received", "awaiting_customer_info", "info_nudge_1"] }, createdAt: { gte: cutoff }, OR: orMatch },
       select: { id: true, companyName: true, agentStatus: true, commentary: true },
     });
-    if (dup) {
-      let verdict: { duplicate: boolean; reason: string } | null = null;
-      try {
-        const { isDuplicateQuote } = await import("@/lib/agent/claude");
-        verdict = await isDuplicateQuote({ a: dup.commentary || "", b: lead.commentary || "" });
-      } catch { /* fall through → treat as separate */ }
-      if (verdict && verdict.duplicate) {
-        const note = `${lead.commentary || ""}\n\n[Agent] Duplicate of an active quote already with Mary for ${lead.companyName} - not sent again. ${verdict.reason || ""}`.slice(0, 4000);
-        await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, pipelineStage: "LOST", stage: "Duplicate", commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate (${dup.agentStatus}); not sent to Mary. ${verdict.reason || ""}`) } });
-        return;
-      }
-      // Not a duplicate (or the agent couldn't tell) → proceed and send Mary.
+    if (!dup) return false;
+    let verdict: { duplicate: boolean; reason: string } | null = null;
+    try {
+      const { isDuplicateQuote } = await import("@/lib/agent/claude");
+      verdict = await isDuplicateQuote({ a: dup.commentary || "", b: lead.commentary || "" });
+    } catch { /* fall through → treat as separate */ }
+    if (verdict && verdict.duplicate) {
+      const note = `${lead.commentary || ""}\n\n[Agent] Duplicate of an active lead already in progress for ${lead.companyName} - dropped. ${verdict.reason || ""}`.slice(0, 4000);
+      await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, pipelineStage: "LOST", stage: "Duplicate", commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate of ${dup.agentStatus}. ${verdict.reason || ""}`) } });
+      return true;
     }
-  } catch { /* if the dedup check fails, fall through and behave as before */ }
+  } catch { /* dedup check failed → behave as before */ }
+  return false;
+}
+
+// ── Step 1: hand a new lead to Mary ────────────────────────────────────────
+export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
+  if (!agentEnabled()) return;
+  if (await dropIfDuplicate(prisma, lead)) return;
 
   const token = lead.agentToken || newToken();
   const body = wrap(`
@@ -170,6 +174,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
 // customer goes quiet (see processDueAgentLeads). Benjy 6/28.
 export async function askCustomer(prisma: any, lead: any, missing: string[]): Promise<void> {
   if (!agentEnabled()) return;
+  if (await dropIfDuplicate(prisma, lead)) return; // resubmission where this copy is missing specs
   const token = lead.agentToken || newToken();
   if (!lead.contactEmail) { await kickoffAgent(prisma, { ...lead, agentToken: token }); return; } // can't ask → Mary with defaults
   let inner: string | null = null;

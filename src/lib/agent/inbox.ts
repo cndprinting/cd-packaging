@@ -29,10 +29,15 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
 
   let items: any[] = [];
   try {
+    // Fetch recent mail regardless of read state — an owner opening a reply in
+    // Outlook must NOT hide it from the agent. We de-dupe per lead via
+    // agentLastMsgAt instead of relying on the unread flag. Benjy 7/7.
+    const cutoff = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
     const res = await client
       .api(`/users/${MAILBOX}/mailFolders/Inbox/messages`)
-      .filter("isRead eq false")
-      .top(25)
+      .filter(`receivedDateTime ge ${cutoff}`)
+      .orderby("receivedDateTime asc")
+      .top(100)
       .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
       .get();
     items = res.value || [];
@@ -59,8 +64,11 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         const open = await prisma.lead.findMany({ where: { agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
         ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
       }
-      if (!ml) continue; // unrelated Mary email — leave it untouched (and unread)
+      if (!ml) continue; // unrelated Mary email — leave it untouched
+      // Already handled this message (even if an owner opened it since)? skip.
+      if (ml.agentLastMsgAt && new Date(m.receivedDateTime) <= new Date(ml.agentLastMsgAt)) continue;
       try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+      try { await prisma.lead.update({ where: { id: ml.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
       const preview = (m.bodyPreview || "").trim();
 
       // Mary quotes via an attached PDF → store it and route to the owners for
@@ -100,9 +108,12 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
+    // Skip if we already handled this message (an owner may have opened it since).
+    if (lead.agentLastMsgAt && new Date(m.receivedDateTime) <= new Date(lead.agentLastMsgAt)) continue;
 
-    // Only now mark it read — it's a lead reply we're handling.
+    // Mark handled (read + timestamp) before processing so we never double-handle.
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+    try { await prisma.lead.update({ where: { id: lead.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
 
     // CASE 0: we're already quoting (Mary has it / owners reviewing). A customer
     // reply here is usually artwork or more detail — forward it to Mary, copy owners.
