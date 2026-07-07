@@ -135,10 +135,15 @@ export async function POST(req: NextRequest) {
   // Not a real print/packaging request (someone selling us a service, spam,
   // misrouted) → file to Lost, never engage. Benjy 7/2.
   const notAQuote = !!claude?.notAQuote;
+  // About a job/account C&D already produces (directly or via a co-manufacturer,
+  // e.g. Florida Nutrition) → owners handle it personally; the agent stays out of
+  // the relationship. Benjy 7/6.
+  const existingRel = !!claude?.existingRelationship && !blockedReason && !scamHigh && !notAQuote;
   const guardBanner = blockedReason
     ? `🚫 BLOCKED — ${blockedReason}. Agent will NOT engage.`
     : (scamHigh ? `⚠ POSSIBLE SCAM (${claude?.scamReason || "fraud signals"}) — agent paused; review before any contact.`
-    : (notAQuote ? `🛈 NOT A QUOTE — ${claude?.notAQuoteReason || "a solicitation, not a print/packaging request"}. Filed to Lost; agent will not engage.` : null));
+    : (notAQuote ? `🛈 NOT A QUOTE — ${claude?.notAQuoteReason || "a solicitation, not a print/packaging request"}. Filed to Lost; agent will not engage.`
+    : (existingRel ? `🤝 EXISTING ACCOUNT — ${claude?.existingRelationshipReason || "about a job C&D already produces"}. Owners to handle directly; agent paused.` : null)));
 
   const summary = [
     guardBanner,
@@ -168,12 +173,12 @@ export async function POST(req: NextRequest) {
       contactEmail: email,
       contactPhone: phone,
       website: null,
-      priority: isVip ? 1 : 3,     // major client → priority 1; otherwise routine priority 3
+      priority: (isVip || existingRel) ? 1 : 3,     // major client / existing account → priority 1
       ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
-      agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : (notAQuote ? "disqualified" : null)), // guards park the lead so the agent never chases it
-      stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : (notAQuote ? "Not a quote" : "New")),
-      // Keep blocked/scam/solicitation junk out of the active Leads funnel —
-      // parked in Lost (agentStatus + notes preserve the reason). Benjy 7/2.
+      agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : (notAQuote ? "disqualified" : (existingRel ? "owner_handling" : null))), // guards park the lead so the agent never chases it
+      stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : (notAQuote ? "Not a quote" : (existingRel ? "Existing account — owners handling" : "New"))),
+      // Blocked/scam/solicitation → Lost. Existing-account inquiries STAY in the
+      // funnel (they're valuable) but flagged for the owners; agent stays out. Benjy 7/2, 7/6.
       pipelineStage: (blockedReason || scamHigh || notAQuote) ? "LOST" : "LEAD",
       source: "inbound",
       volume: quantity,
@@ -205,6 +210,22 @@ export async function POST(req: NextRequest) {
   if (notAQuote) {
     console.log("[Godzilla INTAKE] not a quote — filed to Lost", lead.id, claude?.notAQuoteReason || "");
     return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude, notAQuote: true });
+  }
+
+  // Existing account (we already produce this, directly or via a co-manufacturer)
+  // → alert the owners ASAP and STOP. The agent never emails the contact or Mary;
+  // owners own this relationship. Benjy 7/6.
+  if (existingRel) {
+    try {
+      const { OWNERS, agentSend } = await import("@/lib/agent/agent");
+      await agentSend({
+        to: OWNERS,
+        subject: `🤝 Existing account — needs you: ${lead.companyName}`,
+        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>This inquiry is about a job C&amp;D <strong>already produces</strong>, so I did not run the quote flow or contact them. <strong>Please reach out directly.</strong></p><p><strong>${lead.companyName}</strong>${contactName ? ` · ${contactName}` : ""}${email ? ` · ${email}` : ""}${phone ? ` · ${phone}` : ""}</p><p><strong>Why:</strong> ${claude?.existingRelationshipReason || "references an existing production relationship"}</p><p><strong>Their message:</strong><br>${(inquiry || "").replace(/</g, "&lt;") || "(see the lead)"}</p></div>`,
+      });
+    } catch (e) { console.error("[Godzilla INTAKE] existing-account alert failed", e); }
+    console.log("[Godzilla INTAKE] existing account — owners alerted, agent paused", lead.id);
+    return NextResponse.json({ ok: true, id: lead.id, claudeOk: !!claude, existingRelationship: true });
   }
 
   // Hand off to the sales agent — only when AGENT_ENABLED=true. If Claude found
