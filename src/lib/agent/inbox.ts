@@ -212,11 +212,12 @@ export async function pollMailerCityLeads(prisma: any): Promise<{ created: numbe
   if (!client) return { created: 0 };
   let items: any[] = [];
   try {
-    const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const res = await client.api(`/users/${MAILERCITY_MAILBOX}/mailFolders/Inbox/messages`)
-      .filter(`receivedDateTime ge ${cutoff}`).orderby("receivedDateTime asc").top(100)
+    // Targeted search (avoids paging the whole mailbox); newest are returned.
+    const res = await client.api(`/users/${MAILERCITY_MAILBOX}/messages`)
+      .search('"New MailerCity lead"')
+      .top(25)
       .select("id,subject,from,body,receivedDateTime").get();
-    items = res.value || [];
+    items = (res.value || []).filter((m: any) => new Date(m.receivedDateTime).getTime() > Date.now() - 14 * 24 * 3600 * 1000);
   } catch (e) { console.error("[mailercity] read failed", e); return { created: 0 }; }
 
   let created = 0;
