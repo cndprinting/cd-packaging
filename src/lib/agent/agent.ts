@@ -217,6 +217,44 @@ export async function suggestFoldingCarton(prisma: any, lead: any): Promise<void
   });
 }
 
+// ── MailerCity (direct-mail) lane ───────────────────────────────────────────
+// Leads from the marketing.cndprinting.com (MailerCity) landing page. Pricing is
+// self-service on the site, so the agent does NOT quote and Mary is NEVER
+// involved — it qualifies (postcards vs letters, 1/2 sheet, quantity, address
+// list for cleansing, artwork) and hands the answers to the owners. Sends as
+// Albert. Benjy 7/8.
+const MAILERCITY_SUBJECT = "Your direct mail with C&D (MailerCity)";
+
+export async function kickoffMailerCity(prisma: any, lead: any): Promise<void> {
+  if (!agentEnabled() || !lead.contactEmail) return;
+  const token = lead.agentToken || newToken();
+  const body = wrap(`
+    <p>Hi ${firstName(lead.contactName)},</p>
+    <p>Thanks so much for reaching out to C&amp;D about direct mail! To get your mailer moving, could you share a few quick details:</p>
+    <ul>
+      <li>Are you looking to send postcards or letters/mailers?</li>
+      <li>One sheet or two?</li>
+      <li>Roughly how many pieces? (Our per-piece pricing by quantity is right on our site: <a href="https://marketing.cndprinting.com/">marketing.cndprinting.com</a>)</li>
+      <li>Do you have your mailing address list ready for us to run through cleansing (NCOA/CASS), or would you like a hand sourcing one?</li>
+      <li>Do you have your artwork, or would you like us to design it?</li>
+    </ul>
+    <p>Once we have these we'll get everything moving (standard production is about 7 days). Happy to answer any questions on pricing or the process too.</p>
+    <p>Best regards,<br>${SIGNOFF}</p>`);
+  await agentCustomerSend(prisma, lead, { subject: MAILERCITY_SUBJECT, body });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { agentStatus: "mailercity_qualifying", agentToken: token, stage: "MailerCity - qualifying", agentNextAt: addBusinessDays(new Date(), 3), agentLog: logLine(lead.agentLog, "MailerCity lead - sent qualifying questions") },
+  });
+}
+
+// Customer answered the MailerCity questions → capture and hand to the owners
+// (you, Nitay, Albert). The agent does not run the campaign; the owners take it.
+export async function onMailerCityReply(prisma: any, lead: any, reply: string): Promise<void> {
+  const commentary = `${lead.commentary || ""}\n\n[Customer reply] ${reply}`.slice(0, 4000);
+  await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "mailercity_handoff", stage: "MailerCity - qualified, owners handling", agentNextAt: null, commentary } });
+  await agentSend({ to: OWNERS, subject: `MailerCity lead ready: ${lead.companyName || lead.contactName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p><strong>${lead.companyName || lead.contactName}</strong>${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""} replied with their direct-mail details - over to you:</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${(reply || "").slice(0, 800).replace(/</g, "&lt;")}</blockquote><p>Full context is on the lead in the pipeline.</p></div>` });
+}
+
 // ── Always ask for artwork when it's missing — but never block the quote ────
 // Artwork clarifies colors, bleeds, finish and the actual look, so we request
 // it on every lead that didn't include it. When the specs are otherwise

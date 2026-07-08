@@ -1,6 +1,7 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, SENDER, OWNERS, MARY, onMaryQuote } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, SENDER, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply } from "@/lib/agent/agent";
 import { getClaude } from "@/lib/agent/claude";
+import { isTestSubmission } from "@/lib/agent/blocklist";
 
 // Inbound reply handler (Benjy 6/26) — the second half of the lead↔agent
 // conversation. Reads the agent mailbox, matches each unread message to the
@@ -104,7 +105,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
-      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3"] } },
+      where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying"] } },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
@@ -114,6 +115,16 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Mark handled (read + timestamp) before processing so we never double-handle.
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
     try { await prisma.lead.update({ where: { id: lead.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
+
+    // MailerCity lane: they answered the qualifying questions → capture and hand
+    // to the owners. The agent never quotes these or involves Mary.
+    if (lead.source === "mailercity") {
+      let reply = (m.bodyPreview || "").trim();
+      try { const full: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get(); if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim(); } catch { /* fall back */ }
+      await onMailerCityReply(prisma, lead, reply);
+      handled++;
+      continue;
+    }
 
     // CASE 0: we're already quoting (Mary has it / owners reviewing). A customer
     // reply here is usually artwork or more detail — forward it to Mary, copy owners.
@@ -185,4 +196,55 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     handled++;
   }
   return { checked: items.length, handled };
+}
+
+// ── MailerCity feed (Benjy 7/8) ─────────────────────────────────────────────
+// The MailerCity landing page (marketing.cndprinting.com) emails a "New
+// MailerCity lead" notification from reports@cndprinting.com. We read those,
+// parse the lead, drop it into Godzilla tagged source="mailercity" (so the
+// outbound agent can never touch it), and kick off the qualifying email.
+const MAILERCITY_MAILBOX = "bwaxman@cndprinting.com";
+const REPORTS = "reports@cndprinting.com";
+
+export async function pollMailerCityLeads(prisma: any): Promise<{ created: number }> {
+  if (process.env.AGENT_ENABLED !== "true") return { created: 0 };
+  const client = getGraphClient();
+  if (!client) return { created: 0 };
+  let items: any[] = [];
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    const res = await client.api(`/users/${MAILERCITY_MAILBOX}/mailFolders/Inbox/messages`)
+      .filter(`receivedDateTime ge ${cutoff}`).orderby("receivedDateTime asc").top(100)
+      .select("id,subject,from,body,receivedDateTime").get();
+    items = res.value || [];
+  } catch (e) { console.error("[mailercity] read failed", e); return { created: 0 }; }
+
+  let created = 0;
+  for (const m of items) {
+    const fromAddr = m.from?.emailAddress?.address?.toLowerCase();
+    if (fromAddr !== REPORTS.toLowerCase()) continue;
+    if (!/new mailercity lead/i.test(m.subject || "")) continue;
+    const text = (m.body?.content || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;|’/g, "'").replace(/\s+/g, " ").trim();
+    const email = (text.match(/Email\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i) || [])[1] || (text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i) || [])[0];
+    if (!email) continue;
+    if (isTestSubmission(email)) continue; // Habib/SlashPie tests
+    const exists = await prisma.lead.findFirst({ where: { source: "mailercity", contactEmail: { equals: email, mode: "insensitive" } }, select: { id: true } });
+    if (exists) continue; // already captured
+    const name = ((text.match(/Name\s+(.+?)\s+Email/i) || [])[1] || "").trim() || null;
+    const lead = await prisma.lead.create({ data: {
+      companyName: name || email,
+      contactName: name,
+      contactEmail: email,
+      productCategory: "Mailers",
+      ownerName: "Albert",
+      source: "mailercity",
+      pipelineStage: "LEAD",
+      stage: "MailerCity - new",
+      commentary: `MailerCity landing-page lead.\n${text.slice(0, 1500)}`,
+      intakeRaw: JSON.stringify({ mailercityEmailId: m.id, receivedDateTime: m.receivedDateTime }),
+      lastInteraction: new Date(),
+    } });
+    try { await kickoffMailerCity(prisma, lead); created++; } catch (e) { console.error("[mailercity] kickoff failed", lead.id, e); }
+  }
+  return { created };
 }

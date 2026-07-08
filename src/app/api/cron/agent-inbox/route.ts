@@ -16,9 +16,11 @@ export async function GET(request: NextRequest) {
   const prisma = prismaModule.default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   try {
-    const { pollAgentInbox } = await import("@/lib/agent/inbox");
+    const { pollAgentInbox, pollMailerCityLeads } = await import("@/lib/agent/inbox");
     const result = await pollAgentInbox(prisma);
-    return NextResponse.json({ ok: true, ...result });
+    let mailercity = { created: 0 };
+    try { mailercity = await pollMailerCityLeads(prisma); } catch (e) { console.error("[Godzilla CRON] mailercity poll failed", e); }
+    return NextResponse.json({ ok: true, ...result, mailercityCreated: mailercity.created });
   } catch (e) {
     console.error("[Godzilla CRON] agent-inbox failed", e);
     return NextResponse.json({ error: "failed" }, { status: 500 });

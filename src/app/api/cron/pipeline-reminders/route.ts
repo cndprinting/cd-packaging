@@ -99,11 +99,11 @@ export async function GET(request: NextRequest) {
     const stale = new Date(now.getTime() - 3 * 24 * 3600 * 1000);
     const inbound = await prisma.lead.findMany({
       where: {
-        source: "inbound",
+        source: { in: ["inbound", "mailercity"] },
         pipelineStage: { in: ["LEAD", "QUALIFIED"] },
         OR: [
-          { agentStatus: { in: ["quote_received", "owner_handling", "needs_review", "needs_info", "needs_owner"] } },
-          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1"] }, agentNextAt: { lt: stale } },
+          { agentStatus: { in: ["quote_received", "owner_handling", "needs_review", "needs_info", "needs_owner", "mailercity_handoff"] } },
+          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying"] }, agentNextAt: { lt: stale } },
         ],
       },
       orderBy: { createdAt: "asc" },
@@ -118,6 +118,8 @@ export async function GET(request: NextRequest) {
           case "needs_info":
           case "needs_owner": return "Mary needs something / a decision from you";
           case "awaiting_mary": return "Stalled - Mary hasn't quoted yet, give her a nudge";
+          case "mailercity_handoff": return "MailerCity lead qualified - follow up on their mailer";
+          case "mailercity_qualifying": return "MailerCity - customer hasn't answered the qualifying questions";
           default: return "Stalled - customer hasn't sent info, consider a personal nudge";
         }
       };
