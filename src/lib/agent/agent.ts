@@ -228,17 +228,20 @@ const MAILERCITY_SUBJECT = "Your direct mail with C&D (MailerCity)";
 export async function kickoffMailerCity(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled() || !lead.contactEmail) return;
   const token = lead.agentToken || newToken();
+  // Acknowledge the specific template they sampled, if the landing page gave us one.
+  const template = (String(lead.commentary || "").match(/Template:\s*(.+?)\s*(?:\(|\n|$)/i) || [])[1]?.trim();
+  const intro = template
+    ? `Thanks so much for requesting a sample of our ${template} mailer! We'll get that out to you.`
+    : `Thanks so much for reaching out to C&amp;D about direct mail!`;
   const body = wrap(`
     <p>Hi ${firstName(lead.contactName)},</p>
-    <p>Thanks so much for reaching out to C&amp;D about direct mail! To get your mailer moving, could you share a few quick details:</p>
+    <p>${intro} When you're ready to run a campaign, a few quick things so we can set it up for you:</p>
     <ul>
-      <li>Are you looking to send postcards or letters/mailers?</li>
-      <li>One sheet or two?</li>
-      <li>Roughly how many pieces? (Our per-piece pricing by quantity is right on our site: <a href="https://marketing.cndprinting.com/">marketing.cndprinting.com</a>)</li>
-      <li>Do you have your mailing address list ready for us to run through cleansing (NCOA/CASS), or would you like a hand sourcing one?</li>
-      <li>Do you have your artwork, or would you like us to design it?</li>
+      <li>Roughly how many pieces are you looking to mail?</li>
+      <li>Do you already have your mailing list, or would you like us to pull one for a specific area / counties?</li>
+      <li>Any timeline you're working toward?</li>
     </ul>
-    <p>Once we have these we'll get everything moving (standard production is about 7 days). Happy to answer any questions on pricing or the process too.</p>
+    <p>Our per-piece pricing by quantity is right on our site (<a href="https://marketing.cndprinting.com/">marketing.cndprinting.com</a>), and we handle the list cleansing (NCOA/CASS) on our end. Happy to answer any questions on pricing or the process too.</p>
     <p>Best regards,<br>${SIGNOFF}</p>`);
   await agentCustomerSend(prisma, lead, { subject: MAILERCITY_SUBJECT, body });
   await prisma.lead.update({
