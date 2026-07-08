@@ -213,7 +213,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   // Follow-ups first (existing conversations), only when actually sending.
   if (autoSend()) {
     const due = await prisma.lead.findMany({
-      where: { pipelineStage: "LEAD", agentHold: false, source: { not: "inbound" }, outreachNextAt: { not: null, lte: now }, outreachStatus: { in: ["intro_sent", "followup_1"] } },
+      where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", outreachNextAt: { not: null, lte: now }, outreachStatus: { in: ["intro_sent", "followup_1"] } },
       take: limit,
     });
     for (const l of due) {
@@ -249,7 +249,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   // a contact we haven't emailed yet (e.g. one you just added). Replied /
   // not-interested / unsubscribed leads are intentionally left alone.
   const fresh = await prisma.lead.findMany({
-    where: { pipelineStage: "LEAD", agentHold: false, source: { not: "inbound" }, OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
+    where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
     orderBy: { createdAt: "asc" }, take: limit * 3,
   });
   for (const l of fresh) {
