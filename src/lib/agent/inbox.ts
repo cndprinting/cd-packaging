@@ -236,7 +236,7 @@ export async function pollMailerCityLeads(prisma: any): Promise<{ created: numbe
       companyName: name || email,
       contactName: name,
       contactEmail: email,
-      productCategory: "Mailers",
+      productCategory: "MailerCity",
       ownerName: "Albert",
       source: "mailercity",
       pipelineStage: "LEAD",

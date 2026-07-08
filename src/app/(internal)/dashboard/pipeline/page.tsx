@@ -37,7 +37,7 @@ function dueState(l: Lead): "due" | "upcoming" | null {
 }
 const fmtShort = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers"];
+const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
 const OWNERS = ["Benjy", "Albert", "Nitay", "Kelsey", "TBD"];
 const STAGE_LEAD = ["Break in", "Touch base", "Connected", "Requested info", "Quoting", "Meeting set", "Deprioritize", "Dead"];
 const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
