@@ -228,10 +228,10 @@ export async function pollMailerCityLeads(prisma: any): Promise<{ created: numbe
     const text = (m.body?.content || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;|’/g, "'").replace(/\s+/g, " ").trim();
     const email = (text.match(/Email\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i) || [])[1] || (text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i) || [])[0];
     if (!email) continue;
-    if (isTestSubmission(email)) continue; // Habib/SlashPie tests
+    const name = ((text.match(/Name\s+(.+?)\s+Email/i) || [])[1] || "").trim() || null;
+    if (isTestSubmission(email, name)) continue; // Habib/SlashPie tests (email OR name)
     const exists = await prisma.lead.findFirst({ where: { source: "mailercity", contactEmail: { equals: email, mode: "insensitive" } }, select: { id: true } });
     if (exists) continue; // already captured
-    const name = ((text.match(/Name\s+(.+?)\s+Email/i) || [])[1] || "").trim() || null;
     const lead = await prisma.lead.create({ data: {
       companyName: name || email,
       contactName: name,

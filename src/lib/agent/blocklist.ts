@@ -16,14 +16,16 @@ export const BLOCKLIST = {
 export const TEST_SUBMISSIONS = {
   emails: ["sampleemail@hotmail.com", "habib@slashpie.com"],
   domains: ["slashpie.com"],
+  names: ["slashpie", "habib"],   // Habib often uses throwaway emails, but the name gives it away
 };
 
-export function isTestSubmission(email?: string | null): boolean {
+export function isTestSubmission(email?: string | null, name?: string | null): boolean {
   const e = (email || "").toLowerCase();
-  if (!e) return false;
+  const n = (name || "").toLowerCase();
   const domain = e.includes("@") ? e.split("@")[1] : "";
-  if (TEST_SUBMISSIONS.emails.some((x) => x && e.includes(x.toLowerCase()))) return true;
+  if (e && TEST_SUBMISSIONS.emails.some((x) => x && e.includes(x.toLowerCase()))) return true;
   if (domain && TEST_SUBMISSIONS.domains.some((d) => d && domain.includes(d.toLowerCase()))) return true;
+  if (n && TEST_SUBMISSIONS.names.some((x) => x && n.includes(x))) return true;
   return false;
 }
 

@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   const phone = pick("phone", "tel", "mobile") || null;
 
   // Habib's QA test submissions — drop silently, never a lead.
-  if (isTestSubmission(email)) {
+  if (isTestSubmission(email, contactName)) {
     console.log("[Godzilla INTAKE] ignored test submission from", email);
     return NextResponse.json({ ok: true, ignored: "test submission" });
   }
