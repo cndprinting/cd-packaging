@@ -202,6 +202,24 @@ async function outboundSend(prisma: any, lead: any, owner: Owner, to: string, to
   return !!r.success;
 }
 
+// Generic email providers — a shared domain here does NOT mean same company.
+const GENERIC_DOMAINS = new Set(["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "aol.com", "icloud.com", "me.com", "live.com", "msn.com", "comcast.net", "att.net", "verizon.net", "protonmail.com"]);
+
+// True if we're already engaged with this company via a Qualified prospect or an
+// existing Customer (usually a duplicate import row) — so a cold intro would be
+// embarrassing. Matches by exact company name or business email domain. Benjy 7/9.
+async function alreadyEngaged(prisma: any, lead: any, email: string): Promise<boolean> {
+  const d = (email || "").toLowerCase().split("@")[1] || "";
+  const bizDomain = d && !GENERIC_DOMAINS.has(d) ? d : null;
+  const or: any[] = [{ companyName: { equals: lead.companyName, mode: "insensitive" } }];
+  if (bizDomain) or.push({ contactEmail: { endsWith: `@${bizDomain}`, mode: "insensitive" } });
+  const hit = await prisma.lead.findFirst({
+    where: { id: { not: lead.id }, pipelineStage: { in: ["QUALIFIED", "CUSTOMER"] }, OR: or },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
 // ── The sweep ──────────────────────────────────────────────────────────────
 export async function processOutbound(prisma: any): Promise<{ intros: number; followups: number; previews: number }> {
   if (!outboundEnabled()) return { intros: 0, followups: 0, previews: 0 };
@@ -257,6 +275,13 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     const contact = nextUnemailedContact(l); // the first person on this lead we haven't emailed
     if (!contact) continue; // nothing new to reach out to here
     if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
+    // Never cold-email a company we're ALREADY engaged with — a qualified prospect
+    // or existing customer (often a duplicate row from an import). Match by exact
+    // company name or business email domain. Benjy 7/9.
+    if (await alreadyEngaged(prisma, l, contact.email)) {
+      await prisma.lead.update({ where: { id: l.id }, data: { agentHold: true, outreachLog: logLine(l.outreachLog, "Skipped - company already a qualified prospect/customer") } });
+      continue;
+    }
     const owner = resolveOwner(l.ownerName);
     try {
       const draft = await draftIntro(l, owner, contact.name);
