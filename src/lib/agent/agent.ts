@@ -379,10 +379,17 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const fresh = await prisma.lead.findUnique({ where: { id: l.id } });
         await kickoffAgent(prisma, fresh);
       } else if (l.agentStatus === "awaiting_mary") {
-        // Chase Mary every ~24h until the quote is in. If she can't get to it
-        // right away, ask for a timeline so we can set the customer's expectations.
-        await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>Albert</p>`) });
-        await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
+        // Chase Mary every ~24h, but CAP it — never pester her forever on a slow
+        // or dead lead. After 3 nudges with no quote, stop and hand to the owners
+        // (shows in the daily digest). Benjy 7/9.
+        const nudges = ((l.agentLog || "").match(/Nudged Mary/g) || []).length;
+        if (nudges >= 3) {
+          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "needs_owner", stage: "Mary hasn't quoted (3 nudges)", agentNextAt: null, agentLog: logLine(l.agentLog, "Stopped nudging Mary after 3 tries - handed to owners") } });
+          await agentSend({ to: OWNERS, subject: `Mary hasn't quoted: ${l.companyName}`, body: wrap(`<p>I've followed up with Mary three times on <strong>${l.companyName}</strong> with no quote yet, so I've stopped nudging her. Please chase it or close it out from the pipeline.</p>`) });
+        } else {
+          await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>Albert</p>`) });
+          await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
+        }
       } else if (l.agentStatus === "quote_received") {
         await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged owners to approve") } });

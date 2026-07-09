@@ -37,8 +37,8 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     const res = await client
       .api(`/users/${MAILBOX}/mailFolders/Inbox/messages`)
       .filter(`receivedDateTime ge ${cutoff}`)
-      .orderby("receivedDateTime asc")
-      .top(100)
+      .orderby("receivedDateTime desc")   // NEWEST first — a busy mailbox has >100 msgs in 5d; asc missed recent replies
+      .top(200)
       .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
       .get();
     items = res.value || [];
