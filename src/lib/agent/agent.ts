@@ -361,7 +361,9 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
   if (!agentEnabled()) return { acted: 0 };
   const now = new Date();
   const due = await prisma.lead.findMany({
-    where: { agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2"] } },
+    // pipelineStage LEAD only — moving a lead to Qualified/Customer/Lost hands it
+    // to a human and stops the agent's chase automatically. Benjy 7/9.
+    where: { pipelineStage: "LEAD", agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2"] } },
     take: 100,
   });
   let acted = 0;
