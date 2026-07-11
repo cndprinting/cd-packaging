@@ -242,6 +242,7 @@ model Lead {
   agentConvId     String?   // Graph conversationId — keeps all customer emails in one thread
   agentMaryConvId String?   // Graph conversationId for the Mary thread — all her emails in one place
   agentQuoteMsgId String?   // Graph message id of Mary's quote email (PDF) to forward to the customer on approval
+  agentMailbox    String?   // mailbox this lead's threads live in (Albert pre-cutover, Jessica after) — set on first send
   agentLastMsgAt  DateTime? // received time of the last reply the agent handled (so opening an email in Outlook never makes it skip one)
   contactName2    String?   // optional secondary contact (agent tries after the primary)
   contactEmail2   String?

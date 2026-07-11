@@ -1,5 +1,6 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, SENDER, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply } from "@/lib/agent/agent";
+import { AGENT_NAME, AGENT_FIRST, READ_MAILBOXES } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
 
@@ -10,7 +11,6 @@ import { isTestSubmission } from "@/lib/agent/blocklist";
 // Azure on top of the existing Mail.Send — until that's granted the read call
 // throws and this no-ops.
 
-const MAILBOX = SENDER; // bwaxman@cndprinting.com
 const BASE = "https://packaging.cndprinting.com";
 
 // Loose company match: Mary may title her quote "Mid-Pacific Flyer pricing"
@@ -28,27 +28,32 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   const client = getGraphClient();
   if (!client) return { checked: 0, handled: 0, error: "graph not configured" };
 
-  let items: any[] = [];
-  try {
-    // Fetch recent mail regardless of read state — an owner opening a reply in
-    // Outlook must NOT hide it from the agent. We de-dupe per lead via
-    // agentLastMsgAt instead of relying on the unread flag. Benjy 7/7.
-    const cutoff = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
-    const res = await client
-      .api(`/users/${MAILBOX}/mailFolders/Inbox/messages`)
-      .filter(`receivedDateTime ge ${cutoff}`)
-      .orderby("receivedDateTime desc")   // NEWEST first — a busy mailbox has >100 msgs in 5d; asc missed recent replies
-      .top(200)
-      .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
-      .get();
-    items = res.value || [];
-  } catch (e) {
-    console.error("[agent inbox] read failed — needs Mail.ReadWrite app permission", e);
-    return { checked: 0, handled: 0, error: "mail read failed (Mail.ReadWrite not granted?)" };
+  // Fetch recent mail regardless of read state — an owner opening a reply in
+  // Outlook must NOT hide it from the agent. We de-dupe per lead via
+  // agentLastMsgAt instead of relying on the unread flag. Benjy 7/7.
+  // Polls BOTH the current identity mailbox and the legacy Albert mailbox during
+  // the Jessica cutover, so in-flight threads keep working. Benjy 7/9.
+  const items: any[] = [];
+  const cutoff = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  for (const box of READ_MAILBOXES) {
+    try {
+      const res = await client
+        .api(`/users/${box}/mailFolders/Inbox/messages`)
+        .filter(`receivedDateTime ge ${cutoff}`)
+        .orderby("receivedDateTime desc")   // NEWEST first — a busy mailbox has >100 msgs in 5d; asc missed recent replies
+        .top(200)
+        .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
+        .get();
+      for (const m of (res.value || [])) { m._mb = box; items.push(m); }
+    } catch (e) {
+      console.error(`[agent inbox] read failed for ${box} — needs Mail.ReadWrite app permission`, e);
+      if (items.length === 0 && box === READ_MAILBOXES[READ_MAILBOXES.length - 1]) return { checked: 0, handled: 0, error: "mail read failed (Mail.ReadWrite not granted?)" };
+    }
   }
 
   let handled = 0;
   for (const m of items) {
+    const MAILBOX = m._mb; // the mailbox this message lives in
     const from = m.from?.emailAddress?.address?.toLowerCase();
     if (!from) continue;
 
@@ -131,7 +136,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     if (lead.agentStatus === "awaiting_mary" || lead.agentStatus === "quote_received") {
       const preview = (m.bodyPreview || "").trim();
       await agentMarySend(prisma, lead, {
-        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through${m.hasAttachments ? " (artwork attached)" : ""}. Please factor it into the quote. Thanks,<br>Albert</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
+        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through${m.hasAttachments ? " (artwork attached)" : ""}. Please factor it into the quote. Thanks,<br>${AGENT_FIRST}</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
         copyAttachmentsFrom: m.id,
       });
       handled++;
@@ -173,7 +178,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     try {
       const claude = getClaude();
       if (claude) {
-        const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off with just the name "Albert Waxman" (a company signature is appended automatically). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote. If the customer asks about timing, our standard lead time is 2 to 3 weeks after we receive payment and final approval of the quote, and we can prioritize when they have a deadline.`;
+        const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off with just the name "${AGENT_NAME}" (a company signature is appended automatically). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote. If the customer asks about timing, our standard lead time is 2 to 3 weeks after we receive payment and final approval of the quote, and we can prioritize when they have a deadline.`;
         const u = `Customer ${lead.companyName} replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${m.bodyPreview || ""}`;
         const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system: sys, messages: [{ role: "user", content: u }] });
         const t: any = (r.content || []).find((b: any) => b.type === "text");

@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { sendEmail } from "@/lib/email/graph-client";
+import { AGENT_MAILBOX, AGENT_NAME, AGENT_FIRST, leadMailbox } from "@/lib/agent/identity";
 
 // AI sales-agent chase engine (Benjy 6/26). A status machine on the Lead with
 // a clock — nothing sits silent. Customer-facing QUOTE sends are gated behind
@@ -9,10 +10,11 @@ import { sendEmail } from "@/lib/email/graph-client";
 
 export const MARY = "mbitting@cndprinting.com";
 export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
-// Customer-facing identity: the agent sends AS Albert (sales manager) and reads
-// his mailbox for replies, so what the customer sees matches the lead owner.
-export const SENDER = "awaxman@cndprinting.com";
-export const SIGNOFF = "Albert Waxman"; // closing name; the signature card below is appended automatically
+// Customer-facing identity — driven by identity.ts (Albert today, Jessica once
+// AGENT_SENDER_EMAIL/NAME are set). Per-lead threads stick to the mailbox they
+// started in via leadMailbox().
+export const SENDER = AGENT_MAILBOX;
+export const SIGNOFF = AGENT_NAME; // closing name; the signature card below is appended automatically
 // Company signature block appended to every customer-facing email. Matches
 // Benjy's real Outlook signature: logo, company, address, office line, and the
 // "C&D Printing Website" link, in gray (#333). Logo is hosted at the app root
@@ -93,13 +95,16 @@ export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?
   const subject = noEmDash(opts.subject || customerSubject(lead));
   const body = noEmDash(opts.body) + SIGNATURE;
   if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: OWNERS, subject, body }); return; }
+  const mb = leadMailbox(lead); // existing threads stay in their original mailbox through the identity cutover
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentConvId) {
-    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+    const r = await replyInConversation({ from: mb, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return; // threaded
   }
-  const r = await sendEmailGetConversation({ from: SENDER, to: lead.contactEmail, cc: OWNERS, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
-  if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentConvId: r.conversationId } }); } catch { /* ignore */ } }
+  const r = await sendEmailGetConversation({ from: mb, to: lead.contactEmail, cc: OWNERS, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+  if (r.conversationId || !lead.agentMailbox) {
+    try { await prisma.lead.update({ where: { id: lead.id }, data: { ...(r.conversationId ? { agentConvId: r.conversationId } : {}), agentMailbox: mb } }); } catch { /* ignore */ }
+  }
 }
 
 // All email to Mary for a given lead threads into ONE conversation: the first
@@ -109,13 +114,16 @@ export async function agentMarySend(prisma: any, lead: any, opts: { subject?: st
   const subject = noEmDash(opts.subject || `Quote needed: ${lead.companyName}`);
   const body = noEmDash(opts.body);
   if (process.env.AGENT_TEST_TO) { await agentSend({ to: MARY, cc: OWNERS, subject, body }); return; }
+  const mb = leadMailbox(lead);
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentMaryConvId) {
-    const r = await replyInConversation({ from: SENDER, conversationId: lead.agentMaryConvId, to: MARY, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+    const r = await replyInConversation({ from: mb, conversationId: lead.agentMaryConvId, to: MARY, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return;
   }
-  const r = await sendEmailGetConversation({ from: SENDER, to: MARY, cc: OWNERS, subject, body });
-  if (r.conversationId) { try { await prisma.lead.update({ where: { id: lead.id }, data: { agentMaryConvId: r.conversationId } }); } catch { /* ignore */ } }
+  const r = await sendEmailGetConversation({ from: mb, to: MARY, cc: OWNERS, subject, body });
+  if (r.conversationId || !lead.agentMailbox) {
+    try { await prisma.lead.update({ where: { id: lead.id }, data: { ...(r.conversationId ? { agentMaryConvId: r.conversationId } : {}), agentMailbox: mb } }); } catch { /* ignore */ }
+  }
 }
 
 // Shared duplicate guard (Benjy 7/2, expanded 7/7). If another active lead for
@@ -159,7 +167,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
     <p>Can you put a quote together for this one when you get a chance? Everything we have is below. Just reply to me with your price and terms, or let me know if you need anything else, and I'll take it from there.</p>
     <p><strong>${lead.companyName}</strong>${lead.contactName ? ` · ${lead.contactName}` : ""}${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""}</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
-    <p>Thanks,<br>Albert</p>`);
+    <p>Thanks,<br>${AGENT_FIRST}</p>`);
   await agentMarySend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -334,7 +342,7 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
   try {
     if (lead.agentQuoteMsgId) {
       const { getFirstPdfAttachment } = await import("@/lib/email/graph-client");
-      const pdf = await getFirstPdfAttachment(SENDER, lead.agentQuoteMsgId);
+      const pdf = await getFirstPdfAttachment(leadMailbox(lead), lead.agentQuoteMsgId); // Mary's PDF lives in the lead's own mailbox
       if (pdf?.contentBytes) {
         const { draftQuoteBreakdown } = await import("@/lib/agent/claude");
         inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: lead.companyName, contactName: lead.contactName, productName: product });
@@ -389,7 +397,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
           await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "needs_owner", stage: "Mary hasn't quoted (3 nudges)", agentNextAt: null, agentLog: logLine(l.agentLog, "Stopped nudging Mary after 3 tries - handed to owners") } });
           await agentSend({ to: OWNERS, subject: `Mary hasn't quoted: ${l.companyName}`, body: wrap(`<p>I've followed up with Mary three times on <strong>${l.companyName}</strong> with no quote yet, so I've stopped nudging her. Please chase it or close it out from the pipeline.</p>`) });
         } else {
-          await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>Albert</p>`) });
+          await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>${AGENT_FIRST}</p>`) });
           await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
         }
       } else if (l.agentStatus === "quote_received") {
