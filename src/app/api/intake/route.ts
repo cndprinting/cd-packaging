@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
       contactPhone: phone,
       website: null,
       priority: (isVip || existingRel) ? 1 : 3,     // major client / existing account → priority 1
-      ownerName: "Albert",         // inbound agent leads auto-assigned to Albert for follow-up
+      ownerName: "Jessica",        // agent-created leads belong to the agent (Jessica) until a human takes over (Benjy 7/13)
       agentStatus: blockedReason ? "blocked" : (scamHigh ? "needs_review" : (notAQuote ? "disqualified" : (existingRel ? "owner_handling" : null))), // guards park the lead so the agent never chases it
       stage: blockedReason ? "Blocked — flagged" : (scamHigh ? "Possible scam — review" : (notAQuote ? "Not a quote" : (existingRel ? "Existing account — owners handling" : "New"))),
       // Blocked/scam/solicitation → Lost. Existing-account inquiries STAY in the

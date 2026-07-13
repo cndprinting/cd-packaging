@@ -242,7 +242,7 @@ export async function pollMailerCityLeads(prisma: any): Promise<{ created: numbe
       contactName: name,
       contactEmail: email,
       productCategory: "MailerCity",
-      ownerName: "Albert",
+      ownerName: "Jessica", // agent-owned until a human takes over (Benjy 7/13)
       source: "mailercity",
       pipelineStage: "LEAD",
       stage: "MailerCity - new",

@@ -12,6 +12,7 @@ const MAILBOXES: Record<string, string> = {
   "awaxman@cndprinting.com": "Albert Waxman",
   "bwaxman@cndprinting.com": "Benjy Waxman",
   "nlaor@cndprinting.com": "Nitay Laor",
+  "jwaxman@cndprinting.com": "Jessica Waxman", // the agent's own outbound sends (Benjy 7/13)
 };
 const ACTIVE = ["intro_sent", "followup_1", "followup_2", "replied"];
 const ACTIVE_SEQ = ["intro_sent", "followup_1", "followup_2"]; // mid-sequence (can bounce)

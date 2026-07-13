@@ -19,8 +19,14 @@ const OWNERS_MAP: Record<string, Owner> = {
   benjy: { email: "bwaxman@cndprinting.com", full: "Benjy Waxman", first: "Benjy" },
   albert: { email: "awaxman@cndprinting.com", full: "Albert Waxman", first: "Albert" },
   nitay: { email: "nlaor@cndprinting.com", full: "Nitay Laor", first: "Nitay" },
+  jessica: { email: "jwaxman@cndprinting.com", full: "Jessica Waxman", first: "Jessica" }, // the agent's own identity (Benjy 7/13)
 };
-const DEFAULT_OWNER = OWNERS_MAP.albert; // Kelsey / TBD / blank / unknown → Albert
+// The agent's pool (owner "Jessica", Kelsey, TBD, blank, unknown) sends as
+// Jessica. Real owner names still send as themselves — the family voice.
+const DEFAULT_OWNER = OWNERS_MAP.jessica;
+// Jessica's mailbox is brand-new with zero cold-send reputation — ramp it.
+// Raise AGENT_OUTBOUND_JESSICA_LIMIT in the env as deliverability proves out.
+const jessicaPerRunCap = () => parseInt(process.env.AGENT_OUTBOUND_JESSICA_LIMIT || "8", 10);
 // Benjy, Nitay, Albert are BCC'd on every outbound send so they can monitor the
 // agent (invisible to the prospect). The sending owner is dropped since their
 // own copy already lands in Sent.
@@ -139,7 +145,9 @@ async function draftIntro(lead: any, owner: Owner, contactName: string): Promise
   const claude = getClaude();
   if (!claude) return fallback;
   try {
-    const system = `You write warm, personal cold-intro emails for C&D Printing & Packaging, in the voice of the Waxman family that owns it. C&D is a family-owned folding carton and packaging manufacturer in St. Petersburg, Florida with roughly 50 years of history (folding cartons, custom boxes, retail and printed packaging), with a team of 50-plus, serving cosmetics, skincare, nutraceutical, health-and-wellness, and other consumer brands and contract manufacturers. IMPORTANT accuracy note: C&D the company is about 50 years old, but the Waxman family acquired it in 2025 and runs it hands-on now. Describe C&D as a 50-year-old company that is now family-owned. Do NOT claim the family has run or owned C&D for 50 years, and do NOT call it "multi-generation." You are writing AS ${owner.full} (first name ${owner.first}), part of the Waxman family that owns C&D.
+    const system = `You write warm, personal cold-intro emails for C&D Printing & Packaging, in the voice of the Waxman family that owns it. C&D is a family-owned folding carton and packaging manufacturer in St. Petersburg, Florida with roughly 50 years of history (folding cartons, custom boxes, retail and printed packaging), with a team of 50-plus, serving cosmetics, skincare, nutraceutical, health-and-wellness, and other consumer brands and contract manufacturers. IMPORTANT accuracy note: C&D the company is about 50 years old, but the Waxman family acquired it in 2025 and runs it hands-on now. Describe C&D as a 50-year-old company that is now family-owned. Do NOT claim the family has run or owned C&D for 50 years, and do NOT call it "multi-generation." ${owner.first === "Jessica"
+    ? `You are writing AS Jessica Waxman (first name Jessica), on C&D's sales team at the St. Petersburg plant. Speak as part of the team at a family-owned company ("our family-owned shop", "you'd work directly with our owners and our team"), but do NOT claim to be one of the owners.`
+    : `You are writing AS ${owner.full} (first name ${owner.first}), part of the Waxman family that owns C&D.`}
 
 Model the tone on our best-performing emails:
 - Warm, personal, human. Never salesy or templated.
@@ -149,8 +157,10 @@ Model the tone on our best-performing emails:
 - Soft call to action: offer a quick call or an in-person visit, and invite a reply.
 - A few short paragraphs.
 
-You (${owner.first}) are based in Miami (Brickell); C&D's manufacturing plant is in St. Petersburg, Florida. Use the prospect's location (given below, or from the notes) to pick the RIGHT geography hook, and never claim to be local when you are not:
-- Prospect in South Florida (Miami, Fort Lauderdale, West Palm): say you are local to them in Miami and could easily meet in person.
+${owner.first === "Jessica"
+    ? `You (Jessica) are based at the plant in St. Petersburg, Florida.`
+    : `You (${owner.first}) are based in Miami (Brickell); C&D's manufacturing plant is in St. Petersburg, Florida.`} Use the prospect's location (given below, or from the notes) to pick the RIGHT geography hook, and never claim to be local when you are not:
+- Prospect in South Florida (Miami, Fort Lauderdale, West Palm): ${owner.first === "Jessica" ? `mention the owners are in Miami and would gladly meet in person.` : `say you are local to them in Miami and could easily meet in person.`}
 - Prospect near Tampa, St. Petersburg, or Orlando: note the plant is a short drive and you would be glad to visit.
 - Prospect elsewhere in Florida: mention you are a fellow Florida company, same state, easy to work with in person or by phone.
 - Prospect in Georgia or another state (i.e. NOT Florida): do NOT imply you are local or nearby. Instead lean on being a Southeast manufacturer that already works with brands across the region and ships nationwide, and offer a call or to send samples. For Georgia specifically you may note you are just down in Florida, a straightforward regional partner, but never say "local" or "neighbors."
@@ -270,6 +280,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
     orderBy: { createdAt: "asc" }, take: limit * 3,
   });
+  let jessicaSends = 0; // ramp guard for the brand-new jwaxman mailbox
   for (const l of fresh) {
     if (sends >= limit) break;
     const contact = nextUnemailedContact(l); // the first person on this lead we haven't emailed
@@ -283,6 +294,11 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       continue;
     }
     const owner = resolveOwner(l.ownerName);
+    // Warm up Jessica's fresh mailbox slowly — leave the rest for tomorrow's run.
+    if (owner.email === OWNERS_MAP.jessica.email) {
+      if (jessicaSends >= jessicaPerRunCap()) continue;
+      jessicaSends++;
+    }
     try {
       const draft = await draftIntro(l, owner, contact.name);
       l.outreachConvId = null; // an intro always opens a fresh thread for this person
