@@ -1,6 +1,6 @@
 import { getClaude } from "@/lib/agent/claude";
 import { checkBlocked } from "@/lib/agent/blocklist";
-import { noEmDash, SIGNATURE } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE, firstName, informalCompany } from "@/lib/agent/agent";
 import { sendEmail, sendEmailGetConversation, replyInConversation } from "@/lib/email/graph-client";
 
 // Outbound prospecting agent (Benjy 6/30). Sweeps the Leads tab and sends a
@@ -35,7 +35,12 @@ const bccFor = (owner: Owner) => OWNER_BCC.filter((e) => e.toLowerCase() !== own
 function resolveOwner(ownerName?: string | null): Owner {
   return OWNERS_MAP[(ownerName || "").trim().toLowerCase()] || DEFAULT_OWNER;
 }
-const firstName = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "there";
+// Reverse lookup for a stamped sender mailbox (lead.outreachMailbox).
+function ownerByEmail(email?: string | null): Owner | null {
+  const e = (email || "").trim().toLowerCase();
+  return Object.values(OWNERS_MAP).find((o) => o.email.toLowerCase() === e) || null;
+}
+// firstName/informalCompany come from agent.ts (quote-aware nickname + no LLC/Inc suffixes)
 
 // Lead fields sometimes hold MULTIPLE people, pipe/comma/slash separated, e.g.
 // name "Ken Lorichio | Reid Barack", email "ken@sunnutra.com | rbarack27@gmail.com".
@@ -139,7 +144,7 @@ async function draftIntro(lead: any, owner: Owner, contactName: string): Promise
     body: wrap(`
       <p>Hi ${contact},</p>
       <p>I'm ${owner.first} with C&amp;D Printing &amp; Packaging, a family-owned folding carton manufacturer in St. Petersburg, Florida with about 50 years of history behind it. Our family and a team of 50-plus make folding cartons, custom boxes, and retail packaging for cosmetics, skincare, nutraceutical, and other consumer brands.</p>
-      <p>I came across ${lead.companyName} and thought we could be a good fit. What sets us apart is that working with us means working with our family directly. Would you be open to a quick call, or an in-person visit if you are nearby?</p>
+      <p>I came across ${informalCompany(lead.companyName)} and thought we could be a good fit. What sets us apart is that working with us means working with our family directly. Would you be open to a quick call, or an in-person visit if you are nearby?</p>
       <p>Best,<br>${owner.first}</p>`),
   };
   const claude = getClaude();
@@ -172,7 +177,7 @@ Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <str
 
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
     const loc = [lead.city, lead.state].filter(Boolean).join(", ") || "unknown (see notes)";
-    const user = `Prospect company: ${lead.companyName}. Location: ${loc}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
+    const user = `Prospect company: ${informalCompany(lead.companyName)}. Location: ${loc}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
     const req: any = { model: "claude-opus-4-8", max_tokens: 2500, system, messages: [{ role: "user", content: user }] };
     if (research()) req.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }]; // newer variant (dynamic filtering) for Opus 4.8 — more token-efficient
     const msg = await claude.messages.create(req);
@@ -188,8 +193,8 @@ Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific s
 function draftFollowup(lead: any, owner: Owner, step: string, contactName: string): string {
   const contact = firstName(contactName);
   const msg = step === "intro_sent"
-    ? `Just following up on my note below about packaging for ${lead.companyName}. Happy to send over a few samples or hop on a quick call if useful.`
-    : `Last note from me for now. If custom packaging is ever on the radar for ${lead.companyName}, we would love the chance to help, just reply anytime.`;
+    ? `Just following up on my note below about packaging for ${informalCompany(lead.companyName)}. Happy to send over a few samples or hop on a quick call if useful.`
+    : `Last note from me for now. If custom packaging is ever on the radar for ${informalCompany(lead.companyName)}, we would love the chance to help, just reply anytime.`;
   return wrap(`<p>Hi ${contact},</p><p>${msg}</p><p>Best,<br>${owner.first}</p>`);
 }
 
@@ -248,11 +253,14 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       if (sends >= limit) break;
       const contact = sequenceContact(l);
       if (!contact) continue;
-      const owner = resolveOwner(l.ownerName);
+      // Follow-ups come from WHOEVER SENT THE INTRO (outreachMailbox), never the
+      // current default — so a mid-sequence thread can't flip Albert→Jessica
+      // when ownership or defaults change (Benjy 7/13, the VEI case).
+      const owner = ownerByEmail(l.outreachMailbox) || resolveOwner(l.ownerName);
       const step = FOLLOWUPS[l.outreachStatus as string];
       if (!step) continue;
       try {
-        const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${l.companyName}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
+        const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${informalCompany(l.companyName)}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
         if (ok) {
           await appendNote(prisma, l.id, `Follow-up sent to ${contact.name || contact.email}`);
           if (step.next === "done") {
@@ -260,7 +268,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
             // contact we haven't emailed yet (e.g. one just added), reset so the
             // intro pass starts a fresh sequence to THEM; otherwise close out.
             if (nextUnemailedContact(l)) {
-              await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: null, outreachTo: null, outreachConvId: null, outreachNextAt: null, outreachLog: logLine(l.outreachLog, "No reply, moving to next contact") } });
+              await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: null, outreachTo: null, outreachConvId: null, outreachMailbox: null, outreachNextAt: null, outreachLog: logLine(l.outreachLog, "No reply, moving to next contact") } });
             } else {
               await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "done", outreachNextAt: null, outreachLog: logLine(l.outreachLog, "Sequence complete, no response") } });
             }
@@ -304,7 +312,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       l.outreachConvId = null; // an intro always opens a fresh thread for this person
       const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, draft.subject, draft.body);
       if (sent) {
-        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachTo: contact.email, outreachEmailed: withEmailed(l, contact.email), outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, `Intro sent to ${contact.name || contact.email}`) } });
+        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "intro_sent", outreachTo: contact.email, outreachMailbox: owner.email, outreachEmailed: withEmailed(l, contact.email), outreachNextAt: addDays(now, 3), outreachLog: logLine(l.outreachLog, `Intro sent to ${contact.name || contact.email}`) } });
         await appendNote(prisma, l.id, `Intro email sent to ${contact.name || contact.email}`);
         sends++; intros++;
       } else {

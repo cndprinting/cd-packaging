@@ -39,7 +39,25 @@ function quoteAmount(q: string): number {
 
 const newToken = () => randomBytes(16).toString("hex");
 // Greet customers by first name only (full name reads stiff/automated).
-const firstName = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "there";
+// Quote-aware (Benjy 7/13, the `Hi "Alex"` bug): a quoted nickname means "call
+// me this" — use it WITHOUT the quotes; otherwise first token, quotes stripped.
+export const firstName = (n?: string | null) => {
+  const raw = (n || "").trim();
+  const nick = raw.match(/["“”'‘’]([A-Za-z][A-Za-z .'-]{0,20}?)["“”'‘’]/);
+  const tok = (nick?.[1] || raw.replace(/["“”'‘’]/g, " ").trim().split(/\s+/)[0] || "").replace(/[,.]+$/, "").trim();
+  return tok || "there";
+};
+// Customer-facing company name, the way a person would SAY it — no LLC/Inc/
+// Corp/Co suffixes, no parentheticals ("Valentine Enterprises (VEI)" →
+// "Valentine Enterprises"). Entity types read robotic (Benjy 7/13). Internal
+// briefs to Mary keep the full legal name.
+export function informalCompany(name?: string | null): string {
+  let n = (name || "").replace(/\(.*?\)/g, " ").trim();
+  const suffix = /[\s,]+(llc|l\.l\.c\.|inc\.?|incorporated|corp\.?|corporation|co\.?|company|ltd\.?|limited|llp|lp|pllc|plc|usa)\.?$/i;
+  for (let i = 0; i < 3 && suffix.test(n); i++) n = n.replace(suffix, "");
+  n = n.replace(/[\s,]+$/, "").replace(/\s{2,}/g, " ").trim();
+  return n || (name || "").trim();
+}
 const link = (id: string, token: string, action: string) => `${BASE}/agent?id=${id}&token=${token}&do=${action}`;
 
 // Business-day clock — skips weekends.
@@ -95,7 +113,7 @@ export async function agentSend(opts: { to: string | string[]; cc?: string | str
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
 // One stable subject per customer so all their emails group into one thread.
-export const customerSubject = (lead: any) => `Your quote from C&D Printing - ${lead.companyName}`;
+export const customerSubject = (lead: any) => `Your quote from C&D Printing - ${informalCompany(lead.companyName)}`;
 
 // All customer-facing email goes through here so it threads into ONE conversation.
 // First email starts the thread (and we store its conversationId); the rest reply
@@ -325,7 +343,7 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
     let inner: string | null = null;
     try {
       const { draftCustomerQuote } = await import("@/lib/agent/claude");
-      inner = await draftCustomerQuote({ customerName: lead.companyName, contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "", agentName: leadAgentName(lead) });
+      inner = await draftCustomerQuote({ customerName: informalCompany(lead.companyName), contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "", agentName: leadAgentName(lead) });
     } catch { /* fall back */ }
     const body = inner ? wrap(inner) : wrap(`
       <p>Hi ${firstName(lead.contactName)},</p>
@@ -355,7 +373,7 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
       const pdf = await getFirstPdfAttachment(leadMailbox(lead), lead.agentQuoteMsgId); // Mary's PDF lives in the lead's own mailbox
       if (pdf?.contentBytes) {
         const { draftQuoteBreakdown } = await import("@/lib/agent/claude");
-        inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: lead.companyName, contactName: lead.contactName, productName: product, agentName: leadAgentName(lead) });
+        inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: informalCompany(lead.companyName), contactName: lead.contactName, productName: product, agentName: leadAgentName(lead) });
       }
     }
   } catch { /* fall back */ }

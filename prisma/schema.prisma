@@ -254,6 +254,7 @@ model Lead {
   outreachStatus  String?   // null | intro_sent | followup_1 | replied | not_interested | unsubscribed | done
   outreachNextAt  DateTime? // clock for the next outbound action
   outreachConvId  String?   // Graph conversationId for the prospect thread (sent from the owner's mailbox)
+  outreachMailbox String?   // mailbox that sent the intro — follow-ups keep the same sender/persona even if defaults change (Benjy 7/13)
   outreachLog     String?   // JSON audit trail of outbound actions
   agentLog        String?   // JSON audit trail of agent actions
 
