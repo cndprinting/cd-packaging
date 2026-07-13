@@ -70,6 +70,16 @@ export function noEmDash(s: string): string {
     .replace(/\s*[—–]\s*/g, " - ");
 }
 
+// Out-of-office / auto-reply detector (Benjy 7/13). An OOO is NOT a real reply:
+// it verifies the address is live, and the sequence continues on its normal
+// cadence — never stop, never flag for review, never draft a response to it.
+export function isAutoReply(subject?: string | null, body?: string | null): boolean {
+  const s = (subject || "").trim().toLowerCase();
+  const b = (body || "").toLowerCase();
+  if (/^(automatic reply|auto[- ]?reply|autoreply|out of office|ooo[:\s])/i.test(s)) return true;
+  return /\bout of (the )?office\b|\bon (vacation|annual leave|holiday|leave|pto)\b|away from (the office|my email)|limited access to (my )?e-?mail|will (respond|reply|return).{0,30}(return|back in the office)|currently (out of|traveling|on leave)|i am (currently )?out\b|automated? (reply|response)|do not reply to this automated/i.test(b);
+}
+
 export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
   const subject = noEmDash(opts.subject);
   const body = noEmDash(opts.body);

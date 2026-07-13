@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
 import { READ_MAILBOXES, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
@@ -77,6 +77,14 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       try { await prisma.lead.update({ where: { id: ml.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
       const preview = (m.bodyPreview || "").trim();
 
+      // Mary is out of office → give her a quiet 2-day grace, no owner alert,
+      // and the normal nudge cadence resumes after. Benjy 7/13.
+      if (isAutoReply(m.subject, preview)) {
+        await prisma.lead.update({ where: { id: ml.id }, data: { agentNextAt: new Date(Date.now() + 2 * 24 * 3600 * 1000) } });
+        handled++;
+        continue;
+      }
+
       // Mary quotes via an attached PDF → store it and route to the owners for
       // one-click approval to forward it (with a cover note) to the customer.
       if (m.hasAttachments) {
@@ -120,6 +128,15 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Mark handled (read + timestamp) before processing so we never double-handle.
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
     try { await prisma.lead.update({ where: { id: lead.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
+
+    // Out-of-office auto-reply → NOT a real customer reply. The address is
+    // verified; leave the status and follow-up clock exactly as they are so the
+    // normal cadence continues. Never draft a response to a robot. Benjy 7/13.
+    if (isAutoReply(m.subject, m.bodyPreview)) {
+      try { await prisma.lead.update({ where: { id: lead.id }, data: { commentary: `${lead.commentary || ""}\n[Agent] Out-of-office auto-reply received - address verified, follow-ups continue as scheduled`.slice(0, 8000) } }); } catch { /* ignore */ }
+      handled++;
+      continue;
+    }
 
     // MailerCity lane: they answered the qualifying questions → capture and hand
     // to the owners. The agent never quotes these or involves Mary.

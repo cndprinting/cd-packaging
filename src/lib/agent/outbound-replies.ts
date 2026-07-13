@@ -1,7 +1,7 @@
 import { getGraphClient, replyInConversation, sendEmail } from "@/lib/email/graph-client";
 import { getClaude } from "@/lib/agent/claude";
 import { outboundEnabled, appendNote } from "@/lib/agent/outbound";
-import { noEmDash, SIGNATURE, OWNERS } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE, OWNERS, isAutoReply } from "@/lib/agent/agent";
 
 // Handles replies to outbound prospecting emails (Benjy 6/30). Scans each owner
 // mailbox, matches a reply to its lead, and classifies it: not interested →
@@ -84,6 +84,15 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
 
       try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
       const preview = (m.bodyPreview || "").trim();
+
+      // Out-of-office auto-reply → the address is verified and the human just
+      // isn't there. Keep the sequence on its normal cadence; no flags. Benjy 7/13.
+      if (isAutoReply(m.subject, preview)) {
+        await appendNote(prisma, lead.id, "Out-of-office auto-reply received - address verified, follow-ups continue as scheduled");
+        handled++;
+        continue;
+      }
+
       const cls = await classify(preview);
       const ownerFull = MAILBOXES[mb];
       // Alert all three owners (Benjy, Nitay, Albert) on every reply, regardless
