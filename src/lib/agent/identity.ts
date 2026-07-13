@@ -24,5 +24,16 @@ export function leadMailbox(lead: { agentMailbox?: string | null; agentConvId?: 
   return AGENT_MAILBOX;
 }
 
+// The NAME follows the mailbox: a conversation that started as Albert keeps
+// signing "Albert" to the end — never Albert yesterday, Jessica today (Benjy
+// 7/13, e.g. St.Agave mid-flow with Mary). New leads sign as the current identity.
+export const LEGACY_NAME = "Albert Waxman";
+export function leadAgentName(lead: Parameters<typeof leadMailbox>[0]): string {
+  return leadMailbox(lead) === LEGACY_MAILBOX && AGENT_MAILBOX !== LEGACY_MAILBOX ? LEGACY_NAME : AGENT_NAME;
+}
+export function leadAgentFirst(lead: Parameters<typeof leadMailbox>[0]): string {
+  return leadAgentName(lead).split(" ")[0];
+}
+
 // Mailboxes the inbound reader must poll (deduped — a single box pre-cutover).
 export const READ_MAILBOXES = [...new Set([AGENT_MAILBOX, LEGACY_MAILBOX])];

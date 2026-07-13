@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { sendEmail } from "@/lib/email/graph-client";
-import { AGENT_MAILBOX, AGENT_NAME, AGENT_FIRST, leadMailbox } from "@/lib/agent/identity";
+import { AGENT_MAILBOX, AGENT_NAME, leadMailbox, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 
 // AI sales-agent chase engine (Benjy 6/26). A status machine on the Lead with
 // a clock — nothing sits silent. Customer-facing QUOTE sends are gated behind
@@ -167,7 +167,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
     <p>Can you put a quote together for this one when you get a chance? Everything we have is below. Just reply to me with your price and terms, or let me know if you need anything else, and I'll take it from there.</p>
     <p><strong>${lead.companyName}</strong>${lead.contactName ? ` · ${lead.contactName}` : ""}${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""}</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
-    <p>Thanks,<br>${AGENT_FIRST}</p>`);
+    <p>Thanks,<br>${leadAgentFirst(lead)}</p>`);
   await agentMarySend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -188,14 +188,14 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
   let inner: string | null = null;
   try {
     const { draftClarifyEmail } = await import("@/lib/agent/claude");
-    inner = await draftClarifyEmail({ contactName: lead.contactName, productName: lead.productName, missing });
+    inner = await draftClarifyEmail({ contactName: lead.contactName, productName: lead.productName, missing, agentName: leadAgentName(lead) });
   } catch { /* fall back */ }
   const body = inner ? wrap(inner) : wrap(`
     <p>Hi ${firstName(lead.contactName)},</p>
     <p>Thank you for reaching out to C&amp;D Printing. To put together an accurate quote for your ${lead.productName || "project"}, could you share a few details:</p>
     <ul>${missing.map((m) => `<li>${m.replace(/</g, "&lt;")}</li>`).join("")}</ul>
     <p>If you're not sure on any of these, just say so and we'll recommend what works best. Once we have these we'll turn a quote around quickly.</p>
-    <p>Best regards,<br>${SIGNOFF}</p>`);
+    <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -217,7 +217,7 @@ export async function suggestFoldingCarton(prisma: any, lead: any): Promise<void
     <p>Hi ${firstName(lead.contactName)},</p>
     <p>Thank you for reaching out to C&amp;D Printing about your ${lead.productName || lead.productCategory || "project"}. One quick note: we specialize in folding cartons rather than corrugated. For a lot of projects, a heavier folding carton board gives you a sturdy box that works well in place of corrugated.</p>
     <p>Would a heavier folding carton work for you, or do you specifically need corrugated? If a folding carton works, we'll put a quote together right away.</p>
-    <p>Best regards,<br>${SIGNOFF}</p>`);
+    <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -250,7 +250,7 @@ export async function kickoffMailerCity(prisma: any, lead: any): Promise<void> {
       <li>Any timeline you're working toward?</li>
     </ul>
     <p>Our per-piece pricing by quantity is right on our site (<a href="https://marketing.cndprinting.com/">marketing.cndprinting.com</a>), and we handle the list cleansing (NCOA/CASS) on our end. Happy to answer any questions on pricing or the process too.</p>
-    <p>Best regards,<br>${SIGNOFF}</p>`);
+    <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { subject: MAILERCITY_SUBJECT, body });
   await prisma.lead.update({
     where: { id: lead.id },
@@ -276,7 +276,7 @@ export async function requestArtwork(prisma: any, lead: any): Promise<void> {
     <p>Hi ${firstName(lead.contactName)},</p>
     <p>While we put your quote together, could you send over your print-ready artwork, or even a rough proof or mockup? It helps us confirm the exact look and details (colors, bleeds, finish) so the final piece comes out right.</p>
     <p>If it isn't ready yet, no problem, just let us know and we can recommend specs in the meantime.</p>
-    <p>Best regards,<br>${SIGNOFF}</p>`);
+    <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body });
   await prisma.lead.update({ where: { id: lead.id }, data: { agentLog: logLine(lead.agentLog, "Requested artwork from customer") } });
 }
@@ -315,14 +315,14 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
     let inner: string | null = null;
     try {
       const { draftCustomerQuote } = await import("@/lib/agent/claude");
-      inner = await draftCustomerQuote({ customerName: lead.companyName, contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "" });
+      inner = await draftCustomerQuote({ customerName: lead.companyName, contactName: lead.contactName, productName: lead.productName, quote: lead.agentQuote || "", agentName: leadAgentName(lead) });
     } catch { /* fall back */ }
     const body = inner ? wrap(inner) : wrap(`
       <p>Hi ${firstName(lead.contactName)},</p>
       <p>Thank you for reaching out to C&amp;D Printing. Here's your quote:</p>
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
       <p>Happy to adjust quantities or specs — just reply and we'll take care of it.</p>
-      <p>Best regards,<br>${SIGNOFF}</p>`);
+      <p>Best regards,<br>${leadAgentName(lead)}</p>`);
     await agentCustomerSend(prisma, lead, { body });
   }
   await prisma.lead.update({
@@ -345,7 +345,7 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
       const pdf = await getFirstPdfAttachment(leadMailbox(lead), lead.agentQuoteMsgId); // Mary's PDF lives in the lead's own mailbox
       if (pdf?.contentBytes) {
         const { draftQuoteBreakdown } = await import("@/lib/agent/claude");
-        inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: lead.companyName, contactName: lead.contactName, productName: product });
+        inner = await draftQuoteBreakdown({ pdfBase64: pdf.contentBytes, customerName: lead.companyName, contactName: lead.contactName, productName: product, agentName: leadAgentName(lead) });
       }
     }
   } catch { /* fall back */ }
@@ -353,7 +353,7 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
     <p>Hi ${firstName(lead.contactName)},</p>
     <p>Thank you for your patience. Please find our pricing for your ${product} attached.</p>
     <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
-    <p>Best regards,<br>${SIGNOFF}</p>`);
+    <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body, copyAttachmentsFrom: lead.agentQuoteMsgId });
   await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote PDF sent to customer") } });
 }
@@ -380,7 +380,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
       if (l.agentStatus === "awaiting_customer_info") {
         // Customer hasn't sent the details yet — nudge once.
         if (l.contactEmail) {
-          await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works, happy to help.</p><p>Best regards,<br>${SIGNOFF}</p>`) });
+          await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works, happy to help.</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
         }
         await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "info_nudge_1", agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for missing specs") } });
       } else if (l.agentStatus === "info_nudge_1") {
@@ -397,7 +397,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
           await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "needs_owner", stage: "Mary hasn't quoted (3 nudges)", agentNextAt: null, agentLog: logLine(l.agentLog, "Stopped nudging Mary after 3 tries - handed to owners") } });
           await agentSend({ to: OWNERS, subject: `Mary hasn't quoted: ${l.companyName}`, body: wrap(`<p>I've followed up with Mary three times on <strong>${l.companyName}</strong> with no quote yet, so I've stopped nudging her. Please chase it or close it out from the pipeline.</p>`) });
         } else {
-          await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>${AGENT_FIRST}</p>`) });
+          await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>${leadAgentFirst(l)}</p>`) });
           await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
         }
       } else if (l.agentStatus === "quote_received") {
@@ -407,7 +407,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         const step = FOLLOWUPS[l.agentStatus as string];
         if (step) {
           if (l.contactEmail) {
-            await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>${step.msg}</p><p>Best regards,<br>${SIGNOFF}</p>`) });
+            await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>${step.msg}</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
           }
           const next = step.days > 0 ? addBusinessDays(now, step.days) : null;
           const status = step.days > 0 ? step.next : "closed";
