@@ -4,11 +4,11 @@
 // Email / domain / phone are far more reliable than name (scammers change names).
 
 export const BLOCKLIST = {
-  emails: ["wellborndelta@gmail.com"],          // full or partial email
-  domains: [] as string[],                       // email domain, e.g. "scam-broker.com"
-  names: ["chris taunt", "james wellborn"],      // contact-name substring
-  phones: ["7256961153"],                        // any digits substring
-  companies: ["mid-pacific road runners"],       // company-name substring
+  emails: ["wellborndelta@gmail.com", "lmckernan@csbcolorado.com"],          // full or partial email
+  domains: ["csbcolorado.com"],                  // email domain, e.g. "scam-broker.com"
+  names: ["chris taunt", "james wellborn", "laurel mckernan", "lauren mckiernan"],      // contact-name substring
+  phones: ["7256961153", "9703254478"],          // any digits substring
+  companies: ["mid-pacific road runners", "citizens state bank of ouray"],       // company-name substring
 };
 
 // Test traffic from our own agency (Habib) — silently ignored at intake: no
