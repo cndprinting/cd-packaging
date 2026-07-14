@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
           // and drops it from this digest (Benjy 7/14, Avini -> Suzanne).
           { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
           { agentStatus: { in: ["quote_received", "needs_info"] } },
-          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying"] }, agentNextAt: { lt: stale } },
+          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying", "awaiting_customer_file"] }, agentNextAt: { lt: stale } },
         ],
       },
       orderBy: { createdAt: "asc" },
@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
           case "awaiting_mary": return "Stalled - Mary hasn't quoted yet, give her a nudge";
           case "mailercity_handoff": return "MailerCity lead qualified - follow up on their mailer";
           case "mailercity_qualifying": return "MailerCity - customer hasn't answered the qualifying questions";
+          case "awaiting_customer_file": return "Customer hasn't sent the item Mary needs - consider a personal nudge";
           default: return "Stalled - customer hasn't sent info, consider a personal nudge";
         }
       };

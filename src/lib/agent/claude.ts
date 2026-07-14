@@ -128,6 +128,30 @@ ${opts.reply}`;
   }
 }
 
+// Understand what Mary (the estimator) is actually SAYING in a reply — not just
+// pattern-match for a price. "Too big for our equipment" or "this is corrugated"
+// must stop the chase, not trigger another nudge (Benjy 7/14, No.1 Flowers).
+export async function classifyMaryReply(opts: { company: string; reply: string }): Promise<{ kind: "quote" | "working" | "cannot_do" | "needs_from_customer"; reason: string; corrugated: boolean; otherBlocker: boolean } | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You read a reply from Mary, C&D Printing's estimator, about a quote request, and classify what she is saying. C&D makes folding cartons and commercial print; it does NOT make corrugated, and its presses have size limits. Categories:
+- "quote": she gives pricing (dollar amounts / price and terms).
+- "working": she is still working on it or waiting on someone (e.g. waiting on Todd for pricing) and has NOT ruled the job out.
+- "cannot_do": she says C&D cannot produce the job as specified - too large for the equipment/presses, it is corrugated, wrong process, or any other hard capability blocker. Waiting-on-a-person is NOT cannot_do.
+- "needs_from_customer": she needs something from the CUSTOMER to proceed (art file, dieline, physical sample, a spec confirmed).
+Also: corrugated=true if part of the blocker is that the job is corrugated; otherBlocker=true if there is any hard blocker BESIDES corrugated (e.g. size too large). Output ONLY compact JSON, no fences: {"kind":"quote|working|cannot_do|needs_from_customer","reason":"one short plain-language sentence","corrugated":true|false,"otherBlocker":true|false}`;
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 250, system, messages: [{ role: "user", content: `Company: ${opts.company}
+
+Mary's reply:
+${(opts.reply || "").slice(0, 1500)}` }] });
+    const raw = firstText(msg).trim().replace(/^```json\s*|\s*```$/gi, "");
+    const p = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || raw);
+    const kind = ["quote", "working", "cannot_do", "needs_from_customer"].includes(p.kind) ? p.kind : "working";
+    return { kind, reason: String(p.reason || "").trim(), corrugated: p.corrugated === true, otherBlocker: p.otherBlocker === true };
+  } catch (e) { console.error("[agent] classifyMaryReply failed", e); return null; }
+}
+
 // Compare two incoming quote requests for the same company and decide whether
 // they are the SAME job (a duplicate submission) or two genuinely different jobs.
 // Errs toward "not a duplicate" when unsure so a real job is never dropped. (Benjy 7/2)

@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
 import { READ_MAILBOXES, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
@@ -102,14 +102,43 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim();
       } catch { /* fall back to preview */ }
 
-      if (/\$/.test(reply)) {
+      // UNDERSTAND Mary's reply, don't just pattern-match it (Benjy 7/14 — "too
+      // big for our equipment" / "this is corrugated" must stop the chase, not
+      // trigger another nudge). Falls back to the old $-check if Claude is off.
+      let mCls: { kind: string; reason: string; corrugated: boolean; otherBlocker: boolean } | null = null;
+      try { const { classifyMaryReply } = await import("@/lib/agent/claude"); mCls = await classifyMaryReply({ company: ml.companyName, reply }); } catch { /* fall back */ }
+      const mKind = mCls?.kind || (/\$/.test(reply) ? "quote" : "working");
+      const quoted = (t: string) => `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${t.slice(0, 600).replace(/</g, "&lt;")}</blockquote>`;
+
+      if (mKind === "quote" && /\$/.test(reply)) {
         await onMaryQuote(prisma, ml, reply); // has a price → run it as the quote
+      } else if (mKind === "cannot_do") {
+        if (mCls?.corrugated && !mCls?.otherBlocker) {
+          // Only blocker is corrugated → run the standard play: propose a
+          // heavier folding carton to the customer and stop chasing Mary.
+          const { suggestFoldingCarton } = await import("@/lib/agent/agent");
+          const fresh = await prisma.lead.findUnique({ where: { id: ml.id } });
+          await suggestFoldingCarton(prisma, { ...fresh, productName: fresh.productCategory });
+          await agentSend({ to: OWNERS, subject: `FYI - ${ml.companyName} is corrugated; proposed folding carton`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary flagged <strong>${ml.companyName}</strong> as corrugated (we don't make corrugated), so I stopped chasing her and asked the customer whether a heavier folding carton works. Her note:</p>${quoted(reply)}</div>` });
+        } else {
+          // Hard blocker (size / process) → the agent can't fix this; stop the
+          // chase entirely and put it in the owners' hands.
+          await prisma.lead.update({ where: { id: ml.id }, data: { agentStatus: "needs_owner", stage: `Can't produce as specced - ${(mCls?.reason || "capability blocker").slice(0, 60)}`, agentNextAt: null, agentLog: (ml.agentLog || null), commentary: `${ml.commentary || ""}
+[Agent] Mary says C&D can't produce this as specced (${mCls?.reason || "capability blocker"}). Stopped chasing her; owners to decide (suggest an alternative spec or close).`.slice(0, 8000) } });
+          await agentSend({ to: OWNERS, subject: `Can't produce: ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary says <strong>${ml.companyName}</strong> can't be produced as specced${mCls?.reason ? ` - ${mCls.reason}` : ""}. I've stopped following up with her.</p>${quoted(reply)}<p>Your call: suggest an alternative spec/size to the customer, or close it out from the pipeline.</p></div>` });
+        }
+      } else if (mKind === "needs_from_customer" && ml.contactEmail) {
+        // Mary needs something from the CUSTOMER (art file, dieline, sample) →
+        // relay her ask; the customer's reply routes back through the agent.
+        await agentCustomerSend(prisma, ml, { body: `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>Hi ${(ml.contactName || "there").trim().split(/\s+/)[0].replace(/["'“”]/g, "") || "there"},</p><p>Quick update on your quote: to finish it up, our estimator needs one thing from you - ${(mCls?.reason || "an item to complete the estimate").replace(/</g, "&lt;")}. If you can send that over by reply, we'll keep things moving right away.</p><p>Best regards,<br>${leadAgentName(ml)}</p></div>` });
+        await prisma.lead.update({ where: { id: ml.id }, data: { agentStatus: "awaiting_customer_file", stage: "Waiting on customer (for Mary)", agentNextAt: new Date(Date.now() + 2 * 24 * 3600 * 1000), commentary: `${ml.commentary || ""}
+[Agent] Mary needs from the customer: ${mCls?.reason || "(see her reply)"}. Relayed the ask; chase paused until they respond.`.slice(0, 8000) } });
+        await agentSend({ to: OWNERS, subject: `FYI - asked ${ml.companyName} for what Mary needs`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary needs something from <strong>${ml.companyName}</strong>${mCls?.reason ? ` (${mCls.reason})` : ""} - I've relayed the ask to the customer and paused her chase. Her note:</p>${quoted(reply)}</div>` });
       } else {
-        // No price yet (she's working it) — note it for owners, give Mary room,
-        // but keep following up until the actual quote arrives.
+        // Genuinely still working it — give Mary room, keep the normal cadence.
         const grace = new Date(Date.now() + 2 * 24 * 3600 * 1000);
         await prisma.lead.update({ where: { id: ml.id }, data: { agentNextAt: grace } });
-        await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (working on it, no price yet):</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${reply.slice(0, 600).replace(/</g, "&lt;")}</blockquote><p>The agent will keep following up until the quote is in.</p></div>` });
+        await agentSend({ to: OWNERS, subject: `Mary replied on ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary replied on <strong>${ml.companyName}</strong> (working on it, no price yet):</p>${quoted(reply)}<p>The agent will keep following up until the quote is in.</p></div>` });
       }
       handled++;
       continue;
@@ -118,7 +147,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
-      where: { pipelineStage: "LEAD", contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying"] } },
+      where: { pipelineStage: "LEAD", contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"] } },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
@@ -144,6 +173,19 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       let reply = (m.bodyPreview || "").trim();
       try { const full: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get(); if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim(); } catch { /* fall back */ }
       await onMailerCityReply(prisma, lead, reply);
+      handled++;
+      continue;
+    }
+
+    // Customer sent what Mary was waiting on (art file / dieline / answer) →
+    // forward it to Mary with attachments and resume the quote clock.
+    if (lead.agentStatus === "awaiting_customer_file") {
+      const preview = (m.bodyPreview || "").trim();
+      await agentMarySend(prisma, lead, {
+        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} sent over what you needed${m.hasAttachments ? " (attached)" : ""}. Over to you for the quote. Thanks,<br>${leadAgentFirst(lead)}</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
+        copyAttachmentsFrom: m.id,
+      });
+      await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "awaiting_mary", stage: "Awaiting Mary", agentNextAt: new Date(Date.now() + 24 * 3600 * 1000) } });
       handled++;
       continue;
     }

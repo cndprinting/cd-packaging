@@ -399,7 +399,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
   const due = await prisma.lead.findMany({
     // pipelineStage LEAD only — moving a lead to Qualified/Customer/Lost hands it
     // to a human and stops the agent's chase automatically. Benjy 7/9.
-    where: { pipelineStage: "LEAD", agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "mailercity_qualifying"] } },
+    where: { pipelineStage: "LEAD", agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "mailercity_qualifying", "awaiting_customer_file"] } },
     take: 100,
   });
   let acted = 0;
@@ -427,6 +427,17 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         } else {
           await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>${leadAgentFirst(l)}</p>`) });
           await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
+        }
+      } else if (l.agentStatus === "awaiting_customer_file") {
+        // Customer hasn't sent what Mary needs. One nudge, then hand to owners —
+        // never fall back to Mary with house defaults (she's missing a real thing).
+        const fNudges = ((l.agentLog || "").match(/Nudged customer for Mary's item/g) || []).length;
+        if (fNudges >= 1) {
+          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "needs_owner", stage: "Customer silent on Mary's request", agentNextAt: null, agentLog: logLine(l.agentLog, "Customer silent on Mary's item after a nudge - handed to owners") } });
+          await agentSend({ to: OWNERS, subject: `Customer silent: ${l.companyName}`, body: wrap(`<p><strong>${l.companyName}</strong> hasn't sent the item Mary needs to finish their quote (asked twice). A personal nudge or a call may do it - otherwise close it out.</p>`) });
+        } else if (l.contactEmail) {
+          await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just circling back - our estimator is ready to finish your quote and is only waiting on the item we mentioned. If you can send it over by reply, we'll get your pricing right out.</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
+          await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for Mary's item") } });
         }
       } else if (l.agentStatus === "mailercity_qualifying") {
         // MailerCity lead went quiet after the qualifying questions — keep
