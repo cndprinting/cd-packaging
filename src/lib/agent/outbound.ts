@@ -1,6 +1,6 @@
 import { getClaude } from "@/lib/agent/claude";
 import { checkBlocked } from "@/lib/agent/blocklist";
-import { noEmDash, SIGNATURE, firstName, informalCompany } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE, firstName, informalCompany, hasRealName } from "@/lib/agent/agent";
 import { sendEmail, sendEmailGetConversation, replyInConversation } from "@/lib/email/graph-client";
 
 // Outbound prospecting agent (Benjy 6/30). Sweeps the Leads tab and sends a
@@ -173,7 +173,7 @@ ${owner.first === "Jessica"
 
 Research the prospect first using web search: what they make, where they are based, their notable products or brands, and anything genuinely current. Weave in one or two specific, accurate details you find (for example the kinds of products they package). Use only facts you actually verify. Never guess or fabricate a product, location, or person.
 
-Rules: address the contact by FIRST name. Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
+Rules: address the contact by FIRST name (a real human name - if the provided name is a role word like Info or Sales, something has gone wrong: do not write the email). Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
 
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
     const loc = [lead.city, lead.state].filter(Boolean).join(", ") || "unknown (see notes)";
@@ -253,6 +253,10 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       if (sends >= limit) break;
       const contact = sequenceContact(l);
       if (!contact) continue;
+      if (!hasRealName(contact.name)) { // slipped through before the name gate existed
+        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "needs_name", outreachNextAt: null, outreachLog: logLine(l.outreachLog, "No real contact name - follow-ups stopped") } });
+        continue;
+      }
       // Follow-ups come from WHOEVER SENT THE INTRO (outreachMailbox), never the
       // current default — so a mid-sequence thread can't flip Albert→Jessica
       // when ownership or defaults change (Benjy 7/13, the VEI case).
@@ -294,6 +298,12 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     const contact = nextUnemailedContact(l); // the first person on this lead we haven't emailed
     if (!contact) continue; // nothing new to reach out to here
     if (checkBlocked({ name: contact.name, email: contact.email, phone: l.contactPhone, company: l.companyName })) continue;
+    // No real person's name -> NO email (Benjy 7/14, "Hi Info"). Flag for a name.
+    if (!hasRealName(contact.name)) {
+      await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "needs_name", outreachNextAt: null, outreachLog: logLine(l.outreachLog, `No real contact name for ${contact.email} - not emailed`) } });
+      await appendNote(prisma, l.id, `Not emailed - no real contact name (only "${(contact.name || "blank").slice(0, 40)}"). Add a person's name and clear the Outreach status to send.`);
+      continue;
+    }
     // Never cold-email a company we're ALREADY engaged with — a qualified prospect
     // or existing customer (often a duplicate row from an import). Match by exact
     // company name or business email domain. Benjy 7/9.

@@ -24,6 +24,7 @@ const OUTREACH: Record<string, { label: string; cls: string }> = {
   replied:        { label: "Replied",        cls: "bg-green-50 text-green-700 border-green-200" },
   not_interested: { label: "Recheck (6mo)",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
   bounced:        { label: "Bounced - needs email", cls: "bg-red-50 text-red-700 border-red-200" },
+  needs_name:     { label: "Needs contact name", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   unsubscribed:   { label: "Do not contact", cls: "bg-gray-200 text-gray-600 border-gray-300" },
   done:           { label: "Sequence done",  cls: "bg-gray-100 text-gray-500 border-gray-200" },
 };

@@ -47,6 +47,16 @@ export const firstName = (n?: string | null) => {
   const tok = (nick?.[1] || raw.replace(/["“”'‘’]/g, " ").trim().split(/\s+/)[0] || "").replace(/[,.]+$/, "").trim();
   return tok || "there";
 };
+// "Always address a real person by name, or no email should be sent" (Benjy
+// 7/14, the "Hi Info," FormuNova case). Role words from generic inboxes are
+// not names — a lead without a human name gets FLAGGED, never emailed.
+const ROLE_WORDS = new Set(["info", "sales", "hello", "hi", "admin", "office", "contact", "support", "team", "accounts", "accounting", "billing", "orders", "order", "enquiries", "inquiries", "inquiry", "marketing", "service", "services", "reception", "frontdesk", "mail", "email", "general", "requests", "request", "purchasing", "line", "customerservice", "webmaster", "noreply", "no-reply", "there"]);
+export function hasRealName(n?: string | null): boolean {
+  const first = firstName(n);
+  if (!first || first === "there" || first.length < 2) return false;
+  if (first.includes("@")) return false;
+  return !ROLE_WORDS.has(first.toLowerCase().replace(/[^a-z]/g, ""));
+}
 // Customer-facing company name, the way a person would SAY it — no LLC/Inc/
 // Corp/Co suffixes, no parentheticals ("Valentine Enterprises (VEI)" →
 // "Valentine Enterprises"). Entity types read robotic (Benjy 7/13). Internal
@@ -263,6 +273,10 @@ const MAILERCITY_SUBJECT = "Your direct mail with C&D (MailerCity)";
 
 export async function kickoffMailerCity(prisma: any, lead: any): Promise<void> {
   if (!agentEnabled() || !lead.contactEmail) return;
+  if (!hasRealName(lead.contactName)) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "mailercity_handoff", stage: "MailerCity - needs a contact name", agentNextAt: null, agentLog: logLine(lead.agentLog, "No real contact name - not emailed; owners to add a name") } });
+    return;
+  }
   const token = lead.agentToken || newToken();
   // Acknowledge the specific template they sampled, if the landing page gave us one.
   const template = (String(lead.commentary || "").match(/Template:\s*(.+?)\s*(?:\(|\n|$)/i) || [])[1]?.trim();
