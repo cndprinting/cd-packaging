@@ -102,7 +102,11 @@ export async function GET(request: NextRequest) {
         source: { in: ["inbound", "mailercity"] },
         pipelineStage: { in: ["LEAD", "QUALIFIED"] },
         OR: [
-          { agentStatus: { in: ["quote_received", "owner_handling", "needs_review", "needs_info", "needs_owner", "mailercity_handoff"] } },
+          // Hand-off states nag until a real person takes ownership: changing the
+          // lead's Owner to yourself (not Jessica/TBD) tells Godzilla you're on it
+          // and drops it from this digest (Benjy 7/14, Avini -> Suzanne).
+          { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
+          { agentStatus: { in: ["quote_received", "needs_info"] } },
           { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying"] }, agentNextAt: { lt: stale } },
         ],
       },

@@ -399,7 +399,7 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
   const due = await prisma.lead.findMany({
     // pipelineStage LEAD only — moving a lead to Qualified/Customer/Lost hands it
     // to a human and stops the agent's chase automatically. Benjy 7/9.
-    where: { pipelineStage: "LEAD", agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2"] } },
+    where: { pipelineStage: "LEAD", agentNextAt: { not: null, lte: now }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "mailercity_qualifying"] } },
     take: 100,
   });
   let acted = 0;
@@ -427,6 +427,17 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         } else {
           await agentMarySend(prisma, l, { body: wrap(`<p>Hi Mary,</p><p>Following up on the quote for <strong>${l.companyName}</strong>. If you can get it over today that's great. If not, can you let me know roughly when you'll have it so I can keep the customer in the loop? Thanks,<br>${leadAgentFirst(l)}</p>`) });
           await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addHours(now, 24), agentLog: logLine(l.agentLog, "Nudged Mary for quote / timeline") } });
+        }
+      } else if (l.agentStatus === "mailercity_qualifying") {
+        // MailerCity lead went quiet after the qualifying questions — keep
+        // nudging gently until they answer (Benjy 7/14, Shelley). 3 nudges,
+        // then hand to the owners via the daily digest.
+        const mcNudges = ((l.agentLog || "").match(/Nudged MailerCity/g) || []).length;
+        if (mcNudges >= 3) {
+          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "mailercity_handoff", stage: "MailerCity - no response, needs a human", agentNextAt: null, agentLog: logLine(l.agentLog, "MailerCity lead silent after 3 nudges - handed to owners") } });
+        } else if (l.contactEmail) {
+          await agentCustomerSend(prisma, l, { subject: "Your direct mail with C&D (MailerCity)", body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just checking in on your mailer. Whenever you have a minute: roughly how many pieces are you thinking, do you have your mailing list or would you like us to pull one for your area, and is there a timeline you're working toward? Happy to help with the design too.</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
+          await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 3), agentLog: logLine(l.agentLog, "Nudged MailerCity lead for campaign details") } });
         }
       } else if (l.agentStatus === "quote_received") {
         await agentSend({to: OWNERS, subject: `Reminder — approve quote: ${l.companyName}`, body: wrap(`<p>Quote for <strong>${l.companyName}</strong> is waiting to go out.</p><p>${btn(link(l.id, l.agentToken, "approve"), "Approve &amp; send")}</p>`) });
