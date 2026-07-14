@@ -4,10 +4,10 @@
 // Email / domain / phone are far more reliable than name (scammers change names).
 
 export const BLOCKLIST = {
-  emails: ["wellborndelta@gmail.com", "lmckernan@csbcolorado.com"],          // full or partial email
+  emails: ["wellborndelta@gmail.com"],          // full or partial email
   domains: [] as string[],                       // email domain, e.g. "scam-broker.com" (csbcolorado.com removed - the BANK is legit, the person was a spoofer)
-  names: ["chris taunt", "james wellborn", "laurel mckernan", "lauren mckiernan"],      // contact-name substring
-  phones: ["7256961153", "9703254478"],          // any digits substring
+  names: ["chris taunt", "james wellborn"],      // contact-name substring
+  phones: ["7256961153"],                        // any digits substring
   companies: ["mid-pacific road runners"],       // company-name substring (Citizens State Bank itself is fine - only the spoofed person is blocked)
 };
 
