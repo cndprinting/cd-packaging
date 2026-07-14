@@ -5,10 +5,10 @@
 
 export const BLOCKLIST = {
   emails: ["wellborndelta@gmail.com", "lmckernan@csbcolorado.com"],          // full or partial email
-  domains: ["csbcolorado.com"],                  // email domain, e.g. "scam-broker.com"
+  domains: [] as string[],                       // email domain, e.g. "scam-broker.com" (csbcolorado.com removed - the BANK is legit, the person was a spoofer)
   names: ["chris taunt", "james wellborn", "laurel mckernan", "lauren mckiernan"],      // contact-name substring
   phones: ["7256961153", "9703254478"],          // any digits substring
-  companies: ["mid-pacific road runners", "citizens state bank of ouray"],       // company-name substring
+  companies: ["mid-pacific road runners"],       // company-name substring (Citizens State Bank itself is fine - only the spoofed person is blocked)
 };
 
 // Test traffic from our own agency (Habib) — silently ignored at intake: no
