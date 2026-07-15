@@ -192,9 +192,16 @@ Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific s
 }
 function draftFollowup(lead: any, owner: Owner, step: string, contactName: string): string {
   const contact = firstName(contactName);
+  // Sequences Jessica took over from a colleague say so plainly ("picking this
+  // up for Albert") instead of pretending "my note below" (Benjy 7/15).
+  const handoff = lead.outreachHandoff && lead.outreachHandoff !== owner.first ? lead.outreachHandoff : null;
   const msg = step === "intro_sent"
-    ? `Just following up on my note below about packaging for ${informalCompany(lead.companyName)}. Happy to send over a few samples or hop on a quick call if useful.`
-    : `Last note from me for now. If custom packaging is ever on the radar for ${informalCompany(lead.companyName)}, we would love the chance to help, just reply anytime.`;
+    ? (handoff
+        ? `${owner.first} here with C&D, picking this up for ${handoff}. Just wanted to circle back on his note about packaging for ${informalCompany(lead.companyName)}. Happy to send over a few samples or hop on a quick call if useful.`
+        : `Just following up on my note below about packaging for ${informalCompany(lead.companyName)}. Happy to send over a few samples or hop on a quick call if useful.`)
+    : (handoff
+        ? `${owner.first} here with C&D, picking up for ${handoff}. Last note from us for now - if custom packaging is ever on the radar for ${informalCompany(lead.companyName)}, we would love the chance to help, just reply anytime.`
+        : `Last note from me for now. If custom packaging is ever on the radar for ${informalCompany(lead.companyName)}, we would love the chance to help, just reply anytime.`);
   return wrap(`<p>Hi ${contact},</p><p>${msg}</p><p>Best,<br>${owner.first}</p>`);
 }
 
@@ -244,6 +251,7 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   let sends = 0, intros = 0, followups = 0, previews = 0;
 
   // Follow-ups first (existing conversations), only when actually sending.
+  let jessicaSends = 0; // ramp guard: TOTAL sends from the brand-new jwaxman mailbox per run
   if (autoSend()) {
     const due = await prisma.lead.findMany({
       where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", outreachNextAt: { not: null, lte: now }, outreachStatus: { in: ["intro_sent", "followup_1"] } },
@@ -263,6 +271,10 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       const owner = ownerByEmail(l.outreachMailbox) || resolveOwner(l.ownerName);
       const step = FOLLOWUPS[l.outreachStatus as string];
       if (!step) continue;
+      if (owner.email === OWNERS_MAP.jessica.email) {
+        if (jessicaSends >= jessicaPerRunCap()) continue; // stays due — goes next run
+        jessicaSends++;
+      }
       try {
         const ok = await outboundSend(prisma, l, owner, contact.email, contact.name, `Re: C&D Printing & Packaging - ${informalCompany(l.companyName)}`, draftFollowup(l, owner, l.outreachStatus, contact.name));
         if (ok) {
@@ -292,7 +304,6 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
     orderBy: { createdAt: "asc" }, take: limit * 3,
   });
-  let jessicaSends = 0; // ramp guard for the brand-new jwaxman mailbox
   for (const l of fresh) {
     if (sends >= limit) break;
     const contact = nextUnemailedContact(l); // the first person on this lead we haven't emailed
