@@ -136,5 +136,38 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) { console.error("[Godzilla CRON] inbound digest failed", e); }
 
-  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted, inboundDigest });
+  // Owner accountability nags (Benjy 7/14): some owners (Albert) forget to keep
+  // next-step dates current. Every QUALIFIED / CUSTOMER record they own should
+  // always carry a live follow-up date — flag any with NO date or a LAPSED date
+  // (past and never rescheduled), daily, with the configured watchers CC'd.
+  const ACCOUNTABILITY: { owner: string; to: string; cc: string[] }[] = [
+    { owner: "Albert", to: "awaxman@cndprinting.com", cc: ["bwaxman@cndprinting.com", "nlaor@cndprinting.com"] },
+  ];
+  let accountability = 0;
+  try {
+    for (const a of ACCOUNTABILITY) {
+      const missing = await prisma.lead.findMany({
+        where: {
+          ownerName: { equals: a.owner, mode: "insensitive" },
+          pipelineStage: { in: ["QUALIFIED", "CUSTOMER"] },
+          OR: [{ followUpAt: null }, { followUpAt: { lt: startOfToday } }],
+        },
+        orderBy: [{ pipelineStage: "asc" }, { companyName: "asc" }],
+        take: 100,
+        select: { companyName: true, pipelineStage: true, stage: true, followUpAt: true, followUpDoneAt: true },
+      });
+      if (!missing.length) continue;
+      const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const rows = missing.map((l: any) => {
+        const tab = l.pipelineStage === "CUSTOMER" ? "Customer" : "Qualified";
+        const state = !l.followUpAt ? "no follow-up date set" : (l.followUpDoneAt ? `last follow-up done, no new date (was ${fmt(l.followUpAt)})` : `date lapsed ${fmt(l.followUpAt)} - reschedule or mark done`);
+        return `<li style="margin-bottom:8px;"><strong>${l.companyName}</strong> <span style="color:#888;">(${tab}${l.stage ? ` · ${l.stage}` : ""})</span><br><span style="color:#B45309;">${state}</span></li>`;
+      }).join("");
+      const body = `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>Hi ${a.owner},</p><p><strong>${missing.length}</strong> of your qualified prospects / customers ${missing.length === 1 ? "is" : "are"} missing a next-step date. Set a follow-up date on each (or mark the last one done and pick a new date) and this reminder stops:</p><ul style="padding-left:18px;">${rows}</ul><p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p><p style="color:#aaa;font-size:11px;margin-top:20px;">Daily until the dates are set. Automated from Godzilla.</p></div>`;
+      const res = await sendEmail({ from: SENDER, to: a.to, cc: a.cc, subject: `${a.owner}: ${missing.length} account${missing.length === 1 ? "" : "s"} need a next-step date`, body });
+      if (res.success) accountability += missing.length;
+    }
+  } catch (e) { console.error("[Godzilla CRON] accountability nag failed", e); }
+
+  return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted, inboundDigest, accountability });
 }
