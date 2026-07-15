@@ -65,9 +65,10 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       const subjectLc = (m.subject || "").toLowerCase();
       // Match by conversation first — Mary may reply in her own thread OR in the
       // customer thread — then fall back to company name in the subject.
-      let ml: any = conv ? await prisma.lead.findFirst({ where: { pipelineStage: "LEAD", agentStatus: "awaiting_mary", OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
+      const agentScope = { OR: [{ pipelineStage: "LEAD" }, { pipelineStage: "QUALIFIED", ownerName: { equals: "Jessica", mode: "insensitive" as const } }] };
+      let ml: any = conv ? await prisma.lead.findFirst({ where: { AND: [agentScope], agentStatus: "awaiting_mary", OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
       if (!ml) {
-        const open = await prisma.lead.findMany({ where: { pipelineStage: "LEAD", agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
+        const open = await prisma.lead.findMany({ where: { AND: [agentScope], agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
         ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
       }
       if (!ml) continue; // unrelated Mary email — leave it untouched
@@ -155,6 +156,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         contactEmail: { equals: from, mode: "insensitive" },
         OR: [
           { pipelineStage: "LEAD", agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"] } },
+          { pipelineStage: "QUALIFIED", ownerName: { equals: "Jessica", mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file", "closed"] } }, // agent-run qualified leads (Benjy 7/15)
           { pipelineStage: "LOST", agentStatus: "declined" }, // customer came back after a can't-produce decline (revised specs?)
         ],
       },

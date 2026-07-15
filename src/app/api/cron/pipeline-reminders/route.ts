@@ -48,6 +48,9 @@ export async function GET(request: NextRequest) {
     if (!ownerName || ownerName.toUpperCase() === "TBD") return FALLBACK_TO;
     const first = ownerName.trim().toLowerCase().split(/\s+/)[0];
     const u = users.find((x) => x.name.toLowerCase().startsWith(first));
+    // Jessica-owned records are the agent's desk - her follow-up reminders go to
+    // the humans (Benjy), never to her unmonitored mailbox. Benjy 7/15.
+    if (u?.email?.toLowerCase() === "jwaxman@cndprinting.com") return FALLBACK_TO;
     return u?.email || FALLBACK_TO;
   };
 
