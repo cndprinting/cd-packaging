@@ -121,11 +121,15 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
           await suggestFoldingCarton(prisma, { ...fresh, productName: fresh.productCategory });
           await agentSend({ to: OWNERS, subject: `FYI - ${ml.companyName} is corrugated; proposed folding carton`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary flagged <strong>${ml.companyName}</strong> as corrugated (we don't make corrugated), so I stopped chasing her and asked the customer whether a heavier folding carton works. Her note:</p>${quoted(reply)}</div>` });
         } else {
-          // Hard blocker (size / process) → the agent can't fix this; stop the
-          // chase entirely and put it in the owners' hands.
-          await prisma.lead.update({ where: { id: ml.id }, data: { agentStatus: "needs_owner", stage: `Can't produce as specced - ${(mCls?.reason || "capability blocker").slice(0, 60)}`, agentNextAt: null, agentLog: (ml.agentLog || null), commentary: `${ml.commentary || ""}
-[Agent] Mary says C&D can't produce this as specced (${mCls?.reason || "capability blocker"}). Stopped chasing her; owners to decide (suggest an alternative spec or close).`.slice(0, 8000) } });
-          await agentSend({ to: OWNERS, subject: `Can't produce: ${ml.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary says <strong>${ml.companyName}</strong> can't be produced as specced${mCls?.reason ? ` - ${mCls.reason}` : ""}. I've stopped following up with her.</p>${quoted(reply)}<p>Your call: suggest an alternative spec/size to the customer, or close it out from the pipeline.</p></div>` });
+          // Hard blocker (size / process) → close the loop OURSELVES: tell the
+          // customer honestly, move the lead to Lost, one-time FYI to owners.
+          // No digest nagging for a decision that has no real choice (Benjy 7/14).
+          if (ml.contactEmail) {
+            await agentCustomerSend(prisma, ml, { body: `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>Hi ${(ml.contactName || "there").trim().split(/\s+/)[0].replace(/["'“”]/g, "") || "there"},</p><p>Thank you for your patience while our production team took a close look. I have to be straight with you: ${mCls?.reason ? mCls.reason.replace(/</g, "&lt;") : "this one falls outside what our equipment can produce"}, so we are not able to make this project for you, and I did not want to leave you waiting on a quote that was not coming.</p><p>If your needs ever shift toward folding cartons or printed pieces in our range, we would genuinely love to help. Wishing you the best with this one.</p><p>Best regards,<br>${leadAgentName(ml)}</p></div>` });
+          }
+          await prisma.lead.update({ where: { id: ml.id }, data: { agentStatus: "declined", stage: `Can't produce - customer told`, pipelineStage: "LOST", agentNextAt: null, commentary: `${ml.commentary || ""}
+[Agent] Mary says C&D can't produce this (${mCls?.reason || "capability blocker"}). Sent the customer a courteous decline and closed to Lost.`.slice(0, 8000) } });
+          await agentSend({ to: OWNERS, subject: `FYI - declined ${ml.companyName} (can't produce)`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary flagged <strong>${ml.companyName}</strong> as un-producible${mCls?.reason ? ` (${mCls.reason})` : ""}. I let the customer know politely and moved the lead to Lost - nothing needed from you. Reopen it from the pipeline if you see an angle.</p>${quoted(reply)}</div>` });
         }
       } else if (mKind === "needs_from_customer" && ml.contactEmail) {
         // Mary needs something from the CUSTOMER (art file, dieline, sample) →
@@ -147,7 +151,13 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Match to a lead the agent is actively chasing. We do NOT touch messages
     // that aren't agent replies — leave the rest of the mailbox untouched.
     const lead = await prisma.lead.findFirst({
-      where: { pipelineStage: "LEAD", contactEmail: { equals: from, mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"] } },
+      where: {
+        contactEmail: { equals: from, mode: "insensitive" },
+        OR: [
+          { pipelineStage: "LEAD", agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"] } },
+          { pipelineStage: "LOST", agentStatus: "declined" }, // customer came back after a can't-produce decline (revised specs?)
+        ],
+      },
       orderBy: { updatedAt: "desc" },
     });
     if (!lead) continue;
