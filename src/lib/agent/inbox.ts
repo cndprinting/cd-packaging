@@ -170,6 +170,20 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
     try { await prisma.lead.update({ where: { id: lead.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
 
+    // A pure pleasantry on an already-declined lead ("no problem, thanks for
+    // letting me know") ends the conversation — log it quietly, never draft a
+    // reply or task the owners (Benjy 7/16, Jo at No.1 Flowers).
+    if (lead.agentStatus === "declined") {
+      const txt = (m.bodyPreview || "").split(/On \w{3}, \w{3} \d/)[0].trim(); // strip quoted history
+      const pleasantry = txt.length < 250 && !txt.includes("?") && /thank|thanks|no problem|appreciate|understood|got it|all good|take care|okay|ok/i.test(txt) && !/quote|price|order|need|can you|could you|would you|spec|size|change/i.test(txt);
+      if (pleasantry) {
+        try { await prisma.lead.update({ where: { id: lead.id }, data: { commentary: `${lead.commentary || ""}
+[Agent] Customer acknowledged the decline graciously ("${txt.slice(0, 80)}") - conversation closed, no action needed.`.slice(0, 8000) } }); } catch { /* ignore */ }
+        handled++;
+        continue;
+      }
+    }
+
     // Out-of-office auto-reply → NOT a real customer reply. The address is
     // verified; leave the status and follow-up clock exactly as they are so the
     // normal cadence continues. Never draft a response to a robot. Benjy 7/13.
