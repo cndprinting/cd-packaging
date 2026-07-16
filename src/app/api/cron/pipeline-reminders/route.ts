@@ -36,21 +36,25 @@ export async function GET(request: NextRequest) {
       followUpDoneAt: null,
       OR: [{ reminderSentAt: null }, { reminderSentAt: { lt: startOfToday } }],
       pipelineStage: { in: ["LEAD", "QUALIFIED"] },
+      // Agent-desk (Jessica) follow-ups are handled separately below and must
+      // NEVER appear in a human owner personal due list (Benjy 7/16).
+      NOT: { ownerName: { equals: "Jessica", mode: "insensitive" } },
     },
     orderBy: { followUpAt: "asc" },
   });
   // (No early return here — the agent chase engine below must run even when
   // there are no follow-up reminders due. Bug fix, Benjy 6/26.)
 
-  // Map owner display names → real mailbox emails.
+  // Map owner display names → real mailbox emails. Known owners are hardcoded
+  // (deterministic — the User table has several duplicate-name rows); anything
+  // unknown falls back to Benjy.
+  const OWNER_EMAILS: Record<string, string> = { benjy: "bwaxman@cndprinting.com", albert: "awaxman@cndprinting.com", nitay: "nlaor@cndprinting.com", kelsey: "kjacobsen@cndprinting.com", suzanne: "salvarez@cndprinting.com" };
   const users = await prisma.user.findMany({ where: { isActive: true }, select: { name: true, email: true } });
   const emailFor = (ownerName: string | null): string => {
     if (!ownerName || ownerName.toUpperCase() === "TBD") return FALLBACK_TO;
     const first = ownerName.trim().toLowerCase().split(/\s+/)[0];
+    if (OWNER_EMAILS[first]) return OWNER_EMAILS[first];
     const u = users.find((x) => x.name.toLowerCase().startsWith(first));
-    // Jessica-owned records are the agent's desk - her follow-up reminders go to
-    // the humans (Benjy), never to her unmonitored mailbox. Benjy 7/15.
-    if (u?.email?.toLowerCase() === "jwaxman@cndprinting.com") return FALLBACK_TO;
     return u?.email || FALLBACK_TO;
   };
 
@@ -138,6 +142,38 @@ export async function GET(request: NextRequest) {
       inboundDigest = inbound.length;
     }
   } catch (e) { console.error("[Godzilla CRON] inbound digest failed", e); }
+
+  // Agent-desk (Jessica) follow-ups (Benjy 7/16): stale human follow-up dates on
+  // agent-owned leads must not land in any personal list. If the agent has an
+  // active sequence (or the lead is still queued for its intro), the human
+  // reminder is redundant — auto-complete it with a note. Anything left goes to
+  // the owners as ONE clearly-labeled agent-desk email.
+  let agentDesk = 0;
+  try {
+    const jDue = await prisma.lead.findMany({
+      where: { ownerName: { equals: "Jessica", mode: "insensitive" }, followUpAt: { not: null, lte: now }, followUpDoneAt: null, pipelineStage: { in: ["LEAD", "QUALIFIED"] } },
+      select: { id: true, companyName: true, pipelineStage: true, stage: true, followUpNote: true, agentStatus: true, outreachStatus: true, commentary: true },
+      take: 100,
+    });
+    const ACTIVE_A = ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"];
+    const ACTIVE_O = ["intro_sent", "followup_1"];
+    const needHuman: typeof jDue = [];
+    for (const l of jDue) {
+      const agentOnIt = (l.agentStatus && ACTIVE_A.includes(l.agentStatus)) || (l.outreachStatus && ACTIVE_O.includes(l.outreachStatus)) || (l.pipelineStage === "LEAD" && l.outreachStatus === null);
+      if (agentOnIt) {
+        await prisma.lead.update({ where: { id: l.id }, data: { followUpDoneAt: now, commentary: `${l.commentary || ""}
+[Agent] Cleared a stale human follow-up date - this lead is on the agent cadence.`.slice(0, 8000) } });
+      } else {
+        needHuman.push(l);
+      }
+    }
+    if (needHuman.length) {
+      const rows = needHuman.map((l) => `<li style="margin-bottom:8px;"><strong>${l.companyName}</strong> <span style="color:#888;">(${l.pipelineStage === "QUALIFIED" ? "Qualified" : "Lead"}${l.stage ? ` · ${l.stage}` : ""} · agent: ${l.outreachStatus || l.agentStatus || "idle"})</span>${l.followUpNote ? ` — ${l.followUpNote}` : ""}</li>`).join("");
+      const body = `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>These are <strong>agent-desk (Jessica) leads</strong> with a follow-up date due — the agent has no active sequence on them, so a human should decide: restart outreach, take it over, or clear the date. This is not your personal list.</p><ul style="padding-left:18px;">${rows}</ul><p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p><p style="color:#aaa;font-size:11px;margin-top:20px;">Automated from Godzilla.</p></div>`;
+      await sendEmail({ from: SENDER, to: ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"], subject: `Agent desk (Jessica): follow-ups due (${needHuman.length})`, body });
+      agentDesk = needHuman.length;
+    }
+  } catch (e) { console.error("[Godzilla CRON] agent-desk follow-ups failed", e); }
 
   // Owner accountability nags (Benjy 7/14): some owners (Albert) forget to keep
   // next-step dates current. Every QUALIFIED / CUSTOMER record they own should
