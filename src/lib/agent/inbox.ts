@@ -174,8 +174,8 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // letting me know") ends the conversation — log it quietly, never draft a
     // reply or task the owners (Benjy 7/16, Jo at No.1 Flowers).
     if (lead.agentStatus === "declined") {
-      const txt = (m.bodyPreview || "").split(/On \w{3}, \w{3} \d/)[0].trim(); // strip quoted history
-      const pleasantry = txt.length < 250 && !txt.includes("?") && /thank|thanks|no problem|appreciate|understood|got it|all good|take care|okay|ok/i.test(txt) && !/quote|price|order|need|can you|could you|would you|spec|size|change/i.test(txt);
+      const txt = (m.bodyPreview || "").split(/On \w{3}, \w{3} \d|From: /)[0].trim(); // strip quoted history
+      const pleasantry = txt.length < 350 && !txt.includes("?") && /thank|thanks|no problem|appreciate|understood|got it|all good|take care|okay|ok/i.test(txt) && !/quote|price|order|need|can you|could you|would you|spec|size|change/i.test(txt);
       if (pleasantry) {
         try { await prisma.lead.update({ where: { id: lead.id }, data: { commentary: `${lead.commentary || ""}
 [Agent] Customer acknowledged the decline graciously ("${txt.slice(0, 80)}") - conversation closed, no action needed.`.slice(0, 8000) } }); } catch { /* ignore */ }
