@@ -332,6 +332,19 @@ export default function QuoteRequestsPage() {
                     ) : null}
                     {req.dateNeeded && <span>Need by: {formatDate(req.dateNeeded)}</span>}
                   </p>
+                  {/* Per-version lines + Line Notes — these were saved but never
+                      shown to Mary anywhere (Benjy 7/20). */}
+                  {req.lineItems && req.lineItems.length > 0 && (req.lineItems.length > 1 || req.lineItems.some((l: any) => l.notes)) && (
+                    <div className="mt-1 space-y-0.5">
+                      {req.lineItems.map((l: any, i: number) => (
+                        <p key={i} className="text-xs text-gray-600">
+                          <span className="font-medium">{l.version || `Line ${i + 1}`}</span>
+                          {l.quantity ? ` — ${Number(l.quantity).toLocaleString()}` : ""}
+                          {l.notes && <span className="text-amber-700"> — {l.notes}</span>}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-400 mt-1">Submitted by {req.submittedByName} on {formatDate(req.createdAt)}</p>
                 </div>
                 <div className="flex gap-2">

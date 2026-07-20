@@ -2171,7 +2171,12 @@ function EstimateContent() {
           hasBleeds: !!req.hasBleeds || prev.hasBleeds,
           plusCover: req.coverType === "plus_cover" || prev.plusCover,
           softCover: req.coverType === "self_cover" || prev.softCover,
-          specialInstructions: [req.specialInstructions, req.customColorCoatingNotes, req.artworkNotes].filter(Boolean).join(" | ") || prev.specialInstructions,
+          // Line Notes from the request's version lines were previously saved but
+          // never shown to the estimator — surface them here (Benjy 7/20).
+          specialInstructions: [
+            req.specialInstructions, req.customColorCoatingNotes, req.artworkNotes,
+            ...qrLineItems.filter((li: any) => li.notes).map((li: any, i: number) => `${li.version || `Line ${i + 1}`}: ${li.notes}`),
+          ].filter(Boolean).join(" | ") || prev.specialInstructions,
           deliveryTo: req.deliveryInstructions || prev.deliveryTo,
         } as any));
         // Auto-advance to step 2 since product type is set
