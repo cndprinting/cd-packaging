@@ -49,7 +49,15 @@ export default function TalentPage() {
 
   const update = async (id: string, patch: Record<string, unknown>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as Talent : r)));
-    await fetch("/api/talent", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
+    // Confirm the save landed — silent failures cost Benjy/Nitay their pipeline
+    // edits on 7/20; never let the screen lie about saved state.
+    try {
+      const res = await fetch("/api/talent", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      alert("That change did NOT save (server hiccup). Refreshing - please re-enter it.");
+      load();
+    }
   };
   const remove = async (id: string) => {
     if (!confirm("Remove this candidate?")) return;

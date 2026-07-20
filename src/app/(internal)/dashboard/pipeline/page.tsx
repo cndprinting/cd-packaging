@@ -100,18 +100,33 @@ export default function PipelinePage() {
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
 
   // Optimistic inline patch.
+  // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
+  // during deploy churn because failures were silently swallowed). On failure:
+  // one retry, then alert + reload so the screen never lies about saved state.
+  const savePut = async (payload: Record<string, unknown>) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch("/api/leads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (res.ok) return true;
+      } catch { /* retry */ }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    alert("That change did NOT save (server hiccup). The page will refresh - please re-enter it.");
+    load();
+    return false;
+  };
   const patch = async (id: string, field: string, value: any) => {
     setLeads((p) => p.map((l) => l.id === id ? { ...l, [field]: value } : l));
-    await fetch("/api/leads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, [field]: value }) }).catch(() => {});
+    await savePut({ id, [field]: value });
   };
   // Local-only edit (no save) — for controlled inputs that save on blur.
   const setLocal = (id: string, field: string, value: any) => setLeads((p) => p.map((l) => l.id === id ? { ...l, [field]: value } : l));
   const move = async (id: string, pipelineStage: string) => {
     setLeads((p) => p.map((l) => l.id === id ? { ...l, pipelineStage } : l));
-    await fetch("/api/leads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, pipelineStage }) }).catch(() => {});
+    await savePut({ id, pipelineStage });
   };
   const convert = async (id: string) => {
-    await fetch("/api/leads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, convert: true }) }).catch(() => {});
+    await savePut({ id, convert: true });
     load();
   };
 
