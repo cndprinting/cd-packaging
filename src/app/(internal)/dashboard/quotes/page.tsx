@@ -14,7 +14,7 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 
 interface Company { id: string; name: string; industry?: string; }
 
-interface Quote { id: string; quoteNumber: string; customerName: string; productType: string; productName: string; quantity: number; unitPrice: number; totalPrice: number; status: string; validUntil: string; createdAt: string; }
+interface Quote { id: string; quoteNumber: string; customerName: string; productType: string; productName: string; quantity: number; unitPrice: number; totalPrice: number; status: string; validUntil: string; createdAt: string; estimateMethod?: string; }
 
 const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", sent: "bg-blue-100 text-blue-700", approved: "bg-emerald-100 text-emerald-700", rejected: "bg-red-100 text-red-700", converted: "bg-purple-100 text-purple-700", archived: "bg-gray-100 text-gray-400" };
 
@@ -143,13 +143,15 @@ export default function QuotesPage() {
                         re-entering everything. The estimator reloads the full
                         quote via ?draftId; saving updates it in place. */}
                     {/* Outsourced (wholesale) quotes edit on their detail page
-                        (sourcing card), not the estimator — Benjy 6/16. */}
+                        (sourcing card), not the estimator — Benjy 6/16.
+                        Classic-built quotes reopen in the Classic estimator
+                        (specs.method === "classic" → estimateMethod flag). */}
                     {q.status === "draft" && ((q as any).sourcingVendor
                       ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>
-                      : <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>)}
+                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>)}
                     {(q.status === "sent" || q.status === "approved" || q.status === "rejected") && ((q as any).sourcingVendor
                       ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>
-                      : <Link href={`/dashboard/quotes/estimate?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>)}
+                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>)}
                     {/* Internal-only actions — hidden on wholesale rows so the
                         sourcing card's Won/Lost is the only lifecycle control
                         (Benjy 6/23, after a wholesale quote got rejected→Lost

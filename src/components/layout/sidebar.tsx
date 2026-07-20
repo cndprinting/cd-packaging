@@ -22,7 +22,7 @@ const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
-  { label: "Jobs", href: "/dashboard/jobs", icon: Package },
+  { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
   // { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid }, // Archived Apr 2026 — redundant with Schedule + Production for Darrin; page still accessible by URL
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
   { label: "Invoices", href: "/dashboard/invoices", icon: FileBarChart },
@@ -113,7 +113,7 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
       return [
         { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
-        { label: "Jobs", href: "/dashboard/jobs", icon: Package },
+        { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
         { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
         { label: "Customers", href: "/dashboard/customers", icon: Users },
         { label: "Shipping", href: "/dashboard/shipping", icon: Truck },

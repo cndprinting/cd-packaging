@@ -27,6 +27,18 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
+
+  // Day-guard: the GitHub Actions backstop (16:00 UTC) re-hits this endpoint;
+  // if today's run already happened (Vercel cron), skip so digest/accountability
+  // emails never double-send. ?force=1 bypasses for manual reruns.
+  if (request.nextUrl.searchParams.get("force") !== "1") {
+    try {
+      const last = await prisma.cronRun.findUnique({ where: { job: "pipeline-reminders" } });
+      if (last && new Date(last.ranAt) >= startOfToday) {
+        return NextResponse.json({ ok: true, skipped: "already ran today", ranAt: last.ranAt });
+      }
+    } catch { /* table missing → proceed */ }
+  }
   // Active stages only — no point nudging won/lost. Re-nag every morning until
   // the follow-up is marked done: send if not already reminded today, and skip
   // any that are completed (followUpDoneAt set).
@@ -208,5 +220,12 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) { console.error("[Godzilla CRON] accountability nag failed", e); }
 
+  try {
+    await prisma.cronRun.upsert({
+      where: { job: "pipeline-reminders" },
+      create: { job: "pipeline-reminders", ranAt: new Date() },
+      update: { ranAt: new Date() },
+    });
+  } catch { /* guard table missing — non-fatal */ }
   return NextResponse.json({ ok: true, emails: sent, reminders: sentLeadIds.length, agentActed: agent.acted, inboundDigest, accountability });
 }

@@ -42,7 +42,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         .filter(`receivedDateTime ge ${cutoff}`)
         .orderby("receivedDateTime desc")   // NEWEST first — a busy mailbox has >100 msgs in 5d; asc missed recent replies
         .top(200)
-        .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId")
+        .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId,internetMessageId")
         .get();
       for (const m of (res.value || [])) { m._mb = box; items.push(m); }
     } catch (e) {
@@ -50,6 +50,29 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       if (items.length === 0 && box === READ_MAILBOXES[READ_MAILBOXES.length - 1]) return { checked: 0, handled: 0, error: "mail read failed (Mail.ReadWrite not granted?)" };
     }
   }
+
+  // PROCESS OLDEST-FIRST. Fetching desc gets the freshest 200, but handling
+  // newest-first swallowed older unhandled replies: processing a newer message
+  // stamps agentLastMsgAt, and anything older then looks already-handled.
+  // Sunny Brooke (7/17): Mary's "too big" reply at 6:45pm was skipped because
+  // the customer's 6:50pm artwork email was processed first — she was then
+  // nudged for days on a job she'd already declined (Benjy 7/20).
+  items.sort((a, b) => new Date(a.receivedDateTime).getTime() - new Date(b.receivedDateTime).getTime());
+
+  // The same message often exists in BOTH polled mailboxes (owners are CC'd)
+  // with delivery-skewed timestamps, which double-processed it (duplicate
+  // forwards to Mary). De-dupe by internetMessageId within the run.
+  const seenMsgIds = new Set<string>();
+  const preDedupe = items.length;
+  const deduped: any[] = [];
+  for (const m of items) {
+    const key = m.internetMessageId || m.id;
+    if (seenMsgIds.has(key)) continue;
+    seenMsgIds.add(key);
+    deduped.push(m);
+  }
+  items.length = 0; items.push(...deduped);
+  if (preDedupe !== items.length) console.log(`[agent inbox] cross-mailbox de-dupe: ${preDedupe} -> ${items.length}`);
 
   let handled = 0;
   for (const m of items) {

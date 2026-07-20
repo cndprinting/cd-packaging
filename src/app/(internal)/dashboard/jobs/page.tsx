@@ -131,7 +131,7 @@ export default function JobsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Jobs Board</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Jobs &amp; Job Tickets</h1>
           <p className="text-sm text-gray-500">{filtered.length} of {jobs.length} jobs</p>
         </div>
         <Button onClick={() => setShowNewJobModal(true)} className="gap-2">

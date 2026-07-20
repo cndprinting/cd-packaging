@@ -181,10 +181,23 @@ export async function dropIfDuplicate(prisma: any, lead: any): Promise<boolean> 
     });
     if (!dup) return false;
     let verdict: { duplicate: boolean; reason: string } | null = null;
-    try {
-      const { isDuplicateQuote } = await import("@/lib/agent/claude");
-      verdict = await isDuplicateQuote({ a: dup.commentary || "", b: lead.commentary || "" });
-    } catch { /* fall through → treat as separate */ }
+    // Deterministic fast-path (Sunny Brooke 7/20): the SAME contact resubmitting
+    // the web form within 7 days for the same product category is a duplicate,
+    // period — Claude once judged gloss-vs-matte "different jobs" and Mary got
+    // chased on two threads for one box. Finish/option tweaks are the same job.
+    const dupFull = await prisma.lead.findUnique({ where: { id: dup.id }, select: { createdAt: true, contactEmail: true, productCategory: true } });
+    const daysApart = dupFull ? Math.abs(Date.now() - new Date(dupFull.createdAt).getTime()) / 86400000 : 99;
+    const sameContact = !!(lead.contactEmail && dupFull?.contactEmail && lead.contactEmail.toLowerCase() === dupFull.contactEmail.toLowerCase());
+    const sameCategory = !lead.productCategory || !dupFull?.productCategory || lead.productCategory.toLowerCase() === dupFull.productCategory.toLowerCase();
+    if (sameContact && sameCategory && daysApart <= 7) {
+      verdict = { duplicate: true, reason: "Same contact resubmitted within 7 days for the same product - treated as one job (option tweaks like finish don't make it a new job)." };
+    }
+    if (!verdict) {
+      try {
+        const { isDuplicateQuote } = await import("@/lib/agent/claude");
+        verdict = await isDuplicateQuote({ a: dup.commentary || "", b: lead.commentary || "" });
+      } catch { /* fall through → treat as separate */ }
+    }
     if (verdict && verdict.duplicate) {
       const note = `${lead.commentary || ""}\n\n[Agent] Duplicate of an active lead already in progress for ${lead.companyName} - dropped. ${verdict.reason || ""}`.slice(0, 4000);
       await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "duplicate", agentNextAt: null, pipelineStage: "LOST", stage: "Duplicate", commentary: note, agentLog: logLine(lead.agentLog, `Auto-detected duplicate of ${dup.agentStatus}. ${verdict.reason || ""}`) } });

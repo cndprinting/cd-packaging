@@ -377,6 +377,14 @@ export default function QuoteRequestsPage() {
                       </Button>
                     </a>
                   )}
+                  {/* Classic (E&M-style) estimator — Mary's preferred flow */}
+                  {isEstimator && req.status === "estimating" && (
+                    <a href={`/dashboard/quotes/estimate-classic?from=${req.id}`}>
+                      <Button size="sm" className="gap-1 bg-amber-500 text-black hover:bg-amber-400">
+                        <ArrowRight className="h-3.5 w-3.5" /> Open in Classic
+                      </Button>
+                    </a>
+                  )}
                   {req.convertedQuoteId && (
                     <a href={`/dashboard/quotes/${req.convertedQuoteId}`}>
                       <Button size="sm" variant="outline" className="gap-1"><FileText className="h-3.5 w-3.5" /> View Quote</Button>

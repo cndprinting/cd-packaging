@@ -8,8 +8,9 @@
 // like the DOS system. Nothing persists until "Save Quote".
 // ─────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   BINDERY_OPERATIONS,
@@ -19,7 +20,7 @@ import {
   computeClassic,
   defaultClassicForm,
 } from "@/lib/classic-estimate";
-import { DigitalClickStandards, InkConfig, getDigitalSizeTier } from "@/lib/digital-clicks";
+import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
 // ── Plant standards / presses (same endpoint the wizard estimator uses) ──
 interface PressConfigData {
@@ -105,8 +106,22 @@ const money = (v: number) => `$${(Number.isFinite(v) ? v : 0).toFixed(2)}`;
 const hrs = (v: number) => `${(Number.isFinite(v) ? v : 0).toFixed(2)} hrs`;
 
 export default function ClassicEstimatorPage() {
+  // useSearchParams requires a Suspense boundary in App Router client pages
+  // (same pattern as the wizard estimator).
+  return <Suspense><ClassicEstimatorContent /></Suspense>;
+}
+
+function ClassicEstimatorContent() {
+  const searchParams = useSearchParams();
+  const fromRequestId = searchParams.get("from");
+  const draftIdFromUrl = searchParams.get("draftId");
+
   const [screen, setScreen] = useState(1); // 1..9
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
+  // Resume-from-draft: once set, Save updates this quote instead of creating
+  // a new one each time (mirrors the wizard's draftQuoteId flow).
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(draftIdFromUrl);
+  const [draftQuoteNumber, setDraftQuoteNumber] = useState<string | null>(null);
   const [presses, setPresses] = useState<PressData[]>([]);
   const [companies, setCompanies] = useState<{ id: string; name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null }[]>([]);
   const [standards, setStandards] = useState<(DigitalClickStandards & Record<string, unknown>) | null>(null);
@@ -151,6 +166,84 @@ export default function ClassicEstimatorPage() {
       .then((d) => setCompanies(d.companies || []))
       .catch(() => {});
   }, []);
+
+  // ── Pre-fill from a Quote Request (?from=<quoteRequestId>) — same source
+  // and field mapping the wizard uses, translated to E&M vocabulary. ──
+  useEffect(() => {
+    if (!fromRequestId) return;
+    fetch("/api/quote-requests")
+      .then((r) => r.json())
+      .then((d) => {
+        const req = (d.requests || []).find((x: { id: string }) => x.id === fromRequestId) as Record<string, unknown> | undefined;
+        if (!req) return;
+        const r = req as Record<string, any>;
+        const qrLineItems: Record<string, any>[] = Array.isArray(r.lineItems) ? r.lineItems : [];
+        const firstLine = qrLineItems[0] || {};
+        const primaryQty = qrLineItems.length > 0
+          ? Number(firstLine.quantity) || 0
+          : Number(r.quantity1 || r.quantity2 || r.quantity3 || 0);
+        const flatW = Number(firstLine.flatWidth) || Number(r.flatWidth) || 0;
+        const flatH = Number(firstLine.flatHeight) || Number(r.flatHeight) || 0;
+        // Same colors mapping the wizard uses (colorsSide1/2 enum → counts).
+        const mapColors = (c: string | null | undefined, isBack: boolean): number | null => {
+          if (!c) return null;
+          if (c === "4_process") return 4;
+          if (c === "process_1pms") return 5;
+          if (c === "process_2pms") return 6;
+          if (c === "black" || c === "pms") return 1;
+          if (isBack && c === "none") return 0;
+          return null;
+        };
+        const s1 = mapColors(r.colorsSide1, false);
+        const s2 = mapColors(r.colorsSide2, true);
+        // Line Notes labeled per version — parity with the wizard (Benjy 7/20).
+        const instructions = [
+          r.specialInstructions, r.customColorCoatingNotes, r.artworkNotes,
+          ...qrLineItems.filter((li) => li.notes).map((li, i) => `${li.version || `Line ${i + 1}`}: ${li.notes}`),
+        ].filter(Boolean).join(" | ");
+        setForm((f) => ({
+          ...f,
+          customerName: r.customerName || f.customerName,
+          jobTitle: r.jobTitle || r.descriptionType || f.jobTitle,
+          quantity: primaryQty || f.quantity,
+          numParts: qrLineItems.length > 1 ? qrLineItems.length : f.numParts,
+          sheetWidthRun: flatW || f.sheetWidthRun,
+          sheetHeightRun: flatH || f.sheetHeightRun,
+          numPages: Number(r.pages) || f.numPages,
+          runColorsSide1: s1 ?? f.runColorsSide1,
+          runColorsSide2: s2 ?? f.runColorsSide2,
+          // Keep the digital branch consistent in case Mary flips to Digital Direct.
+          digitalInkConfig: s1 != null ? inferInkConfig(s1, s2 ?? 0) : f.digitalInkConfig,
+          stockDescription: r.paperDescription || f.stockDescription,
+          caliperBasisWeight: r.paperWeight ? String(r.paperWeight) : f.caliperBasisWeight,
+          deliveryZone: r.deliveryInstructions || f.deliveryZone,
+          instructions: instructions || f.instructions,
+          // Job type stays at the "New With Pre-Press" default — QuoteRequest
+          // has no offset/digital flag; Mary picks on Screen 3.
+        }));
+      })
+      .catch(() => {});
+  }, [fromRequestId]);
+
+  // ── Resume a Classic draft (?draftId=<quoteId>) — the full form was stashed
+  // in specs JSON on save; merge over defaults so old drafts survive new fields. ──
+  useEffect(() => {
+    if (!draftIdFromUrl) return;
+    fetch(`/api/quotes?id=${draftIdFromUrl}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const q = (d.quotes || []).find((x: { id: string }) => x.id === draftIdFromUrl);
+        if (!q) return;
+        let specs: { method?: string; classicForm?: Partial<ClassicForm> } = {};
+        try { specs = q.specs ? JSON.parse(q.specs) : {}; } catch {}
+        if (specs.method === "classic" && specs.classicForm) {
+          setForm({ ...defaultClassicForm(), ...specs.classicForm });
+        }
+        setDraftQuoteId(q.id);
+        setDraftQuoteNumber(q.quoteNumber || null);
+      })
+      .catch(() => {});
+  }, [draftIdFromUrl]);
 
   // Exact-name match (case-insensitive) → auto-fill address + customer # once.
   const onCustomerName = useCallback((name: string) => {
@@ -211,45 +304,175 @@ export default function ClassicEstimatorPage() {
     setSaving(true);
     try {
       const qty = form.quantity || 1;
-      const res = await fetch("/api/quotes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName: form.customerName,
-          productName: form.jobTitle,
-          productType: "COMMERCIAL_PRINT",
-          description: [
-            form.stockDescription,
-            form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun} sheet` : "",
-            form.jobType,
-          ].filter(Boolean).join(" — "),
-          quantity: qty,
-          unitPrice: calc.total / qty,
-          notes: [
-            "Method: classic (E&M-style estimator)",
-            form.quoteNotes,
-            form.instructions ? `Instructions: ${form.instructions}` : "",
-          ].filter(Boolean).join("\n"),
-          specs: JSON.stringify({
-            method: "classic",
-            classicForm: form,
-            costSheet: {
-              paper: { cost: calc.paperCost, selling: calc.paperSelling, orderSheets: calc.orderSheets },
-              prep: { hours: calc.prepHours, cost: calc.prepCost, selling: calc.prepSelling },
-              press: { hours: calc.pressHrs, inkLbs: calc.inkLbs, cost: calc.pressCost, selling: calc.pressSelling },
-              bindery: { hours: calc.binderyHrs, cost: calc.binderyCost, selling: calc.binderySelling },
-              outside: { cost: calc.outsideCost, selling: calc.outsideSelling },
-              freightAndAdditional: calc.freightAndAdditional,
-              commission: calc.commission,
-              totalCost: calc.totalCost,
-              total: calc.total,
-            },
-          }),
-        }),
+      const isDigital = calc.isDigital;
+      const cfg = selectedPress?.configurations.find((c) => c.id === form.pressConfigId) || null;
+
+      // ── costBreakdown — same field semantics as the wizard so the quote
+      // detail page and margin reports read Classic quotes identically:
+      //   materials = substrate + ink + consumables, tooling = dies,
+      //   labor = press+prepress labor, finishing = bindery labor,
+      //   waste = MR waste sheets at paper cost, shipping = freight/outside,
+      //   markup = total markup $, commission = commission $.
+      // Buckets sum to calc.totalCost.
+      const outOfParent = Math.max(1, form.sheetsOutOfParent || 1);
+      const wasteCost = Math.min(
+        calc.paperCost,
+        ((calc.mrWasteSheets / outOfParent) / 1000) * (form.pricePerM || 0)
+      );
+      const costBreakdown = {
+        materials: Math.max(0, calc.paperCost - wasteCost) + calc.inkCost + calc.prepMaterials,
+        tooling: form.dieCost || 0,
+        labor: calc.prepLabor + (calc.pressLaborCost - calc.inkCost),
+        finishing: calc.binderyLabor,
+        waste: wasteCost,
+        // Outside bucket rides "shipping" — the detail page applies Outside
+        // markup to this field (freight + additional + outside purchases,
+        // incl. digital clicks which E&M books as outside).
+        shipping: calc.freightAndAdditional + calc.outsideCost,
+        markup: calc.sellingSubtotal - calc.totalCost,
+        commission: calc.commission,
+      };
+
+      // ── jobTicket — same shape the wizard sends; the quotes API conversion
+      // path (specs.jobTicket) hydrates the Job from these fields.
+      const jobTicket = {
+        flatSizeWidth: form.sheetWidthRun || null,
+        flatSizeHeight: form.sheetHeightRun || null,
+        finishedWidth: null,
+        finishedHeight: null,
+        numberUp: form.numberUp || null,
+        numPages: form.numPages || null,
+        varnish: null,
+        coating: null,
+        pressAssignment: isDigital ? "Digital" : selectedPress?.name || null,
+        pressFormat: cfg?.name || null,
+        makeReadyCount: calc.mrWasteSheets || null,
+        stockDescription: [form.stockDescription, form.caliperBasisWeight, form.brandColorFinish]
+          .filter(Boolean).join(" / ") || null,
+        runSheetWidth: form.sheetWidthRun || null,
+        runSheetHeight: form.sheetHeightRun || null,
+        isMillItem: false,
+        millItemLeadTime: null,
+        binderyFold: !!form.folderConfig || form.binderyOperation === 3,
+        binderyStitch: form.binderyOperation === 2 || form.binderyOperation === 4 || form.binderyOperation === 5,
+        binderyScore: (form.scorePerfHrs || 0) > 0,
+        binderyDrill: (form.drillHoles || 0) > 0,
+        binderyGlue: false,
+        binderyWrap: (form.skids || 0) > 0,
+        binderyNotes: [
+          form.folderConfig ? `Folder: ${form.folderConfig}` : "",
+          form.handOp1.description ? `Hand: ${form.handOp1.description}` : "",
+          form.handOp2.description ? `Hand: ${form.handOp2.description}` : "",
+          (form.drillHoles || 0) > 0 ? `${form.drillHoles} drill holes` : "",
+        ].filter(Boolean).join("; ") || null,
+        inkFront: isDigital
+          ? `${form.digitalInkConfig.split("/")[0]}/0 digital`
+          : form.runColorsSide1 > 0 ? `${form.runColorsSide1}/0` : null,
+        inkBack: isDigital
+          ? `${form.digitalInkConfig.split("/")[1]}/0 digital`
+          : form.runColorsSide2 > 0 ? `${form.runColorsSide2}/0` : null,
+        dieNumber: null,
+        fscCertified: false,
+        pressCheck: (form.pressCheckHrs || 0) > 0,
+        softCover: false,
+        plusCover: false,
+        hasBleeds: !!form.bleedAllowance,
+        blanketNumber: null,
+        deliveryTo: form.deliveryZone || null,
+        samplesRequired: false,
+        samplesTo: null,
+        pressNotes: form.instructions || null,
+        estimatedHours: calc.pressHrs + calc.prepHours + calc.binderyHrs,
+        laborCostRate: form.pressHourlyRate || null,
+      };
+
+      const specs = JSON.stringify({
+        method: "classic",
+        classicForm: form,
+        // Rendered by /dashboard/quotes/[id] + print pages (wizard parity)
+        dimensions: form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun}` : undefined,
+        sheetSize: form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun}` : undefined,
+        colors: isDigital ? form.digitalInkConfig : `${form.runColorsSide1}F/${form.runColorsSide2}B`,
+        pressName: isDigital ? "Digital" : selectedPress?.name || "",
+        pressConfig: cfg?.name || "",
+        paperStock: form.stockDescription || undefined,
+        markups: { paper: form.markupPaperPct, material: form.markupMaterialPct, labor: form.markupLaborPct, outside: form.markupOutsidePct },
+        commission: { percent: form.commissionPct, amount: calc.commission },
+        costBreakdown,
+        jobTicket,
+        costSheet: {
+          paper: { cost: calc.paperCost, selling: calc.paperSelling, orderSheets: calc.orderSheets },
+          prep: { hours: calc.prepHours, cost: calc.prepCost, selling: calc.prepSelling },
+          press: { hours: calc.pressHrs, inkLbs: calc.inkLbs, cost: calc.pressCost, selling: calc.pressSelling },
+          bindery: { hours: calc.binderyHrs, cost: calc.binderyCost, selling: calc.binderySelling },
+          outside: { cost: calc.outsideCost, selling: calc.outsideSelling },
+          freightAndAdditional: calc.freightAndAdditional,
+          commission: calc.commission,
+          totalCost: calc.totalCost,
+          total: calc.total,
+        },
       });
-      const data = await res.json();
-      if (!res.ok || !data.quote) throw new Error(data.error || "Save failed");
-      setSaved({ quoteNumber: data.quote.quoteNumber, id: data.quote.id });
+
+      const summaryFields = {
+        customerName: form.customerName,
+        productName: form.jobTitle,
+        description: [
+          form.stockDescription,
+          form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun} sheet` : "",
+          form.jobType,
+        ].filter(Boolean).join(" — "),
+        quantity: qty,
+        unitPrice: calc.total / qty,
+      };
+
+      let res: Response;
+      let savedQuote: { id: string; quoteNumber: string } | null = null;
+      if (draftQuoteId) {
+        // Update the existing draft in place (wizard parity — Mary can come
+        // and go; the API's specs-without-status path keeps it a DRAFT).
+        res = await fetch("/api/quotes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: draftQuoteId, specs, ...summaryFields }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Save failed");
+        savedQuote = { id: draftQuoteId, quoteNumber: saved?.quoteNumber || draftQuoteNumber || "draft" };
+      } else {
+        res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...summaryFields,
+            productType: "COMMERCIAL_PRINT",
+            quoteRequestId: fromRequestId || undefined,
+            notes: [
+              "Method: classic (E&M-style estimator)",
+              form.quoteNotes,
+              form.instructions ? `Instructions: ${form.instructions}` : "",
+            ].filter(Boolean).join("\n"),
+            specs,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.quote) throw new Error(data.error || "Save failed");
+        savedQuote = { id: data.quote.id, quoteNumber: data.quote.quoteNumber };
+        setDraftQuoteId(data.quote.id);
+        setDraftQuoteNumber(data.quote.quoteNumber);
+      }
+      setSaved(savedQuote);
+
+      // Started from a quote request → mark it completed so it leaves the
+      // Quote Requests queue (exactly like the wizard).
+      if (fromRequestId && savedQuote?.id) {
+        try {
+          await fetch("/api/quote-requests", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: fromRequestId, status: "completed", convertedQuoteId: savedQuote.id }),
+          });
+        } catch { /* non-fatal */ }
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {

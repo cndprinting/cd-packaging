@@ -1,0 +1,31 @@
+# BACKSTOP for Vercel Hobby crons, which silently skipped the 7/20/2026 run
+# (Benjy missed his Sales Funnel email). Vercel's crons (vercel.json) stay
+# primary; this fires ~2h later and the endpoints' own date-stamps make a
+# same-day second run a no-op for per-lead reminders.
+# REQUIRES repo secret CRON_SECRET (same value as the Vercel env var):
+#   gh secret set CRON_SECRET -b"<value>"
+name: daily-crons
+
+on:
+  schedule:
+    - cron: "0 16 * * *"   # 16:00 UTC — backstop pass, all three endpoints
+  workflow_dispatch: {}
+
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the due cron endpoint(s)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          hour=$(date -u +%H)
+          hit () {
+            echo "→ $1"
+            curl -sS -m 300 -H "Authorization: Bearer $CRON_SECRET" \
+              "https://packaging.cndprinting.com/api/cron/$1" | head -c 500
+            echo
+          }
+          # backstop pass — hit all three; per-lead reminder stamps make
+          # already-handled work a no-op
+          hit pipeline-reminders; hit agent-inbox; hit outbound

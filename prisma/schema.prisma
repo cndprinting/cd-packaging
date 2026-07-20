@@ -296,6 +296,13 @@ model Talent {
   @@index([status])
 }
 
+// Day-guard for cron endpoints so a backstop trigger (GitHub Actions) can't
+// double-send daily digest emails when Vercel's cron already ran (7/20/2026).
+model CronRun {
+  job   String   @id
+  ranAt DateTime
+}
+
 // ─── ORDERS & JOBS ───────────────────────────────────────
 
 model Order {
