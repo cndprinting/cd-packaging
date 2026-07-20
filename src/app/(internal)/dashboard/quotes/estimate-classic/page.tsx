@@ -86,8 +86,8 @@ function Num({ value, onChange, step, readOnly }: {
   );
 }
 
-function Txt({ value, onChange, placeholder }: {
-  value: string; onChange: (v: string) => void; placeholder?: string;
+function Txt({ value, onChange, placeholder, list }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; list?: string;
 }) {
   return (
     <input
@@ -95,6 +95,7 @@ function Txt({ value, onChange, placeholder }: {
       className={inputCls}
       value={value}
       placeholder={placeholder}
+      list={list}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -107,6 +108,7 @@ export default function ClassicEstimatorPage() {
   const [screen, setScreen] = useState(1); // 1..9
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   const [presses, setPresses] = useState<PressData[]>([]);
+  const [companies, setCompanies] = useState<{ id: string; name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null }[]>([]);
   const [standards, setStandards] = useState<(DigitalClickStandards & Record<string, unknown>) | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<{ quoteNumber: string; id: string } | null>(null);
@@ -142,7 +144,28 @@ export default function ClassicEstimatorPage() {
         }
       })
       .catch(() => {});
+    // Customer list — same source as the wizard estimator, so Screen 1 ties to
+    // the uploaded Godzilla customers (Benjy 7/20). Free-typed names still work.
+    fetch("/api/companies")
+      .then((r) => r.json())
+      .then((d) => setCompanies(d.companies || []))
+      .catch(() => {});
   }, []);
+
+  // Exact-name match (case-insensitive) → auto-fill address + customer # once.
+  const onCustomerName = useCallback((name: string) => {
+    setForm((f) => {
+      const match = companies.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
+      if (!match) return { ...f, customerName: name };
+      const addr = [match.address, [match.city, match.state].filter(Boolean).join(", "), match.zip].filter(Boolean).join(", ");
+      return {
+        ...f,
+        customerName: match.name,
+        address: f.address || addr,
+        customerNumber: f.customerNumber || match.id.slice(-6).toUpperCase(),
+      };
+    });
+  }, [companies]);
 
   const calc = useMemo(() => computeClassic(form, standards), [form, standards]);
 
@@ -241,7 +264,10 @@ export default function ClassicEstimatorPage() {
       <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
         <div>
           <SectionTitle>Customer</SectionTitle>
-          <Row label="Customer Name" wide><Txt value={form.customerName} onChange={(v) => set("customerName", v)} /></Row>
+          <Row label="Customer Name" wide><Txt value={form.customerName} onChange={onCustomerName} list="classic-customers" placeholder="type to search customers…" /></Row>
+          <datalist id="classic-customers">
+            {companies.map((c) => <option key={c.id} value={c.name} />)}
+          </datalist>
           <Row label="Customer #" wide><Txt value={form.customerNumber} onChange={(v) => set("customerNumber", v)} placeholder="optional" /></Row>
           <Row label="Address" wide><Txt value={form.address} onChange={(v) => set("address", v)} /></Row>
           <SectionTitle>Job</SectionTitle>
