@@ -1430,3 +1430,13 @@ model Alert {
   @@index([jobId])
   @@index([userId])
 }
+
+// ─── COMPLIANCE LIBRARY ──────────────────────────────────────
+
+// Checklist state for the SQF compliance library (/dashboard/compliance).
+// Key = "<category>-<ref>" from src/lib/compliance-data.ts checklist data.
+model ComplianceCheck {
+  key       String   @id
+  checkedAt DateTime @default(now())
+  checkedBy String?
+}

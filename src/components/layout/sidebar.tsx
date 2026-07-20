@@ -39,6 +39,8 @@ const internalNav = [
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
   { label: "Help Desk", href: "/dashboard/help-desk", icon: HelpCircle },
+  // SQF compliance library (Lee's SQF/IT/privacy doc viewer + checklist, Jul 2026)
+  { label: "Compliance", href: "/dashboard/compliance", icon: ShieldCheck },
   { label: "Security", href: "/dashboard/security", icon: Shield },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
   { label: "Admin", href: "/dashboard/admin", icon: Shield },
@@ -117,6 +119,8 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
         { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
         { label: "Customers", href: "/dashboard/customers", icon: Users },
         { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
+        // Compliance library visible to sales — Lee Zerfass (SALES_REP) owns it
+        { label: "Compliance", href: "/dashboard/compliance", icon: ShieldCheck },
         { label: "Security", href: "/dashboard/security", icon: Shield },
         { label: "Settings", href: "/dashboard/settings", icon: Settings },
       ];
