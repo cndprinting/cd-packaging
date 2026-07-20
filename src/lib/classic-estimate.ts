@@ -94,6 +94,9 @@ export interface ClassicForm {
   caliperBasisWeight: string;
   pricePerM: number; // $ per 1000 sheets
   numberUp: number;
+  sheetsPerPiece: number; // press sheets per finished piece (booklets: 16pg on 4pp/side = 4) — Cybake #347528
+  sheetsOutOfParent: number; // press sheets cut from each parent sheet bought (E&M "out of parent"); pricePerM is per PARENT
+  bindWasteSheets: number;   // extra press sheets bought for bindery spoilage — paper only, never clicked/printed
   bleedAllowance: string;
   brandColorFinish: string;
 
@@ -182,7 +185,7 @@ export function defaultClassicForm(): ClassicForm {
     separations: 0, separationCharge: 20,
     sheetWidthRun: 0, sheetHeightRun: 0, sheetWidthOrder: 0, sheetHeightOrder: 0,
     numPages: 0, stockDescription: "", caliperBasisWeight: "",
-    pricePerM: 0, numberUp: 1, bleedAllowance: "", brandColorFinish: "",
+    pricePerM: 0, numberUp: 1, sheetsPerPiece: 1, sheetsOutOfParent: 1, bindWasteSheets: 0, bleedAllowance: "", brandColorFinish: "",
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
@@ -280,11 +283,17 @@ export function computeClassic(
   const numberUp = Math.max(1, f.numberUp || 1);
 
   // ── Paper (Screen 6, waste from Screen 7) ──
-  const pressSheets = Math.ceil(qty / numberUp);
+  const sheetsPerPiece = Math.max(1, f.sheetsPerPiece || 1);
+  const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
   const mrWasteSheets = isDigital
     ? Math.ceil(f.digitalMakereadySheets || 0)
     : Math.ceil(pressSheets * ((f.wasteFactorPct || 0) / 100));
-  const orderSheets = pressSheets + mrWasteSheets;
+  // Paper buy: press sheets + MR/overs + bindery spoilage, rounded up to whole
+  // PARENT sheets (E&M: "Use 1,110 sheets 19x25 ... 2 out of parent").
+  // pricePerM is per parent sheet when sheetsOutOfParent > 1.
+  const outOfParent = Math.max(1, f.sheetsOutOfParent || 1);
+  const sheetsToBuy = pressSheets + mrWasteSheets + Math.ceil(f.bindWasteSheets || 0);
+  const orderSheets = Math.ceil(sheetsToBuy / outOfParent);
   const paperCost = (orderSheets / 1000) * (f.pricePerM || 0);
 
   // ── Prep = Electronic Prepress (4) + Camera/Stripping/Platemaking (5) ──
@@ -329,9 +338,10 @@ export function computeClassic(
       digitalVDSetupCost = (f.digitalVDSetupHrs || 0) * (digitalStd.digitalVDSetupRate || 0);
     }
     pressHrs = dieScoreHrs + pressCheckHrs;
-    pressLaborCost =
-      digitalClickCost + digitalVDCost + digitalVDSetupCost +
-      pressHrs * (f.pressHourlyRate || 0);
+    // Clicks are NOT press labor — E&M books digital as an outside purchase
+    // (Cybake #347528: Digital 793.80 under Outside at 0%). They land in the
+    // outside bucket below; press labor is only die/score/press-check hours.
+    pressLaborCost = pressHrs * (f.pressHourlyRate || 0);
   } else {
     makereadyHrs = (f.baseMakereadyHrsPerPlate || 0) * (f.makereadyDiff || 1) * plates;
     washupHrs = (f.washupHrsPerUnit || 0) * (f.washupDiff || 1) * plates;
@@ -362,31 +372,44 @@ export function computeClassic(
   const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
   const binderyHrs = cutterHrs + (f.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (f.packHrs || 0);
   const binderyLabor = binderyHrs * (f.binderyHourlyRate || 0);
+  // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
+  // labor — they ride the prep/materials bucket at Material markup below.
   const cartonSkidCost = (f.cartons || 0) * (f.cartonCost || 0) + (f.skids || 0) * (f.skidCost || 0);
-  const binderyCost = binderyLabor + cartonSkidCost;
+  const binderyCost = binderyLabor;
+  const prepCostWithMaterials = prepCost + cartonSkidCost;
 
   // ── Outside / pass-through (Screen 9) ──
-  const outsideCost = f.outsidePurchases.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const digitalClickTotal = digitalClickCost + digitalVDCost + digitalVDSetupCost;
+  const outsideCost =
+    f.outsidePurchases.reduce((s, p) => s + (Number(p.amount) || 0), 0) + digitalClickTotal;
   const freightAndAdditional = (f.freight || 0) + (f.additionalCosts || 0);
 
   // ── Sellings (E&M cost sheet) ──
-  const mk = (pct: number) => 1 + (pct || 0) / 100;
-  const paperSelling = paperCost * mk(f.markupPaperPct);
-  const prepSelling = prepCost * mk(f.markupMaterialPct);
-  const pressSelling = pressCost * mk(f.markupLaborPct);
-  const binderySelling = binderyCost * mk(f.markupLaborPct);
-  const outsideSelling = outsideCost * mk(f.markupOutsidePct);
+  // E&M charges a $1 minimum markup on any nonzero cost line (Cybake #347528:
+  // Outside 843.80 at 0% still shows +1.00).
+  const mk = (cost: number, pct: number) =>
+    cost > 0 ? cost + Math.max((cost * (pct || 0)) / 100, 1) : 0;
+  const paperSelling = mk(paperCost, f.markupPaperPct);
+  const prepSelling = mk(prepCostWithMaterials, f.markupMaterialPct);
+  const pressSelling = mk(pressCost, f.markupLaborPct);
+  const binderySelling = mk(binderyCost, f.markupLaborPct);
+  const outsideSelling = mk(outsideCost, f.markupOutsidePct);
 
-  const totalCost = paperCost + prepCost + pressCost + binderyCost + outsideCost + freightAndAdditional;
+  const totalCost = paperCost + prepCostWithMaterials + pressCost + binderyCost + outsideCost + freightAndAdditional;
+  // Commission is % of total COST, not of selling — verified against Cybake
+  // #347528 (117.33 = 10% × 1,173.28) — added on top like a markup line.
+  const commission = totalCost * ((f.commissionPct || 0) / 100);
   const sellingSubtotal =
     paperSelling + prepSelling + pressSelling + binderySelling + outsideSelling + freightAndAdditional;
-  const commission = sellingSubtotal * ((f.commissionPct || 0) / 100);
   const total = sellingSubtotal + commission;
 
   return {
     isDigital,
     pressSheets, mrWasteSheets, orderSheets, paperCost, paperSelling,
-    prepHours, prepLabor, prepMaterials, prepCost, prepSelling,
+    prepHours, prepLabor,
+    prepMaterials: prepMaterials + cartonSkidCost,
+    prepCost: prepCostWithMaterials,
+    prepSelling,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,

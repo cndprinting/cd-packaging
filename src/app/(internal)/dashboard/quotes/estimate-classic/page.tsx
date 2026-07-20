@@ -377,6 +377,9 @@ export default function ClassicEstimatorPage() {
           <Row label="Size To Order — Height"><Num value={form.sheetHeightOrder} onChange={(v) => set("sheetHeightOrder", v)} /></Row>
           <Row label="Number Of Pages"><Num value={form.numPages} onChange={(v) => set("numPages", v)} step={1} /></Row>
           <Row label="Number Up"><Num value={form.numberUp} onChange={(v) => set("numberUp", v)} step={1} /></Row>
+          <Row label="Sheets per Piece"><Num value={form.sheetsPerPiece} onChange={(v) => set("sheetsPerPiece", v)} step={1} /></Row>
+          <Row label="Out of Parent"><Num value={form.sheetsOutOfParent} onChange={(v) => set("sheetsOutOfParent", v)} step={1} /></Row>
+          <Row label="Bind Waste Shts"><Num value={form.bindWasteSheets} onChange={(v) => set("bindWasteSheets", v)} step={1} /></Row>
           <Row label="Bleed Allowance" wide><Txt value={form.bleedAllowance} onChange={(v) => set("bleedAllowance", v)} /></Row>
         </div>
         <div>
@@ -676,7 +679,7 @@ export default function ClassicEstimatorPage() {
                 hours={calc.prepHours} cost={calc.prepCost} markup={`${form.markupMaterialPct}%`} selling={calc.prepSelling} />
               {calc.isDigital ? (
                 <CostRow section="PRESS (DIGITAL)"
-                  detail={`${calc.digitalClickSheets} clicks @ $${calc.digitalClickRate.toFixed(4)}${form.digitalVariableData ? " +VD" : ""}${form.dieCost ? ` / die ${money(form.dieCost)}` : ""}`}
+                  detail={`die/score/check hrs only — clicks under OUTSIDE${form.dieCost ? ` / die ${money(form.dieCost)}` : ""}`}
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               ) : (
                 <CostRow section="PRESS"
@@ -686,7 +689,8 @@ export default function ClassicEstimatorPage() {
               <CostRow section="BINDERY"
                 detail={`Cut ${calc.cutterHrs.toFixed(2)} / Trim ${form.trimHrs.toFixed(2)} / Drill ${calc.drillHrs.toFixed(2)} / Hand ${(calc.handOp1Hrs + calc.handOp2Hrs).toFixed(2)} / Pack ${form.packHrs.toFixed(2)}${calc.cartonSkidCost ? ` · ctns ${money(calc.cartonSkidCost)}` : ""}`}
                 hours={calc.binderyHrs} cost={calc.binderyCost} markup={`${form.markupLaborPct}%`} selling={calc.binderySelling} />
-              <CostRow section="OUTSIDE" detail={`${form.outsidePurchases.length} item(s)`}
+              <CostRow section="OUTSIDE"
+                detail={`${form.outsidePurchases.length} item(s)${calc.isDigital ? ` + ${calc.digitalClickSheets} clicks @ $${calc.digitalClickRate.toFixed(4)}${form.digitalVariableData ? " +VD" : ""} = ${money(calc.digitalClickCost + calc.digitalVDCost + calc.digitalVDSetupCost)}` : ""}`}
                 cost={calc.outsideCost} markup={`${form.markupOutsidePct}%`} selling={calc.outsideSelling} />
               <CostRow section="FREIGHT + ADDL" detail="pass-through"
                 cost={calc.freightAndAdditional} markup="—" selling={calc.freightAndAdditional} />
