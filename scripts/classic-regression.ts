@@ -206,5 +206,22 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("manual trim hrs override", manualTrim.partCalcs[0].trimHrsUsed, 3, 0);
 }
 
+// ══ Cuts auto-derived from Screen 6 sheet info (Mary 7/20) ══
+{
+  // 8-up from a 2-out parent: cuts = (2-1) + 8 + 3 = 12; trim + waste follow
+  const f = defaultClassicForm();
+  f.quantity = 8000; f.numberUp = 8; f.sheetsOutOfParent = 2; f.pricePerM = 100;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Cuts from sheet info ──");
+  check("cuts auto (1 + 8 + 3)", c.partCalcs[0].cutsUsed, 12, 0);
+  // trim auto: 1,000 press sheets / 500 = 2 lifts × 12 cuts × 8s = 192s = 0.0533hr × 0.5 diff
+  check("trim hrs from derived cuts", c.partCalcs[0].trimHrsUsed, 0.0267, 0.0005);
+  check("cutting counts as waste pass", c.partCalcs[0].equipmentPasses, 1, 0);
+  const noCut = computeClassic({ ...f, numberUp: 1, sheetsOutOfParent: 1 }, digitalStd);
+  check("1-up 1-out = no cutting", noCut.partCalcs[0].cutsUsed, 0, 0);
+  const manual = computeClassic({ ...f, cutsToFinalSize: 9 }, digitalStd);
+  check("typed cut count overrides auto", manual.partCalcs[0].cutsUsed, 9, 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -853,6 +853,9 @@ function ClassicEstimatorContent() {
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
+            {/* Cuts derive from the sheet info above (Mary 7/20) — number-up
+                and out-of-parent drive the cutting math on Pg 8. */}
+            <Readout label="Cuts To Final (Auto)" value={String(pcalc.cutsUsed)} />
             <Row label="Bleed Allowance" wide><Txt value={pv("bleedAllowance")} onChange={(v) => setP("bleedAllowance", v)} /></Row>
           </div>
           <div>
@@ -1099,7 +1102,8 @@ function ClassicEstimatorContent() {
             <Readout label="Load Cutter Hrs (auto)" value={hrs(pcalc.cutterHrs)} />
             {/* Trim auto-computes from cuts × sec/cut × cutting diff, like
                 E&M did once Mary entered the difficulty (7/20). */}
-            <Row label="Cuts To Final Size"><Num value={pv("cutsToFinalSize")} onChange={(v) => setP("cutsToFinalSize", v)} step={1} /></Row>
+            <Row label="Cuts To Final (0 = Auto)"><Num value={pv("cutsToFinalSize")} onChange={(v) => setP("cutsToFinalSize", v)} step={1} /></Row>
+            <Readout label="Cuts Used (From Pg 6 Sheet)" value={String(pcalc.cutsUsed)} />
             <Row label="Sheets Per Lift"><Num value={pv("sheetsPerLift")} onChange={(v) => setP("sheetsPerLift", v)} step={50} /></Row>
             <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
             <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>

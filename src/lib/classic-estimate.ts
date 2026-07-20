@@ -326,6 +326,8 @@ export interface PartCalc {
   wrapHrsUsed: number;
   trimHrsUsed: number;      // auto from cuts × sec/cut × diff unless overridden
   equipmentPasses: number;  // waste-formula equipment pass count in effect
+  cutsAuto: number;         // cuts derived from Screen 6 sheet info (out-of-parent + number-up)
+  cutsUsed: number;         // Mary's typed cut count overrides the auto
 }
 
 /** Paper + press + bindery math for ONE part at the job quantity.
@@ -341,12 +343,22 @@ function computePart(
   // ── Paper (Screen 6, waste from Screen 7) ──
   const sheetsPerPiece = Math.max(1, p.sheetsPerPiece || 1);
   const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
+  // Cuts to final size — auto-derived from Screen 6's sheet info (Mary 7/20:
+  // "cutting should get summed based on the sheet info"). Guillotine cuts for
+  // an N-up layout ≈ N + 3 (4 edge trims + strip/cross cuts), plus parent→press
+  // separation cuts (out - 1). 1-up straight from a 1-out sheet = no cutting.
+  const outOfParentForCuts = Math.max(1, p.sheetsOutOfParent || 1);
+  const cutsAuto = (numberUp > 1 || outOfParentForCuts > 1)
+    ? (outOfParentForCuts - 1) + numberUp + 3
+    : 0;
+  const cutsUsed = (p.cutsToFinalSize || 0) > 0 ? p.cutsToFinalSize : cutsAuto;
+
   // Press waste — Mary's E&M rule (7/20): 100 sheets per color per side +
   // 100 per piece of equipment the job passes through. Passes auto-count from
   // the operations on the job; every knob is editable and a typed waste-sheet
   // count overrides the whole formula.
   const passesAuto =
-    ((p.trimHrs || 0) > 0 || (p.cutsToFinalSize || 0) > 0 ? 1 : 0) + // cutting
+    ((p.trimHrs || 0) > 0 || cutsUsed > 0 ? 1 : 0) + // cutting
     ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
     ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
     (p.folderConfig || p.binderyOperation === 3 ? 1 : 0) +           // folding
@@ -437,9 +449,10 @@ function computePart(
   const padHrsUsed = opHrs(p.padIn, p.padHrs || 0);
   const wrapHrsUsed = opHrs(p.wrapIn, p.wrapHrs || 0);
   // Trim-to-size: E&M computed it once the difficulty was entered (Mary 7/20).
-  // Auto = lifts × cuts-to-final × sec/cut × cutting diff; typed hours override.
-  const trimAuto = (p.cutsToFinalSize || 0) > 0
-    ? (Math.ceil(pressSheets / Math.max(1, p.sheetsPerLift || 500)) * p.cutsToFinalSize * (p.cutSecPerCut || 8) / 3600) * (p.cuttingDiff || 1)
+  // Auto = lifts × cuts (from Screen 6 sheet info, or her override) × sec/cut
+  // × cutting diff; typed hours override everything.
+  const trimAuto = cutsUsed > 0
+    ? (Math.ceil(pressSheets / Math.max(1, p.sheetsPerLift || 500)) * cutsUsed * (p.cutSecPerCut || 8) / 3600) * (p.cuttingDiff || 1)
     : 0;
   const trimHrsUsed = (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
   const binderyHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
@@ -467,6 +480,7 @@ function computePart(
     paperLbs, cartonsAuto, cartonsUsed,
     bandHrsUsed, padHrsUsed, wrapHrsUsed,
     trimHrsUsed, equipmentPasses,
+    cutsAuto, cutsUsed,
   };
 }
 
