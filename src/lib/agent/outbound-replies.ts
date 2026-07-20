@@ -83,7 +83,13 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
       if (!lead) continue; // not an outbound reply — leave it alone
 
       try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
-      const preview = (m.bodyPreview || "").trim();
+      // Full new-content text, not the ~255-char bodyPreview — a question late in
+      // the message must reach the classifier (Benjy 7/19, Gino at St.Agave).
+      let preview = (m.bodyPreview || "").trim();
+      try {
+        const fullMsg: any = await client.api(`/users/${mb}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get();
+        if (fullMsg?.uniqueBody?.content?.trim()) preview = fullMsg.uniqueBody.content.trim();
+      } catch { /* fall back to preview */ }
 
       // Out-of-office auto-reply → the address is verified and the human just
       // isn't there. Keep the sequence on its normal cadence; no flags. Benjy 7/13.
@@ -98,7 +104,7 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
       // Alert all three owners (Benjy, Nitay, Albert) on every reply, regardless
       // of which mailbox the outreach was sent from.
       const notify = (subject: string, note: string) =>
-        sendEmail({ from: mb, to: OWNERS, subject: noEmDash(subject), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${note}</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote></div>`) });
+        sendEmail({ from: mb, to: OWNERS, subject: noEmDash(subject), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${note}</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.slice(0, 1500).replace(/</g, "&lt;")}</blockquote></div>`) });
 
       if (cls === "unsubscribe") {
         await prisma.lead.update({ where: { id: lead.id }, data: { outreachStatus: "unsubscribed", agentHold: true, outreachNextAt: null } });

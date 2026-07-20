@@ -170,11 +170,21 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
     try { await prisma.lead.update({ where: { id: lead.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime) } }); } catch { /* ignore */ }
 
+    // Pull the FULL new-content text (uniqueBody) before ANY classification or
+    // drafting. bodyPreview truncates at ~255 chars and once hid a freight
+    // question mid-message (Benjy 7/19, Gino at St.Agave) — the agent must read
+    // the whole message, never the preview.
+    let fullText = (m.bodyPreview || "").trim();
+    try {
+      const fullMsg: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get();
+      if (fullMsg?.uniqueBody?.content?.trim()) fullText = fullMsg.uniqueBody.content.trim();
+    } catch { /* fall back to preview */ }
+
     // A pure pleasantry on an already-declined lead ("no problem, thanks for
     // letting me know") ends the conversation — log it quietly, never draft a
     // reply or task the owners (Benjy 7/16, Jo at No.1 Flowers).
     if (lead.agentStatus === "declined") {
-      const txt = (m.bodyPreview || "").split(/On \w{3}, \w{3} \d|From: /)[0].trim(); // strip quoted history
+      const txt = fullText.split(/On \w{3}, \w{3} \d|From: /)[0].trim(); // strip quoted history
       const pleasantry = txt.length < 350 && !txt.includes("?") && /thank|thanks|no problem|appreciate|understood|got it|all good|take care|okay|ok/i.test(txt) && !/quote|price|order|need|can you|could you|would you|spec|size|change/i.test(txt);
       if (pleasantry) {
         try { await prisma.lead.update({ where: { id: lead.id }, data: { commentary: `${lead.commentary || ""}
@@ -196,9 +206,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // MailerCity lane: they answered the qualifying questions → capture and hand
     // to the owners. The agent never quotes these or involves Mary.
     if (lead.source === "mailercity") {
-      let reply = (m.bodyPreview || "").trim();
-      try { const full: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get(); if (full?.uniqueBody?.content) reply = full.uniqueBody.content.trim(); } catch { /* fall back */ }
-      await onMailerCityReply(prisma, lead, reply);
+      await onMailerCityReply(prisma, lead, fullText);
       handled++;
       continue;
     }
@@ -206,7 +214,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Customer sent what Mary was waiting on (art file / dieline / answer) →
     // forward it to Mary with attachments and resume the quote clock.
     if (lead.agentStatus === "awaiting_customer_file") {
-      const preview = (m.bodyPreview || "").trim();
+      const preview = fullText.slice(0, 1500);
       await agentMarySend(prisma, lead, {
         body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} sent over what you needed${m.hasAttachments ? " (attached)" : ""}. Over to you for the quote. Thanks,<br>${leadAgentFirst(lead)}</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
         copyAttachmentsFrom: m.id,
@@ -219,7 +227,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // CASE 0: we're already quoting (Mary has it / owners reviewing). A customer
     // reply here is usually artwork or more detail — forward it to Mary, copy owners.
     if (lead.agentStatus === "awaiting_mary" || lead.agentStatus === "quote_received") {
-      const preview = (m.bodyPreview || "").trim();
+      const preview = fullText.slice(0, 1500);
       await agentMarySend(prisma, lead, {
         body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Hi Mary,</p><p>${lead.companyName}${lead.contactName ? ` (${lead.contactName})` : ""} just sent this through${m.hasAttachments ? " (artwork attached)" : ""}. Please factor it into the quote. Thanks,<br>${leadAgentFirst(lead)}</p>${preview ? `<blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${preview.replace(/</g, "&lt;")}</blockquote>` : ""}</div>`,
         copyAttachmentsFrom: m.id,
@@ -234,17 +242,17 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       let res: { merged: string; quotable: boolean; reason: string } | null = null;
       try {
         const { mergeCustomerAnswers } = await import("@/lib/agent/claude");
-        res = await mergeCustomerAnswers({ productName: lead.productCategory || "project", priorBrief: lead.commentary || "", reply: m.bodyPreview || "" });
+        res = await mergeCustomerAnswers({ productName: lead.productCategory || "project", priorBrief: lead.commentary || "", reply: fullText });
       } catch { /* fall back to raw append */ }
       const commentary = res?.merged
-        ? `${res.merged}\n\n[Customer's reply, verbatim] ${m.bodyPreview || ""}`.slice(0, 4000)
-        : `${lead.commentary || ""}\n\n[Customer answered] ${m.bodyPreview || ""}`.slice(0, 4000);
+        ? `${res.merged}\n\n[Customer's reply, verbatim] ${fullText}`.slice(0, 4000)
+        : `${lead.commentary || ""}\n\n[Customer answered] ${fullText}`.slice(0, 4000);
 
       // Not actually a print/packaging quote (vendor pitch, misrouted, spam)?
       // Do NOT hand it to Mary — flag it for the owners to close out.
       if (res && res.quotable === false) {
         await prisma.lead.update({ where: { id: lead.id }, data: { commentary, agentStatus: "disqualified", agentNextAt: null, pipelineStage: "LOST", stage: "Not a quote" } });
-        await agentSend({ to: OWNERS, subject: `Not a quote: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>Heads up - <strong>${lead.companyName}</strong> replied, and it is not a print or packaging inquiry, so I did not send it to Mary.</p><p><strong>Why:</strong> ${res.reason || "the sender is not seeking a printing or packaging quote."}</p><p><strong>Their reply:</strong> "${(m.bodyPreview || "").slice(0, 500)}"</p><p>Safe to close this one out (move to Lost) whenever.</p></div>` });
+        await agentSend({ to: OWNERS, subject: `Not a quote: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p>Heads up - <strong>${lead.companyName}</strong> replied, and it is not a print or packaging inquiry, so I did not send it to Mary.</p><p><strong>Why:</strong> ${res.reason || "the sender is not seeking a printing or packaging quote."}</p><p><strong>Their reply:</strong> "${fullText.slice(0, 500)}"</p><p>Safe to close this one out (move to Lost) whenever.</p></div>` });
         handled++;
         continue;
       }
@@ -264,7 +272,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       const claude = getClaude();
       if (claude) {
         const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off with just the name "${leadAgentName(lead)}" (a company signature is appended automatically). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote. If the customer asks about timing, our standard lead time is 2 to 3 weeks after we receive payment and final approval of the quote, and we can prioritize when they have a deadline.`;
-        const u = `Customer ${lead.companyName} replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${m.bodyPreview || ""}`;
+        const u = `Customer ${lead.companyName} replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${fullText}`;
         const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system: sys, messages: [{ role: "user", content: u }] });
         const t: any = (r.content || []).find((b: any) => b.type === "text");
         draft = t?.text?.trim() || null;
@@ -275,12 +283,12 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // agent answers it directly and keeps the cadence; only substantive replies
     // (questions, changes, go-aheads) become an owner task (Benjy 7/19, Gino).
     let cCls: { kind: string; reason: string } | null = null;
-    try { const { classifyCustomerReply } = await import("@/lib/agent/claude"); cCls = await classifyCustomerReply({ company: lead.companyName, reply: m.bodyPreview || "" }); } catch { /* review path */ }
+    try { const { classifyCustomerReply } = await import("@/lib/agent/claude"); cCls = await classifyCustomerReply({ company: lead.companyName, reply: fullText }); } catch { /* review path */ }
     if (cCls?.kind === "benign" && draft) {
       await agentCustomerSend(prisma, lead, { body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">${draft}</div>` });
       const nextBenign = new Date(); nextBenign.setDate(nextBenign.getDate() + 12);
       await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", agentNextAt: nextBenign, agentDraft: null, commentary: `${lead.commentary || ""}
-[Customer replied - benign] ${(m.bodyPreview || "").slice(0, 300)}
+[Customer replied - benign] ${fullText.slice(0, 500)}
 [Agent] Acknowledged directly (${cCls.reason || "no action needed"}); next check-in ${nextBenign.toISOString().slice(0, 10)}.`.slice(0, 8000) } });
       handled++;
       continue;
@@ -289,12 +297,12 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Stop the chase, record the reply + draft, alert owners to approve a send.
     await prisma.lead.update({
       where: { id: lead.id },
-      data: { agentStatus: "replied", agentNextAt: null, agentDraft: draft, commentary: `${lead.commentary || ""}\n\n[Customer replied] ${m.bodyPreview || ""}`.slice(0, 4000) },
+      data: { agentStatus: "replied", agentNextAt: null, agentDraft: draft, commentary: `${lead.commentary || ""}\n\n[Customer replied] ${fullText}`.slice(0, 4000) },
     });
     const link = `${BASE}/agent?id=${lead.id}&token=${lead.agentToken}&do=reply`;
     const body = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">
       <p><strong>${lead.companyName}</strong> replied to the quote:</p>
-      <blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${(m.bodyPreview || "").replace(/</g, "&lt;")}</blockquote>
+      <blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${fullText.slice(0, 1500).replace(/</g, "&lt;")}</blockquote>
       ${draft ? `<p>Suggested reply (review &amp; edit before sending):</p><pre style="white-space:pre-wrap;background:#f7f7f7;padding:10px;border-radius:6px;font-family:inherit;">${draft.replace(/<[^>]+>/g, "").replace(/</g, "&lt;")}</pre>` : "<p>No draft (Claude not enabled).</p>"}
       <p><a href="${link}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">Review &amp; send reply</a></p></div>`;
     await agentSend({ to: OWNERS, subject: `Lead replied: ${lead.companyName}`, body });
