@@ -831,10 +831,12 @@ function ClassicEstimatorContent() {
         <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
           <div>
             <SectionTitle>Sheet</SectionTitle>
-            <Row label="Size To Run — Width"><Num value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
-            <Row label="Size To Run — Height"><Num value={pv("sheetHeightRun")} onChange={(v) => setP("sheetHeightRun", v)} /></Row>
-            <Row label="Size To Order — Width"><Num value={pv("sheetWidthOrder")} onChange={(v) => setP("sheetWidthOrder", v)} /></Row>
+            {/* Mary 7/20: Size to Order comes FIRST, and each block is
+                height-then-width, matching her E&M entry order. */}
             <Row label="Size To Order — Height"><Num value={pv("sheetHeightOrder")} onChange={(v) => setP("sheetHeightOrder", v)} /></Row>
+            <Row label="Size To Order — Width"><Num value={pv("sheetWidthOrder")} onChange={(v) => setP("sheetWidthOrder", v)} /></Row>
+            <Row label="Size To Run — Height"><Num value={pv("sheetHeightRun")} onChange={(v) => setP("sheetHeightRun", v)} /></Row>
+            <Row label="Size To Run — Width"><Num value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
             <Row label="Number Of Pages"><Num value={pv("numPages")} onChange={(v) => setP("numPages", v)} step={1} /></Row>
             <Row label="Number Up"><Num value={pv("numberUp")} onChange={(v) => setP("numberUp", v)} step={1} /></Row>
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
