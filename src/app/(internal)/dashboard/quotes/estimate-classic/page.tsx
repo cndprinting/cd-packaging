@@ -504,12 +504,15 @@ function ClassicEstimatorContent() {
         binderyScore: (form.scorePerfHrs || 0) > 0,
         binderyDrill: (form.drillHoles || 0) > 0,
         binderyGlue: false,
-        binderyWrap: (form.skids || 0) > 0,
+        binderyWrap: !!(form.wrapIn || (form.wrapHrs || 0) > 0 || (form.skids || 0) > 0),
         binderyNotes: [
           form.folderConfig ? `Folder: ${form.folderConfig}` : "",
           form.handOp1.description ? `Hand: ${form.handOp1.description}` : "",
           form.handOp2.description ? `Hand: ${form.handOp2.description}` : "",
           (form.drillHoles || 0) > 0 ? `${form.drillHoles} drill holes` : "",
+          form.bandIn ? `Band: ${form.bandIn}` : "",
+          form.padIn ? `Pad: ${form.padIn}` : "",
+          form.wrapIn ? `Wrap: ${form.wrapIn}` : "",
           // Multi-part summary — one line per part so the ticket shows passes
           ...(numParts > 1
             ? allParts.map((p, i) =>
@@ -1103,6 +1106,13 @@ function ClassicEstimatorContent() {
                 </div>
               );
             })}
+            <SectionTitle>Band / Pad / Wrap</SectionTitle>
+            <Row label="Band In" wide><Txt value={pv("bandIn")} onChange={(v) => setP("bandIn", v)} placeholder="e.g. band in 50s" /></Row>
+            <Row label="Band Hrs"><Num value={pv("bandHrs")} onChange={(v) => setP("bandHrs", v)} /></Row>
+            <Row label="Pad In" wide><Txt value={pv("padIn")} onChange={(v) => setP("padIn", v)} placeholder="e.g. pads of 100" /></Row>
+            <Row label="Pad Hrs"><Num value={pv("padHrs")} onChange={(v) => setP("padHrs", v)} /></Row>
+            <Row label="Wrap In" wide><Txt value={pv("wrapIn")} onChange={(v) => setP("wrapIn", v)} placeholder="e.g. wrap in 100s, kraft" /></Row>
+            <Row label="Wrap Hrs"><Num value={pv("wrapHrs")} onChange={(v) => setP("wrapHrs", v)} /></Row>
             <SectionTitle>Carton Pack</SectionTitle>
             <Row label="Cartons"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
             <Row label="  @ $ each"><Num value={pv("cartonCost")} onChange={(v) => setP("cartonCost", v)} /></Row>

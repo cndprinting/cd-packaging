@@ -66,6 +66,7 @@ export const PART_FIELD_KEYS = [
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
+  "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs",
 ] as const;
 
 export type ClassicPart = Pick<ClassicForm, (typeof PART_FIELD_KEYS)[number]>;
@@ -184,6 +185,13 @@ export interface ClassicForm {
   skidCost: number;
   packHrs: number;
   binderyHourlyRate: number;
+  // Band / Pad / Wrap (E&M Screen 8 trio — Mary 7/20 asked for Wrap In detail)
+  bandIn: string;  // e.g. "band in 50s"
+  bandHrs: number;
+  padIn: string;   // e.g. "pads of 100"
+  padHrs: number;
+  wrapIn: string;  // e.g. "wrap in 100s, kraft"
+  wrapHrs: number;
 
   // ── Multi-part: parts 2..N (Screen 6-8 field subset each) ──
   parts: ClassicPart[];
@@ -242,6 +250,7 @@ export function defaultClassicForm(): ClassicForm {
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
     binderyHourlyRate: 65,
+    bandIn: "", bandHrs: 0, padIn: "", padHrs: 0, wrapIn: "", wrapHrs: 0,
     parts: [],
     additionalCosts: 0, freight: 0, outsidePurchases: [],
     deliveryZone: "", quoteNotes: "",
@@ -373,7 +382,8 @@ function computePart(
   const op1 = p.handOp1, op2 = p.handOp2;
   const handOp1Hrs = op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0;
   const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
-  const binderyHrs = cutterHrs + (p.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0);
+  const binderyHrs = cutterHrs + (p.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
+    + (p.bandHrs || 0) + (p.padHrs || 0) + (p.wrapHrs || 0);
   const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
