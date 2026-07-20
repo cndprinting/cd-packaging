@@ -103,7 +103,7 @@ export default function QuotesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3"><DollarSign className="h-6 w-6 text-brand-600" /><div><h1 className="text-2xl font-bold text-gray-900">Quotes & Estimates</h1><p className="text-sm text-gray-500">{quotes.length} quotes</p></div></div>
-        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button variant="outline" className="gap-2" onClick={() => { setError(""); setShowOutsource(true); }}><Package className="h-4 w-4" />Outsource</Button><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
+        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate-classic"><Button className="gap-2 bg-amber-600 hover:bg-amber-700 text-white">Classic Estimator (E&amp;M)</Button></Link><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button variant="outline" className="gap-2" onClick={() => { setError(""); setShowOutsource(true); }}><Package className="h-4 w-4" />Outsource</Button><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
