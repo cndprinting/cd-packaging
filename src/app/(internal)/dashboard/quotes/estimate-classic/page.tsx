@@ -168,6 +168,13 @@ function ClassicEstimatorContent() {
             inkFactorMsqinPerLb: Number(s.coverageColorCoated) || f.inkFactorMsqinPerLb,
             skidCost: Number(s.skidCost) || f.skidCost,
             cartonCost: Number(s.carton1Cost) || f.cartonCost,
+            // E&M-seeded standards found in PlantStandard (Benjy 7/20) — these
+            // replace the hand-picked placeholders:
+            inkDollarsPerLb: Number(s.inkColorPerLb) || f.inkDollarsPerLb,           // $10.81/lb
+            prepressRate: Number(s.artworkRate) || f.prepressRate,                    // $60/hr
+            drillHrsPerHole: Number(s.drillTimePerHoleSec) > 0 ? Number(s.drillTimePerHoleSec) / 3600 : f.drillHrsPerHole, // 4 sec/hole
+            bundleRatePerHr: Number(s.wrapLaborMinutesPerBundle) > 0 ? 60 / Number(s.wrapLaborMinutesPerBundle) : f.bundleRatePerHr, // 1 min/bundle = 60/hr
+            binderyHourlyRate: Number(s.trimmingRate) || f.binderyHourlyRate,         // $45/hr trimming rate
           }));
         }
       })
