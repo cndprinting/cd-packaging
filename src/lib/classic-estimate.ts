@@ -66,7 +66,7 @@ export const PART_FIELD_KEYS = [
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
-  "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs",
+  "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs", "bundleRatePerHr",
 ] as const;
 
 export type ClassicPart = Pick<ClassicForm, (typeof PART_FIELD_KEYS)[number]>;
@@ -186,13 +186,16 @@ export interface ClassicForm {
   skidCost: number;
   packHrs: number;
   binderyHourlyRate: number;
-  // Band / Pad / Wrap (E&M Screen 8 trio — Mary 7/20 asked for Wrap In detail)
-  bandIn: string;  // e.g. "band in 50s"
-  bandHrs: number;
-  padIn: string;   // e.g. "pads of 100"
-  padHrs: number;
-  wrapIn: string;  // e.g. "wrap in 100s, kraft"
-  wrapHrs: number;
+  // Band / Pad / Wrap (E&M Screen 8 trio — Mary 7/20). The "In" value is the
+  // pieces-per-bundle count; hours AUTO-compute (bundles ÷ bundle rate) with
+  // the Hrs field as a manual override (0 = auto), like E&M.
+  bandIn: string;  // pieces per band, e.g. "50" (extra text tolerated)
+  bandHrs: number; // 0 = auto
+  padIn: string;   // pieces per pad, e.g. "100"
+  padHrs: number;  // 0 = auto
+  wrapIn: string;  // pieces per wrap, e.g. "100 kraft"
+  wrapHrs: number; // 0 = auto
+  bundleRatePerHr: number; // bundles processed per hour (shared band/pad/wrap standard)
 
   // ── Multi-part: parts 2..N (Screen 6-8 field subset each) ──
   parts: ClassicPart[];
@@ -252,6 +255,8 @@ export function defaultClassicForm(): ClassicForm {
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
     binderyHourlyRate: 65,
     bandIn: "", bandHrs: 0, padIn: "", padHrs: 0, wrapIn: "", wrapHrs: 0,
+    bundleRatePerHr: 200, // PLACEHOLDER standard — awaiting Mary's E&M figure
+
     parts: [],
     additionalCosts: 0, freight: 0, outsidePurchases: [],
     deliveryZone: "", quoteNotes: "",
@@ -302,6 +307,9 @@ export interface PartCalc {
   paperLbs: number;     // order sheets × lbs-per-M
   cartonsAuto: number;  // ceil(paperLbs / 35) — Mary's 35-lb max rule
   cartonsUsed: number;  // manual override if cartons > 0, else auto
+  bandHrsUsed: number;  // auto (bundles ÷ rate) unless manually overridden
+  padHrsUsed: number;
+  wrapHrsUsed: number;
 }
 
 /** Paper + press + bindery math for ONE part at the job quantity.
@@ -386,8 +394,20 @@ function computePart(
   const op1 = p.handOp1, op2 = p.handOp2;
   const handOp1Hrs = op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0;
   const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
+  // Band/Pad/Wrap: "In" = pieces per bundle → bundles = ceil(qty / in);
+  // auto hrs = bundles ÷ bundle rate; a typed Hrs value overrides (0 = auto).
+  const perBundle = (s: string) => parseFloat(String(s || "").replace(/[^0-9.]/g, "")) || 0;
+  const rate = p.bundleRatePerHr || 0;
+  const opHrs = (inStr: string, manual: number) => {
+    if (manual > 0) return manual;
+    const size = perBundle(inStr);
+    return size > 0 && rate > 0 ? Math.ceil(qty / size) / rate : 0;
+  };
+  const bandHrsUsed = opHrs(p.bandIn, p.bandHrs || 0);
+  const padHrsUsed = opHrs(p.padIn, p.padHrs || 0);
+  const wrapHrsUsed = opHrs(p.wrapIn, p.wrapHrs || 0);
   const binderyHrs = cutterHrs + (p.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
-    + (p.bandHrs || 0) + (p.padHrs || 0) + (p.wrapHrs || 0);
+    + bandHrsUsed + padHrsUsed + wrapHrsUsed;
   const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
@@ -409,6 +429,7 @@ function computePart(
     cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
     cartonSkidCost, binderyCost,
     paperLbs, cartonsAuto, cartonsUsed,
+    bandHrsUsed, padHrsUsed, wrapHrsUsed,
   };
 }
 

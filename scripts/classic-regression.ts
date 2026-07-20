@@ -170,5 +170,19 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("carton cost uses effective count", manual.cartonSkidCost, 6 * 0.93);
 }
 
+// ══ Band/Pad/Wrap auto hours — bundles ÷ bundle rate, manual override ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 10000; f.numberUp = 1; f.cutterSheetsPerHr = 0;
+  f.wrapIn = "100 kraft"; // 100 pcs/bundle → 100 bundles ÷ 200/hr = 0.5 hr
+  f.binderyHourlyRate = 65;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Band/Pad/Wrap auto hours ──");
+  check("wrap auto hrs (100 bundles ÷ 200/hr)", c.partCalcs[0].wrapHrsUsed, 0.5);
+  check("wrap hrs in bindery labor", c.binderyCost, 0.5 * 65);
+  const manual = computeClassic({ ...f, wrapHrs: 2 }, digitalStd);
+  check("manual wrap hrs override", manual.partCalcs[0].wrapHrsUsed, 2);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

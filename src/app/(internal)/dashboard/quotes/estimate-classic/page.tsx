@@ -1108,12 +1108,18 @@ function ClassicEstimatorContent() {
               );
             })}
             <SectionTitle>Band / Pad / Wrap</SectionTitle>
-            <Row label="Band In" wide><Txt value={pv("bandIn")} onChange={(v) => setP("bandIn", v)} placeholder="e.g. band in 50s" /></Row>
-            <Row label="Band Hrs"><Num value={pv("bandHrs")} onChange={(v) => setP("bandHrs", v)} /></Row>
-            <Row label="Pad In" wide><Txt value={pv("padIn")} onChange={(v) => setP("padIn", v)} placeholder="e.g. pads of 100" /></Row>
-            <Row label="Pad Hrs"><Num value={pv("padHrs")} onChange={(v) => setP("padHrs", v)} /></Row>
-            <Row label="Wrap In" wide><Txt value={pv("wrapIn")} onChange={(v) => setP("wrapIn", v)} placeholder="e.g. wrap in 100s, kraft" /></Row>
-            <Row label="Wrap Hrs"><Num value={pv("wrapHrs")} onChange={(v) => setP("wrapHrs", v)} /></Row>
+            {/* "In" = pieces per bundle → hours auto-compute at the bundle
+                rate; typed Hrs overrides (0 = auto). Mary 7/20. */}
+            <Row label="Bundle Rate (Bundles/Hr)"><Num value={pv("bundleRatePerHr")} onChange={(v) => setP("bundleRatePerHr", v)} step={10} /></Row>
+            <Row label="Band In (Pcs/Bundle)" wide><Txt value={pv("bandIn")} onChange={(v) => setP("bandIn", v)} placeholder="e.g. 50" /></Row>
+            <Row label="Band Hrs (0 = Auto)"><Num value={pv("bandHrs")} onChange={(v) => setP("bandHrs", v)} /></Row>
+            <Readout label="Band Hrs Used" value={hrs(pcalc.bandHrsUsed)} />
+            <Row label="Pad In (Pcs/Bundle)" wide><Txt value={pv("padIn")} onChange={(v) => setP("padIn", v)} placeholder="e.g. 100" /></Row>
+            <Row label="Pad Hrs (0 = Auto)"><Num value={pv("padHrs")} onChange={(v) => setP("padHrs", v)} /></Row>
+            <Readout label="Pad Hrs Used" value={hrs(pcalc.padHrsUsed)} />
+            <Row label="Wrap In (Pcs/Bundle)" wide><Txt value={pv("wrapIn")} onChange={(v) => setP("wrapIn", v)} placeholder="e.g. 100 kraft" /></Row>
+            <Row label="Wrap Hrs (0 = Auto)"><Num value={pv("wrapHrs")} onChange={(v) => setP("wrapHrs", v)} /></Row>
+            <Readout label="Wrap Hrs Used" value={hrs(pcalc.wrapHrsUsed)} />
             <SectionTitle>Carton Pack</SectionTitle>
             {/* Mary 7/20: cartons auto-compute from paper weight, max 35 lbs
                 per carton; typing a count overrides the auto. */}
