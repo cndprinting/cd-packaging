@@ -15,10 +15,13 @@ import { Button } from "@/components/ui/button";
 import {
   BINDERY_OPERATIONS,
   ClassicForm,
+  ClassicPart,
   JOB_TYPES,
   JobType,
   computeClassic,
+  computeQuantityBreaks,
   defaultClassicForm,
+  defaultClassicPart,
 } from "@/lib/classic-estimate";
 import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
@@ -122,6 +125,16 @@ function ClassicEstimatorContent() {
   // a new one each time (mirrors the wizard's draftQuoteId flow).
   const [draftQuoteId, setDraftQuoteId] = useState<string | null>(draftIdFromUrl);
   const [draftQuoteNumber, setDraftQuoteNumber] = useState<string | null>(null);
+  // Multi-part: which part Screens 6-8 are editing (0 = Part 1 / flat fields)
+  const [partIndex, setPartIndex] = useState(0);
+  // Pickup Estimate (E&M reprint pickup) — searchable list of past Classic quotes
+  const [classicQuotes, setClassicQuotes] = useState<{ id: string; quoteNumber: string; customerName: string }[]>([]);
+  const [pickupValue, setPickupValue] = useState("");
+  const [pickupLoaded, setPickupLoaded] = useState<string | null>(null);
+  // Die inventory lookup (1,842 CuttingDie rows via /api/dies?search=)
+  const [dieOptions, setDieOptions] = useState<{ dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null }[]>([]);
+  // Stock picker — E&M paper history (PaperUsage: description + pricePerM + weight)
+  const [stockOptions, setStockOptions] = useState<{ description: string; pricePerM: number | null; weight: string | null; size: string | null }[]>([]);
   const [presses, setPresses] = useState<PressData[]>([]);
   const [companies, setCompanies] = useState<{ id: string; name: string; address?: string | null; city?: string | null; state?: string | null; zip?: string | null }[]>([]);
   const [standards, setStandards] = useState<(DigitalClickStandards & Record<string, unknown>) | null>(null);
@@ -165,7 +178,127 @@ function ClassicEstimatorContent() {
       .then((r) => r.json())
       .then((d) => setCompanies(d.companies || []))
       .catch(() => {});
+    // Pickup list — past Classic quotes only (estimateMethod flag from the list API).
+    fetch("/api/quotes")
+      .then((r) => r.json())
+      .then((d) => setClassicQuotes(
+        (d.quotes || [])
+          .filter((q: { estimateMethod?: string }) => q.estimateMethod === "classic")
+          .map((q: { id: string; quoteNumber: string; customerName: string }) => ({ id: q.id, quoteNumber: q.quoteNumber, customerName: q.customerName }))
+      ))
+      .catch(() => {});
+    // Stock picker source — E&M paper purchase history (has real prices/M).
+    fetch("/api/paper-usage")
+      .then((r) => r.json())
+      .then((d) => {
+        const seen = new Set<string>();
+        const opts: { description: string; pricePerM: number | null; weight: string | null; size: string | null }[] = [];
+        for (const rec of d.records || []) {
+          const desc = (rec.description || "").trim();
+          if (!desc || seen.has(desc.toLowerCase())) continue; // newest first — keep latest price
+          seen.add(desc.toLowerCase());
+          opts.push({ description: desc, pricePerM: Number(rec.pricePerM) || null, weight: rec.weight || null, size: rec.size || null });
+        }
+        setStockOptions(opts);
+      })
+      .catch(() => {});
   }, []);
+
+  // ── Multi-part plumbing ──────────────────────────────────────────────
+  const numParts = Math.max(1, Math.floor(form.numParts || 1));
+  // Keep parts[] padded to numParts-1 entries (never trim — Mary may flip back).
+  useEffect(() => {
+    setForm((f) => {
+      const need = Math.max(0, Math.floor(f.numParts || 1) - 1);
+      if ((f.parts?.length || 0) >= need) return f;
+      const parts = [...(f.parts || [])];
+      while (parts.length < need) parts.push(defaultClassicPart());
+      return { ...f, parts };
+    });
+  }, [form.numParts]);
+  useEffect(() => { setPartIndex((i) => Math.min(i, numParts - 1)); }, [numParts]);
+
+  // Part-aware read/write for Screen 6-8 fields: part 1 = flat form fields,
+  // part N = parts[N-2]. Everything else keeps using form/set directly.
+  const pv = useCallback(<K extends keyof ClassicPart>(k: K): ClassicPart[K] => {
+    if (partIndex === 0) return form[k];
+    return ((form.parts[partIndex - 1] || defaultClassicPart()) as ClassicPart)[k];
+  }, [form, partIndex]);
+  const patchP = useCallback((patch: Partial<ClassicPart>) => {
+    setForm((f) => {
+      if (partIndex === 0) return { ...f, ...patch };
+      const parts = [...(f.parts || [])];
+      parts[partIndex - 1] = { ...defaultClassicPart(), ...(parts[partIndex - 1] || {}), ...patch };
+      return { ...f, parts };
+    });
+  }, [partIndex]);
+  const setP = useCallback(<K extends keyof ClassicPart>(k: K, v: ClassicPart[K]) => {
+    patchP({ [k]: v } as Partial<ClassicPart>);
+  }, [patchP]);
+
+  // ── Die lookup: debounced search of the die inventory as Mary types ──
+  const activeDieNumber = String(
+    partIndex === 0 ? form.dieNumber : (form.parts[partIndex - 1]?.dieNumber ?? "")
+  );
+  useEffect(() => {
+    const q = activeDieNumber.trim();
+    if (q.length < 2) { setDieOptions([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/dies?search=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((d) => setDieOptions(d.dies || []))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [activeDieNumber]);
+  const dieMatch = useMemo(() => {
+    const q = activeDieNumber.trim().toLowerCase();
+    if (!q) return null;
+    return dieOptions.find((d) => d.dieNumber.toLowerCase() === q) || null;
+  }, [dieOptions, activeDieNumber]);
+
+  // ── Pickup Estimate: load a past Classic quote as a NEW estimate ──
+  const onPickup = useCallback((v: string) => {
+    setPickupValue(v);
+    const m = classicQuotes.find(
+      (q) => `${q.quoteNumber} — ${q.customerName}` === v || q.quoteNumber === v.trim()
+    );
+    if (!m) return;
+    fetch(`/api/quotes?id=${m.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const q = (d.quotes || [])[0];
+        if (!q) return;
+        let specs: { method?: string; classicForm?: Partial<ClassicForm> } = {};
+        try { specs = q.specs ? JSON.parse(q.specs) : {}; } catch {}
+        if (specs.method !== "classic" || !specs.classicForm) return;
+        const cf = specs.classicForm;
+        setForm({
+          ...defaultClassicForm(),
+          ...cf,
+          jobType: "Exact Reprint", // pickup default — Mary flips to Reprint w/Changes as needed
+          instructions: [`Picked up from ${m.quoteNumber}`, cf.instructions || ""].filter(Boolean).join("\n"),
+        });
+        // A pickup is a NEW estimate — never overwrite the source quote.
+        setDraftQuoteId(null);
+        setDraftQuoteNumber(null);
+        setSaved(null);
+        setPartIndex(0);
+        setPickupLoaded(m.quoteNumber);
+      })
+      .catch(() => {});
+  }, [classicQuotes]);
+
+  // ── Stock picker: exact description match prefills price/M + caliper ──
+  const onStockDescription = useCallback((v: string) => {
+    const m = stockOptions.find((o) => o.description.toLowerCase() === v.trim().toLowerCase());
+    if (!m) { setP("stockDescription", v); return; }
+    patchP({
+      stockDescription: v,
+      ...(m.pricePerM && m.pricePerM > 0 ? { pricePerM: m.pricePerM } : {}),
+      ...(m.weight ? { caliperBasisWeight: m.weight } : {}),
+    });
+  }, [stockOptions, setP, patchP]);
 
   // ── Pre-fill from a Quote Request (?from=<quoteRequestId>) — same source
   // and field mapping the wizard uses, translated to E&M vocabulary. ──
@@ -261,8 +394,18 @@ function ClassicEstimatorContent() {
   }, [companies]);
 
   const calc = useMemo(() => computeClassic(form, standards), [form, standards]);
+  // Quantity tiers — primary quantity first, then each additional quantity.
+  const quantityBreaks = useMemo(() => computeQuantityBreaks(form, standards), [form, standards]);
+  // Active part's computed detail for the Screen 6-8 readouts.
+  const pcalc = calc.partCalcs[Math.min(partIndex, calc.partCalcs.length - 1)] || calc.partCalcs[0];
 
+  // Press selection for the ACTIVE part (Screen 7 UI)...
   const selectedPress = useMemo(
+    () => presses.find((p) => p.id === pv("pressId")) || null,
+    [presses, pv]
+  );
+  // ...and for part 1 (used by the save payload's jobTicket).
+  const part1Press = useMemo(
     () => presses.find((p) => p.id === form.pressId) || null,
     [presses, form.pressId]
   );
@@ -305,7 +448,10 @@ function ClassicEstimatorContent() {
     try {
       const qty = form.quantity || 1;
       const isDigital = calc.isDigital;
-      const cfg = selectedPress?.configurations.find((c) => c.id === form.pressConfigId) || null;
+      const cfg = part1Press?.configurations.find((c) => c.id === form.pressConfigId) || null;
+      // Effective parts (part 1 = flat fields) for die #s and part notes.
+      const allParts: ClassicPart[] = [form, ...(form.parts || []).slice(0, Math.max(0, numParts - 1))];
+      const dieNumbers = allParts.map((p) => (p.dieNumber || "").trim()).filter(Boolean);
 
       // ── costBreakdown — same field semantics as the wizard so the quote
       // detail page and margin reports read Classic quotes identically:
@@ -344,7 +490,7 @@ function ClassicEstimatorContent() {
         numPages: form.numPages || null,
         varnish: null,
         coating: null,
-        pressAssignment: isDigital ? "Digital" : selectedPress?.name || null,
+        pressAssignment: isDigital ? "Digital" : part1Press?.name || null,
         pressFormat: cfg?.name || null,
         makeReadyCount: calc.mrWasteSheets || null,
         stockDescription: [form.stockDescription, form.caliperBasisWeight, form.brandColorFinish]
@@ -364,6 +510,16 @@ function ClassicEstimatorContent() {
           form.handOp1.description ? `Hand: ${form.handOp1.description}` : "",
           form.handOp2.description ? `Hand: ${form.handOp2.description}` : "",
           (form.drillHoles || 0) > 0 ? `${form.drillHoles} drill holes` : "",
+          // Multi-part summary — one line per part so the ticket shows passes
+          ...(numParts > 1
+            ? allParts.map((p, i) =>
+                `Part ${i + 1}: ${[
+                  p.stockDescription,
+                  p.sheetWidthRun && p.sheetHeightRun ? `${p.sheetWidthRun}x${p.sheetHeightRun}` : "",
+                  isDigital ? p.digitalInkConfig : `${p.runColorsSide1}/${p.runColorsSide2}`,
+                  p.dieNumber ? `die ${p.dieNumber}` : "",
+                ].filter(Boolean).join(" · ") || "—"}`)
+            : []),
         ].filter(Boolean).join("; ") || null,
         inkFront: isDigital
           ? `${form.digitalInkConfig.split("/")[0]}/0 digital`
@@ -371,7 +527,7 @@ function ClassicEstimatorContent() {
         inkBack: isDigital
           ? `${form.digitalInkConfig.split("/")[1]}/0 digital`
           : form.runColorsSide2 > 0 ? `${form.runColorsSide2}/0` : null,
-        dieNumber: null,
+        dieNumber: dieNumbers.join(", ") || null,
         fscCertified: false,
         pressCheck: (form.pressCheckHrs || 0) > 0,
         softCover: false,
@@ -393,9 +549,12 @@ function ClassicEstimatorContent() {
         dimensions: form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun}` : undefined,
         sheetSize: form.sheetWidthRun && form.sheetHeightRun ? `${form.sheetWidthRun}x${form.sheetHeightRun}` : undefined,
         colors: isDigital ? form.digitalInkConfig : `${form.runColorsSide1}F/${form.runColorsSide2}B`,
-        pressName: isDigital ? "Digital" : selectedPress?.name || "",
+        pressName: isDigital ? "Digital" : part1Press?.name || "",
         pressConfig: cfg?.name || "",
         paperStock: form.stockDescription || undefined,
+        // Quantity tiers — wizard key/shape so the quote detail page renders
+        // them (primary quantity first).
+        quantityTiers: quantityBreaks.length > 1 ? quantityBreaks : undefined,
         markups: { paper: form.markupPaperPct, material: form.markupMaterialPct, labor: form.markupLaborPct, outside: form.markupOutsidePct },
         commission: { percent: form.commissionPct, amount: calc.commission },
         costBreakdown,
@@ -496,9 +655,35 @@ function ClassicEstimatorContent() {
           <SectionTitle>Job</SectionTitle>
           <Row label="Job Title" wide><Txt value={form.jobTitle} onChange={(v) => set("jobTitle", v)} /></Row>
           <Row label="Quantity"><Num value={form.quantity} onChange={(v) => set("quantity", v)} step={1} /></Row>
+          {[0, 1, 2].map((i) => (
+            <Row key={i} label={`Add'l Quantity ${i + 2}`}>
+              <Num
+                value={form.additionalQuantities[i] || 0}
+                step={1}
+                onChange={(v) => {
+                  const a = [...(form.additionalQuantities || [])];
+                  while (a.length < 3) a.push(0);
+                  a[i] = v;
+                  set("additionalQuantities", a);
+                }}
+              />
+            </Row>
+          ))}
           <Row label="No. of Parts"><Num value={form.numParts} onChange={(v) => set("numParts", v)} step={1} /></Row>
         </div>
         <div>
+          <SectionTitle>Pickup Estimate</SectionTitle>
+          <Row label="Pickup From Quote #" wide>
+            <Txt value={pickupValue} onChange={onPickup} list="classic-pickups" placeholder="type a past Classic quote #…" />
+          </Row>
+          <datalist id="classic-pickups">
+            {classicQuotes.map((q) => <option key={q.id} value={`${q.quoteNumber} — ${q.customerName}`} />)}
+          </datalist>
+          {pickupLoaded && (
+            <div className="mb-1 border border-amber-500/50 bg-amber-400/5 px-2 py-1 font-mono text-[12px] text-amber-300">
+              Picked up {pickupLoaded} as a NEW estimate — Job Type set to Exact Reprint (flip to Reprint w/Changes if needed).
+            </div>
+          )}
           <SectionTitle>Markup Overrides (this job)</SectionTitle>
           <Row label="Paper %"><Num value={form.markupPaperPct} onChange={(v) => set("markupPaperPct", v)} /></Row>
           <Row label="Material %"><Num value={form.markupMaterialPct} onChange={(v) => set("markupMaterialPct", v)} /></Row>
@@ -615,33 +800,73 @@ function ClassicEstimatorContent() {
     );
   }
 
+  // Part tab bar for Screens 6-8 (only when No. of Parts > 1)
+  function partTabs() {
+    if (numParts <= 1) return null;
+    return (
+      <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-amber-700/40 pb-2">
+        <span className="mr-1 font-mono text-[11px] uppercase tracking-widest text-amber-500/80">Part:</span>
+        {Array.from({ length: numParts }, (_, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setPartIndex(i)}
+            className={`rounded-sm px-3 py-1 font-mono text-[12px] ${
+              partIndex === i
+                ? "bg-amber-400 font-bold text-black"
+                : "border border-amber-700/50 text-amber-400/80 hover:bg-amber-400/10"
+            }`}
+          >
+            Part {i + 1}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   function screen6() {
     return (
-      <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
-        <div>
-          <SectionTitle>Sheet</SectionTitle>
-          <Row label="Size To Run — Width"><Num value={form.sheetWidthRun} onChange={(v) => set("sheetWidthRun", v)} /></Row>
-          <Row label="Size To Run — Height"><Num value={form.sheetHeightRun} onChange={(v) => set("sheetHeightRun", v)} /></Row>
-          <Row label="Size To Order — Width"><Num value={form.sheetWidthOrder} onChange={(v) => set("sheetWidthOrder", v)} /></Row>
-          <Row label="Size To Order — Height"><Num value={form.sheetHeightOrder} onChange={(v) => set("sheetHeightOrder", v)} /></Row>
-          <Row label="Number Of Pages"><Num value={form.numPages} onChange={(v) => set("numPages", v)} step={1} /></Row>
-          <Row label="Number Up"><Num value={form.numberUp} onChange={(v) => set("numberUp", v)} step={1} /></Row>
-          <Row label="Sheets per Piece"><Num value={form.sheetsPerPiece} onChange={(v) => set("sheetsPerPiece", v)} step={1} /></Row>
-          <Row label="Out of Parent"><Num value={form.sheetsOutOfParent} onChange={(v) => set("sheetsOutOfParent", v)} step={1} /></Row>
-          <Row label="Bind Waste Shts"><Num value={form.bindWasteSheets} onChange={(v) => set("bindWasteSheets", v)} step={1} /></Row>
-          <Row label="Bleed Allowance" wide><Txt value={form.bleedAllowance} onChange={(v) => set("bleedAllowance", v)} /></Row>
-        </div>
-        <div>
-          <SectionTitle>Stock</SectionTitle>
-          <Row label="Stock Description" wide><Txt value={form.stockDescription} onChange={(v) => set("stockDescription", v)} /></Row>
-          <Row label="Caliper / Basis Weight" wide><Txt value={form.caliperBasisWeight} onChange={(v) => set("caliperBasisWeight", v)} /></Row>
-          <Row label="Brand/Color/Finish" wide><Txt value={form.brandColorFinish} onChange={(v) => set("brandColorFinish", v)} /></Row>
-          <Row label="Price Per M Sheets $"><Num value={form.pricePerM} onChange={(v) => set("pricePerM", v)} /></Row>
-          <SectionTitle>Computed</SectionTitle>
-          <Readout label="Press Sheets" value={String(calc.pressSheets)} />
-          <Readout label="+ Makeready Waste" value={String(calc.mrWasteSheets)} />
-          <Readout label="Sheets To Order" value={String(calc.orderSheets)} />
-          <Readout label="Paper Cost" value={money(calc.paperCost)} />
+      <div>
+        {partTabs()}
+        <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+          <div>
+            <SectionTitle>Sheet</SectionTitle>
+            <Row label="Size To Run — Width"><Num value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
+            <Row label="Size To Run — Height"><Num value={pv("sheetHeightRun")} onChange={(v) => setP("sheetHeightRun", v)} /></Row>
+            <Row label="Size To Order — Width"><Num value={pv("sheetWidthOrder")} onChange={(v) => setP("sheetWidthOrder", v)} /></Row>
+            <Row label="Size To Order — Height"><Num value={pv("sheetHeightOrder")} onChange={(v) => setP("sheetHeightOrder", v)} /></Row>
+            <Row label="Number Of Pages"><Num value={pv("numPages")} onChange={(v) => setP("numPages", v)} step={1} /></Row>
+            <Row label="Number Up"><Num value={pv("numberUp")} onChange={(v) => setP("numberUp", v)} step={1} /></Row>
+            <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
+            <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
+            <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
+            <Row label="Bleed Allowance" wide><Txt value={pv("bleedAllowance")} onChange={(v) => setP("bleedAllowance", v)} /></Row>
+          </div>
+          <div>
+            <SectionTitle>Stock</SectionTitle>
+            <Row label="Stock Description" wide>
+              <Txt value={pv("stockDescription")} onChange={onStockDescription} list="classic-stocks" placeholder="type to search paper history…" />
+            </Row>
+            <datalist id="classic-stocks">
+              {stockOptions.map((o) => <option key={o.description} value={o.description} />)}
+            </datalist>
+            {(() => {
+              const m = stockOptions.find((o) => o.description.toLowerCase() === String(pv("stockDescription") || "").trim().toLowerCase());
+              return m ? (
+                <div className="mb-1 border border-amber-500/40 bg-amber-400/5 px-2 py-1 font-mono text-[11px] text-amber-300">
+                  PAPER HISTORY — {m.description}{m.size ? ` · ${m.size}` : ""}{m.weight ? ` · ${m.weight}` : ""}{m.pricePerM ? ` · $${m.pricePerM.toFixed(2)}/M (prefilled, override below)` : " · no price on record"}
+                </div>
+              ) : null;
+            })()}
+            <Row label="Caliper / Basis Weight" wide><Txt value={pv("caliperBasisWeight")} onChange={(v) => setP("caliperBasisWeight", v)} /></Row>
+            <Row label="Brand/Color/Finish" wide><Txt value={pv("brandColorFinish")} onChange={(v) => setP("brandColorFinish", v)} /></Row>
+            <Row label="Price Per M Sheets $"><Num value={pv("pricePerM")} onChange={(v) => setP("pricePerM", v)} /></Row>
+            <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
+            <Readout label="Press Sheets" value={String(pcalc.pressSheets)} />
+            <Readout label="+ Makeready Waste" value={String(pcalc.mrWasteSheets)} />
+            <Readout label="Sheets To Order" value={String(pcalc.orderSheets)} />
+            <Readout label="Paper Cost" value={money(pcalc.paperCost)} />
+          </div>
         </div>
       </div>
     );
@@ -649,154 +874,180 @@ function ClassicEstimatorContent() {
 
   function screen7() {
     const digital = form.jobType === "Digital Direct";
+    // Die # lookup field — shared by both branches.
+    const dieField = (
+      <>
+        <Row label="Die #" wide>
+          <Txt value={String(pv("dieNumber") || "")} onChange={(v) => setP("dieNumber", v)} list="classic-dies" placeholder="existing die # (blank = new die)" />
+        </Row>
+        <datalist id="classic-dies">
+          {dieOptions.map((d) => <option key={d.dieNumber} value={d.dieNumber} />)}
+        </datalist>
+        {dieMatch && (
+          <div className="mb-1 border border-amber-500/40 bg-amber-400/5 px-2 py-1 font-mono text-[11px] text-amber-300">
+            DIE {dieMatch.dieNumber} ON FILE — {[
+              dieMatch.customerName, dieMatch.item, dieMatch.description,
+              dieMatch.length && dieMatch.width ? `${dieMatch.length}x${dieMatch.width}` : "",
+            ].filter(Boolean).join(" · ") || "no detail"} · existing die, no die charge needed
+          </div>
+        )}
+      </>
+    );
     return (
-      <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
-        <div>
-          <SectionTitle>{digital ? "Digital Press" : "Press Selection"}</SectionTitle>
-          <Row label="Press" wide>
-            <select
-              className={inputCls}
-              value={form.pressId}
-              onChange={(e) => {
-                const press = presses.find((p) => p.id === e.target.value);
-                const cfg = press?.configurations[0];
-                setForm((f) => ({
-                  ...f,
-                  pressId: e.target.value,
-                  pressConfigId: cfg?.id || "",
-                  pressHourlyRate: press ? press.costPerHour + (cfg?.addToHourlyRate || 0) : f.pressHourlyRate,
-                  helperHourlyRate: press?.helperCostPerHour ?? f.helperHourlyRate,
-                  runSpeedSph: cfg?.speedUncoated ?? f.runSpeedSph,
-                  baseMakereadyHrsPerPlate: cfg ? Math.round((cfg.setupMinutes / 60) * 100) / 100 : f.baseMakereadyHrsPerPlate,
-                  helpers: cfg?.numHelpers ?? f.helpers,
-                }));
-              }}
-            >
-              <option value="">— select press —</option>
-              {presses.map((p) => (
-                <option key={p.id} value={p.id}>#{p.pressNumber} {p.name} ({p.pressType})</option>
-              ))}
-            </select>
-          </Row>
-          {selectedPress && (
-            <Row label="Configuration" wide>
+      <div>
+        {partTabs()}
+        <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+          <div>
+            <SectionTitle>{digital ? "Digital Press" : "Press Selection"}</SectionTitle>
+            <Row label="Press" wide>
               <select
                 className={inputCls}
-                value={form.pressConfigId}
+                value={pv("pressId")}
                 onChange={(e) => {
-                  const cfg = selectedPress.configurations.find((c) => c.id === e.target.value);
-                  setForm((f) => ({
-                    ...f,
-                    pressConfigId: e.target.value,
-                    pressHourlyRate: selectedPress.costPerHour + (cfg?.addToHourlyRate || 0),
-                    runSpeedSph: cfg?.speedUncoated ?? f.runSpeedSph,
-                    baseMakereadyHrsPerPlate: cfg ? Math.round((cfg.setupMinutes / 60) * 100) / 100 : f.baseMakereadyHrsPerPlate,
-                    helpers: cfg?.numHelpers ?? f.helpers,
-                  }));
+                  const press = presses.find((p) => p.id === e.target.value);
+                  const cfg = press?.configurations[0];
+                  patchP({
+                    pressId: e.target.value,
+                    pressConfigId: cfg?.id || "",
+                    ...(press ? { pressHourlyRate: press.costPerHour + (cfg?.addToHourlyRate || 0) } : {}),
+                    ...(press ? { helperHourlyRate: press.helperCostPerHour } : {}),
+                    ...(cfg ? {
+                      runSpeedSph: cfg.speedUncoated,
+                      baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
+                      helpers: cfg.numHelpers,
+                    } : {}),
+                  });
                 }}
               >
-                {selectedPress.configurations.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} — {c.numColors}c, {c.speedUncoated} sph</option>
+                <option value="">— select press —</option>
+                {presses.map((p) => (
+                  <option key={p.id} value={p.id}>#{p.pressNumber} {p.name} ({p.pressType})</option>
                 ))}
               </select>
             </Row>
-          )}
-          <Row label="Press Rate $/Hr"><Num value={form.pressHourlyRate} onChange={(v) => set("pressHourlyRate", v)} /></Row>
-
-          {digital ? (
-            <>
-              <Row label="Ink Config" wide>
+            {selectedPress && (
+              <Row label="Configuration" wide>
                 <select
-                  className={inputCls + " w-[160px]"}
-                  value={form.digitalInkConfig}
-                  onChange={(e) => set("digitalInkConfig", e.target.value as InkConfig)}
+                  className={inputCls}
+                  value={pv("pressConfigId")}
+                  onChange={(e) => {
+                    const cfg = selectedPress.configurations.find((c) => c.id === e.target.value);
+                    patchP({
+                      pressConfigId: e.target.value,
+                      pressHourlyRate: selectedPress.costPerHour + (cfg?.addToHourlyRate || 0),
+                      ...(cfg ? {
+                        runSpeedSph: cfg.speedUncoated,
+                        baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
+                        helpers: cfg.numHelpers,
+                      } : {}),
+                    });
+                  }}
                 >
-                  {(["1/0", "1/1", "4/0", "4/1", "4/4"] as InkConfig[]).map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {selectedPress.configurations.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} — {c.numColors}c, {c.speedUncoated} sph</option>
                   ))}
                 </select>
               </Row>
-              <Row label="Makeready Sheets"><Num value={form.digitalMakereadySheets} onChange={(v) => set("digitalMakereadySheets", v)} step={1} /></Row>
-              <Row label="Variable Data" wide>
-                <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
-                  <input
-                    type="checkbox"
-                    className="accent-amber-400"
-                    checked={form.digitalVariableData}
-                    onChange={(e) => set("digitalVariableData", e.target.checked)}
-                  />
-                  VD per-side adder + setup
-                </label>
-              </Row>
-              {form.digitalVariableData && (
-                <Row label="VD Setup Hrs"><Num value={form.digitalVDSetupHrs} onChange={(v) => set("digitalVDSetupHrs", v)} /></Row>
-              )}
-              <Row label="Die Cut Time (Hrs)"><Num value={form.dieCutHrs} onChange={(v) => set("dieCutHrs", v)} /></Row>
-              <Row label="Score/Perf Time (Hrs)"><Num value={form.scorePerfHrs} onChange={(v) => set("scorePerfHrs", v)} /></Row>
-              <Row label="Die Cost $"><Num value={form.dieCost} onChange={(v) => set("dieCost", v)} /></Row>
-            </>
-          ) : (
-            <>
-              <Row label="Run Side 1 Colors"><Num value={form.runColorsSide1} onChange={(v) => set("runColorsSide1", v)} step={1} /></Row>
-              <Row label="Run Side 2 Colors"><Num value={form.runColorsSide2} onChange={(v) => set("runColorsSide2", v)} step={1} /></Row>
-              <Row label="Base Makeready Hrs/Plate"><Num value={form.baseMakereadyHrsPerPlate} onChange={(v) => set("baseMakereadyHrsPerPlate", v)} /></Row>
-              <Row label="Makeready Diff"><Num value={form.makereadyDiff} onChange={(v) => set("makereadyDiff", v)} /></Row>
-              <Row label="Washup Hrs/Unit"><Num value={form.washupHrsPerUnit} onChange={(v) => set("washupHrsPerUnit", v)} /></Row>
-              <Row label="Washup Diff"><Num value={form.washupDiff} onChange={(v) => set("washupDiff", v)} /></Row>
-              <Row label="Run Speed (SPH)"><Num value={form.runSpeedSph} onChange={(v) => set("runSpeedSph", v)} step={100} /></Row>
-              <Row label="Run Diff"><Num value={form.runDiff} onChange={(v) => set("runDiff", v)} /></Row>
-              <Row label="Waste Factor %"><Num value={form.wasteFactorPct} onChange={(v) => set("wasteFactorPct", v)} /></Row>
-              <Row label="Helpers"><Num value={form.helpers} onChange={(v) => set("helpers", v)} step={1} /></Row>
-              <Row label="Helper Rate $/Hr"><Num value={form.helperHourlyRate} onChange={(v) => set("helperHourlyRate", v)} /></Row>
-            </>
-          )}
-        </div>
-        <div>
-          {digital ? (
-            <>
-              <SectionTitle>Digital Click Engine</SectionTitle>
-              {standards ? (
-                <>
-                  <Readout label="Size Tier" value={`Tier ${getDigitalSizeTier(form.sheetWidthRun, form.sheetHeightRun, standards)}`} />
-                  <Readout label="Click Rate" value={`$${calc.digitalClickRate.toFixed(4)}/sheet`} />
-                  <Readout label="Click Sheets (run + MR)" value={String(calc.digitalClickSheets)} />
-                  <Readout label="Click Cost" value={money(calc.digitalClickCost)} />
-                  {form.digitalVariableData && (
-                    <>
-                      <Readout label="VD Adder" value={money(calc.digitalVDCost)} />
-                      <Readout label="VD Setup" value={money(calc.digitalVDSetupCost)} />
-                    </>
-                  )}
-                </>
-              ) : (
-                <p className="text-[12px] text-red-400">Plant standards not loaded — digital click rates unavailable.</p>
-              )}
-              <Readout label="Die/Score Hrs" value={hrs(calc.dieScoreHrs)} />
-              <Readout label="Press Cost" value={money(calc.pressCost)} />
-            </>
-          ) : (
-            <>
-              <SectionTitle>Ink</SectionTitle>
-              <Row label="Black % Coverage"><Num value={form.inkCoverageBlackPct} onChange={(v) => set("inkCoverageBlackPct", v)} /></Row>
-              <Row label="Color % Coverage"><Num value={form.inkCoverageColorPct} onChange={(v) => set("inkCoverageColorPct", v)} /></Row>
-              <Row label="Varnish % Coverage"><Num value={form.inkCoverageVarnishPct} onChange={(v) => set("inkCoverageVarnishPct", v)} /></Row>
-              <Row label="Ink Factor (M sq-in/lb)"><Num value={form.inkFactorMsqinPerLb} onChange={(v) => set("inkFactorMsqinPerLb", v)} /></Row>
-              <Row label="Ink $/Lb"><Num value={form.inkDollarsPerLb} onChange={(v) => set("inkDollarsPerLb", v)} /></Row>
-              <SectionTitle>Die / Extras</SectionTitle>
-              <Row label="Die Cut Time (Hrs)"><Num value={form.dieCutHrs} onChange={(v) => set("dieCutHrs", v)} /></Row>
-              <Row label="Score/Perf Time (Hrs)"><Num value={form.scorePerfHrs} onChange={(v) => set("scorePerfHrs", v)} /></Row>
-              <Row label="Die Cost $"><Num value={form.dieCost} onChange={(v) => set("dieCost", v)} /></Row>
-              <Row label="Press Check Hrs"><Num value={form.pressCheckHrs} onChange={(v) => set("pressCheckHrs", v)} /></Row>
-              <SectionTitle>Computed</SectionTitle>
-              <Readout label="Plates" value={String(calc.plates)} />
-              <Readout label="Makeready" value={hrs(calc.makereadyHrs)} />
-              <Readout label="Washup" value={hrs(calc.washupHrs)} />
-              <Readout label="Run" value={hrs(calc.runHrs)} />
-              <Readout label="Makeready Waste Sheets" value={String(calc.mrWasteSheets)} />
-              <Readout label="Ink" value={`${calc.inkLbs.toFixed(2)} lbs / ${money(calc.inkCost)}`} />
-              <Readout label="Press Cost" value={money(calc.pressCost)} />
-            </>
-          )}
+            )}
+            <Row label="Press Rate $/Hr"><Num value={pv("pressHourlyRate")} onChange={(v) => setP("pressHourlyRate", v)} /></Row>
+
+            {digital ? (
+              <>
+                <Row label="Ink Config" wide>
+                  <select
+                    className={inputCls + " w-[160px]"}
+                    value={pv("digitalInkConfig")}
+                    onChange={(e) => setP("digitalInkConfig", e.target.value as InkConfig)}
+                  >
+                    {(["1/0", "1/1", "4/0", "4/1", "4/4"] as InkConfig[]).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </Row>
+                <Row label="Makeready Sheets"><Num value={pv("digitalMakereadySheets")} onChange={(v) => setP("digitalMakereadySheets", v)} step={1} /></Row>
+                <Row label="Variable Data" wide>
+                  <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
+                    <input
+                      type="checkbox"
+                      className="accent-amber-400"
+                      checked={pv("digitalVariableData")}
+                      onChange={(e) => setP("digitalVariableData", e.target.checked)}
+                    />
+                    VD per-side adder + setup
+                  </label>
+                </Row>
+                {pv("digitalVariableData") && (
+                  <Row label="VD Setup Hrs"><Num value={pv("digitalVDSetupHrs")} onChange={(v) => setP("digitalVDSetupHrs", v)} /></Row>
+                )}
+                <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
+                <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
+                {dieField}
+                <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
+              </>
+            ) : (
+              <>
+                <Row label="Run Side 1 Colors"><Num value={pv("runColorsSide1")} onChange={(v) => setP("runColorsSide1", v)} step={1} /></Row>
+                <Row label="Run Side 2 Colors"><Num value={pv("runColorsSide2")} onChange={(v) => setP("runColorsSide2", v)} step={1} /></Row>
+                <Row label="Base Makeready Hrs/Plate"><Num value={pv("baseMakereadyHrsPerPlate")} onChange={(v) => setP("baseMakereadyHrsPerPlate", v)} /></Row>
+                <Row label="Makeready Diff"><Num value={pv("makereadyDiff")} onChange={(v) => setP("makereadyDiff", v)} /></Row>
+                <Row label="Washup Hrs/Unit"><Num value={pv("washupHrsPerUnit")} onChange={(v) => setP("washupHrsPerUnit", v)} /></Row>
+                <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
+                <Row label="Run Speed (SPH)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
+                <Row label="Run Diff"><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></Row>
+                <Row label="Waste Factor %"><Num value={pv("wasteFactorPct")} onChange={(v) => setP("wasteFactorPct", v)} /></Row>
+                <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
+                <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
+              </>
+            )}
+          </div>
+          <div>
+            {digital ? (
+              <>
+                <SectionTitle>{numParts > 1 ? `Digital Click Engine — Part ${partIndex + 1}` : "Digital Click Engine"}</SectionTitle>
+                {standards ? (
+                  <>
+                    <Readout label="Size Tier" value={`Tier ${getDigitalSizeTier(pv("sheetWidthRun"), pv("sheetHeightRun"), standards)}`} />
+                    <Readout label="Click Rate" value={`$${pcalc.digitalClickRate.toFixed(4)}/sheet`} />
+                    <Readout label="Click Sheets (run + MR)" value={String(pcalc.digitalClickSheets)} />
+                    <Readout label="Click Cost" value={money(pcalc.digitalClickCost)} />
+                    {pv("digitalVariableData") && (
+                      <>
+                        <Readout label="VD Adder" value={money(pcalc.digitalVDCost)} />
+                        <Readout label="VD Setup" value={money(pcalc.digitalVDSetupCost)} />
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[12px] text-red-400">Plant standards not loaded — digital click rates unavailable.</p>
+                )}
+                <Readout label="Die/Score Hrs" value={hrs(pcalc.dieScoreHrs)} />
+                <Readout label="Press Cost" value={money(pcalc.pressCost)} />
+              </>
+            ) : (
+              <>
+                <SectionTitle>Ink</SectionTitle>
+                <Row label="Black % Coverage"><Num value={pv("inkCoverageBlackPct")} onChange={(v) => setP("inkCoverageBlackPct", v)} /></Row>
+                <Row label="Color % Coverage"><Num value={pv("inkCoverageColorPct")} onChange={(v) => setP("inkCoverageColorPct", v)} /></Row>
+                <Row label="Varnish % Coverage"><Num value={pv("inkCoverageVarnishPct")} onChange={(v) => setP("inkCoverageVarnishPct", v)} /></Row>
+                <Row label="Ink Factor (M sq-in/lb)"><Num value={pv("inkFactorMsqinPerLb")} onChange={(v) => setP("inkFactorMsqinPerLb", v)} /></Row>
+                <Row label="Ink $/Lb"><Num value={pv("inkDollarsPerLb")} onChange={(v) => setP("inkDollarsPerLb", v)} /></Row>
+                <SectionTitle>Die / Extras</SectionTitle>
+                <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
+                <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
+                {dieField}
+                <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
+                <Row label="Press Check Hrs"><Num value={pv("pressCheckHrs")} onChange={(v) => setP("pressCheckHrs", v)} /></Row>
+                <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
+                <Readout label="Plates" value={String(pcalc.plates)} />
+                <Readout label="Makeready" value={hrs(pcalc.makereadyHrs)} />
+                <Readout label="Washup" value={hrs(pcalc.washupHrs)} />
+                <Readout label="Run" value={hrs(pcalc.runHrs)} />
+                <Readout label="Makeready Waste Sheets" value={String(pcalc.mrWasteSheets)} />
+                <Readout label="Ink" value={`${pcalc.inkLbs.toFixed(2)} lbs / ${money(pcalc.inkCost)}`} />
+                <Readout label="Press Cost" value={money(pcalc.pressCost)} />
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -804,56 +1055,60 @@ function ClassicEstimatorContent() {
 
   function screen8() {
     return (
-      <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
-        <div>
-          <SectionTitle>Operation</SectionTitle>
-          <Row label="Operation Type" wide>
-            <select
-              className={inputCls + " w-[220px]"}
-              value={form.binderyOperation}
-              onChange={(e) => set("binderyOperation", parseInt(e.target.value))}
-            >
-              {BINDERY_OPERATIONS.map((op, i) => (
-                <option key={op} value={i + 1}>{op}</option>
-              ))}
-            </select>
-          </Row>
-          <SectionTitle>Cutting / Trimming / Drilling</SectionTitle>
-          <Row label="Cutting Diff"><Num value={form.cuttingDiff} onChange={(v) => set("cuttingDiff", v)} /></Row>
-          <Row label="Cutter Sheets/Hr"><Num value={form.cutterSheetsPerHr} onChange={(v) => set("cutterSheetsPerHr", v)} step={100} /></Row>
-          <Readout label="Load Cutter Hrs (auto)" value={hrs(calc.cutterHrs)} />
-          <Row label="Trim Hrs"><Num value={form.trimHrs} onChange={(v) => set("trimHrs", v)} /></Row>
-          <Row label="Drill Holes"><Num value={form.drillHoles} onChange={(v) => set("drillHoles", v)} step={1} /></Row>
-          <Row label="Drill Diff"><Num value={form.drillDiff} onChange={(v) => set("drillDiff", v)} /></Row>
-          <Row label="Drill Hrs/Hole"><Num value={form.drillHrsPerHole} onChange={(v) => set("drillHrsPerHole", v)} /></Row>
-          <Row label="Folder Config" wide><Txt value={form.folderConfig} onChange={(v) => set("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
-          <Row label="Bindery Rate $/Hr"><Num value={form.binderyHourlyRate} onChange={(v) => set("binderyHourlyRate", v)} /></Row>
-        </div>
-        <div>
-          {( [1, 2] as const).map((n) => {
-            const key = n === 1 ? "handOp1" : "handOp2";
-            const op = form[key as "handOp1"];
-            const opHrs = n === 1 ? calc.handOp1Hrs : calc.handOp2Hrs;
-            return (
-              <div key={n}>
-                <SectionTitle>Hand Op {n}</SectionTitle>
-                <Row label="Description" wide>
-                  <Txt value={op.description} onChange={(v) => set(key as "handOp1", { ...op, description: v })} />
-                </Row>
-                <Row label="Pieces/Hr"><Num value={op.piecesPerHour} onChange={(v) => set(key as "handOp1", { ...op, piecesPerHour: v })} step={1} /></Row>
-                <Row label="% Of Qty"><Num value={op.pctOfQty} onChange={(v) => set(key as "handOp1", { ...op, pctOfQty: v })} /></Row>
-                <Readout label="Hours" value={hrs(opHrs)} />
-              </div>
-            );
-          })}
-          <SectionTitle>Carton Pack</SectionTitle>
-          <Row label="Cartons"><Num value={form.cartons} onChange={(v) => set("cartons", v)} step={1} /></Row>
-          <Row label="  @ $ each"><Num value={form.cartonCost} onChange={(v) => set("cartonCost", v)} /></Row>
-          <Row label="Skid Pack (skids)"><Num value={form.skids} onChange={(v) => set("skids", v)} step={1} /></Row>
-          <Row label="  @ $ each"><Num value={form.skidCost} onChange={(v) => set("skidCost", v)} /></Row>
-          <Row label="Pack Hrs"><Num value={form.packHrs} onChange={(v) => set("packHrs", v)} /></Row>
-          <Readout label="Bindery Hrs Total" value={hrs(calc.binderyHrs)} />
-          <Readout label="Bindery Cost" value={money(calc.binderyCost)} />
+      <div>
+        {partTabs()}
+        <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+          <div>
+            <SectionTitle>Operation</SectionTitle>
+            <Row label="Operation Type" wide>
+              <select
+                className={inputCls + " w-[220px]"}
+                value={pv("binderyOperation")}
+                onChange={(e) => setP("binderyOperation", parseInt(e.target.value))}
+              >
+                {BINDERY_OPERATIONS.map((op, i) => (
+                  <option key={op} value={i + 1}>{op}</option>
+                ))}
+              </select>
+            </Row>
+            <SectionTitle>Cutting / Trimming / Drilling</SectionTitle>
+            <Row label="Cutting Diff"><Num value={pv("cuttingDiff")} onChange={(v) => setP("cuttingDiff", v)} /></Row>
+            <Row label="Cutter Sheets/Hr"><Num value={pv("cutterSheetsPerHr")} onChange={(v) => setP("cutterSheetsPerHr", v)} step={100} /></Row>
+            <Readout label="Load Cutter Hrs (auto)" value={hrs(pcalc.cutterHrs)} />
+            <Row label="Trim Hrs"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            <Row label="Drill Holes"><Num value={pv("drillHoles")} onChange={(v) => setP("drillHoles", v)} step={1} /></Row>
+            <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
+            <Row label="Drill Hrs/Hole"><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></Row>
+            <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
+            <Row label="Bindery Rate $/Hr"><Num value={pv("binderyHourlyRate")} onChange={(v) => setP("binderyHourlyRate", v)} /></Row>
+          </div>
+          <div>
+            {( [1, 2] as const).map((n) => {
+              const key = (n === 1 ? "handOp1" : "handOp2") as "handOp1";
+              const op = pv(key);
+              const opHrs = n === 1 ? pcalc.handOp1Hrs : pcalc.handOp2Hrs;
+              return (
+                <div key={n}>
+                  <SectionTitle>Hand Op {n}</SectionTitle>
+                  <Row label="Description" wide>
+                    <Txt value={op.description} onChange={(v) => setP(key, { ...op, description: v })} />
+                  </Row>
+                  <Row label="Pieces/Hr"><Num value={op.piecesPerHour} onChange={(v) => setP(key, { ...op, piecesPerHour: v })} step={1} /></Row>
+                  <Row label="% Of Qty"><Num value={op.pctOfQty} onChange={(v) => setP(key, { ...op, pctOfQty: v })} /></Row>
+                  <Readout label="Hours" value={hrs(opHrs)} />
+                </div>
+              );
+            })}
+            <SectionTitle>Carton Pack</SectionTitle>
+            <Row label="Cartons"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
+            <Row label="  @ $ each"><Num value={pv("cartonCost")} onChange={(v) => setP("cartonCost", v)} /></Row>
+            <Row label="Skid Pack (skids)"><Num value={pv("skids")} onChange={(v) => setP("skids", v)} step={1} /></Row>
+            <Row label="  @ $ each"><Num value={pv("skidCost")} onChange={(v) => setP("skidCost", v)} /></Row>
+            <Row label="Pack Hrs"><Num value={pv("packHrs")} onChange={(v) => setP("packHrs", v)} /></Row>
+            <Readout label={numParts > 1 ? `Bindery Hrs — Part ${partIndex + 1}` : "Bindery Hrs Total"} value={hrs(pcalc.binderyHrs)} />
+            <Readout label={numParts > 1 ? `Bindery Cost — Part ${partIndex + 1}` : "Bindery Cost"} value={money(pcalc.binderyCost)} />
+            {numParts > 1 && <Readout label="Bindery Cost — All Parts" value={money(calc.binderyCost)} />}
+          </div>
         </div>
       </div>
     );
@@ -968,6 +1223,62 @@ function ClassicEstimatorContent() {
               </tr>
             </tbody>
           </table>
+
+          {/* Per-part subtotals (multi-part jobs) */}
+          {numParts > 1 && (
+            <>
+              <SectionTitle>Part Subtotals (cost)</SectionTitle>
+              <table className="w-full border-collapse font-mono text-[13px] text-amber-200">
+                <thead>
+                  <tr className="border-b border-amber-600/60 text-left text-[11px] uppercase tracking-wider text-amber-500">
+                    <th className="py-1 pr-2">Part</th>
+                    <th className="py-1 pr-2 text-right">Paper</th>
+                    <th className="py-1 pr-2 text-right">Press</th>
+                    <th className="py-1 pr-2 text-right">Bindery</th>
+                    <th className="py-1 text-right">Clicks (Outside)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.partCalcs.map((pc, i) => (
+                    <tr key={i} className="border-b border-amber-800/40">
+                      <td className="py-1 pr-2 text-amber-300">Part {i + 1}</td>
+                      <td className="py-1 pr-2 text-right">{money(pc.paperCost)}</td>
+                      <td className="py-1 pr-2 text-right">{money(pc.pressCost)}</td>
+                      <td className="py-1 pr-2 text-right">{money(pc.binderyCost)}</td>
+                      <td className="py-1 text-right">{calc.isDigital ? money(pc.digitalClickCost + pc.digitalVDCost + pc.digitalVDSetupCost) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* Quantity tiers (E&M multi-quantity quote) */}
+          {quantityBreaks.length > 1 && (
+            <>
+              <SectionTitle>Quantity Tiers</SectionTitle>
+              <table className="w-full border-collapse font-mono text-[13px] text-amber-200">
+                <thead>
+                  <tr className="border-b border-amber-600/60 text-left text-[11px] uppercase tracking-wider text-amber-500">
+                    <th className="py-1 pr-2">Quantity</th>
+                    <th className="py-1 pr-2 text-right">Total</th>
+                    <th className="py-1 pr-2 text-right">Price / Unit</th>
+                    <th className="py-1 text-right">Price / M</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quantityBreaks.map((b, i) => (
+                    <tr key={i} className={`border-b border-amber-800/40 ${i === 0 ? "text-amber-100 font-bold" : ""}`}>
+                      <td className="py-1 pr-2">{b.quantity.toLocaleString()}{i === 0 ? " (primary)" : ""}</td>
+                      <td className="py-1 pr-2 text-right">{money(b.total)}</td>
+                      <td className="py-1 pr-2 text-right">{money(b.costPerUnit)}</td>
+                      <td className="py-1 text-right">{money(b.costPer1000)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
 
           <div className="mt-4 flex items-center gap-3">
             <Button onClick={saveQuote} disabled={saving} className="bg-amber-500 text-black hover:bg-amber-400">

@@ -4,6 +4,11 @@
 //
 // All rates/diffs arrive as editable form fields (prefilled with defaults
 // or PlantStandard values) — nothing here reads the database directly.
+//
+// Multi-part jobs (E&M "No. of Parts"): part 1 lives in the flat Screen 6-8
+// fields (unchanged shape — old drafts keep working); parts 2..N live in
+// `parts[]`. Each part gets its own paper+press+bindery pass at the job
+// quantity; prep/outside/freight/markups/commission stay job-level.
 
 import {
   DigitalClickStandards,
@@ -38,6 +43,33 @@ export interface HandOp {
   pctOfQty: number; // % of quantity that goes through this op
 }
 
+// ── Per-part field set (Screens 6 + 7 + 8) ──────────────────────────────
+// Part 1 IS the flat fields on ClassicForm; additional parts are Picks of
+// exactly these keys stored in `parts[]`.
+export const PART_FIELD_KEYS = [
+  // Screen 6 — Paper/Stock
+  "sheetWidthRun", "sheetHeightRun", "sheetWidthOrder", "sheetHeightOrder",
+  "numPages", "stockDescription", "caliperBasisWeight", "pricePerM",
+  "numberUp", "sheetsPerPiece", "sheetsOutOfParent", "bindWasteSheets",
+  "bleedAllowance", "brandColorFinish",
+  // Screen 7 — Press
+  "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
+  "runColorsSide1", "runColorsSide2", "baseMakereadyHrsPerPlate",
+  "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
+  "runDiff", "wasteFactorPct", "helpers",
+  "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageVarnishPct",
+  "inkFactorMsqinPerLb", "inkDollarsPerLb",
+  "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
+  "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
+  // Screen 8 — Bindery
+  "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
+  "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
+  "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
+  "packHrs", "binderyHourlyRate",
+] as const;
+
+export type ClassicPart = Pick<ClassicForm, (typeof PART_FIELD_KEYS)[number]>;
+
 export interface ClassicForm {
   // ── Screen 1 — Main Entry ──
   customerName: string;
@@ -45,6 +77,9 @@ export interface ClassicForm {
   address: string;
   jobTitle: string;
   quantity: number;
+  // Up to 3 additional quantities (E&M quotes multiple quantities per
+  // estimate). 0/blank entries are ignored.
+  additionalQuantities: number[];
   numParts: number;
   markupPaperPct: number;
   markupMaterialPct: number;
@@ -84,7 +119,7 @@ export interface ClassicForm {
   separations: number;
   separationCharge: number;
 
-  // ── Screen 6 — Paper / Stock ──
+  // ── Screen 6 — Paper / Stock (part 1) ──
   sheetWidthRun: number;
   sheetHeightRun: number;
   sheetWidthOrder: number;
@@ -100,7 +135,7 @@ export interface ClassicForm {
   bleedAllowance: string;
   brandColorFinish: string;
 
-  // ── Screen 7 — Press (offset) ──
+  // ── Screen 7 — Press (part 1, offset) ──
   pressId: string;
   pressConfigId: string;
   pressHourlyRate: number;
@@ -123,15 +158,16 @@ export interface ClassicForm {
   dieCutHrs: number;
   scorePerfHrs: number;
   dieCost: number;
+  dieNumber: string; // existing die # from the die inventory (blank = new die)
   pressCheckHrs: number;
 
-  // ── Screen 7 — Digital branch ──
+  // ── Screen 7 — Digital branch (part 1) ──
   digitalInkConfig: InkConfig;
   digitalMakereadySheets: number;
   digitalVariableData: boolean;
   digitalVDSetupHrs: number;
 
-  // ── Screen 8 — Bindery ──
+  // ── Screen 8 — Bindery (part 1) ──
   binderyOperation: number; // 1 Flat / 2 Saddle / 3 Folded / 4 Perfect / 5 Multibind / 6 Plastic
   cuttingDiff: number;
   cutterSheetsPerHr: number; // divisor for auto cutter hours
@@ -148,6 +184,9 @@ export interface ClassicForm {
   skidCost: number;
   packHrs: number;
   binderyHourlyRate: number;
+
+  // ── Multi-part: parts 2..N (Screen 6-8 field subset each) ──
+  parts: ClassicPart[];
 
   // ── Screen 9 — Cost Summary ──
   additionalCosts: number;
@@ -169,7 +208,7 @@ export const BINDERY_OPERATIONS = [
 export function defaultClassicForm(): ClassicForm {
   return {
     customerName: "", customerNumber: "", address: "", jobTitle: "",
-    quantity: 0, numParts: 1,
+    quantity: 0, additionalQuantities: [], numParts: 1,
     markupPaperPct: 33, markupMaterialPct: 16, markupOutsidePct: 24,
     markupLaborPct: 40, commissionPct: 10,
     instructions: "",
@@ -193,7 +232,7 @@ export function defaultClassicForm(): ClassicForm {
     runSpeedSph: 0, runDiff: 1, wasteFactorPct: 5, helpers: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
     inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5,
-    dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, pressCheckHrs: 0,
+    dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
     binderyOperation: 1, cuttingDiff: 1, cutterSheetsPerHr: 5000,
@@ -203,29 +242,176 @@ export function defaultClassicForm(): ClassicForm {
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
     binderyHourlyRate: 65,
+    parts: [],
     additionalCosts: 0, freight: 0, outsidePurchases: [],
     deliveryZone: "", quoteNotes: "",
+  };
+}
+
+/** Fresh part with the same defaults as the flat Screen 6-8 fields. */
+export function defaultClassicPart(): ClassicPart {
+  const d = defaultClassicForm();
+  const part = {} as Record<string, unknown>;
+  for (const k of PART_FIELD_KEYS) part[k] = d[k];
+  return part as unknown as ClassicPart;
+}
+
+// ── Per-part computed detail ─────────────────────────────────────────────
+export interface PartCalc {
+  pressSheets: number;
+  mrWasteSheets: number;
+  orderSheets: number;
+  paperCost: number;
+  plates: number;
+  makereadyHrs: number;
+  washupHrs: number;
+  runHrs: number;
+  dieScoreHrs: number;
+  pressCheckHrs: number;
+  pressHrs: number;
+  inkLbs: number;
+  inkCost: number;
+  pressLaborCost: number;
+  pressMaterialsCost: number; // die cost
+  pressCost: number;
+  digitalTier: 1 | 2 | 3;
+  digitalClickRate: number;
+  digitalVDRate: number;
+  digitalClickSheets: number;
+  digitalClickCost: number;
+  digitalVDCost: number;
+  digitalVDSetupCost: number;
+  cutterHrs: number;
+  drillHrs: number;
+  handOp1Hrs: number;
+  handOp2Hrs: number;
+  binderyHrs: number;
+  binderyLabor: number;
+  cartonSkidCost: number;
+  binderyCost: number;
+}
+
+/** Paper + press + bindery math for ONE part at the job quantity.
+ *  Formulas identical to the original single-part computeClassic. */
+function computePart(
+  p: ClassicPart,
+  qty: number,
+  isDigital: boolean,
+  digitalStd: DigitalClickStandards | null
+): PartCalc {
+  const numberUp = Math.max(1, p.numberUp || 1);
+
+  // ── Paper (Screen 6, waste from Screen 7) ──
+  const sheetsPerPiece = Math.max(1, p.sheetsPerPiece || 1);
+  const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
+  const mrWasteSheets = isDigital
+    ? Math.ceil(p.digitalMakereadySheets || 0)
+    : Math.ceil(pressSheets * ((p.wasteFactorPct || 0) / 100));
+  // Paper buy: press sheets + MR/overs + bindery spoilage, rounded up to whole
+  // PARENT sheets (E&M: "Use 1,110 sheets 19x25 ... 2 out of parent").
+  // pricePerM is per parent sheet when sheetsOutOfParent > 1.
+  const outOfParent = Math.max(1, p.sheetsOutOfParent || 1);
+  const sheetsToBuy = pressSheets + mrWasteSheets + Math.ceil(p.bindWasteSheets || 0);
+  const orderSheets = Math.ceil(sheetsToBuy / outOfParent);
+  const paperCost = (orderSheets / 1000) * (p.pricePerM || 0);
+
+  // ── Press (Screen 7) ──
+  const plates = (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
+  const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
+
+  let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
+  let inkLbs = 0, inkCost = 0;
+  let pressLaborCost = 0;
+  let digitalTier: 1 | 2 | 3 = 1;
+  let digitalClickRate = 0, digitalVDRate = 0, digitalClickSheets = 0;
+  let digitalClickCost = 0, digitalVDCost = 0, digitalVDSetupCost = 0;
+  const dieScoreHrs = (p.dieCutHrs || 0) + (p.scorePerfHrs || 0);
+  const pressCheckHrs = p.pressCheckHrs || 0;
+  let pressHrs = 0;
+
+  if (isDigital && digitalStd) {
+    // Digital click engine (Mary's tier × ink-config table).
+    digitalTier = getDigitalSizeTier(p.sheetWidthRun || 0, p.sheetHeightRun || 0, digitalStd);
+    digitalClickRate = getDigitalClickRate(digitalTier, p.digitalInkConfig, digitalStd);
+    digitalVDRate = getDigitalVDRate(digitalTier, digitalStd);
+    digitalClickSheets = pressSheets + (p.digitalMakereadySheets || 0);
+    digitalClickCost = digitalClickSheets * digitalClickRate;
+    if (p.digitalVariableData) {
+      digitalVDCost = digitalClickSheets * digitalVDRate;
+      digitalVDSetupCost = (p.digitalVDSetupHrs || 0) * (digitalStd.digitalVDSetupRate || 0);
+    }
+    pressHrs = dieScoreHrs + pressCheckHrs;
+    // Clicks are NOT press labor — E&M books digital as an outside purchase
+    // (Cybake #347528: Digital 793.80 under Outside at 0%). They land in the
+    // outside bucket in computeClassic; press labor is only die/score/check hrs.
+    pressLaborCost = pressHrs * (p.pressHourlyRate || 0);
+  } else {
+    makereadyHrs = (p.baseMakereadyHrsPerPlate || 0) * (p.makereadyDiff || 1) * plates;
+    washupHrs = (p.washupHrsPerUnit || 0) * (p.washupDiff || 1) * plates;
+    runHrs = p.runSpeedSph > 0 ? (pressSheets / p.runSpeedSph) * (p.runDiff || 1) : 0;
+    pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
+    // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb).
+    const coveragePct =
+      (p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0) + (p.inkCoverageVarnishPct || 0);
+    inkLbs = p.inkFactorMsqinPerLb > 0
+      ? (pressSheets * sheetArea * (coveragePct / 100)) / (p.inkFactorMsqinPerLb * 1000)
+      : 0;
+    inkCost = inkLbs * (p.inkDollarsPerLb || 0);
+    pressLaborCost =
+      pressHrs * (p.pressHourlyRate || 0) +
+      pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0) +
+      inkCost;
+  }
+  const pressMaterialsCost = p.dieCost || 0;
+  const pressCost = pressLaborCost + pressMaterialsCost;
+
+  // ── Bindery (Screen 8) ──
+  const cutterHrs = p.cutterSheetsPerHr > 0
+    ? (pressSheets / p.cutterSheetsPerHr) * (p.cuttingDiff || 1)
+    : 0;
+  const drillHrs = (p.drillHoles || 0) * (p.drillHrsPerHole || 0) * (p.drillDiff || 1);
+  const op1 = p.handOp1, op2 = p.handOp2;
+  const handOp1Hrs = op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0;
+  const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
+  const binderyHrs = cutterHrs + (p.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0);
+  const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
+  // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
+  // labor — they ride the prep/materials bucket at Material markup.
+  const cartonSkidCost = (p.cartons || 0) * (p.cartonCost || 0) + (p.skids || 0) * (p.skidCost || 0);
+  const binderyCost = binderyLabor;
+
+  return {
+    pressSheets, mrWasteSheets, orderSheets, paperCost,
+    plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
+    inkLbs, inkCost, pressLaborCost, pressMaterialsCost, pressCost,
+    digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
+    digitalClickCost, digitalVDCost, digitalVDSetupCost,
+    cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
+    cartonSkidCost, binderyCost,
   };
 }
 
 export interface ClassicCalc {
   isDigital: boolean;
 
-  // Paper
+  // Per-part detail (index 0 = part 1 / flat fields)
+  partCalcs: PartCalc[];
+
+  // Paper (sums across parts)
   pressSheets: number;
   mrWasteSheets: number;
   orderSheets: number;
   paperCost: number;
   paperSelling: number;
 
-  // Prep (Screens 4 + 5) — sold at Material markup
+  // Prep (Screens 4 + 5, job-level) — sold at Material markup
   prepHours: number;
   prepLabor: number;
   prepMaterials: number;
   prepCost: number;
   prepSelling: number;
 
-  // Press (Screen 7) — sold at Labor markup
+  // Press (sums across parts) — sold at Labor markup
   plates: number;
   makereadyHrs: number;
   washupHrs: number;
@@ -239,7 +425,7 @@ export interface ClassicCalc {
   pressMaterialsCost: number; // die cost
   pressCost: number;
   pressSelling: number;
-  // digital detail
+  // digital detail (rate/tier from part 1; sheet/cost figures summed)
   digitalTier: 1 | 2 | 3;
   digitalClickRate: number;
   digitalVDRate: number;
@@ -248,7 +434,7 @@ export interface ClassicCalc {
   digitalVDCost: number;
   digitalVDSetupCost: number;
 
-  // Bindery (Screen 8) — sold at Labor markup
+  // Bindery (sums across parts) — sold at Labor markup
   cutterHrs: number;
   drillHrs: number;
   handOp1Hrs: number;
@@ -274,29 +460,36 @@ export interface ClassicCalc {
   costPerM: number;
 }
 
+/** Resolve the effective part list: part 1 = flat fields, parts 2..N merged
+ *  over part defaults (so partially-filled or legacy data can't crash). */
+export function effectiveParts(f: ClassicForm): ClassicPart[] {
+  const numParts = Math.max(1, Math.floor(f.numParts || 1));
+  const extras = Array.isArray(f.parts) ? f.parts : [];
+  const list: ClassicPart[] = [f];
+  for (let i = 1; i < numParts; i++) {
+    list.push({ ...defaultClassicPart(), ...(extras[i - 1] || {}) });
+  }
+  return list;
+}
+
 export function computeClassic(
   f: ClassicForm,
   digitalStd: DigitalClickStandards | null
 ): ClassicCalc {
   const isDigital = f.jobType === "Digital Direct";
   const qty = Math.max(0, f.quantity || 0);
-  const numberUp = Math.max(1, f.numberUp || 1);
 
-  // ── Paper (Screen 6, waste from Screen 7) ──
-  const sheetsPerPiece = Math.max(1, f.sheetsPerPiece || 1);
-  const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
-  const mrWasteSheets = isDigital
-    ? Math.ceil(f.digitalMakereadySheets || 0)
-    : Math.ceil(pressSheets * ((f.wasteFactorPct || 0) / 100));
-  // Paper buy: press sheets + MR/overs + bindery spoilage, rounded up to whole
-  // PARENT sheets (E&M: "Use 1,110 sheets 19x25 ... 2 out of parent").
-  // pricePerM is per parent sheet when sheetsOutOfParent > 1.
-  const outOfParent = Math.max(1, f.sheetsOutOfParent || 1);
-  const sheetsToBuy = pressSheets + mrWasteSheets + Math.ceil(f.bindWasteSheets || 0);
-  const orderSheets = Math.ceil(sheetsToBuy / outOfParent);
-  const paperCost = (orderSheets / 1000) * (f.pricePerM || 0);
+  const partCalcs = effectiveParts(f).map((p) => computePart(p, qty, isDigital, digitalStd));
+  const sum = (get: (c: PartCalc) => number) => partCalcs.reduce((s, c) => s + get(c), 0);
+  const p1 = partCalcs[0];
 
-  // ── Prep = Electronic Prepress (4) + Camera/Stripping/Platemaking (5) ──
+  // ── Paper (summed across parts) ──
+  const pressSheets = sum((c) => c.pressSheets);
+  const mrWasteSheets = sum((c) => c.mrWasteSheets);
+  const orderSheets = sum((c) => c.orderSheets);
+  const paperCost = sum((c) => c.paperCost);
+
+  // ── Prep = Electronic Prepress (4) + Camera/Stripping/Platemaking (5) — job-level ──
   const prepHours = (f.designHours || 0) + (f.photoshopHours || 0);
   const prepLabor = prepHours * (f.prepressRate || 0);
   const prepMaterials =
@@ -312,74 +505,20 @@ export function computeClassic(
       (f.plateDiffFactor || 1);
   const prepCost = prepLabor + prepMaterials;
 
-  // ── Press (Screen 7) ──
-  const plates = (f.runColorsSide1 || 0) + (f.runColorsSide2 || 0);
-  const sheetArea = (f.sheetWidthRun || 0) * (f.sheetHeightRun || 0); // sq in
-
-  let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
-  let inkLbs = 0, inkCost = 0;
-  let pressLaborCost = 0;
-  let digitalTier: 1 | 2 | 3 = 1;
-  let digitalClickRate = 0, digitalVDRate = 0, digitalClickSheets = 0;
-  let digitalClickCost = 0, digitalVDCost = 0, digitalVDSetupCost = 0;
-  const dieScoreHrs = (f.dieCutHrs || 0) + (f.scorePerfHrs || 0);
-  const pressCheckHrs = f.pressCheckHrs || 0;
-  let pressHrs = 0;
-
-  if (isDigital && digitalStd) {
-    // Digital click engine (Mary's tier × ink-config table).
-    digitalTier = getDigitalSizeTier(f.sheetWidthRun || 0, f.sheetHeightRun || 0, digitalStd);
-    digitalClickRate = getDigitalClickRate(digitalTier, f.digitalInkConfig, digitalStd);
-    digitalVDRate = getDigitalVDRate(digitalTier, digitalStd);
-    digitalClickSheets = pressSheets + (f.digitalMakereadySheets || 0);
-    digitalClickCost = digitalClickSheets * digitalClickRate;
-    if (f.digitalVariableData) {
-      digitalVDCost = digitalClickSheets * digitalVDRate;
-      digitalVDSetupCost = (f.digitalVDSetupHrs || 0) * (digitalStd.digitalVDSetupRate || 0);
-    }
-    pressHrs = dieScoreHrs + pressCheckHrs;
-    // Clicks are NOT press labor — E&M books digital as an outside purchase
-    // (Cybake #347528: Digital 793.80 under Outside at 0%). They land in the
-    // outside bucket below; press labor is only die/score/press-check hours.
-    pressLaborCost = pressHrs * (f.pressHourlyRate || 0);
-  } else {
-    makereadyHrs = (f.baseMakereadyHrsPerPlate || 0) * (f.makereadyDiff || 1) * plates;
-    washupHrs = (f.washupHrsPerUnit || 0) * (f.washupDiff || 1) * plates;
-    runHrs = f.runSpeedSph > 0 ? (pressSheets / f.runSpeedSph) * (f.runDiff || 1) : 0;
-    pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
-    // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb).
-    const coveragePct =
-      (f.inkCoverageBlackPct || 0) + (f.inkCoverageColorPct || 0) + (f.inkCoverageVarnishPct || 0);
-    inkLbs = f.inkFactorMsqinPerLb > 0
-      ? (pressSheets * sheetArea * (coveragePct / 100)) / (f.inkFactorMsqinPerLb * 1000)
-      : 0;
-    inkCost = inkLbs * (f.inkDollarsPerLb || 0);
-    pressLaborCost =
-      pressHrs * (f.pressHourlyRate || 0) +
-      pressHrs * (f.helpers || 0) * (f.helperHourlyRate || 0) +
-      inkCost;
-  }
-  const pressMaterialsCost = f.dieCost || 0;
+  // ── Press (summed) ──
+  const pressLaborCost = sum((c) => c.pressLaborCost);
+  const pressMaterialsCost = sum((c) => c.pressMaterialsCost);
   const pressCost = pressLaborCost + pressMaterialsCost;
+  const inkCost = sum((c) => c.inkCost);
 
-  // ── Bindery (Screen 8) ──
-  const cutterHrs = f.cutterSheetsPerHr > 0
-    ? (pressSheets / f.cutterSheetsPerHr) * (f.cuttingDiff || 1)
-    : 0;
-  const drillHrs = (f.drillHoles || 0) * (f.drillHrsPerHole || 0) * (f.drillDiff || 1);
-  const op1 = f.handOp1, op2 = f.handOp2;
-  const handOp1Hrs = op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0;
-  const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
-  const binderyHrs = cutterHrs + (f.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (f.packHrs || 0);
-  const binderyLabor = binderyHrs * (f.binderyHourlyRate || 0);
-  // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
-  // labor — they ride the prep/materials bucket at Material markup below.
-  const cartonSkidCost = (f.cartons || 0) * (f.cartonCost || 0) + (f.skids || 0) * (f.skidCost || 0);
+  // ── Bindery (summed) ──
+  const binderyLabor = sum((c) => c.binderyLabor);
+  const cartonSkidCost = sum((c) => c.cartonSkidCost);
   const binderyCost = binderyLabor;
   const prepCostWithMaterials = prepCost + cartonSkidCost;
 
   // ── Outside / pass-through (Screen 9) ──
-  const digitalClickTotal = digitalClickCost + digitalVDCost + digitalVDSetupCost;
+  const digitalClickTotal = sum((c) => c.digitalClickCost + c.digitalVDCost + c.digitalVDSetupCost);
   const outsideCost =
     f.outsidePurchases.reduce((s, p) => s + (Number(p.amount) || 0), 0) + digitalClickTotal;
   const freightAndAdditional = (f.freight || 0) + (f.additionalCosts || 0);
@@ -405,21 +544,63 @@ export function computeClassic(
 
   return {
     isDigital,
+    partCalcs,
     pressSheets, mrWasteSheets, orderSheets, paperCost, paperSelling,
     prepHours, prepLabor,
     prepMaterials: prepMaterials + cartonSkidCost,
     prepCost: prepCostWithMaterials,
     prepSelling,
-    plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
-    inkLbs, inkCost, pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
-    digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
-    digitalClickCost, digitalVDCost, digitalVDSetupCost,
-    cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
-    cartonSkidCost, binderyCost, binderySelling,
+    plates: sum((c) => c.plates),
+    makereadyHrs: sum((c) => c.makereadyHrs),
+    washupHrs: sum((c) => c.washupHrs),
+    runHrs: sum((c) => c.runHrs),
+    dieScoreHrs: sum((c) => c.dieScoreHrs),
+    pressCheckHrs: sum((c) => c.pressCheckHrs),
+    pressHrs: sum((c) => c.pressHrs),
+    inkLbs: sum((c) => c.inkLbs),
+    inkCost, pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
+    digitalTier: p1.digitalTier,
+    digitalClickRate: p1.digitalClickRate,
+    digitalVDRate: p1.digitalVDRate,
+    digitalClickSheets: sum((c) => c.digitalClickSheets),
+    digitalClickCost: sum((c) => c.digitalClickCost),
+    digitalVDCost: sum((c) => c.digitalVDCost),
+    digitalVDSetupCost: sum((c) => c.digitalVDSetupCost),
+    cutterHrs: sum((c) => c.cutterHrs),
+    drillHrs: sum((c) => c.drillHrs),
+    handOp1Hrs: sum((c) => c.handOp1Hrs),
+    handOp2Hrs: sum((c) => c.handOp2Hrs),
+    binderyHrs: sum((c) => c.binderyHrs),
+    binderyLabor, cartonSkidCost, binderyCost, binderySelling,
     outsideCost, outsideSelling,
     freightAndAdditional,
     totalCost, sellingSubtotal, commission, total,
     costPerUnit: qty > 0 ? total / qty : 0,
     costPerM: qty > 0 ? (total / qty) * 1000 : 0,
   };
+}
+
+// ── Quantity tiers (E&M quotes multiple quantities per estimate) ─────────
+export interface QuantityBreak {
+  quantity: number;
+  total: number;
+  costPerUnit: number;
+  costPer1000: number;
+}
+
+/** Re-run the whole estimate at each quantity (primary first). Everything
+ *  else stays as entered — fixed MR/overs sheets stay fixed; %-driven waste
+ *  and per-piece sheets scale naturally. */
+export function computeQuantityBreaks(
+  f: ClassicForm,
+  digitalStd: DigitalClickStandards | null
+): QuantityBreak[] {
+  const qtys = [
+    f.quantity || 0,
+    ...(Array.isArray(f.additionalQuantities) ? f.additionalQuantities : []).map((q) => Number(q) || 0).filter((q) => q > 0),
+  ];
+  return qtys.map((q) => {
+    const c = computeClassic({ ...f, quantity: q }, digitalStd);
+    return { quantity: q, total: c.total, costPerUnit: c.costPerUnit, costPer1000: c.costPerM };
+  });
 }

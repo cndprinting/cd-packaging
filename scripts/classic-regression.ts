@@ -1,6 +1,12 @@
 // Regression harness: Mary's real E&M quotes through computeClassic().
 // Run with: npx tsx scripts/classic-regression.ts
-import { computeClassic, defaultClassicForm } from "../src/lib/classic-estimate";
+import {
+  PART_FIELD_KEYS,
+  computeClassic,
+  computeQuantityBreaks,
+  defaultClassicForm,
+  type ClassicPart,
+} from "../src/lib/classic-estimate";
 
 const digitalStd = {
   digitalClickT1_1_0: 0.06825, digitalClickT1_1_1: 0.084, digitalClickT1_4_0: 0.189,
@@ -93,6 +99,59 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   f.digitalInkConfig = "4/4"; f.digitalMakereadySheets = 25;
   const c = computeClassic(f, digitalStd);
   check("Mary worked example clicks $198.45", c.digitalClickCost, 198.45);
+}
+
+// ══ Quantity tiers — re-run the whole estimate per quantity ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 1000; f.numberUp = 1; f.wasteFactorPct = 0; f.pricePerM = 100;
+  f.cutterSheetsPerHr = 0; f.freight = 50;
+  f.additionalQuantities = [2000, 0, 0]; // blank tiers ignored
+  const breaks = computeQuantityBreaks(f, digitalStd);
+  console.log("\n── Quantity tiers ──");
+  check("tier rows (primary + 1 valid, blanks dropped)", breaks.length, 2, 0);
+  check("tier[0] quantity is primary", breaks[0].quantity, 1000, 0);
+  const c1 = computeClassic(f, digitalStd);
+  check("tier[0] total = primary calc total", breaks[0].total, c1.total, 1e-9);
+  const c2 = computeClassic({ ...f, quantity: 2000 }, digitalStd);
+  check("tier[1] total = full re-run at 2000", breaks[1].total, c2.total, 1e-9);
+  // Paper-only job with no fixed costs: paper cost scales exactly 2x
+  check("tier paper cost scales 2x", c2.paperCost, c1.paperCost * 2);
+  check("tier[1] price/unit", breaks[1].costPerUnit, c2.total / 2000, 1e-9);
+}
+
+// ══ Multi-part — two identical parts double paper/press/bindery; prep,
+//    outside and commission stay job-level ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 1000; f.numberUp = 2; f.wasteFactorPct = 5; f.pricePerM = 120;
+  f.sheetWidthRun = 25; f.sheetHeightRun = 38;
+  f.runColorsSide1 = 2; f.runColorsSide2 = 1;
+  f.runSpeedSph = 10000; f.pressHourlyRate = 150;
+  f.inkCoverageColorPct = 30;
+  f.trimHrs = 1; f.cartons = 4;
+  f.designHours = 2; // job-level prep: 2 × $95
+  f.outsidePurchases = [{ description: "Foil", amount: 200 }];
+  const single = computeClassic(f, digitalStd);
+
+  // Part 2 = exact copy of part 1's Screen 6-8 fields
+  const partCopy = {} as Record<string, unknown>;
+  for (const k of PART_FIELD_KEYS) partCopy[k] = (f as unknown as Record<string, unknown>)[k];
+  const g = { ...f, numParts: 2, parts: [partCopy as unknown as ClassicPart] };
+  const dbl = computeClassic(g, digitalStd);
+
+  console.log("\n── Multi-part (2 identical parts) ──");
+  check("partCalcs length", dbl.partCalcs.length, 2, 0);
+  check("paper cost 2x", dbl.paperCost, single.paperCost * 2, 1e-9);
+  check("press cost 2x", dbl.pressCost, single.pressCost * 2, 1e-9);
+  check("bindery cost 2x", dbl.binderyCost, single.binderyCost * 2, 1e-9);
+  check("cartons (material bucket) 2x", dbl.cartonSkidCost, single.cartonSkidCost * 2, 1e-9);
+  check("prep labor unchanged (job-level)", dbl.prepLabor, single.prepLabor, 1e-9);
+  check("outside unchanged (job-level)", dbl.outsideCost, single.outsideCost, 1e-9);
+  check("commission = 10% of summed cost", dbl.commission, dbl.totalCost * 0.10, 1e-9);
+  // Sanity: numParts=1 with a stale parts[] entry must be ignored
+  const stale = computeClassic({ ...g, numParts: 1 }, digitalStd);
+  check("numParts=1 ignores parts[] leftovers", stale.total, single.total, 1e-9);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
