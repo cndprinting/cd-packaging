@@ -175,6 +175,7 @@ function ClassicEstimatorContent() {
             drillHrsPerHole: Number(s.drillTimePerHoleSec) > 0 ? Number(s.drillTimePerHoleSec) / 3600 : f.drillHrsPerHole, // 4 sec/hole
             bundleRatePerHr: Number(s.wrapLaborMinutesPerBundle) > 0 ? 60 / Number(s.wrapLaborMinutesPerBundle) : f.bundleRatePerHr, // 1 min/bundle = 60/hr
             binderyHourlyRate: Number(s.trimmingRate) || f.binderyHourlyRate,         // $45/hr trimming rate
+            cutSecPerCut: Number(s.cutTimePerCutSec) || f.cutSecPerCut,               // 8 sec/cut
           }));
         }
       })
@@ -1012,7 +1013,14 @@ function ClassicEstimatorContent() {
                 <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
                 <Row label="Run Speed (SPH)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
                 <Row label="Run Diff"><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></Row>
-                <Row label="Waste Factor %"><Num value={pv("wasteFactorPct")} onChange={(v) => setP("wasteFactorPct", v)} /></Row>
+                {/* Mary's waste rule (7/20): 100 shts/color/side + 100 per
+                    equipment pass; all editable, manual sheets override. */}
+                <Row label="Waste / Color / Side Shts"><Num value={pv("wastePerColorSheets")} onChange={(v) => setP("wastePerColorSheets", v)} step={10} /></Row>
+                <Row label="Waste / Equipment Shts"><Num value={pv("wastePerEquipmentSheets")} onChange={(v) => setP("wastePerEquipmentSheets", v)} step={10} /></Row>
+                <Row label="Equipment Passes (0 = Auto)"><Num value={pv("equipmentPassesManual")} onChange={(v) => setP("equipmentPassesManual", v)} step={1} /></Row>
+                <Readout label="Passes Counted" value={String(pcalc.equipmentPasses)} />
+                <Row label="Waste Sheets (0 = Auto)"><Num value={pv("wasteSheetsManual")} onChange={(v) => setP("wasteSheetsManual", v)} step={10} /></Row>
+                <Readout label="Waste Sheets Used" value={String(pcalc.mrWasteSheets)} />
                 <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
                 <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
               </>
@@ -1089,7 +1097,13 @@ function ClassicEstimatorContent() {
             <Row label="Cutting Diff"><Num value={pv("cuttingDiff")} onChange={(v) => setP("cuttingDiff", v)} /></Row>
             <Row label="Cutter Sheets/Hr"><Num value={pv("cutterSheetsPerHr")} onChange={(v) => setP("cutterSheetsPerHr", v)} step={100} /></Row>
             <Readout label="Load Cutter Hrs (auto)" value={hrs(pcalc.cutterHrs)} />
-            <Row label="Trim Hrs"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            {/* Trim auto-computes from cuts × sec/cut × cutting diff, like
+                E&M did once Mary entered the difficulty (7/20). */}
+            <Row label="Cuts To Final Size"><Num value={pv("cutsToFinalSize")} onChange={(v) => setP("cutsToFinalSize", v)} step={1} /></Row>
+            <Row label="Sheets Per Lift"><Num value={pv("sheetsPerLift")} onChange={(v) => setP("sheetsPerLift", v)} step={50} /></Row>
+            <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
+            <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            <Readout label="Trim Hrs Used" value={hrs(pcalc.trimHrsUsed)} />
             <Row label="Drill Holes"><Num value={pv("drillHoles")} onChange={(v) => setP("drillHoles", v)} step={1} /></Row>
             <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
             <Row label="Drill Hrs/Hole"><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></Row>

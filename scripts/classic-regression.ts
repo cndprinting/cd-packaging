@@ -184,5 +184,27 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("manual wrap hrs override", manual.partCalcs[0].wrapHrsUsed, 2);
 }
 
+// ══ Mary's press-waste rule + trim-from-difficulty (7/20) ══
+{
+  // 4/4 job that cuts and folds: waste = 8 colors × 100 + 2 passes × 100 = 1,000
+  const f = defaultClassicForm();
+  f.quantity = 20000; f.numberUp = 2; f.pricePerM = 100;
+  f.runColorsSide1 = 4; f.runColorsSide2 = 4;
+  f.cutsToFinalSize = 4; // cutting pass + enables auto trim
+  f.folderConfig = "Baum 26x40"; // folding pass
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Waste rule + auto trim ──");
+  check("equipment passes (cut + fold)", c.partCalcs[0].equipmentPasses, 2, 0);
+  check("waste sheets (800 + 200)", c.partCalcs[0].mrWasteSheets, 1000, 0);
+  // trim auto: 10,000 press sheets / 500 per lift = 20 lifts × 4 cuts × 8s = 640s
+  // = 0.1778 hr × 0.5 diff (Mary's default) = 0.0889
+  check("trim hrs auto from difficulty", c.partCalcs[0].trimHrsUsed, 0.0889, 0.0005);
+  check("cutting diff default is 0.5", defaultClassicForm().cuttingDiff, 0.5, 0);
+  const manual = computeClassic({ ...f, wasteSheetsManual: 350 }, digitalStd);
+  check("manual waste sheets override", manual.partCalcs[0].mrWasteSheets, 350, 0);
+  const manualTrim = computeClassic({ ...f, trimHrs: 3 }, digitalStd);
+  check("manual trim hrs override", manualTrim.partCalcs[0].trimHrsUsed, 3, 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

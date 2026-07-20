@@ -57,12 +57,14 @@ export const PART_FIELD_KEYS = [
   "runColorsSide1", "runColorsSide2", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
   "runDiff", "wasteFactorPct", "helpers",
+  "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
   "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageVarnishPct",
   "inkFactorMsqinPerLb", "inkDollarsPerLb",
   "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   // Screen 8 — Bindery
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
+  "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
@@ -150,7 +152,14 @@ export interface ClassicForm {
   washupDiff: number;
   runSpeedSph: number;
   runDiff: number;
-  wasteFactorPct: number;
+  wasteFactorPct: number; // LEGACY — superseded by Mary's sheet-based waste rule below (7/20)
+  // Press waste, Mary's actual E&M rule (7/20): 100 sheets per color per side
+  // + 100 sheets per piece of equipment the job passes through (cut/fold/
+  // die/score/stitch). All knobs editable; manual sheets override wins.
+  wasteSheetsManual: number;       // 0 = auto formula
+  wastePerColorSheets: number;     // default 100
+  wastePerEquipmentSheets: number; // default 100
+  equipmentPassesManual: number;   // 0 = auto-count from the job's operations
   helpers: number;
   inkCoverageBlackPct: number;
   inkCoverageColorPct: number;
@@ -171,9 +180,12 @@ export interface ClassicForm {
 
   // ── Screen 8 — Bindery (part 1) ──
   binderyOperation: number; // 1 Flat / 2 Saddle / 3 Folded / 4 Perfect / 5 Multibind / 6 Plastic
-  cuttingDiff: number;
+  cuttingDiff: number;       // Mary eyeballs .5/.6/.7 — more cuts to final size = higher (7/20)
   cutterSheetsPerHr: number; // divisor for auto cutter hours
-  trimHrs: number;
+  trimHrs: number;           // 0 = auto from cuts × sec/cut × diff (E&M computed trim from difficulty)
+  cutsToFinalSize: number;   // cuts to get a lift to final size (0 = auto trim off)
+  sheetsPerLift: number;     // sheets the cutter takes per lift (default 500)
+  cutSecPerCut: number;      // seconds per cut (plant standard: 8)
   drillHoles: number;
   drillDiff: number;
   drillHrsPerHole: number;
@@ -241,14 +253,16 @@ export function defaultClassicForm(): ClassicForm {
     runColorsSide1: 0, runColorsSide2: 0,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
-    runSpeedSph: 0, runDiff: 1, wasteFactorPct: 5, helpers: 0,
+    runSpeedSph: 0, runDiff: 1, wasteFactorPct: 0, helpers: 0,
+    wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
     inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
-    binderyOperation: 1, cuttingDiff: 1, cutterSheetsPerHr: 5000,
-    trimHrs: 0, drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
+    binderyOperation: 1, cuttingDiff: 0.5, cutterSheetsPerHr: 5000,
+    trimHrs: 0, cutsToFinalSize: 0, sheetsPerLift: 500, cutSecPerCut: 8,
+    drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
@@ -310,6 +324,8 @@ export interface PartCalc {
   bandHrsUsed: number;  // auto (bundles ÷ rate) unless manually overridden
   padHrsUsed: number;
   wrapHrsUsed: number;
+  trimHrsUsed: number;      // auto from cuts × sec/cut × diff unless overridden
+  equipmentPasses: number;  // waste-formula equipment pass count in effect
 }
 
 /** Paper + press + bindery math for ONE part at the job quantity.
@@ -325,9 +341,23 @@ function computePart(
   // ── Paper (Screen 6, waste from Screen 7) ──
   const sheetsPerPiece = Math.max(1, p.sheetsPerPiece || 1);
   const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
+  // Press waste — Mary's E&M rule (7/20): 100 sheets per color per side +
+  // 100 per piece of equipment the job passes through. Passes auto-count from
+  // the operations on the job; every knob is editable and a typed waste-sheet
+  // count overrides the whole formula.
+  const passesAuto =
+    ((p.trimHrs || 0) > 0 || (p.cutsToFinalSize || 0) > 0 ? 1 : 0) + // cutting
+    ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
+    ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
+    (p.folderConfig || p.binderyOperation === 3 ? 1 : 0) +           // folding
+    ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0);                // stitch/bind
+  const equipmentPasses = (p.equipmentPassesManual || 0) > 0 ? p.equipmentPassesManual : passesAuto;
+  const wasteColors = (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
   const mrWasteSheets = isDigital
     ? Math.ceil(p.digitalMakereadySheets || 0)
-    : Math.ceil(pressSheets * ((p.wasteFactorPct || 0) / 100));
+    : (p.wasteSheetsManual || 0) > 0
+      ? Math.ceil(p.wasteSheetsManual)
+      : wasteColors * (p.wastePerColorSheets || 0) + equipmentPasses * (p.wastePerEquipmentSheets || 0);
   // Paper buy: press sheets + MR/overs + bindery spoilage, rounded up to whole
   // PARENT sheets (E&M: "Use 1,110 sheets 19x25 ... 2 out of parent").
   // pricePerM is per parent sheet when sheetsOutOfParent > 1.
@@ -406,7 +436,13 @@ function computePart(
   const bandHrsUsed = opHrs(p.bandIn, p.bandHrs || 0);
   const padHrsUsed = opHrs(p.padIn, p.padHrs || 0);
   const wrapHrsUsed = opHrs(p.wrapIn, p.wrapHrs || 0);
-  const binderyHrs = cutterHrs + (p.trimHrs || 0) + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
+  // Trim-to-size: E&M computed it once the difficulty was entered (Mary 7/20).
+  // Auto = lifts × cuts-to-final × sec/cut × cutting diff; typed hours override.
+  const trimAuto = (p.cutsToFinalSize || 0) > 0
+    ? (Math.ceil(pressSheets / Math.max(1, p.sheetsPerLift || 500)) * p.cutsToFinalSize * (p.cutSecPerCut || 8) / 3600) * (p.cuttingDiff || 1)
+    : 0;
+  const trimHrsUsed = (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
+  const binderyHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
     + bandHrsUsed + padHrsUsed + wrapHrsUsed;
   const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
@@ -430,6 +466,7 @@ function computePart(
     cartonSkidCost, binderyCost,
     paperLbs, cartonsAuto, cartonsUsed,
     bandHrsUsed, padHrsUsed, wrapHrsUsed,
+    trimHrsUsed, equipmentPasses,
   };
 }
 
