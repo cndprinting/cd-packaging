@@ -152,6 +152,26 @@ ${(opts.reply || "").slice(0, 1500)}` }] });
   } catch (e) { console.error("[agent] classifyMaryReply failed", e); return null; }
 }
 
+// After a quote goes out, decide if the customer's reply needs an owner or is
+// just a benign acknowledgment the agent can answer itself (Benjy 7/19, Gino).
+export async function classifyCustomerReply(opts: { company: string; reply: string }): Promise<{ kind: "benign" | "needs_owner"; reason: string } | null> {
+  const client = getClaude();
+  if (!client) return null;
+  const system = `You classify a customer's reply to a quote we sent them. Output exactly one of:
+- "benign": a positive or neutral acknowledgment that asks NOTHING and changes NOTHING - e.g. thanks, sounds good, price works, still deciding, waiting on a partner/agency, will get back to you. The agent can answer this with a warm acknowledgment.
+- "needs_owner": ANYTHING else - a question, a price/quantity/spec change or negotiation, a go-ahead to place the order, a complaint, a deadline, or anything requiring human judgment. When unsure, choose needs_owner.
+Output ONLY compact JSON, no fences: {"kind":"benign|needs_owner","reason":"one short sentence"}`;
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 150, system, messages: [{ role: "user", content: `Company: ${opts.company}
+
+Reply:
+${(opts.reply || "").slice(0, 1200)}` }] });
+    const raw = firstText(msg).trim().replace(/^```json\s*|\s*```$/gi, "");
+    const p = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || raw);
+    return { kind: p.kind === "benign" ? "benign" : "needs_owner", reason: String(p.reason || "").trim() };
+  } catch (e) { console.error("[agent] classifyCustomerReply failed", e); return null; }
+}
+
 // Compare two incoming quote requests for the same company and decide whether
 // they are the SAME job (a duplicate submission) or two genuinely different jobs.
 // Errs toward "not a duplicate" when unsure so a real job is never dropped. (Benjy 7/2)
