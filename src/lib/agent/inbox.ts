@@ -271,6 +271,21 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       }
     } catch (e) { console.error("[agent inbox] draft failed", e); }
 
+    // Benign acknowledgment (thanks / price works / waiting on a partner) → the
+    // agent answers it directly and keeps the cadence; only substantive replies
+    // (questions, changes, go-aheads) become an owner task (Benjy 7/19, Gino).
+    let cCls: { kind: string; reason: string } | null = null;
+    try { const { classifyCustomerReply } = await import("@/lib/agent/claude"); cCls = await classifyCustomerReply({ company: lead.companyName, reply: m.bodyPreview || "" }); } catch { /* review path */ }
+    if (cCls?.kind === "benign" && draft) {
+      await agentCustomerSend(prisma, lead, { body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">${draft}</div>` });
+      const nextBenign = new Date(); nextBenign.setDate(nextBenign.getDate() + 12);
+      await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", agentNextAt: nextBenign, agentDraft: null, commentary: `${lead.commentary || ""}
+[Customer replied - benign] ${(m.bodyPreview || "").slice(0, 300)}
+[Agent] Acknowledged directly (${cCls.reason || "no action needed"}); next check-in ${nextBenign.toISOString().slice(0, 10)}.`.slice(0, 8000) } });
+      handled++;
+      continue;
+    }
+
     // Stop the chase, record the reply + draft, alert owners to approve a send.
     await prisma.lead.update({
       where: { id: lead.id },
