@@ -874,11 +874,15 @@ function ClassicEstimatorContent() {
     );
   }
 
-  function screen7() {
-    const digital = form.jobType === "Digital Direct";
-    // Die # lookup field — shared by both branches.
-    const dieField = (
+  // Die cutting block — lives on Screen 8 (Bindery) per Mary 7/20; hours still
+  // bill at the press rate in the calc (E&M press-screen lineage) until she
+  // says otherwise.
+  function dieCuttingSection() {
+    return (
       <>
+        <SectionTitle>Die Cutting</SectionTitle>
+        <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
+        <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
         <Row label="Die #" wide>
           <Txt value={String(pv("dieNumber") || "")} onChange={(v) => setP("dieNumber", v)} list="classic-dies" placeholder="existing die # (blank = new die)" />
         </Row>
@@ -893,8 +897,13 @@ function ClassicEstimatorContent() {
             ].filter(Boolean).join(" · ") || "no detail"} · existing die, no die charge needed
           </div>
         )}
+        <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
       </>
     );
+  }
+
+  function screen7() {
+    const digital = form.jobType === "Digital Direct";
     return (
       <div>
         {partTabs()}
@@ -981,10 +990,6 @@ function ClassicEstimatorContent() {
                 {pv("digitalVariableData") && (
                   <Row label="VD Setup Hrs"><Num value={pv("digitalVDSetupHrs")} onChange={(v) => setP("digitalVDSetupHrs", v)} /></Row>
                 )}
-                <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
-                <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
-                {dieField}
-                <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
               </>
             ) : (
               <>
@@ -1033,11 +1038,7 @@ function ClassicEstimatorContent() {
                 <Row label="Varnish % Coverage"><Num value={pv("inkCoverageVarnishPct")} onChange={(v) => setP("inkCoverageVarnishPct", v)} /></Row>
                 <Row label="Ink Factor (M sq-in/lb)"><Num value={pv("inkFactorMsqinPerLb")} onChange={(v) => setP("inkFactorMsqinPerLb", v)} /></Row>
                 <Row label="Ink $/Lb"><Num value={pv("inkDollarsPerLb")} onChange={(v) => setP("inkDollarsPerLb", v)} /></Row>
-                <SectionTitle>Die / Extras</SectionTitle>
-                <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
-                <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
-                {dieField}
-                <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
+                <SectionTitle>Extras</SectionTitle>
                 <Row label="Press Check Hrs"><Num value={pv("pressCheckHrs")} onChange={(v) => setP("pressCheckHrs", v)} /></Row>
                 <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
                 <Readout label="Plates" value={String(pcalc.plates)} />
@@ -1083,6 +1084,7 @@ function ClassicEstimatorContent() {
             <Row label="Drill Hrs/Hole"><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></Row>
             <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
             <Row label="Bindery Rate $/Hr"><Num value={pv("binderyHourlyRate")} onChange={(v) => setP("binderyHourlyRate", v)} /></Row>
+            {dieCuttingSection()}
           </div>
           <div>
             {( [1, 2] as const).map((n) => {
