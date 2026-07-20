@@ -864,6 +864,7 @@ function ClassicEstimatorContent() {
               ) : null;
             })()}
             <Row label="Caliper / Basis Weight" wide><Txt value={pv("caliperBasisWeight")} onChange={(v) => setP("caliperBasisWeight", v)} /></Row>
+            <Row label="Weight (Lbs / M Shts)"><Num value={pv("weightPerMSheets")} onChange={(v) => setP("weightPerMSheets", v)} /></Row>
             <Row label="Brand/Color/Finish" wide><Txt value={pv("brandColorFinish")} onChange={(v) => setP("brandColorFinish", v)} /></Row>
             <Row label="Price Per M Sheets $"><Num value={pv("pricePerM")} onChange={(v) => setP("pricePerM", v)} /></Row>
             <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
@@ -1114,7 +1115,12 @@ function ClassicEstimatorContent() {
             <Row label="Wrap In" wide><Txt value={pv("wrapIn")} onChange={(v) => setP("wrapIn", v)} placeholder="e.g. wrap in 100s, kraft" /></Row>
             <Row label="Wrap Hrs"><Num value={pv("wrapHrs")} onChange={(v) => setP("wrapHrs", v)} /></Row>
             <SectionTitle>Carton Pack</SectionTitle>
-            <Row label="Cartons"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
+            {/* Mary 7/20: cartons auto-compute from paper weight, max 35 lbs
+                per carton; typing a count overrides the auto. */}
+            <Readout label="Paper Weight (Lbs)" value={pcalc.paperLbs > 0 ? pcalc.paperLbs.toFixed(1) : "— enter Lbs/M on Pg 6"} />
+            <Readout label="Cartons Auto (35 Lb Max)" value={String(pcalc.cartonsAuto)} />
+            <Row label="Cartons (0 = Auto)"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
+            <Readout label="Cartons Used" value={String(pcalc.cartonsUsed)} />
             <Row label="  @ $ each"><Num value={pv("cartonCost")} onChange={(v) => setP("cartonCost", v)} /></Row>
             <Row label="Skid Pack (skids)"><Num value={pv("skids")} onChange={(v) => setP("skids", v)} step={1} /></Row>
             <Row label="  @ $ each"><Num value={pv("skidCost")} onChange={(v) => setP("skidCost", v)} /></Row>

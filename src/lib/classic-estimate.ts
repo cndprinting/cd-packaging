@@ -49,7 +49,7 @@ export interface HandOp {
 export const PART_FIELD_KEYS = [
   // Screen 6 — Paper/Stock
   "sheetWidthRun", "sheetHeightRun", "sheetWidthOrder", "sheetHeightOrder",
-  "numPages", "stockDescription", "caliperBasisWeight", "pricePerM",
+  "numPages", "stockDescription", "caliperBasisWeight", "pricePerM", "weightPerMSheets",
   "numberUp", "sheetsPerPiece", "sheetsOutOfParent", "bindWasteSheets",
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
@@ -129,6 +129,7 @@ export interface ClassicForm {
   stockDescription: string;
   caliperBasisWeight: string;
   pricePerM: number; // $ per 1000 sheets
+  weightPerMSheets: number; // lbs per 1000 parent sheets (E&M "147M" notation) — drives auto cartons
   numberUp: number;
   sheetsPerPiece: number; // press sheets per finished piece (booklets: 16pg on 4pp/side = 4) — Cybake #347528
   sheetsOutOfParent: number; // press sheets cut from each parent sheet bought (E&M "out of parent"); pricePerM is per PARENT
@@ -232,7 +233,7 @@ export function defaultClassicForm(): ClassicForm {
     separations: 0, separationCharge: 20,
     sheetWidthRun: 0, sheetHeightRun: 0, sheetWidthOrder: 0, sheetHeightOrder: 0,
     numPages: 0, stockDescription: "", caliperBasisWeight: "",
-    pricePerM: 0, numberUp: 1, sheetsPerPiece: 1, sheetsOutOfParent: 1, bindWasteSheets: 0, bleedAllowance: "", brandColorFinish: "",
+    pricePerM: 0, weightPerMSheets: 0, numberUp: 1, sheetsPerPiece: 1, sheetsOutOfParent: 1, bindWasteSheets: 0, bleedAllowance: "", brandColorFinish: "",
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
@@ -298,6 +299,9 @@ export interface PartCalc {
   binderyLabor: number;
   cartonSkidCost: number;
   binderyCost: number;
+  paperLbs: number;     // order sheets × lbs-per-M
+  cartonsAuto: number;  // ceil(paperLbs / 35) — Mary's 35-lb max rule
+  cartonsUsed: number;  // manual override if cartons > 0, else auto
 }
 
 /** Paper + press + bindery math for ONE part at the job quantity.
@@ -387,7 +391,13 @@ function computePart(
   const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
-  const cartonSkidCost = (p.cartons || 0) * (p.cartonCost || 0) + (p.skids || 0) * (p.skidCost || 0);
+  // Cartons auto-compute from paper weight at Mary's rule: no carton over
+  // 35 lbs (7/20). paperLbs = order sheets × lbs-per-M ("147M" on her sheets).
+  // A hand-entered carton count overrides the auto (0 = auto).
+  const paperLbs = (orderSheets / 1000) * (p.weightPerMSheets || 0);
+  const cartonsAuto = paperLbs > 0 ? Math.ceil(paperLbs / 35) : 0;
+  const cartonsUsed = (p.cartons || 0) > 0 ? p.cartons : cartonsAuto;
+  const cartonSkidCost = cartonsUsed * (p.cartonCost || 0) + (p.skids || 0) * (p.skidCost || 0);
   const binderyCost = binderyLabor;
 
   return {
@@ -398,6 +408,7 @@ function computePart(
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
     cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
     cartonSkidCost, binderyCost,
+    paperLbs, cartonsAuto, cartonsUsed,
   };
 }
 

@@ -154,5 +154,21 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("numParts=1 ignores parts[] leftovers", stale.total, single.total, 1e-9);
 }
 
+// ══ Cartons auto from paper weight — Mary's 35-lb max rule (7/20) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 1110; f.numberUp = 1; f.wasteFactorPct = 0;
+  f.pricePerM = 140.70; f.weightPerMSheets = 147; // Cybake stock: "80 LB 147M"
+  f.cutterSheetsPerHr = 0;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Cartons @ 35 lb max ──");
+  check("paper lbs (1,110 shts × 147/M)", c.partCalcs[0].paperLbs, 163.17);
+  check("cartons auto = ceil(163.17/35)", c.partCalcs[0].cartonsAuto, 5, 0);
+  check("cartons used (no override)", c.partCalcs[0].cartonsUsed, 5, 0);
+  const manual = computeClassic({ ...f, cartons: 6 }, digitalStd);
+  check("manual carton count overrides auto", manual.partCalcs[0].cartonsUsed, 6, 0);
+  check("carton cost uses effective count", manual.cartonSkidCost, 6 * 0.93);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
