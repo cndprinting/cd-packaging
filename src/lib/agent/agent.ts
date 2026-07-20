@@ -10,6 +10,9 @@ import { AGENT_MAILBOX, AGENT_NAME, leadMailbox, leadAgentName, leadAgentFirst }
 
 export const MARY = "mbitting@cndprinting.com";
 export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
+// Thread CCs on Jessica's customer/Mary emails — Nitay asked off these
+// (Benjy 7/20); he stays on OWNERS for internal alerts and digests.
+export const THREAD_CC = ["bwaxman@cndprinting.com", "awaxman@cndprinting.com"];
 // Customer-facing identity — driven by identity.ts (Albert today, Jessica once
 // AGENT_SENDER_EMAIL/NAME are set). Per-lead threads stick to the mailbox they
 // started in via leadMailbox().
@@ -132,14 +135,14 @@ export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?
   if (!lead.contactEmail) return;
   const subject = noEmDash(opts.subject || customerSubject(lead));
   const body = noEmDash(opts.body) + SIGNATURE;
-  if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: OWNERS, subject, body }); return; }
+  if (process.env.AGENT_TEST_TO) { await agentSend({ to: lead.contactEmail, cc: THREAD_CC, subject, body }); return; }
   const mb = leadMailbox(lead); // existing threads stay in their original mailbox through the identity cutover
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentConvId) {
-    const r = await replyInConversation({ from: mb, conversationId: lead.agentConvId, to: lead.contactEmail, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+    const r = await replyInConversation({ from: mb, conversationId: lead.agentConvId, to: lead.contactEmail, cc: THREAD_CC, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return; // threaded
   }
-  const r = await sendEmailGetConversation({ from: mb, to: lead.contactEmail, cc: OWNERS, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+  const r = await sendEmailGetConversation({ from: mb, to: lead.contactEmail, cc: THREAD_CC, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
   if (r.conversationId || !lead.agentMailbox) {
     try { await prisma.lead.update({ where: { id: lead.id }, data: { ...(r.conversationId ? { agentConvId: r.conversationId } : {}), agentMailbox: mb } }); } catch { /* ignore */ }
   }
@@ -151,14 +154,14 @@ export async function agentCustomerSend(prisma: any, lead: any, opts: { subject?
 export async function agentMarySend(prisma: any, lead: any, opts: { subject?: string; body: string; copyAttachmentsFrom?: string }): Promise<void> {
   const subject = noEmDash(opts.subject || `Quote needed: ${lead.companyName}`);
   const body = noEmDash(opts.body);
-  if (process.env.AGENT_TEST_TO) { await agentSend({ to: MARY, cc: OWNERS, subject, body }); return; }
+  if (process.env.AGENT_TEST_TO) { await agentSend({ to: MARY, cc: THREAD_CC, subject, body }); return; }
   const mb = leadMailbox(lead);
   const { sendEmailGetConversation, replyInConversation } = await import("@/lib/email/graph-client");
   if (lead.agentMaryConvId) {
-    const r = await replyInConversation({ from: mb, conversationId: lead.agentMaryConvId, to: MARY, cc: OWNERS, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
+    const r = await replyInConversation({ from: mb, conversationId: lead.agentMaryConvId, to: MARY, cc: THREAD_CC, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return;
   }
-  const r = await sendEmailGetConversation({ from: mb, to: MARY, cc: OWNERS, subject, body });
+  const r = await sendEmailGetConversation({ from: mb, to: MARY, cc: THREAD_CC, subject, body });
   if (r.conversationId || !lead.agentMailbox) {
     try { await prisma.lead.update({ where: { id: lead.id }, data: { ...(r.conversationId ? { agentMaryConvId: r.conversationId } : {}), agentMailbox: mb } }); } catch { /* ignore */ }
   }

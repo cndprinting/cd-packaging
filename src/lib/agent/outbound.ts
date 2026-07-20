@@ -30,7 +30,9 @@ const jessicaPerRunCap = () => parseInt(process.env.AGENT_OUTBOUND_JESSICA_LIMIT
 // Benjy, Nitay, Albert are BCC'd on every outbound send so they can monitor the
 // agent (invisible to the prospect). The sending owner is dropped since their
 // own copy already lands in Sent.
-const OWNER_BCC = [OWNERS_MAP.benjy.email, OWNERS_MAP.nitay.email, OWNERS_MAP.albert.email];
+// Nitay asked off the outreach threads (Benjy 7/20) — he still gets the
+// internal alerts (replies/digests), just not the per-email monitoring copies.
+const OWNER_BCC = [OWNERS_MAP.benjy.email, OWNERS_MAP.albert.email];
 const bccFor = (owner: Owner) => OWNER_BCC.filter((e) => e.toLowerCase() !== owner.email.toLowerCase());
 function resolveOwner(ownerName?: string | null): Owner {
   return OWNERS_MAP[(ownerName || "").trim().toLowerCase()] || DEFAULT_OWNER;
