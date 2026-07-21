@@ -795,13 +795,8 @@ function ClassicEstimatorContent() {
           <Row label="Design/Layout/Artwork Hrs"><Num value={form.designHours} onChange={(v) => set("designHours", v)} /></Row>
           <Row label="Photoshop Hrs"><Num value={form.photoshopHours} onChange={(v) => set("photoshopHours", v)} /></Row>
           <Row label="Prepress Rate $/Hr"><Num value={form.prepressRate} onChange={(v) => set("prepressRate", v)} /></Row>
-          <SectionTitle>Scans</SectionTitle>
-          <Row label="Scans 8.5x11"><Num value={form.scans85x11} onChange={(v) => set("scans85x11", v)} step={1} /></Row>
-          <Row label="  @ $ each"><Num value={form.scanCharge85x11} onChange={(v) => set("scanCharge85x11", v)} /></Row>
-          <Row label="Scans 11x17"><Num value={form.scans11x17} onChange={(v) => set("scans11x17", v)} step={1} /></Row>
-          <Row label="  @ $ each"><Num value={form.scanCharge11x17} onChange={(v) => set("scanCharge11x17", v)} /></Row>
-          <Row label="Scans 20x25"><Num value={form.scans20x25} onChange={(v) => set("scans20x25", v)} step={1} /></Row>
-          <Row label="  @ $ each"><Num value={form.scanCharge20x25} onChange={(v) => set("scanCharge20x25", v)} /></Row>
+          {/* Scans section removed per Mary 7/21 — she only uses the Hours
+              block. Fields remain in the data model (old drafts still price). */}
         </div>
         <div>
           <SectionTitle>Disks & Proofs</SectionTitle>
@@ -812,7 +807,10 @@ function ClassicEstimatorContent() {
           <Row label="Color Proofs"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.colorProofCharge} onChange={(v) => set("colorProofCharge", v)} /></Row>
           <Readout label="Prepress Labor" value={money(calc.prepLabor)} />
-          <Readout label="Prepress Materials" value={money(calc.prepMaterials)} />
+          {/* Show ONLY Screen 4+5 items here — cartons also ride the Material
+              bucket but display in Carton Pack (Mary 7/21: "$83 from where?") */}
+          <Readout label="Prepress Materials (Scr 4+5)" value={money(calc.prepMaterials - calc.cartonSkidCost)} />
+          {calc.cartonSkidCost > 0 && <Readout label="+ Cartons/Skids (Material Line)" value={money(calc.cartonSkidCost)} />}
         </div>
       </div>
     );
