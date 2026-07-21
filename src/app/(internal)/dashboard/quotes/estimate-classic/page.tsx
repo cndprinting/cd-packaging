@@ -171,7 +171,9 @@ function ClassicEstimatorContent() {
             cartonCost: Number(s.carton1Cost) || f.cartonCost,
             // E&M-seeded standards found in PlantStandard (Benjy 7/20) — these
             // replace the hand-picked placeholders:
-            inkDollarsPerLb: Number(s.inkColorPerLb) || f.inkDollarsPerLb,           // $10.81/lb
+            inkBlackDollarsPerLb: Number(s.inkBlackPerLb) || f.inkBlackDollarsPerLb,   // $10.81/lb
+            inkDollarsPerLb: Number(s.inkColorPerLb) || f.inkDollarsPerLb,           // process $10.81/lb
+            inkPmsDollarsPerLb: Number(s.inkPmsPerLb) || f.inkPmsDollarsPerLb,       // $19.50/lb (LED has no std - placeholder)
             varnishDollarsPerLb: Number(s.inkVarnishPerLb) || f.varnishDollarsPerLb,  // $5.50/lb
             prepressRate: Number(s.artworkRate) || f.prepressRate,                    // $60/hr
             drillHrsPerHole: Number(s.drillTimePerHoleSec) > 0 ? Number(s.drillTimePerHoleSec) / 3600 : f.drillHrsPerHole, // 4 sec/hole
@@ -1112,11 +1114,16 @@ function ClassicEstimatorContent() {
               <>
                 <SectionTitle>Ink</SectionTitle>
                 <Row label="Black % Coverage"><Num value={pv("inkCoverageBlackPct")} onChange={(v) => setP("inkCoverageBlackPct", v)} /></Row>
-                <Row label="Color % Coverage"><Num value={pv("inkCoverageColorPct")} onChange={(v) => setP("inkCoverageColorPct", v)} /></Row>
+                <Row label="Black Ink $/Lb"><Num value={pv("inkBlackDollarsPerLb")} onChange={(v) => setP("inkBlackDollarsPerLb", v)} /></Row>
+                <Row label="Process % Coverage"><Num value={pv("inkCoverageColorPct")} onChange={(v) => setP("inkCoverageColorPct", v)} /></Row>
+                <Row label="Process Ink $/Lb"><Num value={pv("inkDollarsPerLb")} onChange={(v) => setP("inkDollarsPerLb", v)} /></Row>
+                <Row label="LED Process % Coverage"><Num value={pv("inkCoverageLedPct")} onChange={(v) => setP("inkCoverageLedPct", v)} /></Row>
+                <Row label="LED Process Ink $/Lb"><Num value={pv("inkLedDollarsPerLb")} onChange={(v) => setP("inkLedDollarsPerLb", v)} /></Row>
+                <Row label="PMS % Coverage"><Num value={pv("inkCoveragePmsPct")} onChange={(v) => setP("inkCoveragePmsPct", v)} /></Row>
+                <Row label="PMS Ink $/Lb"><Num value={pv("inkPmsDollarsPerLb")} onChange={(v) => setP("inkPmsDollarsPerLb", v)} /></Row>
                 <Row label="Varnish % Coverage"><Num value={pv("inkCoverageVarnishPct")} onChange={(v) => setP("inkCoverageVarnishPct", v)} /></Row>
-                <Row label="Ink Factor (M sq-in/lb)"><Num value={pv("inkFactorMsqinPerLb")} onChange={(v) => setP("inkFactorMsqinPerLb", v)} /></Row>
-                <Row label="Ink $/Lb (Black/Color)"><Num value={pv("inkDollarsPerLb")} onChange={(v) => setP("inkDollarsPerLb", v)} /></Row>
                 <Row label="Varnish $/Lb"><Num value={pv("varnishDollarsPerLb")} onChange={(v) => setP("varnishDollarsPerLb", v)} /></Row>
+                <Row label="Ink Factor (M sq-in/lb)"><Num value={pv("inkFactorMsqinPerLb")} onChange={(v) => setP("inkFactorMsqinPerLb", v)} /></Row>
                 <SectionTitle>Coatings / Aqueous</SectionTitle>
                 <Row label="Coating Type" wide>
                   <select
@@ -1141,7 +1148,7 @@ function ClassicEstimatorContent() {
                 <Readout label="Makeready" value={hrs(pcalc.makereadyHrs)} />
                 <Readout label="Washup" value={hrs(pcalc.washupHrs)} />
                 <Readout label="Run" value={hrs(pcalc.runHrs)} />
-                <Readout label="Ink" value={`${pcalc.inkLbsBlackColor.toFixed(2)} lb ink${pcalc.inkLbsVarnish > 0 ? ` + ${pcalc.inkLbsVarnish.toFixed(2)} lb varnish` : ""} / ${money(pcalc.inkCost)}`} />
+                <Readout label="Ink" value={[[pcalc.inkLbsBlack, "blk"], [pcalc.inkLbsProcess, "proc"], [pcalc.inkLbsLed, "LED"], [pcalc.inkLbsPms, "PMS"], [pcalc.inkLbsVarnish, "varn"]].filter(([lb]) => (lb as number) > 0).map(([lb, t]) => `${(lb as number).toFixed(2)}lb ${t}`).join(" + ") + ` / ${money(pcalc.inkCost)}` || "—"} />
                 <Readout label="Press Cost" value={money(pcalc.pressCost)} />
               </>
             )}

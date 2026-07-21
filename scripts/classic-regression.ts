@@ -329,7 +329,13 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   console.log("\n── Ink per-type split ──");
   check("black+color lbs (22%)", c.partCalcs[0].inkLbsBlackColor, 0.4141, 0.001);
   check("varnish lbs (12%)", c.partCalcs[0].inkLbsVarnish, 0.2259, 0.001);
-  check("ink cost: bc @8.50 + varnish @5.50", c.partCalcs[0].inkCost, 0.41412 * 8.5 + 0.22588 * 5.5, 0.01);
+  // Per-type rates (Mary 7/21): black $10.81 / process $8.50 default / varnish $5.50
+  check("ink cost: blk@10.81 + proc@8.50 + varn@5.50", c.partCalcs[0].inkCost, 0.18824 * 10.81 + 0.22588 * 8.5 + 0.22588 * 5.5, 0.01);
+  check("black lbs (10%)", c.partCalcs[0].inkLbsBlack, 0.18824, 0.001);
+  check("process lbs (12%)", c.partCalcs[0].inkLbsProcess, 0.22588, 0.001);
+  const led = computeClassic({ ...f, inkCoverageLedPct: 10, inkCoveragePmsPct: 5 }, digitalStd);
+  check("LED lbs price at LED rate", led.partCalcs[0].inkLbsLed * 10.81, 0.18824 * 10.81, 0.01);
+  check("PMS lbs price at 19.50", led.partCalcs[0].inkLbsPms * 19.5, 0.09412 * 19.5, 0.01);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

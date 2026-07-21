@@ -113,8 +113,8 @@ export const PART_FIELD_KEYS = [
   "runDiff", "wasteFactorPct", "helpers",
   "coatingType", "coatingCoveragePct", "coatingDollarsPerLb",
   "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
-  "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageVarnishPct",
-  "inkFactorMsqinPerLb", "inkDollarsPerLb", "varnishDollarsPerLb",
+  "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageLedPct", "inkCoveragePmsPct", "inkCoverageVarnishPct",
+  "inkFactorMsqinPerLb", "inkBlackDollarsPerLb", "inkDollarsPerLb", "inkLedDollarsPerLb", "inkPmsDollarsPerLb", "varnishDollarsPerLb",
   "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   // Screen 8 — Bindery
@@ -224,10 +224,15 @@ export interface ClassicForm {
   equipmentPassesManual: number;   // 0 = auto-count from the job's operations
   helpers: number;
   inkCoverageBlackPct: number;
-  inkCoverageColorPct: number;
+  inkCoverageColorPct: number;   // process (CMYK) coverage
+  inkCoverageLedPct: number;     // LED-cured process coverage (Mary 7/21)
+  inkCoveragePmsPct: number;     // PMS/spot coverage
   inkCoverageVarnishPct: number;
   inkFactorMsqinPerLb: number; // thousand sq-in of coverage per lb of ink
-  inkDollarsPerLb: number; // black + color $/lb
+  inkBlackDollarsPerLb: number; // black ink $/lb (std 10.81)
+  inkDollarsPerLb: number; // PROCESS ink $/lb (std 10.81)
+  inkLedDollarsPerLb: number;   // LED process ink $/lb — NO plant standard, PLACEHOLDER pending Mary
+  inkPmsDollarsPerLb: number;   // PMS ink $/lb (std 19.50)
   varnishDollarsPerLb: number; // varnish prices at its own rate ($5.50 std), not ink money
   // Coating/Aqueous (offset — Mary 7/21). Lbs use the same coverage model as
   // ink; $/lb prefills by type from PlantStandard, always hand-editable.
@@ -324,8 +329,8 @@ export function defaultClassicForm(): ClassicForm {
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
-    inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
-    inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5, varnishDollarsPerLb: 5.5,
+    inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageLedPct: 0, inkCoveragePmsPct: 0, inkCoverageVarnishPct: 0,
+    inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.81, inkDollarsPerLb: 8.5, inkLedDollarsPerLb: 10.81, inkPmsDollarsPerLb: 19.5, varnishDollarsPerLb: 5.5,
     coatingType: "", coatingCoveragePct: 100, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
@@ -370,8 +375,12 @@ export interface PartCalc {
   pressHrs: number;
   inkLbs: number;
   inkCost: number;
-  inkLbsBlackColor: number; // E&M-style per-type split
+  inkLbsBlackColor: number; // black + process (legacy display bucket)
   inkLbsVarnish: number;
+  inkLbsBlack: number;
+  inkLbsProcess: number;
+  inkLbsLed: number;
+  inkLbsPms: number;
   coatingLbs: number;
   coatingCost: number;
   speedFactor: number;   // small-run curve factor applied (1 = full rated speed)
@@ -462,6 +471,7 @@ function computePart(
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
   let inkLbs = 0, inkCost = 0, inkLbsBlackColor = 0, inkLbsVarnish = 0;
+  let inkLbsBlack = 0, inkLbsProcess = 0, inkLbsLed = 0, inkLbsPms = 0;
   let coatingLbs = 0, coatingCost = 0;
   let speedFactor = 1, effectiveSph = 0;
   let speedCapReason = "";
@@ -501,7 +511,8 @@ function computePart(
     // thickness (caliper parsed from the stock weight text), then the
     // small-run factor derates short runs.
     const coveragePctForSpeed =
-      (p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0) + (p.inkCoverageVarnishPct || 0) +
+      (p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0) + (p.inkCoverageLedPct || 0) +
+      (p.inkCoveragePmsPct || 0) + (p.inkCoverageVarnishPct || 0) +
       (p.coatingType ? (p.coatingCoveragePct || 0) : 0);
     let baseSph = p.runSpeedSph || 0;
     if (baseSph > 0 && coveragePctForSpeed >= (speedRules.heavyCoveragePct || Infinity) && speedRules.solidCoverageSpeed > 0) {
@@ -520,10 +531,19 @@ function computePart(
     const lbsFor = (pct: number) => p.inkFactorMsqinPerLb > 0
       ? (pressSheets * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;
-    inkLbsBlackColor = lbsFor((p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0));
+    inkLbsBlack = lbsFor(p.inkCoverageBlackPct || 0);
+    inkLbsProcess = lbsFor(p.inkCoverageColorPct || 0);
+    inkLbsLed = lbsFor(p.inkCoverageLedPct || 0);
+    inkLbsPms = lbsFor(p.inkCoveragePmsPct || 0);
+    inkLbsBlackColor = inkLbsBlack + inkLbsProcess; // legacy display bucket
     inkLbsVarnish = lbsFor(p.inkCoverageVarnishPct || 0);
-    inkLbs = inkLbsBlackColor + inkLbsVarnish;
-    inkCost = inkLbsBlackColor * (p.inkDollarsPerLb || 0) + inkLbsVarnish * (p.varnishDollarsPerLb || 0);
+    inkLbs = inkLbsBlack + inkLbsProcess + inkLbsLed + inkLbsPms + inkLbsVarnish;
+    inkCost =
+      inkLbsBlack * (p.inkBlackDollarsPerLb || 0) +
+      inkLbsProcess * (p.inkDollarsPerLb || 0) +
+      inkLbsLed * (p.inkLedDollarsPerLb || 0) +
+      inkLbsPms * (p.inkPmsDollarsPerLb || 0) +
+      inkLbsVarnish * (p.varnishDollarsPerLb || 0);
     // Coating/Aqueous (Mary 7/21): same coverage model as ink, its own $/lb.
     if (p.coatingType && p.inkFactorMsqinPerLb > 0) {
       coatingLbs = (pressSheets * sheetArea * ((p.coatingCoveragePct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000);
@@ -581,7 +601,7 @@ function computePart(
   return {
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
-    inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
+    inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
