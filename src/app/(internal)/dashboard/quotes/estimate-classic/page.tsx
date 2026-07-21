@@ -807,10 +807,9 @@ function ClassicEstimatorContent() {
           <Row label="Color Proofs"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.colorProofCharge} onChange={(v) => set("colorProofCharge", v)} /></Row>
           <Readout label="Prepress Labor" value={money(calc.prepLabor)} />
-          {/* Show ONLY Screen 4+5 items here — cartons also ride the Material
-              bucket but display in Carton Pack (Mary 7/21: "$83 from where?") */}
-          <Readout label="Prepress Materials (Scr 4+5)" value={money(calc.prepMaterials - calc.cartonSkidCost)} />
-          {calc.cartonSkidCost > 0 && <Readout label="+ Cartons/Skids (Material Line)" value={money(calc.cartonSkidCost)} />}
+          {/* ONLY Screen 4+5 items here — carton/skid $ shows on Screen 8's
+              Carton Pack where it's entered (Benjy/Mary 7/21). */}
+          <Readout label="Prepress Materials" value={money(calc.prepMaterials - calc.cartonSkidCost)} />
         </div>
       </div>
     );
@@ -1224,6 +1223,7 @@ function ClassicEstimatorContent() {
             <Readout label="Cartons Auto (35 Lb Max)" value={String(pcalc.cartonsAuto)} />
             <Row label="Cartons (0 = Auto)"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
             <Readout label="Cartons Used" value={String(pcalc.cartonsUsed)} />
+            <Readout label="Carton/Skid $ (Material Line)" value={money(pcalc.cartonSkidCost)} />
             <Row label="  @ $ each"><Num value={pv("cartonCost")} onChange={(v) => setP("cartonCost", v)} /></Row>
             <Row label="Skid Pack (skids)"><Num value={pv("skids")} onChange={(v) => setP("skids", v)} step={1} /></Row>
             <Row label="  @ $ each"><Num value={pv("skidCost")} onChange={(v) => setP("skidCost", v)} /></Row>
