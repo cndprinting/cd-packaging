@@ -510,12 +510,15 @@ function ClassicEstimatorContent() {
         materials: Math.max(0, calc.paperCost - wasteCost) + calc.inkCost + calc.prepMaterials,
         tooling: form.dieCost || 0,
         labor: calc.prepLabor + (calc.pressLaborCost - calc.inkCost),
-        finishing: calc.binderyLabor,
+        // Todd's in-house finishing rows are REAL C&D cost -> finishing
+        // bucket; only true vendor buyouts ride the outside/shipping bucket
+        // (Benjy 7/21).
+        finishing: calc.binderyLabor + calc.outsideToddCost,
         waste: wasteCost,
         // Outside bucket rides "shipping" — the detail page applies Outside
         // markup to this field (freight + additional + outside purchases,
         // incl. digital clicks which E&M books as outside).
-        shipping: calc.freightAndAdditional + calc.outsideCost,
+        shipping: calc.freightAndAdditional + calc.outsideVendorCost,
         markup: calc.sellingSubtotal - calc.totalCost,
         commission: calc.commission,
       };
@@ -1268,7 +1271,19 @@ function ClassicEstimatorContent() {
             const rowCost = (p.per === "perM" ? (p.amount || 0) * (form.quantity || 0) / 1000 : (p.amount || 0)) * (p.plus3 ? 1.03 : 1);
             return (
               <div key={i} className="mb-1">
-                <div className="grid grid-cols-[1fr_80px_84px_52px_28px] gap-1">
+                <div className="grid grid-cols-[96px_1fr_80px_84px_52px_28px] gap-1">
+                  <select
+                    className={inputCls}
+                    value={p.source === "todd" ? "todd" : "vendor"}
+                    onChange={(e) => {
+                      const src = e.target.value as "todd" | "vendor";
+                      // Todd = in-house: no handling upcharge by default
+                      upd({ source: src, plus3: src === "todd" ? false : p.plus3 });
+                    }}
+                  >
+                    <option value="vendor">Vendor</option>
+                    <option value="todd">Todd/Fin</option>
+                  </select>
                   <input
                     type="text" className={inputCls} placeholder="Description" value={p.description}
                     onChange={(e) => upd({ description: e.target.value })}
@@ -1337,7 +1352,7 @@ function ClassicEstimatorContent() {
           <button
             type="button"
             className="mt-1 rounded-sm border border-amber-700/60 px-2 py-1 font-mono text-[12px] text-amber-300 hover:bg-amber-400/10"
-            onClick={() => set("outsidePurchases", [...form.outsidePurchases, { description: "", amount: 0, per: "job" as const, plus3: true }])}
+            onClick={() => set("outsidePurchases", [...form.outsidePurchases, { description: "", amount: 0, per: "job" as const, plus3: true, source: "vendor" as const }])}
           >+ Add Outside Purchase</button>
           <SectionTitle>Quote Notes (Prints On Letter)</SectionTitle>
           {/* Mary's standard letter phrases (7/21) — click to append, edit inline.

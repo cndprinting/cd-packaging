@@ -359,5 +359,21 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("missing tier price falls back to primary", blankTier.outsideCost, 543);
 }
 
+// ══ Todd/vendor outside split (Benjy 7/21 - Option A) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 1000; f.numberUp = 1; f.pricePerM = 100; f.cutterSheetsPerHr = 0;
+  f.outsidePurchases = [
+    { description: "Todd die cutting", amount: 300, source: "todd", plus3: false },
+    { description: "Wire coil", amount: 100, source: "vendor", plus3: true },
+    { description: "Legacy row (no tag)", amount: 50 },
+  ];
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Todd/vendor split ──");
+  check("Todd portion (in-house)", c.outsideToddCost, 300);
+  check("vendor portion (100x1.03 + 50 legacy)", c.outsideVendorCost, 153);
+  check("total outside unchanged", c.outsideCost, 453);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

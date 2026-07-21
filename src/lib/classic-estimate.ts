@@ -45,6 +45,11 @@ export interface OutsidePurchase {
   // quantity i+1 (tier 0 = the primary `amount`); 0/missing falls back to
   // the primary amount.
   amountsByTier?: number[];
+  // Benjy 7/21: C&D calls Todd's IN-HOUSE finishing "outside service" for
+  // historical reasons, but it's a real C&D cost, not a buyout. The tag
+  // routes Todd rows into the finishing cost bucket for reports; missing
+  // tag = vendor (true outsourced), matching all old rows.
+  source?: "todd" | "vendor";
 }
 
 // ── Small-run speed curve (Mary 7/21: "not going to hit 10,000/hr on smaller
@@ -681,6 +686,8 @@ export interface ClassicCalc {
   // Outside — sold at Outside markup
   outsideCost: number;
   outsideSelling: number;
+  outsideToddCost: number;   // in-house finishing (Todd) portion — real C&D cost
+  outsideVendorCost: number; // true outsourced portion (incl. digital clicks)
 
   // Pass-through
   freightAndAdditional: number;
@@ -763,14 +770,17 @@ export function computeClassic(
   // handling upcharge. Legacy rows without the keys = flat, no upcharge.
   // Digital clicks are added AFTER this reduce — they never get the 3%.
   const tierIdx = f.activeTierIndex || 0;
-  const outsidePurchaseCost = f.outsidePurchases.reduce((s, p) => {
+  let outsideToddCost = 0, outsideVendorCost = 0;
+  for (const p of f.outsidePurchases) {
     // Per-tier vendor price when one is entered for this tier; else primary.
     const tierAmt = tierIdx > 0 && Array.isArray(p.amountsByTier) && (Number(p.amountsByTier[tierIdx - 1]) || 0) > 0
       ? Number(p.amountsByTier[tierIdx - 1])
       : Number(p.amount) || 0;
     const base = p.per === "perM" ? (tierAmt * qty) / 1000 : tierAmt;
-    return s + base * (p.plus3 ? 1.03 : 1);
-  }, 0);
+    const rowCost = base * (p.plus3 ? 1.03 : 1);
+    if (p.source === "todd") outsideToddCost += rowCost; else outsideVendorCost += rowCost;
+  }
+  const outsidePurchaseCost = outsideToddCost + outsideVendorCost;
   const outsideCost = outsidePurchaseCost + digitalClickTotal;
   const freightAndAdditional = (f.freight || 0) + (f.additionalCosts || 0);
 
@@ -827,6 +837,8 @@ export function computeClassic(
     binderyHrs: sum((c) => c.binderyHrs),
     binderyLabor, cartonSkidCost, binderyCost, binderySelling,
     outsideCost, outsideSelling,
+    outsideToddCost,
+    outsideVendorCost: outsideVendorCost + digitalClickTotal,
     freightAndAdditional,
     totalCost, sellingSubtotal, commission, total,
     costPerUnit: qty > 0 ? total / qty : 0,
