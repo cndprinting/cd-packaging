@@ -5,6 +5,7 @@ import {
   computeClassic,
   computeQuantityBreaks,
   defaultClassicForm,
+  smallRunSpeedFactor,
   type ClassicPart,
 } from "../src/lib/classic-estimate";
 
@@ -221,6 +222,71 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("1-up 1-out = no cutting", noCut.partCalcs[0].cutsUsed, 0, 0);
   const manual = computeClassic({ ...f, cutsToFinalSize: 9 }, digitalStd);
   check("typed cut count overrides auto", manual.partCalcs[0].cutsUsed, 9, 0);
+}
+
+// ══ Small-run speed curve (Mary 7/21 — PLACEHOLDER factors) ══
+{
+  console.log("\n── Small-run speed curve ──");
+  check("factor <1,000 shts", smallRunSpeedFactor(500), 0.5, 0);
+  check("factor <2,500 shts", smallRunSpeedFactor(1500), 0.65, 0);
+  check("factor <5,000 shts", smallRunSpeedFactor(3000), 0.8, 0);
+  check("factor <10,000 shts", smallRunSpeedFactor(9999), 0.9, 0);
+  check("factor at 10,000+ shts", smallRunSpeedFactor(10000), 1, 0);
+  const f = defaultClassicForm();
+  f.quantity = 500; f.numberUp = 1; f.runSpeedSph = 10000; f.pressHourlyRate = 100;
+  f.cutterSheetsPerHr = 0;
+  const c = computeClassic(f, digitalStd);
+  // 500 sheets at 10,000 rated × 0.5 = 5,000 effective → 0.1 hr
+  check("effective SPH (10,000 × 0.5)", c.partCalcs[0].effectiveSph, 5000, 0);
+  check("run hrs use effective SPH", c.partCalcs[0].runHrs, 0.1, 1e-9);
+  const off = computeClassic({ ...f, useSpeedCurve: false }, digitalStd);
+  check("curve off → rated speed", off.partCalcs[0].runHrs, 0.05, 1e-9);
+  check("curve off factor is 1", off.partCalcs[0].speedFactor, 1, 0);
+}
+
+// ══ Coatings / Aqueous (Mary 7/21) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 10000; f.numberUp = 1; f.sheetWidthRun = 25; f.sheetHeightRun = 38;
+  f.cutterSheetsPerHr = 0;
+  f.coatingType = "Gloss AQ"; f.coatingCoveragePct = 100; f.coatingDollarsPerLb = 18;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Coatings / Aqueous ──");
+  // 10,000 shts × 950 sq-in × 100% ÷ (425 × 1000) = 22.3529 lbs × $18 = $402.35
+  check("coating lbs", c.partCalcs[0].coatingLbs, 22.3529, 0.001);
+  check("coating $", c.partCalcs[0].coatingCost, 402.35, 0.01);
+  check("coating rides press cost", c.pressCost, 402.35, 0.01);
+  check("job-level coating sum exposed", c.coatingCost, 402.35, 0.01);
+  const none = computeClassic({ ...f, coatingType: "" }, digitalStd);
+  check("no coating type → $0", none.coatingCost, 0, 0);
+}
+
+// ══ Outside services: $/M scaling + 3% upcharge (Mary 7/21) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 10000; f.numberUp = 1; f.cutterSheetsPerHr = 0;
+  f.markupOutsidePct = 0;
+  f.outsidePurchases = [
+    { description: "Legacy row (no keys)", amount: 100 },                       // flat, no 3%
+    { description: "UV coat", amount: 50, per: "perM", plus3: true },           // 50 × 10 × 1.03 = 515
+    { description: "Insert flat +3%", amount: 200, per: "job", plus3: true },   // 206
+  ];
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Outside services $/M + 3% ──");
+  check("outside cost (100 + 515 + 206)", c.outsideCost, 821);
+  // Per-M rows scale to each tier quantity automatically
+  const tiers = computeQuantityBreaks({ ...f, additionalQuantities: [20000, 0, 0] }, digitalStd);
+  const t2 = computeClassic({ ...f, quantity: 20000 }, digitalStd);
+  check("tier 2 outside (100 + 1030 + 206)", t2.outsideCost, 1336);
+  check("tier table re-runs outside per qty", tiers[1].total, t2.total, 1e-9);
+  // Digital clicks join outside WITHOUT the 3% (Cybake exactness re-proved)
+  const d = defaultClassicForm();
+  d.jobType = "Digital Direct"; d.quantity = 1000; d.numberUp = 2;
+  d.sheetWidthRun = 12.5; d.sheetHeightRun = 19; d.digitalInkConfig = "4/4";
+  d.digitalMakereadySheets = 25; d.cutterSheetsPerHr = 0;
+  d.outsidePurchases = [{ description: "Score", amount: 100, plus3: true }];
+  const dc = computeClassic(d, digitalStd);
+  check("clicks never get the 3% (198.45 + 103)", dc.outsideCost, 301.45);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

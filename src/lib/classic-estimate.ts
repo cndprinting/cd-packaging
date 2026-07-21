@@ -35,7 +35,35 @@ export type JobType = (typeof JOB_TYPES)[number];
 export interface OutsidePurchase {
   description: string;
   amount: number;
+  // Mary 7/21 (QT-2026-067): outside services can be priced per M pieces so
+  // they scale with each quoted quantity, and carry a +3% handling upcharge.
+  // Old saved rows lack these keys → behave as { per: "job", plus3: false }.
+  per?: "job" | "perM";
+  plus3?: boolean;
 }
+
+// ── Small-run speed curve (Mary 7/21: "not going to hit 10,000/hr on smaller
+// runs"). Effective SPH = rated SPH × factor(press sheets). PLACEHOLDER
+// thresholds/factors pending Mary's real observed speeds — tune here only.
+export const SMALL_RUN_SPEED_CURVE: { maxSheets: number; factor: number }[] = [
+  { maxSheets: 1000, factor: 0.5 },
+  { maxSheets: 2500, factor: 0.65 },
+  { maxSheets: 5000, factor: 0.8 },
+  { maxSheets: 10000, factor: 0.9 },
+];
+
+/** Speed factor for a run length (1.0 at/above the last threshold). */
+export function smallRunSpeedFactor(pressSheets: number): number {
+  for (const t of SMALL_RUN_SPEED_CURVE) {
+    if (pressSheets < t.maxSheets) return t.factor;
+  }
+  return 1;
+}
+
+// Coating/Aqueous types Mary quotes (Screen 7 offset branch). $/lb prefills
+// from PlantStandard: AQ types → inkAqueousPerLb, Varnish → inkVarnishPerLb.
+export const COATING_TYPES = ["", "Gloss AQ", "Matte AQ", "Satin AQ", "UV", "Varnish"] as const;
+export type CoatingType = (typeof COATING_TYPES)[number];
 
 export interface HandOp {
   description: string;
@@ -56,7 +84,9 @@ export const PART_FIELD_KEYS = [
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
   "runColorsSide1", "runColorsSide2", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
+  "useSpeedCurve",
   "runDiff", "wasteFactorPct", "helpers",
+  "coatingType", "coatingCoveragePct", "coatingDollarsPerLb",
   "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
   "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageVarnishPct",
   "inkFactorMsqinPerLb", "inkDollarsPerLb",
@@ -150,7 +180,8 @@ export interface ClassicForm {
   makereadyDiff: number;
   washupHrsPerUnit: number;
   washupDiff: number;
-  runSpeedSph: number;
+  runSpeedSph: number; // RATED speed — small-run curve derates it when enabled
+  useSpeedCurve: boolean; // apply the small-run speed curve (Mary 7/21)
   runDiff: number;
   wasteFactorPct: number; // LEGACY — superseded by Mary's sheet-based waste rule below (7/20)
   // Press waste, Mary's actual E&M rule (7/20): 100 sheets per color per side
@@ -166,6 +197,11 @@ export interface ClassicForm {
   inkCoverageVarnishPct: number;
   inkFactorMsqinPerLb: number; // thousand sq-in of coverage per lb of ink
   inkDollarsPerLb: number;
+  // Coating/Aqueous (offset — Mary 7/21). Lbs use the same coverage model as
+  // ink; $/lb prefills by type from PlantStandard, always hand-editable.
+  coatingType: string;          // "" = none; see COATING_TYPES
+  coatingCoveragePct: number;   // default 100 (flood)
+  coatingDollarsPerLb: number;  // prefilled by type, editable
   dieCutHrs: number;
   scorePerfHrs: number;
   dieCost: number;
@@ -253,10 +289,11 @@ export function defaultClassicForm(): ClassicForm {
     runColorsSide1: 0, runColorsSide2: 0,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
-    runSpeedSph: 0, runDiff: 1, wasteFactorPct: 0, helpers: 0,
+    runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
     inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5,
+    coatingType: "", coatingCoveragePct: 100, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
@@ -300,6 +337,10 @@ export interface PartCalc {
   pressHrs: number;
   inkLbs: number;
   inkCost: number;
+  coatingLbs: number;
+  coatingCost: number;
+  speedFactor: number;   // small-run curve factor applied (1 = full rated speed)
+  effectiveSph: number;  // rated SPH × factor (0 when no speed entered)
   pressLaborCost: number;
   pressMaterialsCost: number; // die cost
   pressCost: number;
@@ -384,6 +425,8 @@ function computePart(
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
   let inkLbs = 0, inkCost = 0;
+  let coatingLbs = 0, coatingCost = 0;
+  let speedFactor = 1, effectiveSph = 0;
   let pressLaborCost = 0;
   let digitalTier: 1 | 2 | 3 = 1;
   let digitalClickRate = 0, digitalVDRate = 0, digitalClickSheets = 0;
@@ -411,7 +454,12 @@ function computePart(
   } else {
     makereadyHrs = (p.baseMakereadyHrsPerPlate || 0) * (p.makereadyDiff || 1) * plates;
     washupHrs = (p.washupHrsPerUnit || 0) * (p.washupDiff || 1) * plates;
-    runHrs = p.runSpeedSph > 0 ? (pressSheets / p.runSpeedSph) * (p.runDiff || 1) : 0;
+    // Small-run speed curve (Mary 7/21): rated SPH derates on short runs —
+    // she never hits 10,000/hr on a 500-sheet run. Factors are PLACEHOLDER
+    // (see SMALL_RUN_SPEED_CURVE) pending her real speeds.
+    speedFactor = p.useSpeedCurve !== false ? smallRunSpeedFactor(pressSheets) : 1;
+    effectiveSph = (p.runSpeedSph || 0) * speedFactor;
+    runHrs = effectiveSph > 0 ? (pressSheets / effectiveSph) * (p.runDiff || 1) : 0;
     pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb).
     const coveragePct =
@@ -420,10 +468,15 @@ function computePart(
       ? (pressSheets * sheetArea * (coveragePct / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;
     inkCost = inkLbs * (p.inkDollarsPerLb || 0);
+    // Coating/Aqueous (Mary 7/21): same coverage model as ink, its own $/lb.
+    if (p.coatingType && p.inkFactorMsqinPerLb > 0) {
+      coatingLbs = (pressSheets * sheetArea * ((p.coatingCoveragePct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000);
+      coatingCost = coatingLbs * (p.coatingDollarsPerLb || 0);
+    }
     pressLaborCost =
       pressHrs * (p.pressHourlyRate || 0) +
       pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0) +
-      inkCost;
+      inkCost + coatingCost;
   }
   const pressMaterialsCost = p.dieCost || 0;
   const pressCost = pressLaborCost + pressMaterialsCost;
@@ -472,7 +525,8 @@ function computePart(
   return {
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
-    inkLbs, inkCost, pressLaborCost, pressMaterialsCost, pressCost,
+    inkLbs, inkCost, coatingLbs, coatingCost, speedFactor, effectiveSph,
+    pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
     cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
@@ -514,6 +568,8 @@ export interface ClassicCalc {
   pressHrs: number;
   inkLbs: number;
   inkCost: number;
+  coatingLbs: number;
+  coatingCost: number;
   pressLaborCost: number;
   pressMaterialsCost: number; // die cost
   pressCost: number;
@@ -612,8 +668,15 @@ export function computeClassic(
 
   // ── Outside / pass-through (Screen 9) ──
   const digitalClickTotal = sum((c) => c.digitalClickCost + c.digitalVDCost + c.digitalVDSetupCost);
-  const outsideCost =
-    f.outsidePurchases.reduce((s, p) => s + (Number(p.amount) || 0), 0) + digitalClickTotal;
+  // Outside services (Mary 7/21): per-M rows scale with the quoted quantity
+  // (so quantity tiers each get their own outside cost) and +3% adds her
+  // handling upcharge. Legacy rows without the keys = flat, no upcharge.
+  // Digital clicks are added AFTER this reduce — they never get the 3%.
+  const outsidePurchaseCost = f.outsidePurchases.reduce((s, p) => {
+    const base = p.per === "perM" ? ((Number(p.amount) || 0) * qty) / 1000 : Number(p.amount) || 0;
+    return s + base * (p.plus3 ? 1.03 : 1);
+  }, 0);
+  const outsideCost = outsidePurchaseCost + digitalClickTotal;
   const freightAndAdditional = (f.freight || 0) + (f.additionalCosts || 0);
 
   // ── Sellings (E&M cost sheet) ──
@@ -651,7 +714,10 @@ export function computeClassic(
     pressCheckHrs: sum((c) => c.pressCheckHrs),
     pressHrs: sum((c) => c.pressHrs),
     inkLbs: sum((c) => c.inkLbs),
-    inkCost, pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
+    inkCost,
+    coatingLbs: sum((c) => c.coatingLbs),
+    coatingCost: sum((c) => c.coatingCost),
+    pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
     digitalTier: p1.digitalTier,
     digitalClickRate: p1.digitalClickRate,
     digitalVDRate: p1.digitalVDRate,

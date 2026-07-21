@@ -14,6 +14,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   BINDERY_OPERATIONS,
+  COATING_TYPES,
   ClassicForm,
   ClassicPart,
   JOB_TYPES,
@@ -176,6 +177,11 @@ function ClassicEstimatorContent() {
             bundleRatePerHr: Number(s.wrapLaborMinutesPerBundle) > 0 ? 60 / Number(s.wrapLaborMinutesPerBundle) : f.bundleRatePerHr, // 1 min/bundle = 60/hr
             binderyHourlyRate: Number(s.trimmingRate) || f.binderyHourlyRate,         // $45/hr trimming rate
             cutSecPerCut: Number(s.cutTimePerCutSec) || f.cutSecPerCut,               // 8 sec/cut
+            // Press helper rate (Mary 7/21): DB presses mostly carry $0
+            // helperCostPerHour, so default the helper rate to the hand-
+            // bindery rate ($22.50) — press select only overrides it when
+            // the press has its own nonzero rate.
+            helperHourlyRate: f.helperHourlyRate || Number(s.handBinderyRate) || 22.5,
           }));
         }
       })
@@ -307,6 +313,25 @@ function ClassicEstimatorContent() {
       ...(m.weight ? { caliperBasisWeight: m.weight } : {}),
     });
   }, [stockOptions, setP, patchP]);
+
+  // ── Coating type change: prefill $/lb from PlantStandard (AQ/UV →
+  // inkAqueousPerLb, Varnish → inkVarnishPerLb) — but only when the $ field
+  // still holds 0 or a prior auto value, so a hand-typed price sticks. ──
+  const coatingAutoRate = useCallback((type: string): number => {
+    if (!type) return 0;
+    if (type === "Varnish") return Number(standards?.inkVarnishPerLb) || 5.5;
+    // Gloss/Matte/Satin AQ and UV all prefill from the aqueous rate (UV has
+    // no dedicated PlantStandard rate — Mary overrides as needed).
+    return Number(standards?.inkAqueousPerLb) || 18;
+  }, [standards]);
+  const onCoatingType = useCallback((type: string) => {
+    const cur = Number(pv("coatingDollarsPerLb")) || 0;
+    const autoValues = [0, 5.5, 18, Number(standards?.inkVarnishPerLb) || 5.5, Number(standards?.inkAqueousPerLb) || 18];
+    patchP({
+      coatingType: type,
+      ...(autoValues.includes(cur) ? { coatingDollarsPerLb: coatingAutoRate(type) } : {}),
+    });
+  }, [pv, patchP, standards, coatingAutoRate]);
 
   // ── Pre-fill from a Quote Request (?from=<quoteRequestId>) — same source
   // and field mapping the wizard uses, translated to E&M vocabulary. ──
@@ -496,8 +521,10 @@ function ClassicEstimatorContent() {
         finishedHeight: null,
         numberUp: form.numberUp || null,
         numPages: form.numPages || null,
-        varnish: null,
-        coating: null,
+        // Coating flows to the job ticket: Varnish rides the `varnish` column,
+        // AQ/UV types ride `coating` (matches Job model + wizard usage).
+        varnish: form.coatingType === "Varnish" ? "Varnish" : null,
+        coating: form.coatingType && form.coatingType !== "Varnish" ? form.coatingType : null,
         pressAssignment: isDigital ? "Digital" : part1Press?.name || null,
         pressFormat: cfg?.name || null,
         makeReadyCount: calc.mrWasteSheets || null,
@@ -593,6 +620,11 @@ function ClassicEstimatorContent() {
         ].filter(Boolean).join(" — "),
         quantity: qty,
         unitPrice: calc.total / qty,
+        // quote.notes prints VERBATIM on the customer letter (print page's
+        // "Notes" block) — so it carries ONLY Mary's quote-letter notes.
+        // The classic method marker lives in specs; internal instructions
+        // live in specs.classicForm + jobTicket.pressNotes.
+        notes: form.quoteNotes || "",
       };
 
       let res: Response;
@@ -616,11 +648,6 @@ function ClassicEstimatorContent() {
             ...summaryFields,
             productType: "COMMERCIAL_PRINT",
             quoteRequestId: fromRequestId || undefined,
-            notes: [
-              "Method: classic (E&M-style estimator)",
-              form.quoteNotes,
-              form.instructions ? `Instructions: ${form.instructions}` : "",
-            ].filter(Boolean).join("\n"),
             specs,
           }),
         });
@@ -936,12 +963,17 @@ function ClassicEstimatorContent() {
                     pressId: e.target.value,
                     pressConfigId: cfg?.id || "",
                     ...(press ? { pressHourlyRate: press.costPerHour + (cfg?.addToHourlyRate || 0) } : {}),
-                    ...(press ? { helperHourlyRate: press.helperCostPerHour } : {}),
+                    // Helper rate: press's own rate wins only when nonzero;
+                    // otherwise keep the hand-bindery default already loaded
+                    // (Mary 7/21 — "it's not putting in press helper").
+                    ...(press && press.helperCostPerHour > 0 ? { helperHourlyRate: press.helperCostPerHour } : {}),
                     ...(cfg ? {
                       runSpeedSph: cfg.speedUncoated,
                       baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
-                      helpers: cfg.numHelpers,
                     } : {}),
+                    // Never reset a helper count Mary already typed; only
+                    // adopt the config's crew size when it actually has one.
+                    ...(cfg && cfg.numHelpers > 0 ? { helpers: cfg.numHelpers } : {}),
                   });
                 }}
               >
@@ -964,8 +996,9 @@ function ClassicEstimatorContent() {
                       ...(cfg ? {
                         runSpeedSph: cfg.speedUncoated,
                         baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
-                        helpers: cfg.numHelpers,
                       } : {}),
+                      // Keep Mary's typed helper count (Mary 7/21).
+                      ...(cfg && cfg.numHelpers > 0 ? { helpers: cfg.numHelpers } : {}),
                     });
                   }}
                 >
@@ -1010,11 +1043,29 @@ function ClassicEstimatorContent() {
               <>
                 <Row label="Run Side 1 Colors"><Num value={pv("runColorsSide1")} onChange={(v) => setP("runColorsSide1", v)} step={1} /></Row>
                 <Row label="Run Side 2 Colors"><Num value={pv("runColorsSide2")} onChange={(v) => setP("runColorsSide2", v)} step={1} /></Row>
+                {/* Press helper crew — near the top so Mary can't miss it (7/21) */}
+                <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
+                <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
                 <Row label="Base Makeready Hrs/Plate"><Num value={pv("baseMakereadyHrsPerPlate")} onChange={(v) => setP("baseMakereadyHrsPerPlate", v)} /></Row>
                 <Row label="Makeready Diff"><Num value={pv("makereadyDiff")} onChange={(v) => setP("makereadyDiff", v)} /></Row>
                 <Row label="Washup Hrs/Unit"><Num value={pv("washupHrsPerUnit")} onChange={(v) => setP("washupHrsPerUnit", v)} /></Row>
                 <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
-                <Row label="Run Speed (SPH)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
+                <Row label="Run Speed (SPH, Rated)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
+                {/* Small-run speed curve (Mary 7/21): "not going to hit
+                    10,000/hr on smaller runs" — thresholds are PLACEHOLDER
+                    (SMALL_RUN_SPEED_CURVE in classic-estimate.ts). */}
+                <Row label="Small-Run Speed Curve" wide>
+                  <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
+                    <input
+                      type="checkbox"
+                      className="accent-amber-400"
+                      checked={pv("useSpeedCurve") !== false}
+                      onChange={(e) => setP("useSpeedCurve", e.target.checked)}
+                    />
+                    derate short runs
+                  </label>
+                </Row>
+                <Readout label="Effective SPH (small-run curve)" value={pcalc.effectiveSph > 0 ? `${Math.round(pcalc.effectiveSph).toLocaleString()} (×${pcalc.speedFactor})` : "—"} />
                 <Row label="Run Diff"><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></Row>
                 {/* Mary's waste rule (7/20): 100 shts/color/side + 100 per
                     equipment pass; all editable, manual sheets override. */}
@@ -1024,8 +1075,6 @@ function ClassicEstimatorContent() {
                 <Readout label="Passes Counted" value={String(pcalc.equipmentPasses)} />
                 <Row label="Waste Sheets (0 = Auto)"><Num value={pv("wasteSheetsManual")} onChange={(v) => setP("wasteSheetsManual", v)} step={10} /></Row>
                 <Readout label="Waste Sheets Used" value={String(pcalc.mrWasteSheets)} />
-                <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
-                <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
               </>
             )}
           </div>
@@ -1060,6 +1109,23 @@ function ClassicEstimatorContent() {
                 <Row label="Varnish % Coverage"><Num value={pv("inkCoverageVarnishPct")} onChange={(v) => setP("inkCoverageVarnishPct", v)} /></Row>
                 <Row label="Ink Factor (M sq-in/lb)"><Num value={pv("inkFactorMsqinPerLb")} onChange={(v) => setP("inkFactorMsqinPerLb", v)} /></Row>
                 <Row label="Ink $/Lb"><Num value={pv("inkDollarsPerLb")} onChange={(v) => setP("inkDollarsPerLb", v)} /></Row>
+                <SectionTitle>Coatings / Aqueous</SectionTitle>
+                <Row label="Coating Type" wide>
+                  <select
+                    className={inputCls + " w-[220px]"}
+                    value={pv("coatingType")}
+                    onChange={(e) => onCoatingType(e.target.value)}
+                  >
+                    {COATING_TYPES.map((t) => <option key={t} value={t}>{t || "— none —"}</option>)}
+                  </select>
+                </Row>
+                {pv("coatingType") && (
+                  <>
+                    <Row label="Coating % Coverage"><Num value={pv("coatingCoveragePct")} onChange={(v) => setP("coatingCoveragePct", v)} /></Row>
+                    <Row label="Coating $/Lb"><Num value={pv("coatingDollarsPerLb")} onChange={(v) => setP("coatingDollarsPerLb", v)} /></Row>
+                    <Readout label="Coating" value={`${pcalc.coatingLbs.toFixed(2)} lbs / ${money(pcalc.coatingCost)}`} />
+                  </>
+                )}
                 <SectionTitle>Extras</SectionTitle>
                 <Row label="Press Check Hrs"><Num value={pv("pressCheckHrs")} onChange={(v) => setP("pressCheckHrs", v)} /></Row>
                 <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
@@ -1174,38 +1240,82 @@ function ClassicEstimatorContent() {
           <Row label="Freight $"><Num value={form.freight} onChange={(v) => set("freight", v)} /></Row>
           <Row label="Delivery Zone" wide><Txt value={form.deliveryZone} onChange={(v) => set("deliveryZone", v)} /></Row>
           <SectionTitle>Outside Purchases</SectionTitle>
-          {form.outsidePurchases.map((p, i) => (
-            <div key={i} className="mb-1 grid grid-cols-[1fr_100px_28px] gap-1">
-              <input
-                type="text" className={inputCls} placeholder="Description" value={p.description}
-                onChange={(e) => {
-                  const next = [...form.outsidePurchases];
-                  next[i] = { ...next[i], description: e.target.value };
-                  set("outsidePurchases", next);
-                }}
-              />
-              <input
-                type="number" step="any" className={inputCls + " text-right"} value={p.amount || 0}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => {
-                  const next = [...form.outsidePurchases];
-                  next[i] = { ...next[i], amount: parseFloat(e.target.value) || 0 };
-                  set("outsidePurchases", next);
-                }}
-              />
-              <button
-                type="button"
-                className="rounded-sm border border-amber-700/60 text-amber-400 hover:bg-amber-400/10"
-                onClick={() => set("outsidePurchases", form.outsidePurchases.filter((_, j) => j !== i))}
-              >×</button>
-            </div>
-          ))}
+          {/* Mary 7/21: outside services can be $/M (scale to each quoted
+              quantity via the tier re-runs) and carry a +3% upcharge. Old
+              rows without the keys stay flat / no 3%. */}
+          {form.outsidePurchases.map((p, i) => {
+            const upd = (patch: Partial<typeof p>) => {
+              const next = [...form.outsidePurchases];
+              next[i] = { ...next[i], ...patch };
+              set("outsidePurchases", next);
+            };
+            const rowCost = (p.per === "perM" ? (p.amount || 0) * (form.quantity || 0) / 1000 : (p.amount || 0)) * (p.plus3 ? 1.03 : 1);
+            return (
+              <div key={i} className="mb-1">
+                <div className="grid grid-cols-[1fr_80px_84px_52px_28px] gap-1">
+                  <input
+                    type="text" className={inputCls} placeholder="Description" value={p.description}
+                    onChange={(e) => upd({ description: e.target.value })}
+                  />
+                  <input
+                    type="number" step="any" className={inputCls + " text-right"} value={p.amount || 0}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => upd({ amount: parseFloat(e.target.value) || 0 })}
+                  />
+                  <select
+                    className={inputCls}
+                    value={p.per === "perM" ? "perM" : "job"}
+                    onChange={(e) => upd({ per: e.target.value as "job" | "perM" })}
+                  >
+                    <option value="job">$ / Job</option>
+                    <option value="perM">$ / M</option>
+                  </select>
+                  <label className="flex items-center justify-center gap-1 font-mono text-[11px] text-amber-300">
+                    <input
+                      type="checkbox"
+                      className="accent-amber-400"
+                      checked={!!p.plus3}
+                      onChange={(e) => upd({ plus3: e.target.checked })}
+                    />
+                    +3%
+                  </label>
+                  <button
+                    type="button"
+                    className="rounded-sm border border-amber-700/60 text-amber-400 hover:bg-amber-400/10"
+                    onClick={() => set("outsidePurchases", form.outsidePurchases.filter((_, j) => j !== i))}
+                  >×</button>
+                </div>
+                <div className="pr-8 text-right font-mono text-[10px] text-amber-500/70">
+                  = {money(rowCost)} at qty {(form.quantity || 0).toLocaleString()}
+                </div>
+              </div>
+            );
+          })}
           <button
             type="button"
             className="mt-1 rounded-sm border border-amber-700/60 px-2 py-1 font-mono text-[12px] text-amber-300 hover:bg-amber-400/10"
-            onClick={() => set("outsidePurchases", [...form.outsidePurchases, { description: "", amount: 0 }])}
+            onClick={() => set("outsidePurchases", [...form.outsidePurchases, { description: "", amount: 0, per: "job" as const, plus3: true }])}
           >+ Add Outside Purchase</button>
-          <SectionTitle>Quote Notes</SectionTitle>
+          <SectionTitle>Quote Notes (Prints On Letter)</SectionTitle>
+          {/* Mary's standard letter phrases (7/21) — click to append, edit inline.
+              These print on the customer letter under "Notes". */}
+          <div className="mb-1 flex flex-wrap gap-1">
+            {[
+              "Die cost broken out separately: $____",
+              "Mill item stock - allow ____ days for delivery",
+              "Freight additional",
+              "Price valid 30 days",
+            ].map((phrase) => (
+              <button
+                key={phrase}
+                type="button"
+                className="rounded-sm border border-amber-700/60 px-2 py-[2px] font-mono text-[11px] text-amber-300 hover:bg-amber-400/10"
+                onClick={() => set("quoteNotes", [form.quoteNotes, phrase].filter(Boolean).join("\n"))}
+              >
+                + {phrase}
+              </button>
+            ))}
+          </div>
           <textarea
             className={inputCls + " h-24 w-full py-2 leading-5"}
             value={form.quoteNotes}
@@ -1238,7 +1348,7 @@ function ClassicEstimatorContent() {
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               ) : (
                 <CostRow section="PRESS"
-                  detail={`MR ${calc.makereadyHrs.toFixed(2)} / WU ${calc.washupHrs.toFixed(2)} / Run ${calc.runHrs.toFixed(2)} · ink ${calc.inkLbs.toFixed(1)} lb ${money(calc.inkCost)}${form.dieCost ? ` · die ${money(form.dieCost)}` : ""}`}
+                  detail={`MR ${calc.makereadyHrs.toFixed(2)} / WU ${calc.washupHrs.toFixed(2)} / Run ${calc.runHrs.toFixed(2)} · ink ${calc.inkLbs.toFixed(1)} lb ${money(calc.inkCost)}${calc.coatingCost > 0 ? ` · coat ${calc.coatingLbs.toFixed(1)} lb ${money(calc.coatingCost)}` : ""}${form.dieCost ? ` · die ${money(form.dieCost)}` : ""}`}
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               )}
               <CostRow section="BINDERY"
