@@ -177,6 +177,11 @@ function ClassicEstimatorContent() {
             bundleRatePerHr: Number(s.wrapLaborMinutesPerBundle) > 0 ? 60 / Number(s.wrapLaborMinutesPerBundle) : f.bundleRatePerHr, // 1 min/bundle = 60/hr
             binderyHourlyRate: Number(s.trimmingRate) || f.binderyHourlyRate,         // $45/hr trimming rate
             cutSecPerCut: Number(s.cutTimePerCutSec) || f.cutSecPerCut,               // 8 sec/cut
+            // Speed-cap rules (E&M-seeded): heavy coverage + thick board caps
+            solidCoverageSpeed: Number(s.solidCoveragePressSpeed) || f.solidCoverageSpeed,
+            heavyCoveragePct: Number(s.heavyCoverageThresholdPct) || f.heavyCoveragePct,
+            boardCapInches: Number(s.boardThicknessCapInches) || f.boardCapInches,
+            boardCapSpeed: Number(s.boardThicknessMaxSpeed) || f.boardCapSpeed,
             // Press helper rate (Mary 7/21): DB presses mostly carry $0
             // helperCostPerHour, so default the helper rate to the hand-
             // bindery rate ($22.50) — press select only overrides it when
@@ -1065,7 +1070,11 @@ function ClassicEstimatorContent() {
                     derate short runs
                   </label>
                 </Row>
-                <Readout label="Effective SPH (small-run curve)" value={pcalc.effectiveSph > 0 ? `${Math.round(pcalc.effectiveSph).toLocaleString()} (×${pcalc.speedFactor})` : "—"} />
+                <Readout label="Suggested SPH (auto)" value={pcalc.effectiveSph > 0 ? `${Math.round(pcalc.effectiveSph).toLocaleString()} (×${pcalc.speedFactor}${pcalc.speedCapReason ? `, ${pcalc.speedCapReason} cap` : ""})` : "—"} />
+                <Row label="Solid-Coverage Cap (SPH)"><Num value={form.solidCoverageSpeed} onChange={(v) => set("solidCoverageSpeed", v)} step={100} /></Row>
+                <Row label="Heavy Coverage ≥ %"><Num value={form.heavyCoveragePct} onChange={(v) => set("heavyCoveragePct", v)} /></Row>
+                <Row label="Board Cap (Inches)"><Num value={form.boardCapInches} onChange={(v) => set("boardCapInches", v)} /></Row>
+                <Row label="Board Cap Speed (SPH)"><Num value={form.boardCapSpeed} onChange={(v) => set("boardCapSpeed", v)} step={100} /></Row>
                 <Row label="Run Diff"><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></Row>
                 {/* Mary's waste rule (7/20): 100 shts/color/side + 100 per
                     equipment pass; all editable, manual sheets override. */}

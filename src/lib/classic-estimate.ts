@@ -60,6 +60,31 @@ export function smallRunSpeedFactor(pressSheets: number): number {
   return 1;
 }
 
+// ── Press speed caps (Mary 7/21: E&M auto-calculated run speed from sheets,
+// inks, and paper weight). Rules seeded from PlantStandard: heavy ink coverage
+// caps the press at solidCoverageSpeed; thick board caps it at boardCapSpeed.
+// Suggested SPH = min(rated, applicable caps) × small-run factor.
+export interface SpeedRules {
+  solidCoverageSpeed: number;   // SPH cap when coverage is heavy (std: 8500)
+  heavyCoveragePct: number;     // total ink coverage % that counts as heavy (std: 60)
+  boardCapInches: number;       // caliper at/above which the board cap applies (std: 0.028)
+  boardCapSpeed: number;        // SPH cap for thick board (std: 4100)
+}
+export const DEFAULT_SPEED_RULES: SpeedRules = {
+  solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
+};
+
+/** Parse a caliper in inches out of the free-text stock weight ("18pt C1S",
+ *  "24 pt", ".028", "0.030 in") — 0 when nothing parseable. */
+export function parseCaliperInches(caliperBasisWeight: string): number {
+  const s = String(caliperBasisWeight || "");
+  const pt = s.match(/(\d+(?:\.\d+)?)\s*(?:pt|point)/i);
+  if (pt) return parseFloat(pt[1]) / 1000;
+  const inches = s.match(/(?:^|[^\d])(0?\.\d{2,3})(?:\s*(?:in|"|inch))?/i);
+  if (inches) return parseFloat(inches[1]);
+  return 0;
+}
+
 // Coating/Aqueous types Mary quotes (Screen 7 offset branch). $/lb prefills
 // from PlantStandard: AQ types → inkAqueousPerLb, Varnish → inkVarnishPerLb.
 export const COATING_TYPES = ["", "Gloss AQ", "Matte AQ", "Satin AQ", "UV", "Varnish"] as const;
@@ -182,6 +207,12 @@ export interface ClassicForm {
   washupDiff: number;
   runSpeedSph: number; // RATED speed — small-run curve derates it when enabled
   useSpeedCurve: boolean; // apply the small-run speed curve (Mary 7/21)
+  // Speed-cap rules (job-level, prefilled from PlantStandard; Mary 7/21:
+  // E&M auto-suggested run speed from sheets, inks and paper weight).
+  solidCoverageSpeed: number; // SPH cap when ink+coating coverage is heavy
+  heavyCoveragePct: number;   // coverage % threshold that counts as heavy
+  boardCapInches: number;     // caliper (in) at/above which board cap applies
+  boardCapSpeed: number;      // SPH cap for thick board
   runDiff: number;
   wasteFactorPct: number; // LEGACY — superseded by Mary's sheet-based waste rule below (7/20)
   // Press waste, Mary's actual E&M rule (7/20): 100 sheets per color per side
@@ -290,6 +321,7 @@ export function defaultClassicForm(): ClassicForm {
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
+    solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
     inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5,
@@ -340,7 +372,8 @@ export interface PartCalc {
   coatingLbs: number;
   coatingCost: number;
   speedFactor: number;   // small-run curve factor applied (1 = full rated speed)
-  effectiveSph: number;  // rated SPH × factor (0 when no speed entered)
+  effectiveSph: number;  // min(rated, coverage/board caps) × factor (0 when no speed entered)
+  speedCapReason: string; // "" | "solid coverage" | "board thickness" — which cap bound the speed
   pressLaborCost: number;
   pressMaterialsCost: number; // die cost
   pressCost: number;
@@ -377,7 +410,8 @@ function computePart(
   p: ClassicPart,
   qty: number,
   isDigital: boolean,
-  digitalStd: DigitalClickStandards | null
+  digitalStd: DigitalClickStandards | null,
+  speedRules: SpeedRules = DEFAULT_SPEED_RULES
 ): PartCalc {
   const numberUp = Math.max(1, p.numberUp || 1);
 
@@ -427,6 +461,7 @@ function computePart(
   let inkLbs = 0, inkCost = 0;
   let coatingLbs = 0, coatingCost = 0;
   let speedFactor = 1, effectiveSph = 0;
+  let speedCapReason = "";
   let pressLaborCost = 0;
   let digitalTier: 1 | 2 | 3 = 1;
   let digitalClickRate = 0, digitalVDRate = 0, digitalClickSheets = 0;
@@ -458,7 +493,22 @@ function computePart(
     // she never hits 10,000/hr on a 500-sheet run. Factors are PLACEHOLDER
     // (see SMALL_RUN_SPEED_CURVE) pending her real speeds.
     speedFactor = p.useSpeedCurve !== false ? smallRunSpeedFactor(pressSheets) : 1;
-    effectiveSph = (p.runSpeedSph || 0) * speedFactor;
+    // Suggested speed (Mary 7/21): E&M derived run speed from sheets, inks and
+    // paper weight. Base = rated, capped by heavy ink coverage and by board
+    // thickness (caliper parsed from the stock weight text), then the
+    // small-run factor derates short runs.
+    const coveragePctForSpeed =
+      (p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0) + (p.inkCoverageVarnishPct || 0) +
+      (p.coatingType ? (p.coatingCoveragePct || 0) : 0);
+    let baseSph = p.runSpeedSph || 0;
+    if (baseSph > 0 && coveragePctForSpeed >= (speedRules.heavyCoveragePct || Infinity) && speedRules.solidCoverageSpeed > 0) {
+      if (speedRules.solidCoverageSpeed < baseSph) { baseSph = speedRules.solidCoverageSpeed; speedCapReason = "solid coverage"; }
+    }
+    const caliperIn = parseCaliperInches(p.caliperBasisWeight);
+    if (baseSph > 0 && caliperIn >= (speedRules.boardCapInches || Infinity) && speedRules.boardCapSpeed > 0) {
+      if (speedRules.boardCapSpeed < baseSph) { baseSph = speedRules.boardCapSpeed; speedCapReason = "board thickness"; }
+    }
+    effectiveSph = baseSph * speedFactor;
     runHrs = effectiveSph > 0 ? (pressSheets / effectiveSph) * (p.runDiff || 1) : 0;
     pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb).
@@ -525,7 +575,7 @@ function computePart(
   return {
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
-    inkLbs, inkCost, coatingLbs, coatingCost, speedFactor, effectiveSph,
+    inkLbs, inkCost, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
@@ -628,7 +678,13 @@ export function computeClassic(
   const isDigital = f.jobType === "Digital Direct";
   const qty = Math.max(0, f.quantity || 0);
 
-  const partCalcs = effectiveParts(f).map((p) => computePart(p, qty, isDigital, digitalStd));
+  const speedRules: SpeedRules = {
+    solidCoverageSpeed: f.solidCoverageSpeed ?? DEFAULT_SPEED_RULES.solidCoverageSpeed,
+    heavyCoveragePct: f.heavyCoveragePct ?? DEFAULT_SPEED_RULES.heavyCoveragePct,
+    boardCapInches: f.boardCapInches ?? DEFAULT_SPEED_RULES.boardCapInches,
+    boardCapSpeed: f.boardCapSpeed ?? DEFAULT_SPEED_RULES.boardCapSpeed,
+  };
+  const partCalcs = effectiveParts(f).map((p) => computePart(p, qty, isDigital, digitalStd, speedRules));
   const sum = (get: (c: PartCalc) => number) => partCalcs.reduce((s, c) => s + get(c), 0);
   const p1 = partCalcs[0];
 

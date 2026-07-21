@@ -289,5 +289,33 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("clicks never get the 3% (198.45 + 103)", dc.outsideCost, 301.45);
 }
 
+// ══ Speed suggestion from sheets + inks + paper weight (Mary 7/21) ══
+{
+  const base = () => {
+    const f = defaultClassicForm();
+    f.quantity = 20000; f.numberUp = 1; f.pricePerM = 100; // 20k sheets → factor 1.0
+    f.sheetWidthRun = 23; f.sheetHeightRun = 29;
+    f.runSpeedSph = 10000; f.pressHourlyRate = 200;
+    return f;
+  };
+  console.log("\n── Speed caps (coverage + board) ──");
+  const light = computeClassic(base(), digitalStd);
+  check("light coverage, thin board: rated speed", light.partCalcs[0].effectiveSph, 10000, 0);
+  const heavy = base(); heavy.inkCoverageColorPct = 70; // ≥60% → solid-coverage cap
+  const h = computeClassic(heavy, digitalStd);
+  check("heavy coverage caps at 8,500", h.partCalcs[0].effectiveSph, 8500, 0);
+  const board = base(); board.caliperBasisWeight = "28pt C1S"; // 0.028 ≥ cap
+  const b = computeClassic(board, digitalStd);
+  check("28pt board caps at 4,100", b.partCalcs[0].effectiveSph, 4100, 0);
+  const thin = base(); thin.caliperBasisWeight = "18pt C1S"; // 0.018 < cap
+  check("18pt board keeps rated", computeClassic(thin, digitalStd).partCalcs[0].effectiveSph, 10000, 0);
+  const both = base(); both.inkCoverageColorPct = 70; both.caliperBasisWeight = ".030";
+  check("both caps → lower (board) wins", computeClassic(both, digitalStd).partCalcs[0].effectiveSph, 4100, 0);
+  const short = base(); short.quantity = 800; short.caliperBasisWeight = "28pt"; // board cap × 0.5 small-run
+  check("board cap × small-run factor", computeClassic(short, digitalStd).partCalcs[0].effectiveSph, 2050, 0);
+  const coated = base(); coated.coatingType = "Gloss AQ"; coated.coatingCoveragePct = 100; // coating counts toward coverage
+  check("coating coverage triggers solid cap", computeClassic(coated, digitalStd).partCalcs[0].effectiveSph, 8500, 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
