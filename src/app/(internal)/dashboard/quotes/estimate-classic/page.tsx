@@ -1142,7 +1142,6 @@ function ClassicEstimatorContent() {
                 <Readout label="Makeready" value={hrs(pcalc.makereadyHrs)} />
                 <Readout label="Washup" value={hrs(pcalc.washupHrs)} />
                 <Readout label="Run" value={hrs(pcalc.runHrs)} />
-                <Readout label="Makeready Waste Sheets" value={String(pcalc.mrWasteSheets)} />
                 <Readout label="Ink" value={`${pcalc.inkLbs.toFixed(2)} lbs / ${money(pcalc.inkCost)}`} />
                 <Readout label="Press Cost" value={money(pcalc.pressCost)} />
               </>
