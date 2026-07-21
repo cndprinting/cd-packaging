@@ -40,6 +40,11 @@ export interface OutsidePurchase {
   // Old saved rows lack these keys → behave as { per: "job", plus3: false }.
   per?: "job" | "perM";
   plus3?: boolean;
+  // Mary 7/21: vendors quote outside services per quantity break and prices
+  // don't scale linearly. amountsByTier[i] is the price at additional
+  // quantity i+1 (tier 0 = the primary `amount`); 0/missing falls back to
+  // the primary amount.
+  amountsByTier?: number[];
 }
 
 // ── Small-run speed curve (Mary 7/21: "not going to hit 10,000/hr on smaller
@@ -138,6 +143,9 @@ export interface ClassicForm {
   // Up to 3 additional quantities (E&M quotes multiple quantities per
   // estimate). 0/blank entries are ignored.
   additionalQuantities: number[];
+  // Transient: which quantity tier this calc run represents (0 = primary).
+  // Set by computeQuantityBreaks so per-tier outside prices resolve.
+  activeTierIndex?: number;
   numParts: number;
   markupPaperPct: number;
   markupMaterialPct: number;
@@ -754,8 +762,13 @@ export function computeClassic(
   // (so quantity tiers each get their own outside cost) and +3% adds her
   // handling upcharge. Legacy rows without the keys = flat, no upcharge.
   // Digital clicks are added AFTER this reduce — they never get the 3%.
+  const tierIdx = f.activeTierIndex || 0;
   const outsidePurchaseCost = f.outsidePurchases.reduce((s, p) => {
-    const base = p.per === "perM" ? ((Number(p.amount) || 0) * qty) / 1000 : Number(p.amount) || 0;
+    // Per-tier vendor price when one is entered for this tier; else primary.
+    const tierAmt = tierIdx > 0 && Array.isArray(p.amountsByTier) && (Number(p.amountsByTier[tierIdx - 1]) || 0) > 0
+      ? Number(p.amountsByTier[tierIdx - 1])
+      : Number(p.amount) || 0;
+    const base = p.per === "perM" ? (tierAmt * qty) / 1000 : tierAmt;
     return s + base * (p.plus3 ? 1.03 : 1);
   }, 0);
   const outsideCost = outsidePurchaseCost + digitalClickTotal;
@@ -840,8 +853,8 @@ export function computeQuantityBreaks(
     f.quantity || 0,
     ...(Array.isArray(f.additionalQuantities) ? f.additionalQuantities : []).map((q) => Number(q) || 0).filter((q) => q > 0),
   ];
-  return qtys.map((q) => {
-    const c = computeClassic({ ...f, quantity: q }, digitalStd);
+  return qtys.map((q, i) => {
+    const c = computeClassic({ ...f, quantity: q, activeTierIndex: i }, digitalStd);
     return { quantity: q, total: c.total, costPerUnit: c.costPerUnit, costPer1000: c.costPerM };
   });
 }

@@ -338,5 +338,26 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("PMS lbs price at 19.50", led.partCalcs[0].inkLbsPms * 19.5, 0.09412 * 19.5, 0.01);
 }
 
+// ══ Per-tier outside vendor prices (Mary 7/21) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 2000; f.numberUp = 1; f.pricePerM = 100; f.cutterSheetsPerHr = 0;
+  f.additionalQuantities = [3000, 4000, 0];
+  f.outsidePurchases = [{ description: "Die cutting", amount: 543, per: "job", plus3: false, amountsByTier: [700, 850] }];
+  const breaks = computeQuantityBreaks(f, digitalStd);
+  console.log("\n── Per-tier outside prices ──");
+  const c0 = computeClassic(f, digitalStd);
+  check("primary tier uses 543", c0.outsideCost, 543);
+  // tier totals differ by the vendor price delta (paper scales separately)
+  const paper = (q: number) => computeClassic({ ...f, quantity: q, outsidePurchases: [] }, digitalStd);
+  check("tier@3000 outside = 700", breaks[1].total - paper(3000).total, computeClassic({ ...f, quantity: 3000, activeTierIndex: 1 }, digitalStd).outsideSelling + computeClassic({ ...f, quantity: 3000, activeTierIndex: 1 }, digitalStd).commission - paper(3000).commission, 0.02);
+  const t1 = computeClassic({ ...f, quantity: 3000, activeTierIndex: 1 }, digitalStd);
+  check("tier 1 outside cost = 700", t1.outsideCost, 700);
+  const t2 = computeClassic({ ...f, quantity: 4000, activeTierIndex: 2 }, digitalStd);
+  check("tier 2 outside cost = 850", t2.outsideCost, 850);
+  const blankTier = computeClassic({ ...f, quantity: 4000, activeTierIndex: 2, outsidePurchases: [{ description: "x", amount: 543, amountsByTier: [700] }] }, digitalStd);
+  check("missing tier price falls back to primary", blankTier.outsideCost, 543);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1301,6 +1301,33 @@ function ClassicEstimatorContent() {
                     onClick={() => set("outsidePurchases", form.outsidePurchases.filter((_, j) => j !== i))}
                   >×</button>
                 </div>
+                {/* Per-tier vendor prices (Mary 7/21) — one price input per
+                    additional quantity; blank/0 falls back to the primary. */}
+                {(form.additionalQuantities || []).some((q) => (Number(q) || 0) > 0) && (
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1 pl-2">
+                    {(form.additionalQuantities || []).map((q, ti) => {
+                      const qty = Number(q) || 0;
+                      if (qty <= 0) return null;
+                      return (
+                        <label key={ti} className="flex items-center gap-1 font-mono text-[10px] text-amber-400/90">
+                          @{qty.toLocaleString()}:
+                          <input
+                            type="number" step="any"
+                            className={inputCls + " w-[76px] text-right"}
+                            placeholder="= primary"
+                            value={p.amountsByTier?.[ti] || 0}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const arr = [...(p.amountsByTier || [])];
+                              arr[ti] = parseFloat(e.target.value) || 0;
+                              upd({ amountsByTier: arr });
+                            }}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="pr-8 text-right font-mono text-[10px] text-amber-500/70">
                   = {money(rowCost)} at qty {(form.quantity || 0).toLocaleString()}
                 </div>
