@@ -317,5 +317,20 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("coating coverage triggers solid cap", computeClassic(coated, digitalStd).partCalcs[0].effectiveSph, 8500, 0);
 }
 
+// ══ Per-type ink split — varnish at its own $/lb (Mary 7/21) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 2000; f.numberUp = 1; f.pricePerM = 100;
+  f.sheetWidthRun = 20; f.sheetHeightRun = 20; // 400 sq in
+  f.runSpeedSph = 10000; f.pressHourlyRate = 200;
+  f.inkCoverageBlackPct = 10; f.inkCoverageColorPct = 12; f.inkCoverageVarnishPct = 12;
+  // lbs per coverage point: 2000 x 400 x 0.01 / 425,000 = 0.018824
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Ink per-type split ──");
+  check("black+color lbs (22%)", c.partCalcs[0].inkLbsBlackColor, 0.4141, 0.001);
+  check("varnish lbs (12%)", c.partCalcs[0].inkLbsVarnish, 0.2259, 0.001);
+  check("ink cost: bc @8.50 + varnish @5.50", c.partCalcs[0].inkCost, 0.41412 * 8.5 + 0.22588 * 5.5, 0.01);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

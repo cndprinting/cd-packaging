@@ -114,7 +114,7 @@ export const PART_FIELD_KEYS = [
   "coatingType", "coatingCoveragePct", "coatingDollarsPerLb",
   "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
   "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageVarnishPct",
-  "inkFactorMsqinPerLb", "inkDollarsPerLb",
+  "inkFactorMsqinPerLb", "inkDollarsPerLb", "varnishDollarsPerLb",
   "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   // Screen 8 — Bindery
@@ -227,7 +227,8 @@ export interface ClassicForm {
   inkCoverageColorPct: number;
   inkCoverageVarnishPct: number;
   inkFactorMsqinPerLb: number; // thousand sq-in of coverage per lb of ink
-  inkDollarsPerLb: number;
+  inkDollarsPerLb: number; // black + color $/lb
+  varnishDollarsPerLb: number; // varnish prices at its own rate ($5.50 std), not ink money
   // Coating/Aqueous (offset — Mary 7/21). Lbs use the same coverage model as
   // ink; $/lb prefills by type from PlantStandard, always hand-editable.
   coatingType: string;          // "" = none; see COATING_TYPES
@@ -324,7 +325,7 @@ export function defaultClassicForm(): ClassicForm {
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageVarnishPct: 0,
-    inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5,
+    inkFactorMsqinPerLb: 425, inkDollarsPerLb: 8.5, varnishDollarsPerLb: 5.5,
     coatingType: "", coatingCoveragePct: 100, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
@@ -369,6 +370,8 @@ export interface PartCalc {
   pressHrs: number;
   inkLbs: number;
   inkCost: number;
+  inkLbsBlackColor: number; // E&M-style per-type split
+  inkLbsVarnish: number;
   coatingLbs: number;
   coatingCost: number;
   speedFactor: number;   // small-run curve factor applied (1 = full rated speed)
@@ -458,7 +461,7 @@ function computePart(
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
-  let inkLbs = 0, inkCost = 0;
+  let inkLbs = 0, inkCost = 0, inkLbsBlackColor = 0, inkLbsVarnish = 0;
   let coatingLbs = 0, coatingCost = 0;
   let speedFactor = 1, effectiveSph = 0;
   let speedCapReason = "";
@@ -511,13 +514,16 @@ function computePart(
     effectiveSph = baseSph * speedFactor;
     runHrs = effectiveSph > 0 ? (pressSheets / effectiveSph) * (p.runDiff || 1) : 0;
     pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
-    // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb).
-    const coveragePct =
-      (p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0) + (p.inkCoverageVarnishPct || 0);
-    inkLbs = p.inkFactorMsqinPerLb > 0
-      ? (pressSheets * sheetArea * (coveragePct / 100)) / (p.inkFactorMsqinPerLb * 1000)
+    // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb),
+    // PER TYPE like E&M ("7.3 lbs black + 56.5 lbs color") — varnish prices at
+    // its own $/lb ($5.50 std), not ink money (Mary 7/21).
+    const lbsFor = (pct: number) => p.inkFactorMsqinPerLb > 0
+      ? (pressSheets * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;
-    inkCost = inkLbs * (p.inkDollarsPerLb || 0);
+    inkLbsBlackColor = lbsFor((p.inkCoverageBlackPct || 0) + (p.inkCoverageColorPct || 0));
+    inkLbsVarnish = lbsFor(p.inkCoverageVarnishPct || 0);
+    inkLbs = inkLbsBlackColor + inkLbsVarnish;
+    inkCost = inkLbsBlackColor * (p.inkDollarsPerLb || 0) + inkLbsVarnish * (p.varnishDollarsPerLb || 0);
     // Coating/Aqueous (Mary 7/21): same coverage model as ink, its own $/lb.
     if (p.coatingType && p.inkFactorMsqinPerLb > 0) {
       coatingLbs = (pressSheets * sheetArea * ((p.coatingCoveragePct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000);
@@ -575,7 +581,7 @@ function computePart(
   return {
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
-    inkLbs, inkCost, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
+    inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
