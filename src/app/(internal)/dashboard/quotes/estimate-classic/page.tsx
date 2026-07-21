@@ -1237,7 +1237,8 @@ function ClassicEstimatorContent() {
             <Row label="Skid Pack (skids)"><Num value={pv("skids")} onChange={(v) => setP("skids", v)} step={1} /></Row>
             <Row label="  @ $ each"><Num value={pv("skidCost")} onChange={(v) => setP("skidCost", v)} /></Row>
             <Row label="Pack Hrs"><Num value={pv("packHrs")} onChange={(v) => setP("packHrs", v)} /></Row>
-            <Readout label={numParts > 1 ? `Bindery Hrs — Part ${partIndex + 1}` : "Bindery Hrs Total"} value={hrs(pcalc.binderyHrs)} />
+            <Readout label={numParts > 1 ? `Bindery Hrs — Part ${partIndex + 1}` : "Bindery Hrs Total"}
+              value={`${hrs(pcalc.binderyHrs)}${(pcalc.cutterHrs + pcalc.trimHrsUsed) > 0 ? ` (incl auto cut ${pcalc.cutterHrs.toFixed(2)} + trim ${pcalc.trimHrsUsed.toFixed(2)} — Cutting Diff 0 removes)` : ""}`} />
             <Readout label={numParts > 1 ? `Bindery Cost — Part ${partIndex + 1}` : "Bindery Cost"} value={money(pcalc.binderyCost)} />
             {numParts > 1 && <Readout label="Bindery Cost — All Parts" value={money(calc.binderyCost)} />}
           </div>
