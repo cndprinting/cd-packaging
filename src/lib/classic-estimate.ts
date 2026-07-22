@@ -55,19 +55,24 @@ export interface OutsidePurchase {
 // ── Small-run speed curve (Mary 7/21: "not going to hit 10,000/hr on smaller
 // runs"). Effective SPH = rated SPH × factor(press sheets). PLACEHOLDER
 // thresholds/factors pending Mary's real observed speeds — tune here only.
+// Recalibrated 7/21 against E&M #348538: a 3,750-sheet coated-text run went
+// 5,400 SPH on a 10,000-rated KOMII (×0.54) — old factors were too fast.
+// Anchored to that one observation; still PLACEHOLDER pending Mary's rate card.
 export const SMALL_RUN_SPEED_CURVE: { maxSheets: number; factor: number }[] = [
-  { maxSheets: 1000, factor: 0.5 },
-  { maxSheets: 2500, factor: 0.65 },
-  { maxSheets: 5000, factor: 0.8 },
-  { maxSheets: 10000, factor: 0.9 },
+  { maxSheets: 1000, factor: 0.4 },
+  { maxSheets: 2500, factor: 0.5 },
+  { maxSheets: 5000, factor: 0.55 },
+  { maxSheets: 10000, factor: 0.7 },
 ];
+// Even long runs rarely sustain the rated sheet count (E&M evidence).
+export const SPEED_CURVE_LONG_RUN_FACTOR = 0.85;
 
-/** Speed factor for a run length (1.0 at/above the last threshold). */
+/** Speed factor for a run length (long runs get SPEED_CURVE_LONG_RUN_FACTOR). */
 export function smallRunSpeedFactor(pressSheets: number): number {
   for (const t of SMALL_RUN_SPEED_CURVE) {
     if (pressSheets < t.maxSheets) return t.factor;
   }
-  return 1;
+  return SPEED_CURVE_LONG_RUN_FACTOR;
 }
 
 // ── Press speed caps (Mary 7/21: E&M auto-calculated run speed from sheets,
@@ -117,7 +122,7 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "runColorsSide1", "runColorsSide2", "baseMakereadyHrsPerPlate",
+  "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
   "useSpeedCurve",
   "runDiff", "wasteFactorPct", "helpers",
@@ -131,6 +136,7 @@ export const PART_FIELD_KEYS = [
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
+  "foldSetupHrs", "foldRunHrs", "folderRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
   "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs", "bundleRatePerHr",
@@ -214,6 +220,12 @@ export interface ClassicForm {
   helperHourlyRate: number;
   runColorsSide1: number;
   runColorsSide2: number;
+  // WORK & TURN (E&M #348538): same plates print both sides — plates,
+  // washups and makereadys count max(side1, side2) instead of the sum.
+  workAndTurn: boolean;
+  // Plate materials (E&M #348538: 4 plates @ $19 = $76 in the MATERIAL
+  // bucket). Prefills from the selected press config's plateCost; editable.
+  plateCostEach: number;
   baseMakereadyHrsPerPlate: number;
   makereadyDiff: number;
   washupHrsPerUnit: number;
@@ -276,6 +288,10 @@ export interface ClassicForm {
   drillDiff: number;
   drillHrsPerHole: number;
   folderConfig: string;
+  // Folding as its own machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48).
+  foldSetupHrs: number;
+  foldRunHrs: number;
+  folderRatePerHr: number; // prefills PlantStandard.folder1Rate ($48)
   handOp1: HandOp;
   handOp2: HandOp;
   cartons: number;
@@ -337,6 +353,7 @@ export function defaultClassicForm(): ClassicForm {
     pricePerM: 0, weightPerMSheets: 0, numberUp: 1, sheetsPerPiece: 1, sheetsOutOfParent: 1, bindWasteSheets: 0, bleedAllowance: "", brandColorFinish: "",
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
+    workAndTurn: false, plateCostEach: 0,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
@@ -352,6 +369,7 @@ export function defaultClassicForm(): ClassicForm {
     trimHrs: 0, cutsToFinalSize: 0, sheetsPerLift: 500, cutSecPerCut: 8,
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
+    foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
@@ -399,7 +417,10 @@ export interface PartCalc {
   speedFactor: number;   // small-run curve factor applied (1 = full rated speed)
   effectiveSph: number;  // min(rated, coverage/board caps) × factor (0 when no speed entered)
   speedCapReason: string; // "" | "solid coverage" | "board thickness" — which cap bound the speed
-  pressLaborCost: number;
+  plateMaterialsCost: number; // platesUsed × plateCostEach → MATERIAL bucket
+  foldHrs: number;            // fold setup + run hours
+  foldLabor: number;          // fold hrs × folder rate → bindery labor
+  pressLaborCost: number;     // HOURS × rates only (ink/coating are MATERIAL now)
   pressMaterialsCost: number; // die cost
   pressCost: number;
   digitalTier: 1 | 2 | 3;
@@ -461,7 +482,7 @@ function computePart(
     ((p.trimHrs || 0) > 0 || cutsUsed > 0 ? 1 : 0) + // cutting
     ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
     ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
-    (p.folderConfig || p.binderyOperation === 3 ? 1 : 0) +           // folding
+    (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
     ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0);                // stitch/bind
   const equipmentPasses = (p.equipmentPassesManual || 0) > 0 ? p.equipmentPassesManual : passesAuto;
   const wasteColors = (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
@@ -479,7 +500,12 @@ function computePart(
   const paperCost = (orderSheets / 1000) * (p.pricePerM || 0);
 
   // ── Press (Screen 7) ──
-  const plates = (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
+  // WORK & TURN (E&M #348538): the same plates print both sides, so plates /
+  // washups / makereadys = max(side1, side2). Sheet-wise: 4/4 W&T showed
+  // "No. of Wash and Makereadys 4" and 4 plates ($76 @ $19).
+  const plates = p.workAndTurn
+    ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
+    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
@@ -562,11 +588,15 @@ function computePart(
       coatingLbs = (pressSheets * sheetArea * ((p.coatingCoveragePct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000);
       coatingCost = coatingLbs * (p.coatingDollarsPerLb || 0);
     }
+    // BUCKET RESTRUCTURE (E&M #348538): press labor is HOURS × rates only.
+    // Ink and coating are MATERIALS — they ride the Material bucket at
+    // Material markup in computeClassic, not the Labor line.
     pressLaborCost =
       pressHrs * (p.pressHourlyRate || 0) +
-      pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0) +
-      inkCost + coatingCost;
+      pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0);
   }
+  // Plate materials (offset only): W&T-aware plate count × $/plate → MATERIAL.
+  const plateMaterialsCost = isDigital ? 0 : plates * (p.plateCostEach || 0);
   const pressMaterialsCost = p.dieCost || 0;
   const pressCost = pressLaborCost + pressMaterialsCost;
 
@@ -597,9 +627,14 @@ function computePart(
     ? (Math.ceil(pressSheets / Math.max(1, p.sheetsPerLift || 500)) * cutsUsed * (p.cutSecPerCut || 8) / 3600) * (p.cuttingDiff || 1)
     : 0;
   const trimHrsUsed = (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
-  const binderyHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
+  // Folding is its own machine line at the folder rate (E&M #348538:
+  // 0.6 setup + 1.4 run @ ~$48 = 30.00 + 67.25).
+  const foldHrs = (p.foldSetupHrs || 0) + (p.foldRunHrs || 0);
+  const foldLabor = foldHrs * (p.folderRatePerHr || 0);
+  const binderyRateHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
     + bandHrsUsed + padHrsUsed + wrapHrsUsed;
-  const binderyLabor = binderyHrs * (p.binderyHourlyRate || 0);
+  const binderyHrs = binderyRateHrs + foldHrs;
+  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor;
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
   // Cartons auto-compute from paper weight at Mary's rule: no carton over
@@ -615,6 +650,7 @@ function computePart(
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
+    plateMaterialsCost, foldHrs, foldLabor,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
@@ -640,12 +676,19 @@ export interface ClassicCalc {
   paperCost: number;
   paperSelling: number;
 
-  // Prep (Screens 4 + 5, job-level) — sold at Material markup
+  // MATERIAL bucket (E&M #348538 restructure): prep materials (proofs/scans)
+  // + cartons/skids + INK + COATING + PLATES — sold at Material markup.
+  // prepCost/prepSelling are kept as aliases of the material bucket so older
+  // callers keep working. Prep LABOR sells at Labor markup (own line).
   prepHours: number;
   prepLabor: number;
-  prepMaterials: number;
-  prepCost: number;
-  prepSelling: number;
+  prepLaborSelling: number;
+  prepMaterials: number;       // Screen 4/5 materials + cartons (no ink/coating/plates)
+  materialCost: number;        // full material bucket
+  materialSelling: number;
+  plateMaterialsCost: number;  // plates portion of the material bucket
+  prepCost: number;            // alias of materialCost
+  prepSelling: number;         // alias of materialSelling
 
   // Press (sums across parts) — sold at Labor markup
   plates: number;
@@ -677,6 +720,8 @@ export interface ClassicCalc {
   drillHrs: number;
   handOp1Hrs: number;
   handOp2Hrs: number;
+  foldHrs: number;
+  foldLabor: number;
   binderyHrs: number;
   binderyLabor: number;
   cartonSkidCost: number;
@@ -689,8 +734,10 @@ export interface ClassicCalc {
   outsideToddCost: number;   // in-house finishing (Todd) portion — real C&D cost
   outsideVendorCost: number; // true outsourced portion (incl. digital clicks)
 
-  // Pass-through
+  // Pass-through (+$1 minimum on the selling side when nonzero — E&M
+  // #348538: freight 46.17 → 47.17)
   freightAndAdditional: number;
+  freightSelling: number;
 
   totalCost: number;
   sellingSubtotal: number;
@@ -749,7 +796,6 @@ export function computeClassic(
       (f.matchprintProofs || 0) * (f.matchprintCharge || 0) +
       (f.separations || 0) * (f.separationCharge || 0)) *
       (f.plateDiffFactor || 1);
-  const prepCost = prepLabor + prepMaterials;
 
   // ── Press (summed) ──
   const pressLaborCost = sum((c) => c.pressLaborCost);
@@ -761,7 +807,12 @@ export function computeClassic(
   const binderyLabor = sum((c) => c.binderyLabor);
   const cartonSkidCost = sum((c) => c.cartonSkidCost);
   const binderyCost = binderyLabor;
-  const prepCostWithMaterials = prepCost + cartonSkidCost;
+
+  // ── MATERIAL bucket (E&M #348538): prep materials + cartons + ink +
+  // coating + plates. Labor (prep/press/bindery hours) sells separately. ──
+  const coatingCost = sum((c) => c.coatingCost);
+  const plateMaterialsCost = sum((c) => c.plateMaterialsCost);
+  const materialCost = prepMaterials + cartonSkidCost + inkCost + coatingCost + plateMaterialsCost;
 
   // ── Outside / pass-through (Screen 9) ──
   const digitalClickTotal = sum((c) => c.digitalClickCost + c.digitalVDCost + c.digitalVDSetupCost);
@@ -790,27 +841,34 @@ export function computeClassic(
   const mk = (cost: number, pct: number) =>
     cost > 0 ? cost + Math.max((cost * (pct || 0)) / 100, 1) : 0;
   const paperSelling = mk(paperCost, f.markupPaperPct);
-  const prepSelling = mk(prepCostWithMaterials, f.markupMaterialPct);
+  const materialSelling = mk(materialCost, f.markupMaterialPct);
+  // Prep LABOR sells at the Labor markup (E&M #348538: all hours ride the
+  // 40% labor line, not the material line).
+  const prepLaborSelling = mk(prepLabor, f.markupLaborPct);
   const pressSelling = mk(pressCost, f.markupLaborPct);
   const binderySelling = mk(binderyCost, f.markupLaborPct);
   const outsideSelling = mk(outsideCost, f.markupOutsidePct);
+  // Freight/additional: pass-through plus E&M's $1 minimum when nonzero
+  // (#348538: 46.17 → 47.17).
+  const freightSelling = freightAndAdditional > 0 ? freightAndAdditional + 1 : 0;
 
-  const totalCost = paperCost + prepCostWithMaterials + pressCost + binderyCost + outsideCost + freightAndAdditional;
+  const totalCost = paperCost + materialCost + prepLabor + pressCost + binderyCost + outsideCost + freightAndAdditional;
   // Commission is % of total COST, not of selling — verified against Cybake
   // #347528 (117.33 = 10% × 1,173.28) — added on top like a markup line.
   const commission = totalCost * ((f.commissionPct || 0) / 100);
   const sellingSubtotal =
-    paperSelling + prepSelling + pressSelling + binderySelling + outsideSelling + freightAndAdditional;
+    paperSelling + materialSelling + prepLaborSelling + pressSelling + binderySelling + outsideSelling + freightSelling;
   const total = sellingSubtotal + commission;
 
   return {
     isDigital,
     partCalcs,
     pressSheets, mrWasteSheets, orderSheets, paperCost, paperSelling,
-    prepHours, prepLabor,
+    prepHours, prepLabor, prepLaborSelling,
     prepMaterials: prepMaterials + cartonSkidCost,
-    prepCost: prepCostWithMaterials,
-    prepSelling,
+    materialCost, materialSelling, plateMaterialsCost,
+    prepCost: materialCost,
+    prepSelling: materialSelling,
     plates: sum((c) => c.plates),
     makereadyHrs: sum((c) => c.makereadyHrs),
     washupHrs: sum((c) => c.washupHrs),
@@ -821,7 +879,7 @@ export function computeClassic(
     inkLbs: sum((c) => c.inkLbs),
     inkCost,
     coatingLbs: sum((c) => c.coatingLbs),
-    coatingCost: sum((c) => c.coatingCost),
+    coatingCost,
     pressLaborCost, pressMaterialsCost, pressCost, pressSelling,
     digitalTier: p1.digitalTier,
     digitalClickRate: p1.digitalClickRate,
@@ -834,12 +892,14 @@ export function computeClassic(
     drillHrs: sum((c) => c.drillHrs),
     handOp1Hrs: sum((c) => c.handOp1Hrs),
     handOp2Hrs: sum((c) => c.handOp2Hrs),
+    foldHrs: sum((c) => c.foldHrs),
+    foldLabor: sum((c) => c.foldLabor),
     binderyHrs: sum((c) => c.binderyHrs),
     binderyLabor, cartonSkidCost, binderyCost, binderySelling,
     outsideCost, outsideSelling,
     outsideToddCost,
     outsideVendorCost: outsideVendorCost + digitalClickTotal,
-    freightAndAdditional,
+    freightAndAdditional, freightSelling,
     totalCost, sellingSubtotal, commission, total,
     costPerUnit: qty > 0 ? total / qty : 0,
     costPerM: qty > 0 ? (total / qty) * 1000 : 0,

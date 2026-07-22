@@ -79,9 +79,11 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   f.outsidePurchases = [{ description: "Finish out", amount: 1000 }];
   f.freight = 100;
   const c = computeClassic(f, digitalStd);
-  check("selling subtotal (1330+1240+100)", c.sellingSubtotal, 2670);
+  // UPDATED 7/21 (#348538): freight now carries E&M's $1 minimum on the
+  // selling side (46.17 → 47.17 on the real sheet), so 100 sells at 101.
+  check("selling subtotal (1330+1240+101 w/ freight $1 min)", c.sellingSubtotal, 2671);
   check("commission 10% of COST 2100", c.commission, 210);
-  check("total", c.total, 2880);
+  check("total", c.total, 2881);
 }
 {
   // $1 minimum markup: $5 outside at 0% → sells $6
@@ -224,21 +226,22 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("typed cut count overrides auto", manual.partCalcs[0].cutsUsed, 9, 0);
 }
 
-// ══ Small-run speed curve (Mary 7/21 — PLACEHOLDER factors) ══
+// ══ Small-run speed curve — RECALIBRATED 7/21 to E&M #348538 (3,750 coated
+//    sheets ran 5,400 on a 10,000-rated KOMII → old factors were too fast) ══
 {
   console.log("\n── Small-run speed curve ──");
-  check("factor <1,000 shts", smallRunSpeedFactor(500), 0.5, 0);
-  check("factor <2,500 shts", smallRunSpeedFactor(1500), 0.65, 0);
-  check("factor <5,000 shts", smallRunSpeedFactor(3000), 0.8, 0);
-  check("factor <10,000 shts", smallRunSpeedFactor(9999), 0.9, 0);
-  check("factor at 10,000+ shts", smallRunSpeedFactor(10000), 1, 0);
+  check("factor <1,000 shts", smallRunSpeedFactor(500), 0.4, 0);
+  check("factor <2,500 shts", smallRunSpeedFactor(1500), 0.5, 0);
+  check("factor <5,000 shts (E&M 348538 anchor ~0.54)", smallRunSpeedFactor(3750), 0.55, 0);
+  check("factor <10,000 shts", smallRunSpeedFactor(9999), 0.7, 0);
+  check("factor at 10,000+ shts (long-run 0.85)", smallRunSpeedFactor(10000), 0.85, 0);
   const f = defaultClassicForm();
   f.quantity = 500; f.numberUp = 1; f.runSpeedSph = 10000; f.pressHourlyRate = 100;
   f.cutterSheetsPerHr = 0;
   const c = computeClassic(f, digitalStd);
-  // 500 sheets at 10,000 rated × 0.5 = 5,000 effective → 0.1 hr
-  check("effective SPH (10,000 × 0.5)", c.partCalcs[0].effectiveSph, 5000, 0);
-  check("run hrs use effective SPH", c.partCalcs[0].runHrs, 0.1, 1e-9);
+  // 500 sheets at 10,000 rated × 0.4 = 4,000 effective → 0.125 hr
+  check("effective SPH (10,000 × 0.4)", c.partCalcs[0].effectiveSph, 4000, 0);
+  check("run hrs use effective SPH", c.partCalcs[0].runHrs, 0.125, 1e-9);
   const off = computeClassic({ ...f, useSpeedCurve: false }, digitalStd);
   check("curve off → rated speed", off.partCalcs[0].runHrs, 0.05, 1e-9);
   check("curve off factor is 1", off.partCalcs[0].speedFactor, 1, 0);
@@ -255,7 +258,10 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   // 10,000 shts × 950 sq-in × 100% ÷ (425 × 1000) = 22.3529 lbs × $18 = $402.35
   check("coating lbs", c.partCalcs[0].coatingLbs, 22.3529, 0.001);
   check("coating $", c.partCalcs[0].coatingCost, 402.35, 0.01);
-  check("coating rides press cost", c.pressCost, 402.35, 0.01);
+  // UPDATED 7/21 (#348538 bucket restructure): coating is a MATERIAL —
+  // it sells at Material markup, and press cost is hours-labor only.
+  check("coating rides MATERIAL bucket", c.materialCost, 402.35, 0.01);
+  check("press cost excludes coating (hrs only)", c.pressCost, 0, 0.001);
   check("job-level coating sum exposed", c.coatingCost, 402.35, 0.01);
   const none = computeClassic({ ...f, coatingType: "" }, digitalStd);
   check("no coating type → $0", none.coatingCost, 0, 0);
@@ -293,9 +299,13 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
 {
   const base = () => {
     const f = defaultClassicForm();
-    f.quantity = 20000; f.numberUp = 1; f.pricePerM = 100; // 20k sheets → factor 1.0
+    f.quantity = 20000; f.numberUp = 1; f.pricePerM = 100;
     f.sheetWidthRun = 23; f.sheetHeightRun = 29;
     f.runSpeedSph = 10000; f.pressHourlyRate = 200;
+    // UPDATED 7/21: the long-run factor is now 0.85 (was 1.0), so the curve
+    // is disabled here to test the coverage/board caps in isolation. The
+    // cap × curve interplay is checked separately below.
+    f.useSpeedCurve = false;
     return f;
   };
   console.log("\n── Speed caps (coverage + board) ──");
@@ -311,8 +321,9 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("18pt board keeps rated", computeClassic(thin, digitalStd).partCalcs[0].effectiveSph, 10000, 0);
   const both = base(); both.inkCoverageColorPct = 70; both.caliperBasisWeight = ".030";
   check("both caps → lower (board) wins", computeClassic(both, digitalStd).partCalcs[0].effectiveSph, 4100, 0);
-  const short = base(); short.quantity = 800; short.caliperBasisWeight = "28pt"; // board cap × 0.5 small-run
-  check("board cap × small-run factor", computeClassic(short, digitalStd).partCalcs[0].effectiveSph, 2050, 0);
+  const short = base(); short.quantity = 800; short.caliperBasisWeight = "28pt";
+  short.useSpeedCurve = true; // board cap 4,100 × 0.4 small-run (recalibrated)
+  check("board cap × small-run factor", computeClassic(short, digitalStd).partCalcs[0].effectiveSph, 1640, 0);
   const coated = base(); coated.coatingType = "Gloss AQ"; coated.coatingCoveragePct = 100; // coating counts toward coverage
   check("coating coverage triggers solid cap", computeClassic(coated, digitalStd).partCalcs[0].effectiveSph, 8500, 0);
 }
@@ -373,6 +384,76 @@ const check = (name: string, got: number, want: number, tol = 0.01) => {
   check("Todd portion (in-house)", c.outsideToddCost, 300);
   check("vendor portion (100x1.03 + 50 legacy)", c.outsideVendorCost, 153);
   check("total outside unchanged", c.outsideCost, 453);
+}
+
+// ══ E&M #348538 (Forward Graphics, 6,000 activities guides 17x11 → 4.25x5.5,
+//    4/4 WORK & TURN on KOMII 5C, 4,000 shts 19x25 80lb coated text @ 78.66/M,
+//    E&M total $1,590.42) — bucket restructure side-by-side ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 6000; f.numberUp = 2;            // 3,000 press sheets
+  f.sheetWidthRun = 19; f.sheetHeightRun = 25;  // run 19x25 (475 sq in)
+  f.pricePerM = 78.66; f.sheetsOutOfParent = 1;
+  f.wasteSheetsManual = 750; f.bindWasteSheets = 250; // 3,000 + 750 + 250 = 4,000 bought
+  f.markupPaperPct = 33; f.markupMaterialPct = 18; f.markupLaborPct = 40; f.commissionPct = 10;
+  // MATERIAL bucket pieces from the sheet:
+  f.colorProofs = 1; f.colorProofCharge = 76.21;      // Sherpa proofs 76.21
+  f.runColorsSide1 = 4; f.runColorsSide2 = 4;
+  f.workAndTurn = true; f.plateCostEach = 19;          // 4 plates × $19 = 76.00
+  f.inkCoverageColorPct = 200; f.inkDollarsPerLb = 9.277; // 6.70588 lbs → 62.21 (INK is material now)
+  f.cartons = 12; f.cartonCost = 0.93;                 // 11.16
+  f.freight = 46.17;                                   // E&M outside line: 46.17 → 47.17
+  f.cutterSheetsPerHr = 0;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── E&M #348538 (bucket restructure) ──");
+  check("parents bought (E&M 4,000)", c.orderSheets, 4000, 0);
+  check("paper cost (E&M 314.64)", c.paperCost, 314.64);
+  check("paper selling (E&M 418.47 @33%)", c.paperSelling, 418.47, 0.05);
+  check("W&T plates for 4/4 (E&M 4)", c.partCalcs[0].plates, 4, 0);
+  check("plate materials (4 × $19 = 76.00)", c.plateMaterialsCost, 76.00);
+  check("ink cost ≈ E&M 62.21 (material, not labor)", c.inkCost, 62.21, 0.05);
+  check("MATERIAL bucket (E&M 225.58 = proofs+plates+ink+cartons)", c.materialCost, 225.58, 0.06);
+  check("material selling (E&M 266.19 @18%)", c.materialSelling, 266.19, 0.1);
+  check("press cost has NO ink (hrs labor only)", c.pressCost, c.pressLaborCost, 1e-9);
+  check("freight selling (E&M 46.17 → 47.17, $1 min)", c.freightSelling, 47.17);
+  check("commission = 10% of total cost", c.commission, c.totalCost * 0.10, 1e-9);
+  // W&T makeready/washup halve: 4 plates × 0.25 base = 1.0 hr vs 8 × 0.25 = 2.0
+  check("W&T makeready hrs (4 × 0.25)", c.makereadyHrs, 1.0, 1e-9);
+  const straight = computeClassic({ ...f, workAndTurn: false }, digitalStd);
+  check("W&T off → 8 plates", straight.partCalcs[0].plates, 8, 0);
+  check("W&T off → double makeready", straight.makereadyHrs, 2.0, 1e-9);
+  check("W&T off → plate materials 8 × $19", straight.plateMaterialsCost, 152.00);
+}
+
+// ══ Folding machine line (E&M #348538: 0.6 setup + 1.4 run @ $48) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 1000; f.numberUp = 1; f.pricePerM = 100; f.cutterSheetsPerHr = 0;
+  f.foldSetupHrs = 0.6; f.foldRunHrs = 1.4; f.folderRatePerHr = 48;
+  f.binderyHourlyRate = 65; f.packHrs = 1; // 1 hr at the bindery rate
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Folding machine line ──");
+  check("fold hrs (0.6 + 1.4)", c.foldHrs, 2.0, 1e-9);
+  check("fold labor (2.0 × $48)", c.foldLabor, 96.00);
+  check("bindery labor = fold@48 + pack@65", c.binderyLabor, 96 + 65, 1e-9);
+  check("bindery hrs include fold", c.binderyHrs, 3.0, 1e-9);
+  check("fold run counts as a waste equipment pass", c.partCalcs[0].equipmentPasses, 1, 0);
+}
+
+// ══ Prep labor sells at LABOR markup (E&M #348538 restructure) ══
+{
+  const f = defaultClassicForm();
+  f.quantity = 100; f.pricePerM = 0; f.cutterSheetsPerHr = 0;
+  f.designHours = 2; f.prepressRate = 95; // 190 labor
+  f.colorProofs = 1; f.colorProofCharge = 50; // 50 material
+  f.markupLaborPct = 40; f.markupMaterialPct = 18;
+  const c = computeClassic(f, digitalStd);
+  console.log("\n── Prep labor → Labor markup ──");
+  check("prep labor cost", c.prepLabor, 190);
+  check("prep labor selling @40%", c.prepLaborSelling, 266);
+  check("material bucket = proofs only", c.materialCost, 50);
+  check("material selling @18%", c.materialSelling, 59);
+  check("total cost includes both once", c.totalCost, 240, 1e-9);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

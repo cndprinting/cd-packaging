@@ -190,6 +190,8 @@ function ClassicEstimatorContent() {
             // bindery rate ($22.50) — press select only overrides it when
             // the press has its own nonzero rate.
             helperHourlyRate: f.helperHourlyRate || Number(s.handBinderyRate) || 22.5,
+            // Folder machine rate (E&M #348538 folding line ≈ $48/hr)
+            folderRatePerHr: Number(s.folder1Rate) || f.folderRatePerHr,
           }));
         }
       })
@@ -506,10 +508,14 @@ function ClassicEstimatorContent() {
         calc.paperCost,
         ((calc.mrWasteSheets / outOfParent) / 1000) * (form.pricePerM || 0)
       );
+      // E&M #348538 bucket restructure: materials = paper + prep materials +
+      // cartons + INK + COATING + PLATES; labor = prep + press HOURS labor
+      // (pressLaborCost no longer contains ink/coating).
       const costBreakdown = {
-        materials: Math.max(0, calc.paperCost - wasteCost) + calc.inkCost + calc.prepMaterials,
-        tooling: form.dieCost || 0,
-        labor: calc.prepLabor + (calc.pressLaborCost - calc.inkCost),
+        materials: Math.max(0, calc.paperCost - wasteCost) + calc.prepMaterials
+          + calc.inkCost + calc.coatingCost + calc.plateMaterialsCost,
+        tooling: calc.pressMaterialsCost, // die cost (all parts)
+        labor: calc.prepLabor + calc.pressLaborCost,
         // Todd's in-house finishing rows are REAL C&D cost -> finishing
         // bucket; only true vendor buyouts ride the outside/shipping bucket
         // (Benjy 7/21).
@@ -978,6 +984,7 @@ function ClassicEstimatorContent() {
                     ...(cfg ? {
                       runSpeedSph: cfg.speedUncoated,
                       baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
+                      plateCostEach: cfg.plateCost || 0, // KOMII 5C = $19 (E&M #348538)
                     } : {}),
                     // Never reset a helper count Mary already typed; only
                     // adopt the config's crew size when it actually has one.
@@ -1004,6 +1011,7 @@ function ClassicEstimatorContent() {
                       ...(cfg ? {
                         runSpeedSph: cfg.speedUncoated,
                         baseMakereadyHrsPerPlate: Math.round((cfg.setupMinutes / 60) * 100) / 100,
+                        plateCostEach: cfg.plateCost || 0,
                       } : {}),
                       // Keep Mary's typed helper count (Mary 7/21).
                       ...(cfg && cfg.numHelpers > 0 ? { helpers: cfg.numHelpers } : {}),
@@ -1051,6 +1059,21 @@ function ClassicEstimatorContent() {
               <>
                 <Row label="Run Side 1 Colors"><Num value={pv("runColorsSide1")} onChange={(v) => setP("runColorsSide1", v)} step={1} /></Row>
                 <Row label="Run Side 2 Colors"><Num value={pv("runColorsSide2")} onChange={(v) => setP("runColorsSide2", v)} step={1} /></Row>
+                {/* WORK & TURN (E&M #348538): same plates print both sides —
+                    plates/washups/makereadys = max(side1, side2). */}
+                <Row label="Work & Turn" wide>
+                  <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
+                    <input
+                      type="checkbox"
+                      className="accent-amber-400"
+                      checked={!!pv("workAndTurn")}
+                      onChange={(e) => setP("workAndTurn", e.target.checked)}
+                    />
+                    same plates both sides
+                  </label>
+                </Row>
+                <Row label="Plate Cost $ Each"><Num value={pv("plateCostEach")} onChange={(v) => setP("plateCostEach", v)} /></Row>
+                <Readout label="Plates (Material)" value={`${pcalc.plates} × ${money(pv("plateCostEach"))} = ${money(pcalc.plateMaterialsCost)}`} />
                 {/* Press helper crew — near the top so Mary can't miss it (7/21) */}
                 <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
                 <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
@@ -1195,6 +1218,11 @@ function ClassicEstimatorContent() {
             <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
             <Row label="Drill Hrs/Hole"><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></Row>
             <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
+            {/* Folding machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48) */}
+            <Row label="Fold Setup Hrs"><Num value={pv("foldSetupHrs")} onChange={(v) => setP("foldSetupHrs", v)} /></Row>
+            <Row label="Fold Run Hrs"><Num value={pv("foldRunHrs")} onChange={(v) => setP("foldRunHrs", v)} /></Row>
+            <Row label="Folder Rate $/Hr"><Num value={pv("folderRatePerHr")} onChange={(v) => setP("folderRatePerHr", v)} /></Row>
+            <Readout label="Fold Labor" value={`${pcalc.foldHrs.toFixed(2)} hrs / ${money(pcalc.foldLabor)}`} />
             <Row label="Bindery Rate $/Hr"><Num value={pv("binderyHourlyRate")} onChange={(v) => setP("binderyHourlyRate", v)} /></Row>
             {dieCuttingSection()}
           </div>
@@ -1398,25 +1426,36 @@ function ClassicEstimatorContent() {
             <tbody>
               <CostRow section="PAPER" detail={`${calc.orderSheets} shts @ ${money(form.pricePerM)}/M`}
                 cost={calc.paperCost} markup={`${form.markupPaperPct}%`} selling={calc.paperSelling} />
-              <CostRow section="PREP" detail={`materials ${money(calc.prepMaterials)}`}
-                hours={calc.prepHours} cost={calc.prepCost} markup={`${form.markupMaterialPct}%`} selling={calc.prepSelling} />
+              {/* MATERIAL bucket (E&M #348538): proofs/scans + plates + ink +
+                  coating + cartons — all at Material markup. */}
+              <CostRow section="MATERIAL"
+                detail={[
+                  `prep mat ${money(calc.prepMaterials - calc.cartonSkidCost)}`,
+                  calc.plateMaterialsCost > 0 ? `plates ${calc.plates} ${money(calc.plateMaterialsCost)}` : "",
+                  calc.inkCost > 0 ? `ink ${calc.inkLbs.toFixed(1)} lb ${money(calc.inkCost)}` : "",
+                  calc.coatingCost > 0 ? `coat ${calc.coatingLbs.toFixed(1)} lb ${money(calc.coatingCost)}` : "",
+                  calc.cartonSkidCost > 0 ? `ctns ${money(calc.cartonSkidCost)}` : "",
+                ].filter(Boolean).join(" · ")}
+                cost={calc.materialCost} markup={`${form.markupMaterialPct}%`} selling={calc.materialSelling} />
+              <CostRow section="LABOR (PREP)" detail={`design/photoshop @ ${money(form.prepressRate)}/hr`}
+                hours={calc.prepHours} cost={calc.prepLabor} markup={`${form.markupLaborPct}%`} selling={calc.prepLaborSelling} />
               {calc.isDigital ? (
-                <CostRow section="PRESS (DIGITAL)"
+                <CostRow section="LABOR (PRESS/DIGITAL)"
                   detail={`die/score/check hrs only — clicks under OUTSIDE${form.dieCost ? ` / die ${money(form.dieCost)}` : ""}`}
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               ) : (
-                <CostRow section="PRESS"
-                  detail={`MR ${calc.makereadyHrs.toFixed(2)} / WU ${calc.washupHrs.toFixed(2)} / Run ${calc.runHrs.toFixed(2)} · ink ${calc.inkLbs.toFixed(1)} lb ${money(calc.inkCost)}${calc.coatingCost > 0 ? ` · coat ${calc.coatingLbs.toFixed(1)} lb ${money(calc.coatingCost)}` : ""}${form.dieCost ? ` · die ${money(form.dieCost)}` : ""}`}
+                <CostRow section="LABOR (PRESS)"
+                  detail={`MR ${calc.makereadyHrs.toFixed(2)} / WU ${calc.washupHrs.toFixed(2)} / Run ${calc.runHrs.toFixed(2)}${form.helpers > 0 ? ` · ${form.helpers} helper(s)` : ""}${form.dieCost ? ` · die ${money(form.dieCost)}` : ""}`}
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               )}
-              <CostRow section="BINDERY"
-                detail={`Cut ${calc.cutterHrs.toFixed(2)} / Trim ${form.trimHrs.toFixed(2)} / Drill ${calc.drillHrs.toFixed(2)} / Hand ${(calc.handOp1Hrs + calc.handOp2Hrs).toFixed(2)} / Pack ${form.packHrs.toFixed(2)}${calc.cartonSkidCost ? ` · ctns ${money(calc.cartonSkidCost)}` : ""}`}
+              <CostRow section="LABOR (BINDERY)"
+                detail={`Cut ${calc.cutterHrs.toFixed(2)} / Trim ${form.trimHrs.toFixed(2)} / Fold ${calc.foldHrs.toFixed(2)} / Drill ${calc.drillHrs.toFixed(2)} / Hand ${(calc.handOp1Hrs + calc.handOp2Hrs).toFixed(2)} / Pack ${form.packHrs.toFixed(2)}`}
                 hours={calc.binderyHrs} cost={calc.binderyCost} markup={`${form.markupLaborPct}%`} selling={calc.binderySelling} />
               <CostRow section="OUTSIDE"
                 detail={`${form.outsidePurchases.length} item(s)${calc.isDigital ? ` + ${calc.digitalClickSheets} clicks @ $${calc.digitalClickRate.toFixed(4)}${form.digitalVariableData ? " +VD" : ""} = ${money(calc.digitalClickCost + calc.digitalVDCost + calc.digitalVDSetupCost)}` : ""}`}
                 cost={calc.outsideCost} markup={`${form.markupOutsidePct}%`} selling={calc.outsideSelling} />
-              <CostRow section="FREIGHT + ADDL" detail="pass-through"
-                cost={calc.freightAndAdditional} markup="—" selling={calc.freightAndAdditional} />
+              <CostRow section="FREIGHT + ADDL" detail="pass-through, $1 min"
+                cost={calc.freightAndAdditional} markup={calc.freightAndAdditional > 0 ? "+$1" : "—"} selling={calc.freightSelling} />
               <tr className="border-t border-amber-600/60">
                 <td className="py-1 pr-2 text-amber-400" colSpan={3}>SUBTOTAL (SELLING)</td>
                 <td className="py-1 pr-2 text-right text-amber-500/70">{money(calc.totalCost)}</td>
