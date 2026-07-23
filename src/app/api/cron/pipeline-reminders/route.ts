@@ -119,14 +119,28 @@ export async function GET(request: NextRequest) {
     const inbound = await prisma.lead.findMany({
       where: {
         source: { in: ["inbound", "mailercity"] },
-        pipelineStage: { in: ["LEAD", "QUALIFIED"] },
         OR: [
-          // Hand-off states nag until a real person takes ownership: changing the
-          // lead's Owner to yourself (not Jessica/TBD) tells Godzilla you're on it
-          // and drops it from this digest (Benjy 7/14, Avini -> Suzanne).
-          { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
-          { agentStatus: { in: ["quote_received", "needs_info"] } },
-          { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying", "awaiting_customer_file"] }, agentNextAt: { lt: stale } },
+          {
+            pipelineStage: { in: ["LEAD", "QUALIFIED"] },
+            OR: [
+              // Hand-off states nag until a real person takes ownership: changing the
+              // lead's Owner to yourself (not Jessica/TBD) tells Godzilla you're on it
+              // and drops it from this digest (Benjy 7/14, Avini -> Suzanne).
+              { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
+              { agentStatus: { in: ["quote_received", "needs_info"] } },
+              { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying", "awaiting_customer_file"] }, agentNextAt: { lt: stale } },
+            ],
+          },
+          // CATCH-ALL stuck sweep (Benjy 7/23): ANY live agent state with no
+          // future clock and no movement for 3+ days escalates here, whatever
+          // the status or pipeline stage — Sunny Brooke sat in "replied" and
+          // two spam leads sat in "needs_review" for weeks because the digest
+          // only looked for the states it knew about. Never again.
+          {
+            agentStatus: { notIn: ["closed", "declined", "disqualified", "duplicate", "unsubscribed", "done", "owner_handling"] },
+            agentNextAt: null,
+            updatedAt: { lt: stale },
+          },
         ],
       },
       orderBy: { createdAt: "asc" },
@@ -135,7 +149,8 @@ export async function GET(request: NextRequest) {
     if (inbound.length) {
       const needLabel = (l: any): string => {
         switch (l.agentStatus) {
-          case "quote_received": return "Approve &amp; send Mary's quote to the customer";
+          case "quote_received": return "Approve &amp; send Mary's quote to the customer (reply 'approved' to the Approve email)";
+          case "replied": return "Customer replied - review and respond";
           case "owner_handling": return "Existing account - reach out to them directly";
           case "needs_review": return "Review - flagged possible scam";
           case "needs_info":
