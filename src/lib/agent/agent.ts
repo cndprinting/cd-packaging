@@ -9,6 +9,9 @@ import { AGENT_MAILBOX, AGENT_NAME, leadMailbox, leadAgentName, leadAgentFirst }
 // later behind ANTHROPIC_API_KEY — for now drafts are clean templates.
 
 export const MARY = "mbitting@cndprinting.com";
+// Shayla Smith, Head of Shipping & Receiving — owns freight pricing. Her
+// replies in agent threads are read like Mary's (Benjy 7/23, St.Agave freight).
+export const SHAYLA = "ssmith@cndprinting.com";
 export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
 // Thread CCs on Jessica's customer/Mary emails — Nitay asked off these
 // (Benjy 7/20); he stays on OWNERS for internal alerts and digests.

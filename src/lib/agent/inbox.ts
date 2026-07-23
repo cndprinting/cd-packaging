@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
 import { READ_MAILBOXES, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
@@ -118,7 +118,10 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     // Mary replied to a "Quote needed" handoff with her price. Match it to the
     // awaiting-Mary lead by the company name in the subject, and treat her reply
     // as the quote. (She just emails Albert back — never sees the system.)
-    if (from === MARY.toLowerCase()) {
+    // Shayla (shipping) answers freight asks in the same internal threads —
+    // her replies are read exactly like Mary's: "working on it" = grace,
+    // a $ figure = quote for owner approval (Benjy 7/23, St.Agave freight).
+    if (from === MARY.toLowerCase() || from === SHAYLA.toLowerCase()) {
       const conv = m.conversationId;
       const subjectLc = (m.subject || "").toLowerCase();
       // Match by conversation first — Mary may reply in her own thread OR in the
