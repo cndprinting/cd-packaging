@@ -80,6 +80,41 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     const from = m.from?.emailAddress?.address?.toLowerCase();
     if (!from) continue;
 
+    // REPLY-TO-APPROVE (Benjy 7/23): an owner replying "approved" to the
+    // "Approve quote: X" email sends Mary's quote — no link click needed.
+    // Only fires on a held quote (quote_received); once sent, re-polls no-op.
+    if (OWNERS.some((o) => o.toLowerCase() === from)) {
+      const subj = (m.subject || "").replace(/^((re|fw|fwd):\s*)+/i, "").trim();
+      const am = subj.match(/^approve quote:\s*(.+)$/i);
+      if (am) {
+        const lead = await prisma.lead.findFirst({
+          where: { companyName: { equals: am[1].trim(), mode: "insensitive" }, agentStatus: "quote_received" },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (lead) {
+          let txt = (m.bodyPreview || "").trim();
+          try {
+            const fm: any = await client.api(`/users/${MAILBOX}/messages/${m.id}`).header("Prefer", 'outlook.body-content-type="text"').select("uniqueBody").get();
+            if (fm?.uniqueBody?.content?.trim()) txt = fm.uniqueBody.content.trim();
+          } catch { /* preview fallback */ }
+          const newText = txt.split(/On \w{3}, \w{3} \d|From: /)[0];
+          const yes = /\b(approved?|send it|send|yes|go ahead|ok(ay)?|looks good|lgtm)\b/i.test(newText);
+          const no = /\b(no\b|don'?t|do not|hold|wait|revise|stop|cancel)\b/i.test(newText);
+          try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+          if (yes && !no) {
+            const { sendQuotePdfToCustomer, sendCustomerQuote, agentSend: send2 } = await import("@/lib/agent/agent");
+            if (lead.agentQuoteMsgId) await sendQuotePdfToCustomer(prisma, lead);
+            else await sendCustomerQuote(prisma, lead);
+            const who = from.split("@")[0];
+            await send2({ to: OWNERS, subject: `Quote sent: ${lead.companyName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Approved by reply (${who}) - Mary's quote for <strong>${lead.companyName}</strong> is on its way to the customer. Follow-ups are scheduled.</p></div>` });
+            handled++;
+          }
+          // Negative or ambiguous reply → keep holding; the link still works.
+          continue;
+        }
+      }
+    }
+
     // Mary replied to a "Quote needed" handoff with her price. Match it to the
     // awaiting-Mary lead by the company name in the subject, and treat her reply
     // as the quote. (She just emails Albert back — never sees the system.)
