@@ -50,6 +50,11 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
     for (const m of items) {
       const from = m.from?.emailAddress?.address?.toLowerCase();
       if (!from) continue;
+      // NEVER treat internal C&D mail as a prospect reply (Benjy 7/27):
+      // Nitay's own check-in to Ray at Florida Supplement landed in a
+      // monitored inbox inside the outreach thread and got classified as
+      // the prospect replying - false "replied" alert, sequence halted.
+      if (from.endsWith("@cndprinting.com")) continue;
 
       // Bounce / NDR? Intercept before the reply logic — an NDR comes from
       // postmaster (not the prospect) and can even carry the original
