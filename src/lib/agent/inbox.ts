@@ -154,6 +154,24 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         const open = await prisma.lead.findMany({ where: { agentStatus: { in: LIVE_FOR_INTERNAL } }, orderBy: { updatedAt: "desc" }, take: 80 });
         ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
       }
+      // A REAL PERSON owns it → Jessica works only her own leads (Benjy 7/27).
+      // Log what Mary/Shayla said, hand it to the owner, and stand down. This
+      // is the rule that keeps the agent out of Suzanne's/Albert's accounts.
+      const HUMAN_OWNERS = ["benjy", "nitay", "albert", "suzanne", "mary"];
+      if (ml && HUMAN_OWNERS.includes((ml.ownerName || "").trim().toLowerCase())) {
+        const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
+        try {
+          await prisma.lead.update({ where: { id: ml.id }, data: {
+            agentStatus: "owner_handling", agentNextAt: null, stage: "Owner handling - agent stood down",
+            commentary: `${ml.commentary || ""}
+[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 200)}`.slice(0, 8000),
+          } });
+        } catch { /* non-fatal */ }
+        try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+        handled++;
+        continue;
+      }
+
       if (!ml) {
         // No live agent thread. Does the lead exist at all under a human?
         // Holy Toast (Albert), Tempted (Albert), Cardon (nobody) all got
