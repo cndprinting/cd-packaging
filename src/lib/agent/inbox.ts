@@ -145,10 +145,32 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       // moved to quote_received/needs_owner/sent, and those were dropped on the
       // floor because the matcher only looked at awaiting_mary.
       const LIVE_FOR_INTERNAL = ["awaiting_mary", "quote_received", "needs_owner", "needs_info", "awaiting_customer_file", "awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3", "replied"];
-      let ml: any = conv ? await prisma.lead.findFirst({ where: { AND: [agentScope], agentStatus: { in: LIVE_FOR_INTERNAL }, OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
+      // Match on the AGENT's own conversation/state, NOT on who owns the lead
+      // (Benjy 7/27): embe is Suzanne's but the agent had asked Mary for that
+      // quote, and her reply was being dropped because the owner wasn't
+      // Jessica. If the agent started the thread, the agent finishes it.
+      let ml: any = conv ? await prisma.lead.findFirst({ where: { agentStatus: { in: LIVE_FOR_INTERNAL }, OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
       if (!ml) {
-        const open = await prisma.lead.findMany({ where: { AND: [agentScope], agentStatus: { in: LIVE_FOR_INTERNAL } }, orderBy: { updatedAt: "desc" }, take: 80 });
+        const open = await prisma.lead.findMany({ where: { agentStatus: { in: LIVE_FOR_INTERNAL } }, orderBy: { updatedAt: "desc" }, take: 80 });
         ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
+      }
+      if (!ml) {
+        // No live agent thread. Does the lead exist at all under a human?
+        // Holy Toast (Albert), Tempted (Albert), Cardon (nobody) all got
+        // flagged as "unmatched" — but a human-run lead is NOT the agent's
+        // business: log it on the record and stay silent (Benjy 7/27).
+        const human = await prisma.lead.findMany({ orderBy: { updatedAt: "desc" }, take: 400, select: { id: true, companyName: true, commentary: true, ownerName: true } });
+        const owned = human.find((l: any) => companyMatches(l.companyName, subjectLc));
+        if (owned) {
+          const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
+          try {
+            await prisma.lead.update({ where: { id: owned.id }, data: { commentary: `${owned.commentary || ""}
+[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 160)}`.slice(0, 8000) } });
+          } catch { /* non-fatal */ }
+          try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+          handled++;
+          continue; // ${owned.ownerName} owns it and is already on the thread
+        }
       }
       if (!ml) {
         // NEVER silently drop an internal reply. If Mary or Shayla wrote to the
