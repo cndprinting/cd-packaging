@@ -76,6 +76,14 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   items.length = 0; items.push(...deduped);
   if (preDedupe !== items.length) console.log(`[agent inbox] cross-mailbox de-dupe: ${preDedupe} -> ${items.length}`);
 
+  // Alert-once threshold: messages newer than the previous poll. Without this
+  // an unmatched reply would re-alert every day until it aged out (Benjy 7/27).
+  let alertSince = new Date(Date.now() - 26 * 3600 * 1000);
+  try {
+    const lastRun = await prisma.cronRun.findUnique({ where: { job: "agent-inbox" } });
+    if (lastRun?.ranAt) alertSince = new Date(lastRun.ranAt);
+  } catch { /* table missing -> 26h fallback */ }
+
   let handled = 0;
   for (const m of items) {
     const MAILBOX = m._mb; // the mailbox this message lives in
@@ -144,7 +152,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         // NEVER silently drop an internal reply. If Mary or Shayla wrote to the
         // agent and we can't tie it to a lead, tell the owners so a human sees
         // it — the whole class of "we missed Mary's response" failures.
-        const fresh = new Date(m.receivedDateTime) > new Date(Date.now() - 26 * 3600 * 1000); // poll is daily → alert once
+        const fresh = new Date(m.receivedDateTime) > alertSince; // alert exactly once
         if (fresh && /quote|estimate|freight|price|pricing/i.test(`${m.subject || ""} ${m.bodyPreview || ""}`)) {
           const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
           await agentSend({ to: OWNERS, subject: `Unmatched ${who} reply: ${m.subject || "(no subject)"}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><strong>${who}</strong> replied to the agent, but it could not be matched to a lead, so nobody was going to see it. Please take a look:</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${(m.bodyPreview || "").slice(0, 600).replace(/</g, "&lt;")}</blockquote><p style="color:#888;font-size:12px;">Subject: ${(m.subject || "").replace(/</g, "&lt;")}</p></div>` });
@@ -388,6 +396,9 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     await agentSend({ to: OWNERS, subject: `Lead replied: ${lead.companyName}`, body });
     handled++;
   }
+  try {
+    await prisma.cronRun.upsert({ where: { job: "agent-inbox" }, create: { job: "agent-inbox", ranAt: new Date() }, update: { ranAt: new Date() } });
+  } catch { /* non-fatal */ }
   return { checked: items.length, handled };
 }
 
