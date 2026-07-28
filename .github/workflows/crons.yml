@@ -1,31 +1,42 @@
-# BACKSTOP for Vercel Hobby crons, which silently skipped the 7/20/2026 run
-# (Benjy missed his Sales Funnel email). Vercel's crons (vercel.json) stay
-# primary; this fires ~2h later and the endpoints' own date-stamps make a
-# same-day second run a no-op for per-lead reminders.
-# REQUIRES repo secret CRON_SECRET (same value as the Vercel env var):
-#   gh secret set CRON_SECRET -b"<value>"
+# Godzilla schedulers. Vercel Hobby crons only fire once a day and are
+# best-effort, which made Mary's replies look ignored for up to 24 hours
+# (Benjy 7/27). GitHub Actions is free and reliable, so the agent inbox is
+# polled every 15 minutes here; the daily jobs keep their once-a-day slot.
+# REQUIRES repo secret CRON_SECRET (same value as the Vercel env var).
 name: daily-crons
 
 on:
   schedule:
-    - cron: "0 16 * * *"   # 16:00 UTC — backstop pass, all three endpoints
+    - cron: "*/15 * * * *"   # agent inbox — Mary/Shayla/customer replies land within ~15 min
+    - cron: "0 16 * * *"     # daily backstop: reminders + outbound
   workflow_dispatch: {}
+
+# A new poll supersedes one still running; never pile up.
+concurrency:
+  group: godzilla-crons
+  cancel-in-progress: false
 
 jobs:
   fire:
     runs-on: ubuntu-latest
     steps:
-      - name: Hit the due cron endpoint(s)
+      - name: Hit the cron endpoints
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          hour=$(date -u +%H)
           hit () {
             echo "→ $1"
-            curl -sS -m 300 -H "Authorization: Bearer $CRON_SECRET" \
+            # --fail-with-body: a 401/500 turns the run RED instead of passing
+            # silently, so a broken secret can never hide (Benjy 7/27).
+            curl -sS --fail-with-body -m 300 \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "https://packaging.cndprinting.com/api/cron/$1" | head -c 500
             echo
           }
-          # backstop pass — hit all three; per-lead reminder stamps make
-          # already-handled work a no-op
-          hit pipeline-reminders; hit agent-inbox; hit outbound
+          # The agent inbox runs on every trigger — this is the responsiveness fix.
+          hit agent-inbox
+          # Daily work: the 16:00 UTC trigger, or a manual run.
+          if [ "$(date -u +%H%M)" = "1600" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            hit pipeline-reminders
+            hit outbound
+          fi

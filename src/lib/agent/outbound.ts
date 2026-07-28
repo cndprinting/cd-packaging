@@ -34,8 +34,15 @@ const jessicaPerRunCap = () => parseInt(process.env.AGENT_OUTBOUND_JESSICA_LIMIT
 // internal alerts (replies/digests), just not the per-email monitoring copies.
 const OWNER_BCC = [OWNERS_MAP.benjy.email, OWNERS_MAP.albert.email];
 const bccFor = (owner: Owner) => OWNER_BCC.filter((e) => e.toLowerCase() !== owner.email.toLowerCase());
+// The AI never sends as Albert anymore (Benjy 7/27: "AI emails from Albert
+// should be discontinued and moved to Jessica"). Albert-owned prospects are
+// cold-emailed BY Jessica, who says she is picking it up for him. Real people
+// (Benjy/Nitay) keep their own voice on leads they own.
+const NO_AGENT_SEND = new Set(["albert"]);
 function resolveOwner(ownerName?: string | null): Owner {
-  return OWNERS_MAP[(ownerName || "").trim().toLowerCase()] || DEFAULT_OWNER;
+  const key = (ownerName || "").trim().toLowerCase();
+  if (NO_AGENT_SEND.has(key)) return OWNERS_MAP.jessica;
+  return OWNERS_MAP[key] || DEFAULT_OWNER;
 }
 // Reverse lookup for a stamped sender mailbox (lead.outreachMailbox).
 function ownerByEmail(email?: string | null): Owner | null {
@@ -325,6 +332,10 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
       continue;
     }
     const owner = resolveOwner(l.ownerName);
+    // Jessica taking an Albert-owned prospect → say so in the intro.
+    if (NO_AGENT_SEND.has((l.ownerName || "").trim().toLowerCase()) && !l.outreachHandoff) {
+      try { await prisma.lead.update({ where: { id: l.id }, data: { outreachHandoff: "Albert" } }); l.outreachHandoff = "Albert"; } catch { /* non-fatal */ }
+    }
     // Warm up Jessica's fresh mailbox slowly — leave the rest for tomorrow's run.
     if (owner.email === OWNERS_MAP.jessica.email) {
       if (jessicaSends >= jessicaPerRunCap()) continue;
