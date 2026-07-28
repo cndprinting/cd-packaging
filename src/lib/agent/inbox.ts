@@ -84,6 +84,8 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     if (lastRun?.ranAt) alertSince = new Date(lastRun.ranAt);
   } catch { /* table missing -> 26h fallback */ }
 
+  const unmatchedInternal: { who: string; subject: string; preview: string }[] = [];
+
   let handled = 0;
   for (const m of items) {
     const MAILBOX = m._mb; // the mailbox this message lives in
@@ -155,8 +157,9 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         const fresh = new Date(m.receivedDateTime) > alertSince; // alert exactly once
         if (fresh && /quote|estimate|freight|price|pricing/i.test(`${m.subject || ""} ${m.bodyPreview || ""}`)) {
           const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
-          await agentSend({ to: OWNERS, subject: `Unmatched ${who} reply: ${m.subject || "(no subject)"}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><strong>${who}</strong> replied to the agent, but it could not be matched to a lead, so nobody was going to see it. Please take a look:</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${(m.bodyPreview || "").slice(0, 600).replace(/</g, "&lt;")}</blockquote><p style="color:#888;font-size:12px;">Subject: ${(m.subject || "").replace(/</g, "&lt;")}</p></div>` });
-          handled++;
+          // Collect — ONE digest at the end of the poll, never one email per
+          // message (Benjy 7/27: that flooded the owners' inboxes).
+          unmatchedInternal.push({ who, subject: m.subject || "(no subject)", preview: (m.bodyPreview || "").slice(0, 300) });
         }
         continue;
       }
@@ -396,6 +399,14 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     await agentSend({ to: OWNERS, subject: `Lead replied: ${lead.companyName}`, body });
     handled++;
   }
+  // ONE digest for everything Mary/Shayla sent that has no home in Godzilla.
+  if (unmatchedInternal.length) {
+    const rows = unmatchedInternal.map((u) => `<li style="margin-bottom:8px;"><strong>${u.who}</strong> - ${u.subject.replace(/</g, "&lt;")}<br><span style="color:#777;font-size:12px;">${u.preview.replace(/</g, "&lt;")}</span></li>`).join("");
+    try {
+      await agentSend({ to: OWNERS, subject: `Quote emails with no matching lead (${unmatchedInternal.length})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary or Shayla sent these about quotes, but they do not match any lead in Godzilla, so the agent could not act on them:</p><ul style="padding-left:18px;">${rows}</ul><p style="color:#888;font-size:12px;">One summary per day. Add a lead in the pipeline if any of these should be tracked.</p></div>` });
+    } catch { /* non-fatal */ }
+  }
+
   try {
     await prisma.cronRun.upsert({ where: { job: "agent-inbox" }, create: { job: "agent-inbox", ranAt: new Date() }, update: { ranAt: new Date() } });
   } catch { /* non-fatal */ }
