@@ -52,11 +52,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // NOTHING heavy before the reply: no DB import, no parsing beyond the body.
+  // The website's webhook gives up in a few seconds, and a cold serverless boot
+  // + waking the Neon database was blowing past that — visitors saw "server
+  // error" and retried (Laurel McKernan, 7/13). Everything now happens after.
+  const flat = await readFlat(req);
+
+  after(async () => {
+   try {
   const prismaModule = await import("@/lib/prisma");
   const prisma = prismaModule.default;
-  if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
+  if (!prisma) { console.error("[Godzilla INTAKE] database unavailable — payload:", JSON.stringify(flat)); return; }
 
-  const flat = await readFlat(req);
   const entries = Object.entries(flat);
 
   // Tolerant field-finders: match by key substring, fall back to value scan.
@@ -64,7 +71,7 @@ export async function POST(req: NextRequest) {
     const hit = entries.find(([k]) => subs.some((s) => k.toLowerCase().includes(s)));
     return hit?.[1] || "";
   };
-  const allText = entries.map(([k, v]) => `${k}: ${v}`).join("\n");
+  const allText = entries.map(([k, v]) => `${k}: ${v}`).join(String.fromCharCode(10));
 
   const company = pick("company", "business", "organization") || null;
   const first = pick("first");
@@ -81,7 +88,7 @@ export async function POST(req: NextRequest) {
   // Habib's QA test submissions — drop silently, never a lead.
   if (isTestSubmission(email, contactName)) {
     console.log("[Godzilla INTAKE] ignored test submission from", email);
-    return NextResponse.json({ ok: true, ignored: "test submission" });
+    return;
   }
 
   // Empty / junk submission (blank form, bot POST, health-check) — nothing to
@@ -94,14 +101,9 @@ export async function POST(req: NextRequest) {
   );
   if (!hasSubstance) {
     console.log("[Godzilla INTAKE] ignored empty submission");
-    return NextResponse.json({ ok: true, ignored: "empty submission" });
+    return;
   }
 
-  // Everything below runs AFTER the fast reply below (dedup + Claude analysis +
-  // lead create + agent emails). Keeps the webhook well under its ~5s timeout so
-  // the customer never sees a false "submission failed". Benjy 7/7.
-  after(async () => {
-   try {
   const productField = pick("what type", "type of product", "product");
   const otherType = entries.filter(([k]) => /if other|describe|specify|please describe/i.test(k)).map(([, v]) => v).filter(Boolean).join(" · ");
   const quantity = pick("quantity", "qty") || null;

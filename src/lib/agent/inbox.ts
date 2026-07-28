@@ -34,7 +34,9 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   // Polls BOTH the current identity mailbox and the legacy Albert mailbox during
   // the Jessica cutover, so in-flight threads keep working. Benjy 7/9.
   const items: any[] = [];
-  const cutoff = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  // 10 days, not 5: a skipped cron run (Hobby crons are best-effort) plus a
+  // weekend could push an unhandled reply out of the window permanently.
+  const cutoff = new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString();
   for (const box of READ_MAILBOXES) {
     try {
       const res = await client
@@ -127,12 +129,29 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       // Match by conversation first — Mary may reply in her own thread OR in the
       // customer thread — then fall back to company name in the subject.
       const agentScope = { OR: [{ pipelineStage: "LEAD" }, { pipelineStage: "QUALIFIED", ownerName: { equals: "Jessica", mode: "insensitive" as const } }] };
-      let ml: any = conv ? await prisma.lead.findFirst({ where: { AND: [agentScope], agentStatus: "awaiting_mary", OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
+      // Match against ANY live agent state, not just awaiting_mary (Benjy 7/27:
+      // "we keep missing Mary's responses"). She often sends a SECOND email —
+      // a revised price, an answer, freight from Shayla — after the lead has
+      // moved to quote_received/needs_owner/sent, and those were dropped on the
+      // floor because the matcher only looked at awaiting_mary.
+      const LIVE_FOR_INTERNAL = ["awaiting_mary", "quote_received", "needs_owner", "needs_info", "awaiting_customer_file", "awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3", "replied"];
+      let ml: any = conv ? await prisma.lead.findFirst({ where: { AND: [agentScope], agentStatus: { in: LIVE_FOR_INTERNAL }, OR: [{ agentMaryConvId: conv }, { agentConvId: conv }] }, orderBy: { updatedAt: "desc" } }) : null;
       if (!ml) {
-        const open = await prisma.lead.findMany({ where: { AND: [agentScope], agentStatus: "awaiting_mary" }, orderBy: { updatedAt: "desc" }, take: 50 });
+        const open = await prisma.lead.findMany({ where: { AND: [agentScope], agentStatus: { in: LIVE_FOR_INTERNAL } }, orderBy: { updatedAt: "desc" }, take: 80 });
         ml = open.find((l: any) => companyMatches(l.companyName, subjectLc)) || null;
       }
-      if (!ml) continue; // unrelated Mary email — leave it untouched
+      if (!ml) {
+        // NEVER silently drop an internal reply. If Mary or Shayla wrote to the
+        // agent and we can't tie it to a lead, tell the owners so a human sees
+        // it — the whole class of "we missed Mary's response" failures.
+        const fresh = new Date(m.receivedDateTime) > new Date(Date.now() - 26 * 3600 * 1000); // poll is daily → alert once
+        if (fresh && /quote|estimate|freight|price|pricing/i.test(`${m.subject || ""} ${m.bodyPreview || ""}`)) {
+          const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
+          await agentSend({ to: OWNERS, subject: `Unmatched ${who} reply: ${m.subject || "(no subject)"}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><strong>${who}</strong> replied to the agent, but it could not be matched to a lead, so nobody was going to see it. Please take a look:</p><blockquote style="color:#555;border-left:3px solid #ddd;padding-left:10px;">${(m.bodyPreview || "").slice(0, 600).replace(/</g, "&lt;")}</blockquote><p style="color:#888;font-size:12px;">Subject: ${(m.subject || "").replace(/</g, "&lt;")}</p></div>` });
+          handled++;
+        }
+        continue;
+      }
       // Already handled this message (even if an owner opened it since)? skip.
       if (ml.agentLastMsgAt && new Date(m.receivedDateTime) <= new Date(ml.agentLastMsgAt)) continue;
       try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
