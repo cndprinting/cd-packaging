@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// These jobs poll a mailbox, call Claude, and send email — they need room.
+// With no limit declared they were killed at Vercel's ~15s default MID-RUN,
+// so the next run started over and re-sent what had already gone out. That
+// is why Mary got the same nudge repeatedly (Benjy 7/27). Pro allows 300s.
+export const maxDuration = 300;
+
 // Runs the outbound prospecting sweep (Benjy 6/30). Secured by CRON_SECRET when
 // set; also callable manually for testing. No-ops unless AGENT_OUTBOUND_ENABLED.
 export async function GET(request: NextRequest) {

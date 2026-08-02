@@ -7,8 +7,8 @@ name: daily-crons
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # agent inbox — Mary/Shayla/customer replies land within ~15 min
-    - cron: "0 16 * * *"     # daily backstop: reminders + outbound
+    - cron: "0 16 * * *"     # DAILY SAFETY NET only — Vercel Pro crons are primary
+                             # (agent-inbox every 15 min in vercel.json)
   workflow_dispatch: {}
 
 # A new poll supersedes one still running; never pile up.

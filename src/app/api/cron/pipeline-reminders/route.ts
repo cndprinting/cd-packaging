@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email/graph-client";
 
+// These jobs poll a mailbox, call Claude, and send email — they need room.
+// With no limit declared they were killed at Vercel's ~15s default MID-RUN,
+// so the next run started over and re-sent what had already gone out. That
+// is why Mary got the same nudge repeatedly (Benjy 7/27). Pro allows 300s.
+export const maxDuration = 300;
+
 // Daily pipeline follow-up reminders (Benjy 6/26). Vercel Cron hits this once
 // a day; it emails each owner a digest of the leads whose follow-up date has
 // arrived, and keeps re-sending every morning until each is marked done
