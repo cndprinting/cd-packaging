@@ -30,6 +30,16 @@ const BASE = "https://packaging.cndprinting.com";
 
 // Master switch — the agent only chases when AGENT_ENABLED=true, so intake can
 // run (leak fixed) while the owners watch before turning the emails on.
+// No agent email on Saturday or Sunday (Benjy 7/28). Cold intros, nudges and
+// Mary handoffs landing on a weekend read as a machine working alone, and Mary
+// and Shayla are off. Everything queues to Monday. Set AGENT_WEEKEND_SENDS=true
+// to override. Weekday is judged in ET (the plant's clock), not UTC.
+export function isWeekendET(d: Date = new Date()): boolean {
+  if (process.env.AGENT_WEEKEND_SENDS === "true") return false;
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(d);
+  return wd === "Sat" || wd === "Sun";
+}
+
 export const agentEnabled = () => process.env.AGENT_ENABLED === "true";
 // Small routine orders auto-send by default (Mary still prices them — the agent
 // just sends without owner approval). Set AGENT_REVIEW_ALL=true to pause that
@@ -427,6 +437,7 @@ const FOLLOWUPS: Record<string, { next: string; days: number; msg: string }> = {
 
 // ── Cron worker: act on every lead whose clock is due ──────────────────────
 export async function processDueAgentLeads(prisma: any): Promise<{ acted: number }> {
+  if (isWeekendET()) return { acted: 0 }; // weekend quiet hours — resumes Monday
   if (!agentEnabled()) return { acted: 0 };
   const now = new Date();
   const due = await prisma.lead.findMany({

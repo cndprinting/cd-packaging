@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply, isWeekendET } from "@/lib/agent/agent";
 import { READ_MAILBOXES, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
@@ -25,6 +25,10 @@ function companyMatches(name: string | null, subjectLc: string): boolean {
 
 export async function pollAgentInbox(prisma: any): Promise<{ checked: number; handled: number; error?: string }> {
   if (process.env.AGENT_ENABLED !== "true") return { checked: 0, handled: 0 };
+  // Weekend: don't process replies either — handling one sends mail (a quote
+  // to a customer, a forward to Mary). Messages are simply left unread and
+  // picked up Monday; nothing is lost because agentLastMsgAt isn't stamped.
+  if (isWeekendET()) return { checked: 0, handled: 0 };
   const client = getGraphClient();
   if (!client) return { checked: 0, handled: 0, error: "graph not configured" };
 

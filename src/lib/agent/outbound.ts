@@ -1,6 +1,6 @@
 import { getClaude } from "@/lib/agent/claude";
 import { checkBlocked } from "@/lib/agent/blocklist";
-import { noEmDash, SIGNATURE, firstName, informalCompany, hasRealName } from "@/lib/agent/agent";
+import { noEmDash, SIGNATURE, firstName, informalCompany, hasRealName, isWeekendET } from "@/lib/agent/agent";
 import { sendEmail, sendEmailGetConversation, replyInConversation } from "@/lib/email/graph-client";
 
 // Outbound prospecting agent (Benjy 6/30). Sweeps the Leads tab and sends a
@@ -255,6 +255,7 @@ async function alreadyEngaged(prisma: any, lead: any, email: string): Promise<bo
 export async function processOutbound(prisma: any): Promise<{ intros: number; followups: number; previews: number }> {
   if (!outboundEnabled()) return { intros: 0, followups: 0, previews: 0 };
   if (beforeStart()) return { intros: 0, followups: 0, previews: 0 }; // armed, but holding until AGENT_OUTBOUND_START
+  if (isWeekendET()) return { intros: 0, followups: 0, previews: 0 }; // no cold email on Sat/Sun
   const now = new Date();
   const limit = perRunLimit();
   let sends = 0, intros = 0, followups = 0, previews = 0;
