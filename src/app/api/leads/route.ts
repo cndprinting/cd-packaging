@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { leadMode, leadStage, leadType, leadRegion, isStalled } from "@/lib/lead-view";
 
 // Sales pipeline API (Benjy 6/26) — proprietary CRM, gated by the per-user
 // pipelineAccess flag (not a role). Managers (Benjy/Nitay/Albert) see all.
@@ -36,9 +37,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ leads, companies, quotes });
   }
 
-  const leads = await prisma.lead.findMany({
+  const rows = await prisma.lead.findMany({
     orderBy: [{ priority: "asc" }, { lastInteraction: "desc" }],
   });
+  // Presentation layer computed SERVER-SIDE (Benjy 8/2) so the UI never has to
+  // re-derive it and every screen agrees. See src/lib/lead-view.ts.
+  const now = new Date();
+  const leads = rows.map((l) => ({
+    ...l,
+    mode: leadMode(l),            // ai | needs_you | human | idle
+    stageLabel: leadStage(l),     // plain-English stage
+    leadType: leadType(l),        // google_ad | website | mailercity | cold | referral | manual
+    region: leadRegion(l),        // Tampa Bay | Central FL | ... | Out of state | Unknown
+    stalled: isStalled(l, now),   // no future clock AND untouched 3+ days
+  }));
   return NextResponse.json({ leads });
 }
 
@@ -48,12 +60,22 @@ export async function POST(request: NextRequest) {
   const { prisma, session } = g;
   const body = await request.json();
   if (!body.companyName) return NextResponse.json({ error: "Company name required" }, { status: 400 });
+  // Geography is mandatory on NEW leads (Benjy 8/2) — the pipeline is filtered
+  // and routed by region, so a lead with no city/state is unusable. Editing an
+  // existing lead (PUT) is deliberately unaffected.
+  const city = typeof body.city === "string" ? body.city.trim() : "";
+  const state = typeof body.state === "string" ? body.state.trim().toUpperCase() : "";
+  if (!city || !state) {
+    return NextResponse.json({ error: "City and state are required on a new lead — we filter and route the pipeline by geography." }, { status: 400 });
+  }
   const lead = await prisma.lead.create({
     data: {
       companyName: body.companyName,
       endMarket: body.endMarket || null,
       productCategory: body.productCategory || null,
       website: body.website || null,
+      city,
+      state,
       contactName: body.contactName || null,
       contactTitle: body.contactTitle || null,
       contactEmail: body.contactEmail || null,

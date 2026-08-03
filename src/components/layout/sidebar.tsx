@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Bot,
+  LayoutGrid, HelpCircle, TrendingUp, UserSearch,
 } from "lucide-react";
 
 // Proprietary sales pipeline (Benjy 6/26) — only shown to users with the
@@ -17,9 +17,9 @@ const PIPELINE_NAV = { label: "Sales Pipeline", href: "/dashboard/pipeline", ico
 // Talent tracker (Benjy 7/19) — recruiting list for print/packaging sales
 // hires; same owners-only gate as the pipeline.
 const TALENT_NAV = { label: "Talent", href: "/dashboard/talent", icon: UserSearch };
-// Agent Desk (Benjy 7/23) — where the AI agent stands on every lead; same
-// owners-only gate as the pipeline.
-const AGENT_DESK_NAV = { label: "Agent Desk", href: "/dashboard/agent-desk", icon: Bot };
+// Agent Desk removed Aug 2026 — it duplicated the pipeline. Its job (see where
+// the AI agent stands on every lead) is now the "Who" filter chips on
+// /dashboard/pipeline (🤖 AI working / ⏸ Needs you / 👤 Mine / ⚠ Stalled).
 
 const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -141,8 +141,7 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
     const at = next.findIndex((i) => i.href === "/dashboard/quotes");
     next.splice(at >= 0 ? at + 1 : 1, 0, PIPELINE_NAV);
     const pi = next.findIndex((i) => i.href === PIPELINE_NAV.href);
-    if (!next.some((i) => i.href === AGENT_DESK_NAV.href)) next.splice(pi + 1, 0, AGENT_DESK_NAV);
-    if (!next.some((i) => i.href === TALENT_NAV.href)) next.splice(pi + 2, 0, TALENT_NAV);
+    if (!next.some((i) => i.href === TALENT_NAV.href)) next.splice(pi + 1, 0, TALENT_NAV);
     return next;
   }, [filteredNav, isCustomer, pipelineAccess]);
 

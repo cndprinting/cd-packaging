@@ -6,6 +6,7 @@ import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight,
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { US_STATES, REGIONS, TYPE_LABELS, ownerFirstName, type LeadMode, type LeadType, type Region } from "@/lib/lead-view";
 
 type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
@@ -14,6 +15,9 @@ type Lead = {
   ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
   outreachStatus: string | null; outreachNextAt: string | null; outreachTo: string | null; outreachEmailed: string | null; outreachLog: string | null;
+  agentStatus: string | null;
+  // Derived server-side in GET /api/leads (src/lib/lead-view.ts) — never re-derived here.
+  mode: LeadMode; stageLabel: string; leadType: LeadType; region: Region; stalled: boolean;
 };
 
 // Outbound-agent status → chip label + styling. null status = not yet emailed.
@@ -28,6 +32,43 @@ const OUTREACH: Record<string, { label: string; cls: string }> = {
   unsubscribed:   { label: "Do not contact", cls: "bg-gray-200 text-gray-600 border-gray-300" },
   done:           { label: "Sequence done",  cls: "bg-gray-100 text-gray-500 border-gray-200" },
 };
+
+// Who is driving this lead right now (Benjy 8/2: "idk what is an agent lead").
+// mode is computed server-side; this is purely how it looks.
+const MODE_CHIP: Record<Exclude<LeadMode, "idle">, { label: string; cls: string; title: string }> = {
+  ai:        { label: "🤖 AI (Jessica)", cls: "bg-blue-50 text-blue-700 border-blue-200", title: "The AI agent is actively working this lead — a clock is running." },
+  needs_you: { label: "⏸ Needs you",     cls: "bg-amber-50 text-amber-700 border-amber-200", title: "The agent has stopped and is waiting on a human decision." },
+  human:     { label: "👤",              cls: "bg-gray-100 text-gray-600 border-gray-200", title: "A person owns this lead; the agent is not driving it." },
+};
+
+function ModeChip({ l }: { l: Lead }) {
+  if (l.mode === "idle") return null;
+  const c = MODE_CHIP[l.mode];
+  const label = l.mode === "human" ? `👤 ${ownerFirstName(l)}` : c.label;
+  return <span title={c.title} className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap ${c.cls}`}>{label}</span>;
+}
+
+const MODE_FILTERS: { key: LeadMode | "stalled"; label: string }[] = [
+  { key: "ai", label: "🤖 AI working" },
+  { key: "needs_you", label: "⏸ Needs you" },
+  { key: "human", label: "👤 Mine" },
+  { key: "stalled", label: "⚠ Stalled" },
+];
+const TYPE_FILTERS: LeadType[] = ["google_ad", "website", "mailercity", "cold", "referral", "manual"];
+
+// Multi-select filter chip — an obvious button, not a dropdown (Benjy couldn't
+// find things behind menus).
+function Chip({ on, label, count, onClick, tone = "gray" }: { on: boolean; label: string; count?: number; onClick: () => void; tone?: "gray" | "brand" }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+        on ? (tone === "brand" ? "border-brand-500 bg-brand-500 text-white" : "border-gray-800 bg-gray-800 text-white")
+           : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+      <span>{label}</span>
+      {count !== undefined && <span className={on ? "opacity-80" : "text-gray-400"}>{count}</span>}
+    </button>
+  );
+}
 
 // Follow-up state: "due" = date is today or past, "upcoming" = future.
 function dueState(l: Lead): "due" | "upcoming" | null {
@@ -61,6 +102,16 @@ export default function PipelinePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [dueOnly, setDueOnly] = useState(false);
+  // Filter bar (Benjy 8/2). Empty set = "All" for that group; groups AND together.
+  const [modeF, setModeF] = useState<Set<string>>(new Set());
+  const [typeF, setTypeF] = useState<Set<string>>(new Set());
+  const [regionF, setRegionF] = useState<Set<string>>(new Set());
+  const [stateF, setStateF] = useState("");
+  const toggle = (set: Set<string>, upd: (s: Set<string>) => void) => (k: string) => {
+    const n = new Set(set);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    upd(n);
+  };
 
   const load = () => {
     fetch("/api/leads")
@@ -94,10 +145,34 @@ export default function PipelinePage() {
   }, [leads]);
 
   const q = search.trim().toLowerCase();
-  const visible = leads
-    .filter((l) => l.pipelineStage === active)
+  const matchesMode = (l: Lead) => modeF.size === 0 || [...modeF].some((k) => k === "stalled" ? l.stalled : l.mode === k);
+  const inStage = useMemo(() => leads.filter((l) => l.pipelineStage === active), [leads, active]);
+  const visible = inStage
     .filter((l) => !dueOnly || dueState(l) === "due")
-    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
+    .filter(matchesMode)
+    .filter((l) => typeF.size === 0 || typeF.has(l.leadType))
+    .filter((l) => regionF.size === 0 || regionF.has(l.region))
+    .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
+    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
+
+  // Counts shown on the chips — scoped to the active pipeline stage so the
+  // numbers match what you're looking at.
+  const f = useMemo(() => {
+    const mode: Record<string, number> = { ai: 0, needs_you: 0, human: 0, idle: 0, stalled: 0 };
+    const type: Record<string, number> = {};
+    const region: Record<string, number> = {};
+    const states = new Set<string>();
+    inStage.forEach((l) => {
+      mode[l.mode] = (mode[l.mode] || 0) + 1;
+      if (l.stalled) mode.stalled++;
+      type[l.leadType] = (type[l.leadType] || 0) + 1;
+      region[l.region] = (region[l.region] || 0) + 1;
+      const s = (l.state || "").trim().toUpperCase();
+      if (s) states.add(s);
+    });
+    return { mode, type, region, states: [...states].sort() };
+  }, [inStage]);
+  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || !!stateF;
 
   // Optimistic inline patch.
   // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
@@ -171,7 +246,33 @@ export default function PipelinePage() {
         ))}
       </div>
 
-      <Input placeholder="Search company, market, owner, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+      <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+
+      {/* Filter bar (Benjy 8/2) — replaces the old Agent Desk page. Chips are
+          multi-select inside a group and AND across groups. */}
+      <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Who</span>
+          <Chip on={modeF.size === 0} label="All" count={inStage.length} onClick={() => setModeF(new Set())} />
+          {MODE_FILTERS.map((m) => <Chip key={m.key} on={modeF.has(m.key)} label={m.label} count={f.mode[m.key] || 0} onClick={() => toggle(modeF, setModeF)(m.key)} />)}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Source</span>
+          {TYPE_FILTERS.map((t) => <Chip key={t} on={typeF.has(t)} label={TYPE_LABELS[t]} count={f.type[t] || 0} onClick={() => toggle(typeF, setTypeF)(t)} />)}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Where</span>
+          {REGIONS.map((r) => <Chip key={r} on={regionF.has(r)} label={r} count={f.region[r] || 0} onClick={() => toggle(regionF, setRegionF)(r)} tone="brand" />)}
+          <select className={`${selCls} h-7 w-auto`} value={stateF} onChange={(e) => setStateF(e.target.value)} title="Filter by state">
+            <option value="">All states</option>
+            {f.states.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {anyFilter && (
+            <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setStateF(""); }}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear filters</button>
+          )}
+        </div>
+      </div>
 
       {active === "LEAD" && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -191,8 +292,9 @@ export default function PipelinePage() {
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 text-left">
                 <th className="px-3 py-2 font-medium">Company</th>
+                <th className="px-3 py-2 font-medium" title="Who's driving it, and where it actually stands — in plain English">Status</th>
                 <th className="px-3 py-2 font-medium">Product</th>
-                {active !== "LOST" && active !== "CUSTOMER" && <th className="px-3 py-2 font-medium">Stage</th>}
+                {active !== "LOST" && active !== "CUSTOMER" && <th className="px-3 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>}
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
@@ -218,6 +320,14 @@ export default function PipelinePage() {
                           </span>; })()}
                       </span>
                     </button>
+                  </td>
+                  <td className="px-3 py-2 min-w-[150px]">
+                    <div className="flex flex-col items-start gap-1">
+                      <ModeChip l={l} />
+                      {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
+                      <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
+                      {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
+                    </div>
                   </td>
                   <td className="px-3 py-2 min-w-[130px]">
                     <select className={selCls} value={l.productCategory || ""} onChange={(e) => patch(l.id, "productCategory", e.target.value)}>
@@ -284,14 +394,22 @@ export default function PipelinePage() {
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={10} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["city", "City"], ["state", "State (e.g. FL, GA) — sets the agent's geography angle"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
+                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
                           <div key={f}>
                             <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
                             <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => setLocal(l.id, f, e.target.value)} onBlur={(e) => patch(l.id, f, e.target.value)} />
                           </div>
                         ))}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">State <span className="font-normal text-gray-400">— sets the region + the agent's geography angle</span></label>
+                          <select className={selCls} value={(l.state || "").trim().toUpperCase()} onChange={(e) => patch(l.id, "state", e.target.value)}>
+                            <option value="">—</option>
+                            {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <p className="mt-1 text-[11px] text-gray-400">Region: {l.region}</p>
+                        </div>
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <label className="block text-xs font-medium text-gray-500">Follow-up</label>
@@ -349,7 +467,7 @@ export default function PipelinePage() {
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -361,8 +479,9 @@ export default function PipelinePage() {
 }
 
 function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: "Break in" });
+  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", city: "", state: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: "Break in" });
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const [dupes, setDupes] = useState<{ leads: any[]; companies: any[]; quotes: any[] } | null>(null);
   const upd = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -376,10 +495,26 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     return () => clearTimeout(t);
   }, [form.companyName]);
 
+  // Geography is mandatory on new leads (Benjy 8/2) — the server enforces it too.
+  const geoMissing = !form.city.trim() || !form.state;
+  const canSave = !!form.companyName.trim() && !geoMissing;
+
   const save = async () => {
-    if (!form.companyName) return;
-    setSaving(true);
-    await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }).catch(() => {});
+    if (!canSave) return;
+    setSaving(true); setErr(null);
+    try {
+      const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setErr(d.error || "Could not save that lead.");
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setErr("Could not reach the server — the lead was not saved.");
+      setSaving(false);
+      return;
+    }
     setSaving(false);
     onSaved();
   };
@@ -418,10 +553,25 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                <Input value={form.city} onChange={(e) => upd("city", e.target.value)} placeholder="e.g. Tampa" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                <select className={selCls + " h-9"} value={form.state} onChange={(e) => upd("state", e.target.value)}>
+                  <option value="">Select…</option>
+                  {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            {geoMissing && <p className="text-xs text-amber-700">City and state are required — the pipeline is filtered and routed by geography.</p>}
+            <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Website</label><Input value={form.website} onChange={(e) => upd("website", e.target.value)} /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Contact</label><Input value={form.contactName} onChange={(e) => upd("contactName", e.target.value)} /></div>
             </div>
-            <div className="flex gap-2 pt-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" onClick={save} disabled={saving || !form.companyName}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add lead"}</Button></div>
+            {err && <p className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{err}</p>}
+            <div className="flex gap-2 pt-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" onClick={save} disabled={saving || !canSave}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add lead"}</Button></div>
           </div>
         </div>
       </div>
