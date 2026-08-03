@@ -7,7 +7,7 @@
 // client component, and scripts/backfill-geography.ts.
 
 export type LeadMode = "ai" | "needs_you" | "human" | "idle";
-export type LeadType = "google_ad" | "website" | "mailercity" | "cold" | "referral" | "manual";
+export type LeadType = "google_ad" | "website" | "mailercity" | "cold" | "referral" | "tradeshow" | "linkedin" | "customer" | "manual";
 
 // The shape we need — kept loose so a Prisma Lead, an API row, or a script row
 // all satisfy it.
@@ -16,6 +16,7 @@ export type LeadViewInput = {
   agentStatus?: string | null;
   outreachStatus?: string | null;
   pipelineStage?: string | null;
+  leadTypeOverride?: string | null; // human-set source; beats auto-detection
   stage?: string | null; // the owner's own free-text Sub-status
   source?: string | null;
   intakeRaw?: string | null;
@@ -121,8 +122,12 @@ export function leadStage(lead: LeadViewInput): string {
   // not know a stage — DON'T invent one (Benjy 8/2: 50 human-run qualified
   // prospects all read "Getting specs", which was simply untrue). Fall back to
   // the owner's own Sub-status, then to a neutral label.
+  // A sub-status is only worth showing if it MEANS something. "TBD", "N/A",
+  // "-" are placeholders, and echoing them back as a status is noise
+  // (Benjy 8/2 - leads were displaying a bare "TBD").
   const sub = (lead.stage || "").trim();
-  if (sub && sub !== "N/A") return sub;
+  const JUNK = ["tbd", "tba", "n/a", "na", "none", "-", "--", "—", "?", "unknown", "", "n\a"];
+  if (sub && !JUNK.includes(sub.toLowerCase())) return sub;
   if (ps === "QUALIFIED") return "Qualified prospect";
   // A lead we SOURCED for outbound is not an "inquiry" — nobody contacted us
   // (Benjy 8/2). Cold-sourced and inbound must read differently, because one
@@ -158,6 +163,9 @@ function looksLikeGoogleAd(intakeRaw?: string | null): boolean {
 }
 
 export function leadType(lead: LeadViewInput): LeadType {
+  // A person's explicit choice always wins over sniffing the data.
+  const ov = (lead.leadTypeOverride || "").trim() as LeadType;
+  if (ov && (TYPE_LABELS as Record<string, string>)[ov]) return ov;
   const src = (lead.source || "").toLowerCase();
   if (src === "mailercity") return "mailercity";
   if (src === "inbound") return looksLikeGoogleAd(lead.intakeRaw) ? "google_ad" : "website";
@@ -175,6 +183,9 @@ export const TYPE_LABELS: Record<LeadType, string> = {
   mailercity: "MailerCity",
   cold: "Cold outreach",
   referral: "Referral",
+  tradeshow: "Trade show",
+  linkedin: "LinkedIn",
+  customer: "Existing customer",
   manual: "Manual",
 };
 

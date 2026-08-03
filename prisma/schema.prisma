@@ -229,6 +229,9 @@ model Lead {
   // list; "inbound" = website form via /api/intake. intakeRaw keeps the
   // original web-form payload so nothing is lost if mapping misses a field.
   source          String    @default("prospecting")
+  // Human-set lead source, overriding the auto-detected type (Benjy 8/2).
+  // Auto-detection fills the gaps; a person's choice always wins.
+  leadTypeOverride String?
   intakeRaw       String?
   // AI sales-agent chase engine (Benjy 6/26). The agent is a status machine
   // on the lead with a clock — it hands off to Mary, nudges if anyone goes

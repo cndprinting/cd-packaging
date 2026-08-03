@@ -41,12 +41,16 @@ const MODE_CHIP: Record<Exclude<LeadMode, "idle">, { label: string; cls: string;
   human:     { label: "👤",              cls: "bg-gray-100 text-gray-600 border-gray-200", title: "A person owns this lead; the agent is not driving it." },
 };
 
+const INBOUND_TYPES = new Set<LeadType>(["google_ad", "website", "mailercity"]);
 const TYPE_BADGE: Record<LeadType, string> = {
   google_ad:  "bg-emerald-50 text-emerald-700 border-emerald-200",
   website:    "bg-emerald-50 text-emerald-700 border-emerald-200",
   mailercity: "bg-emerald-50 text-emerald-700 border-emerald-200",
   referral:   "bg-violet-50 text-violet-700 border-violet-200",
   cold:       "bg-slate-100 text-slate-600 border-slate-200",
+  tradeshow:  "bg-violet-50 text-violet-700 border-violet-200",
+  linkedin:   "bg-violet-50 text-violet-700 border-violet-200",
+  customer:   "bg-amber-50 text-amber-700 border-amber-200",
   manual:     "bg-slate-100 text-slate-600 border-slate-200",
 };
 // Green = they came to us (answer it). Slate = we sourced them (cold call it).
@@ -58,6 +62,15 @@ function TypeBadge({ t }: { t: LeadType }) {
       {inbound ? "↓ " : t === "cold" ? "↑ " : ""}{TYPE_LABELS[t]}
     </span>
   );
+}
+
+// An empty Outreach cell should say WHY (Benjy 8/2): queued behind the daily
+// send cap is very different from "we have no address for this person".
+function OutreachIdle({ l }: { l: Lead }) {
+  if (l.agentHold) return <span className="text-xs text-gray-400">Agent skipped</span>;
+  if (!l.contactEmail) return <span className="text-xs text-amber-600">No email</span>;
+  if (l.leadType === "cold" || l.leadType === "manual") return <span className="text-xs text-blue-600">Queued</span>;
+  return <span className="text-gray-300">—</span>;
 }
 
 function ModeChip({ l }: { l: Lead }) {
@@ -74,7 +87,7 @@ const MODE_FILTERS: { key: LeadMode | "stalled" | "tocall"; label: string }[] = 
   { key: "stalled", label: "⚠ Stalled" },
   { key: "tocall", label: "☎ To call (cold, no sequence)" },
 ];
-const TYPE_FILTERS: LeadType[] = ["google_ad", "website", "mailercity", "cold", "referral", "manual"];
+const TYPE_FILTERS: LeadType[] = ["google_ad", "website", "mailercity", "cold", "referral", "tradeshow", "linkedin", "customer", "manual"];
 
 // Multi-select filter chip — an obvious button, not a dropdown (Benjy couldn't
 // find things behind menus).
@@ -356,7 +369,16 @@ export default function PipelinePage() {
                       <ModeChip l={l} />
                       {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
                       <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
-                    <TypeBadge t={l.leadType} />
+                    <select
+                      value={l.leadType}
+                      onChange={(e) => patch(l.id, "leadTypeOverride", e.target.value)}
+                      title="Where this lead came from — set it yourself; auto-detected until you do"
+                      className={`mt-0.5 w-fit cursor-pointer rounded border px-1 py-0 text-[10px] ${TYPE_BADGE[l.leadType]}`}
+                    >
+                      {(Object.keys(TYPE_LABELS) as LeadType[]).map((k) => (
+                        <option key={k} value={k}>{INBOUND_TYPES.has(k) ? "↓ " : k === "cold" ? "↑ " : ""}{TYPE_LABELS[k]}</option>
+                      ))}
+                    </select>
                       {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
                     </div>
                   </td>
@@ -397,7 +419,7 @@ export default function PipelinePage() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
-                        : <span className="text-gray-300">—</span>}
+                        : <OutreachIdle l={l} />}
                     </td>
                   )}
                   {active === "LEAD" && (
