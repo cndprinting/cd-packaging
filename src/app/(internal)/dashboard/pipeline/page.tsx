@@ -41,6 +41,25 @@ const MODE_CHIP: Record<Exclude<LeadMode, "idle">, { label: string; cls: string;
   human:     { label: "👤",              cls: "bg-gray-100 text-gray-600 border-gray-200", title: "A person owns this lead; the agent is not driving it." },
 };
 
+const TYPE_BADGE: Record<LeadType, string> = {
+  google_ad:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  website:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  mailercity: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  referral:   "bg-violet-50 text-violet-700 border-violet-200",
+  cold:       "bg-slate-100 text-slate-600 border-slate-200",
+  manual:     "bg-slate-100 text-slate-600 border-slate-200",
+};
+// Green = they came to us (answer it). Slate = we sourced them (cold call it).
+function TypeBadge({ t }: { t: LeadType }) {
+  const inbound = t === "google_ad" || t === "website" || t === "mailercity";
+  return (
+    <span title={inbound ? "Inbound - this lead contacted us" : t === "referral" ? "Referral" : "We sourced this lead for outreach - cold"}
+      className={`mt-0.5 inline-flex w-fit items-center rounded border px-1.5 py-0 text-[10px] ${TYPE_BADGE[t]}`}>
+      {inbound ? "↓ " : t === "cold" ? "↑ " : ""}{TYPE_LABELS[t]}
+    </span>
+  );
+}
+
 function ModeChip({ l }: { l: Lead }) {
   if (l.mode === "idle") return null;
   const c = MODE_CHIP[l.mode];
@@ -48,11 +67,12 @@ function ModeChip({ l }: { l: Lead }) {
   return <span title={c.title} className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap ${c.cls}`}>{label}</span>;
 }
 
-const MODE_FILTERS: { key: LeadMode | "stalled"; label: string }[] = [
+const MODE_FILTERS: { key: LeadMode | "stalled" | "tocall"; label: string }[] = [
   { key: "ai", label: "🤖 AI working" },
   { key: "needs_you", label: "⏸ Needs you" },
   { key: "human", label: "👤 Mine" },
   { key: "stalled", label: "⚠ Stalled" },
+  { key: "tocall", label: "☎ To call (cold, no sequence)" },
 ];
 const TYPE_FILTERS: LeadType[] = ["google_ad", "website", "mailercity", "cold", "referral", "manual"];
 
@@ -145,7 +165,16 @@ export default function PipelinePage() {
   }, [leads]);
 
   const q = search.trim().toLowerCase();
-  const matchesMode = (l: Lead) => modeF.size === 0 || [...modeF].some((k) => k === "stalled" ? l.stalled : l.mode === k);
+  const IN_SEQUENCE = ["intro_sent", "followup_1", "followup_2"];
+  // "To call" = we sourced them (cold/manual) AND no email sequence is running
+  // AND the agent isn't mid-conversation. Cold leads DO get Jessica's emails —
+  // this is the subset where the phone is the next move (Benjy 8/2).
+  const isToCall = (l: Lead) =>
+    (l.leadType === "cold" || l.leadType === "manual") &&
+    !IN_SEQUENCE.includes(l.outreachStatus || "") &&
+    l.mode !== "ai" && l.mode !== "needs_you";
+  const matchesMode = (l: Lead) => modeF.size === 0 || [...modeF].some((k) =>
+    k === "stalled" ? l.stalled : k === "tocall" ? isToCall(l) : l.mode === k);
   const inStage = useMemo(() => leads.filter((l) => l.pipelineStage === active), [leads, active]);
   const visible = inStage
     .filter((l) => !dueOnly || dueState(l) === "due")
@@ -158,13 +187,14 @@ export default function PipelinePage() {
   // Counts shown on the chips — scoped to the active pipeline stage so the
   // numbers match what you're looking at.
   const f = useMemo(() => {
-    const mode: Record<string, number> = { ai: 0, needs_you: 0, human: 0, idle: 0, stalled: 0 };
+    const mode: Record<string, number> = { ai: 0, needs_you: 0, human: 0, idle: 0, stalled: 0, tocall: 0 };
     const type: Record<string, number> = {};
     const region: Record<string, number> = {};
     const states = new Set<string>();
     inStage.forEach((l) => {
       mode[l.mode] = (mode[l.mode] || 0) + 1;
       if (l.stalled) mode.stalled++;
+      if (isToCall(l)) mode.tocall++;
       type[l.leadType] = (type[l.leadType] || 0) + 1;
       region[l.region] = (region[l.region] || 0) + 1;
       const s = (l.state || "").trim().toUpperCase();
@@ -326,6 +356,7 @@ export default function PipelinePage() {
                       <ModeChip l={l} />
                       {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
                       <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
+                    <TypeBadge t={l.leadType} />
                       {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
                     </div>
                   </td>

@@ -124,7 +124,12 @@ export function leadStage(lead: LeadViewInput): string {
   const sub = (lead.stage || "").trim();
   if (sub && sub !== "N/A") return sub;
   if (ps === "QUALIFIED") return "Qualified prospect";
-  if (ps === "LEAD" && !lead.agentStatus && !lead.outreachStatus) return "Not started";
+  // A lead we SOURCED for outbound is not an "inquiry" — nobody contacted us
+  // (Benjy 8/2). Cold-sourced and inbound must read differently, because one
+  // gets cold-called and the other gets answered.
+  const src = (lead.source || "").trim().toLowerCase();
+  if (src === "prospecting") return "Cold - not contacted";
+  if (ps === "LEAD" && !lead.agentStatus && !lead.outreachStatus) return "New inquiry";
   return "New inquiry";
 }
 
