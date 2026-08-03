@@ -169,7 +169,17 @@ Model the tone on our best-performing emails:
 - Lean on being local when it fits (St. Petersburg, Tampa, Orlando, "neighbors", "a short drive away", "an hour from you").
 - Emphasize that working with C&D means working directly with the family (and a 50-plus person team).
 - Soft call to action: offer a quick call or an in-person visit, and invite a reply.
-- A few short paragraphs.
+
+LENGTH IS A HARD REQUIREMENT (Benjy 8/2). A cold email that looks long gets
+deleted unread, so:
+- 90 WORDS MAXIMUM in the body. Aim for 60-80.
+- THREE short paragraphs at most, 1-2 sentences each. No paragraph over 2 lines.
+- ONE specific detail about them. Not two, not a list. Pick the best one.
+- ONE ask at the end, in a single short sentence.
+- Cut every throat-clearing phrase: "I hope this finds you well", "I wanted to
+  reach out", "I came across your company and". Start with the substance.
+- Say it in fewer words wherever you can. Shorter is better than complete.
+- Subject line: 6 words or fewer.
 
 ${owner.first === "Jessica"
     ? `You (Jessica) are based at the plant in St. Petersburg, Florida.`
@@ -180,14 +190,14 @@ ${owner.first === "Jessica"
 - Prospect in Georgia or another state (i.e. NOT Florida): do NOT imply you are local or nearby. Instead lean on being a Southeast manufacturer that already works with brands across the region and ships nationwide, and offer a call or to send samples. For Georgia specifically you may note you are just down in Florida, a straightforward regional partner, but never say "local" or "neighbors."
 - If you genuinely cannot tell where they are, keep geography light and do not guess.
 
-Research the prospect first using web search: what they make, where they are based, their notable products or brands, and anything genuinely current. Weave in one or two specific, accurate details you find (for example the kinds of products they package). Use only facts you actually verify. Never guess or fabricate a product, location, or person.
+Research the prospect first using web search: what they make, where they are based, their notable products or brands, and anything genuinely current. Weave in ONE specific, accurate detail you find (for example the kind of product they package) - one only, kept to a short clause. Use only facts you actually verify. Never guess or fabricate a product, location, or person.
 
 Rules: address the contact by FIRST name (a real human name - if the provided name is a role word like Info or Sales, something has gone wrong: do not write the email). Plain personal email: NO bold, NO <strong>/<b>, NO em dashes or en dashes (use commas or periods), no emoji, no exclamation points, no hype. Sign off with just the first name (${owner.first}). Personalize from the company name, market, website, and notes provided, and from what you genuinely know about the company, but NEVER invent specific facts (do not make up product names, locations, or people you are unsure of).
 
 Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific subject (in the spirit of "Family-built packaging, right here in St. Pete and Orlando"). Then a blank line, then ONLY the inner HTML email body using <p> and <br> only.`;
     const loc = [lead.city, lead.state].filter(Boolean).join(", ") || "unknown (see notes)";
     const user = `Prospect company: ${informalCompany(lead.companyName)}. Location: ${loc}. Market: ${lead.endMarket || lead.productCategory || "unknown"}. Website: ${lead.website || "n/a"}. Contact first name: ${contact}. Notes: ${(lead.commentary || "").slice(0, 600)}. Write the subject and intro email now.`;
-    const req: any = { model: "claude-opus-4-8", max_tokens: 2500, system, messages: [{ role: "user", content: user }] };
+    const req: any = { model: "claude-opus-4-8", max_tokens: 900, system, messages: [{ role: "user", content: user }] };
     if (research()) req.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }]; // newer variant (dynamic filtering) for Opus 4.8 — more token-efficient
     const msg = await claude.messages.create(req);
     // With web search there can be interim text between searches; the email is

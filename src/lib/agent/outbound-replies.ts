@@ -74,6 +74,25 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
         }
         if (bLead) {
           try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
+
+          // GUESSED ADDRESS? Rotate to the next pattern instead of dead-ending
+          // (Benjy 8/2). We store runners-up when we guess, so a bounce just
+          // means "try flast@ next" rather than losing the prospect.
+          let alts: string[] = [];
+          try { alts = JSON.parse((bLead as any).emailAlternates || "[]"); } catch { /* none */ }
+          if ((bLead as any).emailGuessed && alts.length) {
+            const next = alts.shift() as string;
+            await prisma.lead.update({ where: { id: bLead.id }, data: {
+              contactEmail: next,
+              emailAlternates: JSON.stringify(alts),
+              outreachStatus: null,       // re-queue: the sweep will intro to the new address
+              outreachNextAt: null, outreachTo: null, outreachConvId: null,
+            } });
+            await appendNote(prisma, bLead.id, `${bad} bounced (guessed address) - trying ${next} next${alts.length ? `; ${alts.length} more to try` : " (last candidate)"}`);
+            handled++;
+            continue;
+          }
+
           await prisma.lead.update({ where: { id: bLead.id }, data: { outreachStatus: "bounced", outreachNextAt: null } });
           await appendNote(prisma, bLead.id, `Email to ${bad} bounced, needs a new address`);
           await sendEmail({ from: mb, to: OWNERS, subject: noEmDash(`Bounced: ${bLead.companyName}`), body: noEmDash(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>The outbound email to <strong>${bLead.companyName}</strong> bounced (<strong>${bad}</strong> is undeliverable). The agent stopped that sequence. Add or correct the email on the lead and it will pick up the new address automatically.</p></div>`) });

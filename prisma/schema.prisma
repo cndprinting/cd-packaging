@@ -232,6 +232,10 @@ model Lead {
   // Human-set lead source, overriding the auto-detected type (Benjy 8/2).
   // Auto-detection fills the gaps; a person's choice always wins.
   leadTypeOverride String?
+  // Pattern-guessed address (Benjy 8/2) — unverified. emailAlternates holds the
+  // runner-up patterns so a bounce rotates to the next instead of dead-ending.
+  emailGuessed    Boolean   @default(false)
+  emailAlternates String?
   intakeRaw       String?
   // AI sales-agent chase engine (Benjy 6/26). The agent is a status machine
   // on the lead with a clock — it hands off to Mary, nudges if anyone goes
