@@ -310,6 +310,25 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
   // New intros — leads that are un-started OR finished-with-no-reply but now have
   // a contact we haven't emailed yet (e.g. one you just added). Replied /
   // not-interested / unsubscribed leads are intentionally left alone.
+  // SELF-HEAL the needs_name block (Benjy 8/2): a lead parked for "no real
+  // contact name" stayed parked forever even after someone typed a name in —
+  // 7 leads sat dead that way. Clear the flag automatically once a real name
+  // is present so the sweep picks them up on the next run.
+  try {
+    const parked = await prisma.lead.findMany({
+      where: { outreachStatus: "needs_name", pipelineStage: "LEAD", agentHold: false },
+      select: { id: true, contactName: true, contactName2: true, outreachLog: true },
+    });
+    const healed = parked.filter((l: any) => hasRealName(l.contactName) || hasRealName(l.contactName2));
+    for (const l of healed) {
+      await prisma.lead.update({ where: { id: l.id }, data: {
+        outreachStatus: null, outreachNextAt: null,
+        outreachLog: logLine(l.outreachLog, "Contact name filled in - outreach unblocked automatically"),
+      } });
+    }
+    if (healed.length) console.log(`[outbound] unblocked ${healed.length} needs_name lead(s) that now have a real name`);
+  } catch (e) { console.error("[outbound] needs_name self-heal failed", e); }
+
   const fresh = await prisma.lead.findMany({
     where: { pipelineStage: "LEAD", agentHold: false, source: "prospecting", OR: [{ outreachStatus: null }, { outreachStatus: "done" }, { outreachStatus: "bounced" }] },
     orderBy: { createdAt: "asc" }, take: limit * 3,
