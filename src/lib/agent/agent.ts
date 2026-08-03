@@ -61,8 +61,18 @@ export const firstName = (n?: string | null) => {
   const raw = (n || "").trim();
   const nick = raw.match(/["“”'‘’]([A-Za-z][A-Za-z .'-]{0,20}?)["“”'‘’]/);
   const tok = (nick?.[1] || raw.replace(/["“”'‘’]/g, " ").trim().split(/\s+/)[0] || "").replace(/[,.]+$/, "").trim();
-  return tok || "there";
+  return tok ? properCase(tok) : "there";
 };
+// Imported lists often store names SHOUTING ("BRYANT ROWE") or lowercase.
+// Claude-written emails normalise them, but the fixed follow-up templates
+// dropped the raw token straight in — PEScience got "Hi BRYANT," (Benjy 8/3).
+// Mixed-case names (McCoy, O'Brien, DeAngelo) are already deliberate: leave them.
+export function properCase(tok: string): string {
+  const isAllCaps = tok === tok.toUpperCase() && /[A-Z]/.test(tok);
+  const isAllLower = tok === tok.toLowerCase() && /[a-z]/.test(tok);
+  if (!isAllCaps && !isAllLower) return tok;             // McCoy, DeAngelo — as typed
+  return tok.toLowerCase().replace(/(^|[\s'’-])([a-z])/g, (_m, sep, ch) => sep + ch.toUpperCase());
+}
 // "Always address a real person by name, or no email should be sent" (Benjy
 // 7/14, the "Hi Info," FormuNova case). Role words from generic inboxes are
 // not names — a lead without a human name gets FLAGGED, never emailed.
