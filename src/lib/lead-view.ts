@@ -16,6 +16,7 @@ export type LeadViewInput = {
   agentStatus?: string | null;
   outreachStatus?: string | null;
   pipelineStage?: string | null;
+  stage?: string | null; // the owner's own free-text Sub-status
   source?: string | null;
   intakeRaw?: string | null;
   commentary?: string | null;
@@ -106,7 +107,7 @@ const OUTREACH_STAGE: Record<string, StageLabel> = {
   needs_name: "Replied - needs you",
 };
 
-export function leadStage(lead: LeadViewInput): StageLabel {
+export function leadStage(lead: LeadViewInput): string {
   const ps = lead.pipelineStage || "LEAD";
   const a = lead.agentStatus || "";
   if (ps === "CUSTOMER") return "Won";
@@ -116,7 +117,15 @@ export function leadStage(lead: LeadViewInput): StageLabel {
   if (OUTREACH_STAGE[o]) return OUTREACH_STAGE[o];
   // No agent involvement at all. A raw LEAD is a new inquiry; anything already
   // promoted to QUALIFIED is being actively worked by a human.
-  return ps === "QUALIFIED" ? "Getting specs" : "New inquiry";
+  // Nothing automated is happening on this lead, so the system genuinely does
+  // not know a stage — DON'T invent one (Benjy 8/2: 50 human-run qualified
+  // prospects all read "Getting specs", which was simply untrue). Fall back to
+  // the owner's own Sub-status, then to a neutral label.
+  const sub = (lead.stage || "").trim();
+  if (sub && sub !== "N/A") return sub;
+  if (ps === "QUALIFIED") return "Qualified prospect";
+  if (ps === "LEAD" && !lead.agentStatus && !lead.outreachStatus) return "Not started";
+  return "New inquiry";
 }
 
 // ── Type (where the lead came from) ─────────────────────────────────────────
