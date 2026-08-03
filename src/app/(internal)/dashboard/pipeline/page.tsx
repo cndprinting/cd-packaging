@@ -18,6 +18,7 @@ type Lead = {
   agentStatus: string | null;
   // Derived server-side in GET /api/leads (src/lib/lead-view.ts) — never re-derived here.
   mode: LeadMode; stageLabel: string; leadType: LeadType; region: Region; stalled: boolean;
+  leadTypeOverride?: string | null;
 };
 
 // Outbound-agent status → chip label + styling. null status = not yet emailed.
@@ -233,6 +234,13 @@ export default function PipelinePage() {
     load();
     return false;
   };
+  // The Source dropdown is bound to the SERVER-COMPUTED leadType, so setting
+  // only the override left the cell showing the old value — it looked like the
+  // click did nothing. Move both in one go (Benjy 8/2).
+  const setLeadType = async (id: string, value: LeadType) => {
+    setLeads((p) => p.map((l) => (l.id === id ? { ...l, leadType: value, leadTypeOverride: value } : l)));
+    await savePut({ id, leadTypeOverride: value });
+  };
   const patch = async (id: string, field: string, value: any) => {
     setLeads((p) => p.map((l) => l.id === id ? { ...l, [field]: value } : l));
     await savePut({ id, [field]: value });
@@ -371,7 +379,7 @@ export default function PipelinePage() {
                       <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
                     <select
                       value={l.leadType}
-                      onChange={(e) => patch(l.id, "leadTypeOverride", e.target.value)}
+                      onChange={(e) => setLeadType(l.id, e.target.value as LeadType)}
                       title="Where this lead came from — set it yourself; auto-detected until you do"
                       className={`mt-0.5 w-fit cursor-pointer rounded border px-1 py-0 text-[10px] ${TYPE_BADGE[l.leadType]}`}
                     >
