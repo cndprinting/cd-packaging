@@ -143,6 +143,11 @@ export async function GET(request: NextRequest) {
           // two spam leads sat in "needs_review" for weeks because the digest
           // only looked for the states it knew about. Never again.
           {
+            // Only OPEN leads. Moving a lead to Lost or Customer is a human
+            // saying "this is finished" — the sweep must not keep nagging
+            // about it (Benjy 8/3: Teresa was already Lost, Sunken already a
+            // customer, and both still showed up).
+            pipelineStage: { in: ["LEAD", "QUALIFIED"] },
             agentStatus: { notIn: ["closed", "declined", "disqualified", "duplicate", "unsubscribed", "done", "owner_handling"] },
             agentNextAt: null,
             updatedAt: { lt: stale },

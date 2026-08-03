@@ -148,6 +148,18 @@ export async function PUT(request: NextRequest) {
     const stamp = new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
     data.commentary = `${(cur?.commentary || "").trim()}\n[Follow-up] ${fuLog} ${stamp}`.trim().slice(0, 8000);
   }
+  // Closing a lead (Lost / Customer) stops all automation — no clocks, no
+  // digest entries, no chasing. The stage move IS the close-out action
+  // (Benjy 8/3: "just want to make sure we close this out correctly").
+  if (data.pipelineStage === "LOST" || data.pipelineStage === "CUSTOMER") {
+    const cur = await prisma.lead.findUnique({ where: { id: body.id }, select: { agentStatus: true, outreachStatus: true } });
+    const TERMINAL = ["closed", "declined", "disqualified", "duplicate", "unsubscribed"];
+    data.agentNextAt = null;
+    data.outreachNextAt = null;
+    if (cur?.agentStatus && !TERMINAL.includes(cur.agentStatus)) data.agentStatus = "closed";
+    if (cur?.outreachStatus && !["unsubscribed", "bounced"].includes(cur.outreachStatus)) data.outreachStatus = "done";
+  }
+
   const updated = await prisma.lead.update({ where: { id: body.id }, data });
   return NextResponse.json({ lead: updated });
 }
