@@ -161,7 +161,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       // A REAL PERSON owns it → Jessica works only her own leads (Benjy 7/27).
       // Log what Mary/Shayla said, hand it to the owner, and stand down. This
       // is the rule that keeps the agent out of Suzanne's/Albert's accounts.
-      const HUMAN_OWNERS = ["benjy", "nitay", "albert", "suzanne", "mary"];
+      const HUMAN_OWNERS = ["benjy", "nitay", "albert", "shimmie", "suzanne", "mary"];
       if (ml && HUMAN_OWNERS.includes((ml.ownerName || "").trim().toLowerCase())) {
         const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
         try {

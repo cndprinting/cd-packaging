@@ -17,6 +17,7 @@ const PIPELINE_NAV = { label: "Sales Pipeline", href: "/dashboard/pipeline", ico
 // Talent tracker (Benjy 7/19) — recruiting list for print/packaging sales
 // hires; same owners-only gate as the pipeline.
 const TALENT_NAV = { label: "Talent", href: "/dashboard/talent", icon: UserSearch };
+const TALENT_ROLES = ["OWNER", "ADMIN"];
 // Agent Desk removed Aug 2026 — it duplicated the pipeline. Its job (see where
 // the AI agent stands on every lead) is now the "Who" filter chips on
 // /dashboard/pipeline (🤖 AI working / ⏸ Needs you / 👤 Mine / ⚠ Stalled).
@@ -141,9 +142,11 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
     const at = next.findIndex((i) => i.href === "/dashboard/quotes");
     next.splice(at >= 0 ? at + 1 : 1, 0, PIPELINE_NAV);
     const pi = next.findIndex((i) => i.href === PIPELINE_NAV.href);
-    if (!next.some((i) => i.href === TALENT_NAV.href)) next.splice(pi + 1, 0, TALENT_NAV);
+    // Talent is the recruiting/poach list — owners+admin only, NOT everyone
+    // with funnel access (Shimmie Jacoby onboarding, Benjy 8/4).
+    if (TALENT_ROLES.includes(userRole || "") && !next.some((i) => i.href === TALENT_NAV.href)) next.splice(pi + 1, 0, TALENT_NAV);
     return next;
-  }, [filteredNav, isCustomer, pipelineAccess]);
+  }, [filteredNav, isCustomer, pipelineAccess, userRole]);
 
   return (
     <aside className={cn("flex flex-col bg-white border-r border-gray-200 transition-all duration-200 h-full", collapsed ? "w-16" : "w-60")}>

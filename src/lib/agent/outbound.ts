@@ -38,7 +38,7 @@ const bccFor = (owner: Owner) => OWNER_BCC.filter((e) => e.toLowerCase() !== own
 // should be discontinued and moved to Jessica"). Albert-owned prospects are
 // cold-emailed BY Jessica, who says she is picking it up for him. Real people
 // (Benjy/Nitay) keep their own voice on leads they own.
-const NO_AGENT_SEND = new Set(["albert"]);
+const NO_AGENT_SEND = new Set(["albert", "shimmie"]);
 function resolveOwner(ownerName?: string | null): Owner {
   const key = (ownerName || "").trim().toLowerCase();
   if (NO_AGENT_SEND.has(key)) return OWNERS_MAP.jessica;

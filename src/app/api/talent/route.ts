@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
 // Talent tracker API (Benjy 7/19) — recruiting pipeline for print/packaging
-// sales hires. Owners-only: gated by the same pipelineAccess flag as the CRM.
+// sales hires. Owners-only: funnel access is NOT enough — a sales rep with
+// pipelineAccess must not see the list of people we are poaching, including
+// his own former colleagues (Benjy 8/4, Shimmie Jacoby onboarding).
 
 async function gate() {
   const session = await getSession();
@@ -10,8 +12,8 @@ async function gate() {
   const prismaModule = await import("@/lib/prisma");
   const prisma = prismaModule.default;
   if (!prisma) return { error: "Database not available", status: 500 as const };
-  const u = await prisma.user.findUnique({ where: { id: session.id }, select: { pipelineAccess: true } });
-  if (!u?.pipelineAccess) return { error: "Forbidden", status: 403 as const };
+  const u = await prisma.user.findUnique({ where: { id: session.id }, select: { pipelineAccess: true, role: true } });
+  if (!u?.pipelineAccess || !["OWNER", "ADMIN"].includes(u.role)) return { error: "Forbidden", status: 403 as const };
   return { session, prisma };
 }
 
