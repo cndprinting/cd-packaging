@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import Link from "next/link";
 import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight, Bell } from "lucide-react";
+import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -604,6 +605,11 @@ export default function PipelinePage() {
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
                           <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.commentary || ""} onChange={(e) => edit(l.id, "commentary", e.target.value)} onBlur={(e) => flush(l.id, "commentary", e.target.value)} />
+                        </div>
+                        {/* Artwork / dielines / specs collected during the chase.
+                            These follow the account downstream — see AttachmentPanel. */}
+                        <div className="sm:col-span-3">
+                          <AttachmentPanel scope={{ leadId: l.id, companyId: l.companyId || undefined }} title="Files (artwork, dielines, specs)" />
                         </div>
                       </div>
                     </td>

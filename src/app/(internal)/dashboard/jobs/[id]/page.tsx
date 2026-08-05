@@ -7,8 +7,9 @@ import {
   ArrowLeft, CheckCircle, Calendar, Truck, MessageSquare,
   ShieldCheck, FileImage, Loader2, ChevronRight, ChevronDown, Pencil, X, Check,
   Trash2, Users, Layers, Printer, Scissors,
-  DollarSign, Info, Plus, Send, CircleAlert, FileCheck, Copy,
+  DollarSign, Info, Plus, Send, CircleAlert, FileCheck, Copy, Paperclip,
 } from "lucide-react";
+import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { demoJobs, PRODUCT_TYPES } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1730,6 +1731,22 @@ export default function JobDetailPage() {
               onBlur={(e) => updateJobField("binderyNotes", e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ================================================================= */}
+      {/* 6a¹. FILES — artwork/dielines/specs collected anywhere upstream.    */}
+      {/* Passing every id the job knows (job, quote request, company) means  */}
+      {/* a file a rep attached back when this was still a lead is already    */}
+      {/* here for pre-press — nobody has to re-send it (Benjy 8/5).          */}
+      {/* ================================================================= */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Paperclip className="h-4 w-4" />Files</CardTitle>
+          <p className="text-xs text-gray-600">Artwork, dielines and specs for this account — including anything attached before the job existed.</p>
+        </CardHeader>
+        <CardContent>
+          <AttachmentPanel compact scope={{ jobId: job.id, quoteRequestId: quoteRequest?.id || undefined, companyId: job.companyId || undefined }} />
         </CardContent>
       </Card>
 

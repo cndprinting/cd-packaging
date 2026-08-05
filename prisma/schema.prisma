@@ -270,11 +270,45 @@ model Lead {
   companyId       String?   // linked Godzilla customer once converted
   quoteId         String?   // optional linked quote
   createdBy       String?
+  attachments     Attachment[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([pipelineStage])
   @@index([ownerId])
+}
+
+// Attachments that FOLLOW THE WORK (Benjy 8/5). Artwork a rep collects while
+// the deal is still a lead has to be there when Mary quotes it and again when
+// pre-press opens the job — without anyone re-sending it.
+//
+// One row = one file, pinned to every stage it has reached. The lead id is
+// never cleared; the downstream ids are stamped on as the work advances, so a
+// single upload is visible from the funnel, the quote request, the quote and
+// the job ticket at once. The downstream links are plain String? (no Prisma
+// relation) to match how Job already carries quoteRequestId.
+model Attachment {
+  id        String   @id @default(cuid())
+  kind      String   @default("artwork") // artwork | dieline | spec | sample | proof | po | quote | photo | other
+  name      String
+  url       String
+  fileSize  Int?
+  notes     String?
+  uploadedBy     String?
+  uploadedByName String?
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  companyId String?
+  quoteRequestId String?
+  quoteId   String?
+  jobId     String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([companyId])
+  @@index([quoteRequestId])
+  @@index([quoteId])
+  @@index([jobId])
 }
 
 // Talent tracker (Benjy 7/19) — recruiting pipeline for print/packaging sales

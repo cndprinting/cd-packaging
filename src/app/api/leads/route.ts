@@ -128,6 +128,10 @@ async function updateLead(prisma: any, body: any) {
       }
     }
     const updated = await prisma.lead.update({ where: { id: body.id }, data: { pipelineStage: "CUSTOMER", companyId } });
+    // Carry the lead's files onto the customer record. Artwork a rep collected
+    // during the chase is exactly what estimating and pre-press need, and this
+    // is the moment the account it belongs to finally exists (Benjy 8/5).
+    await prisma.attachment.updateMany({ where: { leadId: body.id, companyId: null }, data: { companyId } });
     return NextResponse.json({ lead: updated, companyId });
   }
 

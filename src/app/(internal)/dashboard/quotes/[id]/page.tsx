@@ -6,8 +6,9 @@ import Link from "next/link";
 import {
   ArrowLeft, DollarSign, Send, Package, Check, Loader2,
   FileText, Calendar, User, Mail, Hash, Layers, Printer,
-  BarChart3, Clock, X, Scissors, Truck, RotateCcw,
+  BarChart3, Clock, X, Scissors, Truck, RotateCcw, Paperclip,
 } from "lucide-react";
+import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ interface QuoteData {
   customerNotes: string | null;
   specs: string | null;
   convertedJobId: string | null;
+  companyId?: string | null;
+  quoteRequestId?: string | null;
   sourcingVendor?: string | null;
   sourcingStatus?: string | null;
   sourcingArtworkUrl?: string | null;
@@ -307,6 +310,19 @@ export default function QuoteDetailPage() {
             {isOutsourced && <DetailRow icon={Package} label="Vendor" value={quote.sourcingVendor || "—"} />}
             <DetailRow icon={Calendar} label="Created" value={formatDate(quote.createdAt)} />
             {quote.validUntil && <DetailRow icon={Clock} label="Valid Until" value={formatDate(quote.validUntil)} />}
+          </CardContent>
+        </Card>
+
+        {/* Artwork/dielines for this account, including whatever was collected
+            while it was still a lead (Benjy 8/5). */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Paperclip className="h-4 w-4 text-brand-600" /> Files
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AttachmentPanel compact scope={{ quoteId: quote.id, quoteRequestId: quote.quoteRequestId || undefined, companyId: quote.companyId || undefined }} />
           </CardContent>
         </Card>
 
