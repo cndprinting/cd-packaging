@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import Link from "next/link";
 import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight, Bell } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -84,7 +84,7 @@ function ModeChip({ l }: { l: Lead }) {
 const MODE_FILTERS: { key: LeadMode | "stalled" | "tocall"; label: string }[] = [
   { key: "ai", label: "🤖 AI working" },
   { key: "needs_you", label: "⏸ Needs you" },
-  { key: "human", label: "👤 Mine" },
+  { key: "human", label: "👤 Person-owned" },
   { key: "stalled", label: "⚠ Stalled" },
   { key: "tocall", label: "☎ To call (cold, no sequence)" },
 ];
@@ -112,6 +112,14 @@ function dueState(l: Lead): "due" | "upcoming" | null {
   return d <= end ? "due" : "upcoming";
 }
 const fmtShort = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+// Owner filter key: first name, lowercased. ownerName is free text ("Benjy",
+// "Shimmie Jacoby", "", "TBD"), so everything unassigned collapses to one bucket.
+const ownerKey = (l: Lead) => {
+  const first = (l.ownerName || "").trim().split(/\s+/)[0].toLowerCase();
+  return !first || first === "tbd" ? "tbd" : first;
+};
+const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k.charAt(0).toUpperCase() + k.slice(1);
 
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
 const OWNERS = ["Benjy", "Albert", "Nitay", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
@@ -141,6 +149,10 @@ export default function PipelinePage() {
   const [typeF, setTypeF] = useState<Set<string>>(new Set());
   const [regionF, setRegionF] = useState<Set<string>>(new Set());
   const [stateF, setStateF] = useState("");
+  // Per-person filter (Benjy 8/5) — a rep should be able to see only his own
+  // book. Keyed by lowercased first name, which is how ownerName is stored.
+  const [ownerF, setOwnerF] = useState<Set<string>>(new Set());
+  const [me, setMe] = useState<string>("");
   const toggle = (set: Set<string>, upd: (s: Set<string>) => void) => (k: string) => {
     const n = new Set(set);
     if (n.has(k)) n.delete(k); else n.add(k);
@@ -155,6 +167,12 @@ export default function PipelinePage() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((d) => setMe(((d?.user?.name || "").trim().split(/\s+/)[0] || "").toLowerCase()))
+      .catch(() => {});
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { LEAD: 0, QUALIFIED: 0, CUSTOMER: 0, LOST: 0 };
@@ -196,6 +214,7 @@ export default function PipelinePage() {
     .filter((l) => typeF.size === 0 || typeF.has(l.leadType))
     .filter((l) => regionF.size === 0 || regionF.has(l.region))
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
+    .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
 
   // Counts shown on the chips — scoped to the active pipeline stage so the
@@ -204,8 +223,10 @@ export default function PipelinePage() {
     const mode: Record<string, number> = { ai: 0, needs_you: 0, human: 0, idle: 0, stalled: 0, tocall: 0 };
     const type: Record<string, number> = {};
     const region: Record<string, number> = {};
+    const owner: Record<string, number> = {};
     const states = new Set<string>();
     inStage.forEach((l) => {
+      owner[ownerKey(l)] = (owner[ownerKey(l)] || 0) + 1;
       mode[l.mode] = (mode[l.mode] || 0) + 1;
       if (l.stalled) mode.stalled++;
       if (isToCall(l)) mode.tocall++;
@@ -214,9 +235,9 @@ export default function PipelinePage() {
       const s = (l.state || "").trim().toUpperCase();
       if (s) states.add(s);
     });
-    return { mode, type, region, states: [...states].sort() };
+    return { mode, type, region, owner, states: [...states].sort() };
   }, [inStage]);
-  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || !!stateF;
+  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF;
 
   // Optimistic inline patch.
   // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
@@ -247,6 +268,52 @@ export default function PipelinePage() {
   };
   // Local-only edit (no save) — for controlled inputs that save on blur.
   const setLocal = (id: string, field: string, value: any) => setLeads((p) => p.map((l) => l.id === id ? { ...l, [field]: value } : l));
+
+  // AUTOSAVE (Benjy 8/5 — Albert: "I put info in and it doesn't save").
+  // Every text field used to commit on blur ONLY. If the input went away before
+  // it lost focus — collapsing the row, hitting refresh, closing the tab,
+  // clicking a sidebar link — no blur ever fired and the typing was gone with
+  // no error, which is exactly what "it didn't save" looks like. Now typing
+  // schedules a save ~1s after you stop, blur still flushes immediately, and
+  // anything still pending is flushed on the way out.
+  const pending = useRef<Record<string, { id: string; field: string; value: any; timer: any }>>({});
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const commit = async (id: string, field: string, value: any) => {
+    setSaveState("saving");
+    const ok = await savePut({ id, [field]: value });
+    setSaveState(ok ? "saved" : "idle");
+  };
+  const edit = (id: string, field: string, value: any) => {
+    setLocal(id, field, value);
+    const k = `${id}:${field}`;
+    if (pending.current[k]) clearTimeout(pending.current[k].timer);
+    pending.current[k] = { id, field, value, timer: setTimeout(() => { delete pending.current[k]; commit(id, field, value); }, 1000) };
+  };
+  const flush = (id: string, field: string, value: any) => {
+    const k = `${id}:${field}`;
+    if (pending.current[k]) { clearTimeout(pending.current[k].timer); delete pending.current[k]; }
+    commit(id, field, value);
+  };
+  useEffect(() => {
+    // Last line of defence: a real page exit (refresh, tab close, external
+    // link) can't be awaited, so push anything still queued with sendBeacon —
+    // it survives unload, unlike fetch.
+    const bail = () => {
+      const q = Object.values(pending.current);
+      if (!q.length) return;
+      for (const { id, field, value } of q) {
+        try { navigator.sendBeacon("/api/leads?beacon=1", new Blob([JSON.stringify({ id, [field]: value })], { type: "application/json" })); } catch { /* best effort */ }
+      }
+      pending.current = {};
+    };
+    window.addEventListener("pagehide", bail);
+    return () => { window.removeEventListener("pagehide", bail); bail(); };
+  }, []);
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const t = setTimeout(() => setSaveState("idle"), 1500);
+    return () => clearTimeout(t);
+  }, [saveState]);
   const move = async (id: string, pipelineStage: string) => {
     setLeads((p) => p.map((l) => l.id === id ? { ...l, pipelineStage } : l));
     await savePut({ id, pipelineStage });
@@ -297,7 +364,12 @@ export default function PipelinePage() {
         ))}
       </div>
 
-      <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+      <div className="flex items-center gap-3">
+        <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+        {/* Visible proof an edit landed — no more guessing (Benjy 8/5). */}
+        {saveState === "saving" && <span className="text-xs text-gray-500">Saving…</span>}
+        {saveState === "saved" && <span className="text-xs text-green-600">✓ Saved</span>}
+      </div>
 
       {/* Filter bar (Benjy 8/2) — replaces the old Agent Desk page. Chips are
           multi-select inside a group and AND across groups. */}
@@ -306,6 +378,17 @@ export default function PipelinePage() {
           <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Who</span>
           <Chip on={modeF.size === 0} label="All" count={inStage.length} onClick={() => setModeF(new Set())} />
           {MODE_FILTERS.map((m) => <Chip key={m.key} on={modeF.has(m.key)} label={m.label} count={f.mode[m.key] || 0} onClick={() => toggle(modeF, setModeF)(m.key)} />)}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Owner</span>
+          <Chip on={ownerF.size === 0} label="Everyone" count={inStage.length} onClick={() => setOwnerF(new Set())} />
+          {me && f.owner[me] !== undefined && (
+            <Chip on={ownerF.size === 1 && ownerF.has(me)} label="⭐ Just mine" count={f.owner[me]}
+              onClick={() => setOwnerF(ownerF.size === 1 && ownerF.has(me) ? new Set() : new Set([me]))} tone="brand" />
+          )}
+          {Object.keys(f.owner).sort((a, b) => (f.owner[b] - f.owner[a]) || a.localeCompare(b)).map((k) => (
+            <Chip key={k} on={ownerF.has(k)} label={ownerLabel(k)} count={f.owner[k]} onClick={() => toggle(ownerF, setOwnerF)(k)} />
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Source</span>
@@ -319,7 +402,7 @@ export default function PipelinePage() {
             {f.states.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           {anyFilter && (
-            <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setStateF(""); }}
+            <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); }}
               className="ml-auto text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear filters</button>
           )}
         </div>
@@ -406,7 +489,7 @@ export default function PipelinePage() {
                   )}
                   {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 min-w-[100px]">
-                      <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, volume: e.target.value } : x))} onBlur={(e) => patch(l.id, "volume", e.target.value)} />
+                      <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => edit(l.id, "volume", e.target.value)} onBlur={(e) => flush(l.id, "volume", e.target.value)} />
                     </td>
                   )}
                   <td className="px-3 py-2 min-w-[110px]">
@@ -437,7 +520,7 @@ export default function PipelinePage() {
                   )}
                   {(active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 min-w-[200px]">
-                      <Input className="h-8 text-xs" value={l.commentary || ""} placeholder="—" onChange={(e) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, commentary: e.target.value } : x))} onBlur={(e) => patch(l.id, "commentary", e.target.value)} />
+                      <Input className="h-8 text-xs" value={l.commentary || ""} placeholder="—" onChange={(e) => edit(l.id, "commentary", e.target.value)} onBlur={(e) => flush(l.id, "commentary", e.target.value)} />
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -460,7 +543,7 @@ export default function PipelinePage() {
                         {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
                           <div key={f}>
                             <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                            <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => setLocal(l.id, f, e.target.value)} onBlur={(e) => patch(l.id, f, e.target.value)} />
+                            <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => edit(l.id, f, e.target.value)} onBlur={(e) => flush(l.id, f, e.target.value)} />
                           </div>
                         ))}
                         <div>
@@ -497,11 +580,11 @@ export default function PipelinePage() {
                         </div>
                         <div className="sm:col-span-2">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Reminder note</label>
-                          <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => setLocal(l.id, "followUpNote", e.target.value)} onBlur={(e) => patch(l.id, "followUpNote", e.target.value)} />
+                          <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => edit(l.id, "followUpNote", e.target.value)} onBlur={(e) => flush(l.id, "followUpNote", e.target.value)} />
                         </div>
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Numbers <span className="text-gray-400 font-normal">— dump every number you collect here</span></label>
-                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.numbers || ""} placeholder="e.g. 305-555-0100 (cell) · 727-555-0199 (office) · 954-555-0123 (Reid)" onChange={(e) => setLocal(l.id, "numbers", e.target.value)} onBlur={(e) => patch(l.id, "numbers", e.target.value)} />
+                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.numbers || ""} placeholder="e.g. 305-555-0100 (cell) · 727-555-0199 (office) · 954-555-0123 (Reid)" onChange={(e) => edit(l.id, "numbers", e.target.value)} onBlur={(e) => flush(l.id, "numbers", e.target.value)} />
                         </div>
                         {(l.outreachStatus || l.outreachLog) && (
                           <div className="sm:col-span-3 rounded-md border border-gray-200 bg-white p-3">
@@ -520,7 +603,7 @@ export default function PipelinePage() {
                         )}
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.commentary || ""} onChange={(e) => setLocal(l.id, "commentary", e.target.value)} onBlur={(e) => patch(l.id, "commentary", e.target.value)} />
+                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.commentary || ""} onChange={(e) => edit(l.id, "commentary", e.target.value)} onBlur={(e) => flush(l.id, "commentary", e.target.value)} />
                         </div>
                       </div>
                     </td>

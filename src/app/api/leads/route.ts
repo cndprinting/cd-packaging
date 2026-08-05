@@ -58,6 +58,10 @@ export async function POST(request: NextRequest) {
   const g = await gate();
   if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
   const { prisma, session } = g;
+  // Edits flushed as the user leaves the page — same write path as PUT.
+  if (request.nextUrl.searchParams.get("beacon") === "1") {
+    return updateLead(prisma, await request.json());
+  }
   const body = await request.json();
   if (!body.companyName) return NextResponse.json({ error: "Company name required" }, { status: 400 });
   // Geography is mandatory on NEW leads (Benjy 8/2) — the pipeline is filtered
@@ -96,8 +100,13 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const g = await gate();
   if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
-  const { prisma } = g;
   const body = await request.json();
+  return updateLead(g.prisma, body);
+}
+
+// Shared by PUT and by the page-unload beacon (navigator.sendBeacon can only
+// issue a POST, so pending edits arrive at POST /api/leads?beacon=1).
+async function updateLead(prisma: any, body: any) {
   if (!body.id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
   // Convert → create/link a real Godzilla customer, move to CUSTOMER stage.
