@@ -5,8 +5,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Loader2, Building2, Phone, MapPin, Mail,
-  DollarSign, Package, FileText, User, Clock,
+  DollarSign, Package, FileText, User, Clock, Paperclip,
 } from "lucide-react";
+import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +143,19 @@ export default function CustomerDetailPage() {
                 <span className="text-sm">{company.industry}</span>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Files — the customer's artwork/dielines on file, including anything
+            attached back when they were still a lead (Benjy 8/5). Estimating
+            and pre-press pull from here. */}
+        <Card className="md:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Paperclip className="h-4 w-4 text-brand-600" /> Files on file</CardTitle>
+            <p className="text-xs text-gray-500">Artwork, dielines and specs for this customer — available on every quote and job we run for them.</p>
+          </CardHeader>
+          <CardContent>
+            <AttachmentPanel compact scope={{ companyId: String(params.id) }} />
           </CardContent>
         </Card>
 
