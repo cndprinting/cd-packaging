@@ -656,7 +656,19 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         )}
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Notes <span className="font-normal text-gray-400">— each note is saved with your name and time; type @ to tag someone</span></label>
-                          <NotesTimeline leadId={l.id} onPosted={load} />
+                          {/* Do NOT refetch the list here. Saving a note stamps
+                              lastInteraction, and leads are ordered by it — a
+                              reload re-sorted the row out from under whoever
+                              just typed, so they lost their place and had to
+                              find the lead again (Benjy 8/6). Patch the one row
+                              locally instead; the new order shows up on the
+                              next natural refresh. */}
+                          <NotesTimeline
+                            leadId={l.id}
+                            onPosted={() => setLeads((p) => p.map((x) => x.id === l.id
+                              ? { ...x, lastInteraction: new Date().toISOString(), stalled: false }
+                              : x))}
+                          />
                         </div>
                         {/* Artwork / dielines / specs collected during the chase.
                             These follow the account downstream — see AttachmentPanel. */}

@@ -84,7 +84,19 @@ async function handleLogin(body: { email: string; password: string }) {
     // Database not available, fall through to demo mode
   }
 
-  // Demo mode fallback
+  // DEMO MODE — off unless explicitly switched on, and never in production.
+  //
+  // This block used to run whenever the database lookup didn't produce a user,
+  // which included every unknown email AND any moment the database was
+  // unreachable. It then accepted ANY email with ANY password and issued an
+  // ADMIN session. On the live site that was a full authentication bypass, so
+  // it now fails closed (found 8/6 while auditing the stale benjy@/admin@
+  // accounts).
+  const demoAllowed = process.env.DEMO_MODE === "true" && process.env.NODE_ENV !== "production";
+  if (!demoAllowed) {
+    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+  }
+
   const { demoUsers } = await import("@/lib/demo-data");
   const demoMatch = demoUsers.find((u) => u.email === email);
 
