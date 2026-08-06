@@ -140,6 +140,10 @@ async function updateLead(prisma: any, body: any) {
   for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary", "leadTypeOverride"]) {
     if (k in body) data[k] = body[k] || null;
   }
+  // "I've got this" from the pipeline (Benjy 8/6) — a human taking a lead off
+  // the daily digest. Only the stand-down is accepted from the UI; the agent's
+  // other states are its own to manage.
+  if (body.agentStatus === "closed") { data.agentStatus = "closed"; data.agentNextAt = null; }
   if ("priority" in body) data.priority = body.priority ? Number(body.priority) : null;
   if ("agentHold" in body) data.agentHold = !!body.agentHold; // outbound "Don't email (agent)" toggle
   if ("lastInteraction" in body) data.lastInteraction = body.lastInteraction ? new Date(body.lastInteraction) : null;

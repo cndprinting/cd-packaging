@@ -319,6 +319,15 @@ export default function PipelinePage() {
     setLeads((p) => p.map((l) => l.id === id ? { ...l, pipelineStage } : l));
     await savePut({ id, pipelineStage });
   };
+  // "I've got this" — stand the agent down so the lead drops off the daily
+  // digest. The lead itself stays open; only the reminder stops.
+  const markHandled = async (l: Lead) => {
+    if (!confirm(`Stop the daily reminder for ${l.companyName}?
+
+The lead stays open in the pipeline — you're just telling Godzilla a human has it.`)) return;
+    setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentStatus: "closed", mode: "human" as LeadMode } : x));
+    await savePut({ id: l.id, agentStatus: "closed" });
+  };
   const convert = async (id: string) => {
     await savePut({ id, convert: true });
     load();
@@ -461,6 +470,12 @@ export default function PipelinePage() {
                       <ModeChip l={l} />
                       {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
                       <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
+                      {/* Same escape hatch as the daily email: clear it from the
+                          to-do list without having to move the lead (Benjy 8/6). */}
+                      {l.mode === "needs_you" && (
+                        <button type="button" onClick={() => markHandled(l)} title="Take it off the daily reminder email. The lead stays open — only the nag stops."
+                          className="w-fit text-[11px] text-green-700 hover:underline">✓ I&apos;ve got this</button>
+                      )}
                     <select
                       value={l.leadType}
                       onChange={(e) => setLeadType(l.id, e.target.value as LeadType)}

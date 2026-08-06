@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { sendEmail } from "@/lib/email/graph-client";
 
 // These jobs poll a mailbox, call Claude, and send email — they need room.
@@ -173,8 +174,22 @@ export async function GET(request: NextRequest) {
           default: return "Stalled - customer hasn't sent info, consider a personal nudge";
         }
       };
-      const rows = inbound.map((l: any) => `<li style="margin-bottom:10px;"><strong>${l.companyName}</strong>${l.contactName ? ` <span style="color:#888;">(${l.contactName})</span>` : ""}<br><span style="color:#27AAE1;">${needLabel(l)}</span>${l.stage ? ` <span style="color:#aaa;">· ${l.stage}</span>` : ""}</li>`).join("");
-      const body = `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>These inbound inquiries need a human - the agent has taken them as far as it can on its own:</p><ul style="padding-left:18px;">${rows}</ul><p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p><p style="color:#aaa;font-size:11px;margin-top:20px;">Automated to-do from Godzilla.</p></div>`;
+      // Every row carries its own "I've got this" link, so the same three
+      // leads stop coming back every morning with no way to clear them
+      // (Benjy 8/6). The token IS the credential — mint one for any lead that
+      // never got through the agent flow, or the link can't be built.
+      const BASE = "https://packaging.cndprinting.com";
+      for (const l of inbound as any[]) {
+        if (!l.agentToken) {
+          l.agentToken = crypto.randomUUID();
+          await prisma.lead.update({ where: { id: l.id }, data: { agentToken: l.agentToken } });
+        }
+      }
+      const rows = inbound.map((l: any) => {
+        const done = `${BASE}/api/agent?action=handled&id=${l.id}&token=${l.agentToken}`;
+        return `<li style="margin-bottom:12px;"><strong>${l.companyName}</strong>${l.contactName ? ` <span style="color:#888;">(${l.contactName})</span>` : ""}<br><span style="color:#27AAE1;">${needLabel(l)}</span>${l.stage ? ` <span style="color:#aaa;">· ${l.stage}</span>` : ""}<br><a href="${done}" style="display:inline-block;margin-top:4px;color:#0a8043;font-size:12px;text-decoration:none;">&#10003; I&#39;ve got this - stop reminding me</a></li>`;
+      }).join("");
+      const body = `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;"><p>These inbound inquiries need a human - the agent has taken them as far as it can on its own:</p><ul style="padding-left:18px;">${rows}</ul><p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p><p style="color:#888;font-size:12px;margin-top:14px;">A lead drops off this list when you click "I&#39;ve got this", take ownership of it in the pipeline, or move it to Lost / Existing customer.</p><p style="color:#aaa;font-size:11px;margin-top:16px;">Automated to-do from Godzilla.</p></div>`;
       const { OWNERS, agentSend } = await import("@/lib/agent/agent");
       await agentSend({ to: OWNERS, subject: `Inbound leads needing your attention (${inbound.length})`, body });
       inboundDigest = inbound.length;
