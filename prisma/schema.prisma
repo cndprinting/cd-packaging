@@ -112,6 +112,11 @@ model User {
   // owners + Albert (Benjy 6/26). A per-user flag, NOT a role, so it can't
   // drift if someone else becomes ADMIN later.
   pipelineAccess Boolean  @default(false)
+  // Email me when someone @mentions me in a lead note. A human types every one
+  // of these, so they're rare by construction — on by default, opt out if the
+  // ping stops being useful (Benjy 8/6).
+  notifyMentions Boolean  @default(true)
+  notifications  Notification[]
   isActive       Boolean  @default(true)
   // TOTP 2FA — Mary 5/5 ask after Mike's email hack. Authenticator-app
   // 6-digit codes (Microsoft Authenticator / Google Authenticator / etc.)
@@ -271,11 +276,56 @@ model Lead {
   quoteId         String?   // optional linked quote
   createdBy       String?
   attachments     Attachment[]
+  notes           LeadNote[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([pipelineStage])
   @@index([ownerId])
+}
+
+// Lead notes as an append-only TIMELINE (Shimmie 8/6, approved by Benjy).
+// Notes used to be one shared free-text box: no author, no timestamp, and the
+// last person to type won. Albert could enrich a lead and Shimmie would
+// overwrite it without either of them knowing. Each note is now its own entry.
+//
+// The agent writes here too, as kind="system" — Jessica's activity and the
+// reps' notes belong in ONE readable history, not two competing ones.
+//
+// Locking: the author may edit for a short window after posting (typos), then
+// it is frozen for everyone. Nobody rewrites history a week later.
+model LeadNote {
+  id         String   @id @default(cuid())
+  leadId     String
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  body       String
+  kind       String   @default("human")  // human | system
+  source     String?                     // for system notes: agent | follow-up | import | research
+  authorId   String?                     // null for system/imported notes
+  authorName String
+  mentions   String?                     // JSON array of mentioned userIds
+  editedAt   DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+// In-app notifications. Today this is @mentions in lead notes; the shape is
+// deliberately generic so anything else that needs to ping a person can reuse
+// it without another table.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("mention")
+  title     String
+  body      String?
+  url       String?
+  actorName String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
 }
 
 // Attachments that FOLLOW THE WORK (Benjy 8/5). Artwork a rep collects while

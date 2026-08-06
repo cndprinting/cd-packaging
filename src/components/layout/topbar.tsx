@@ -29,24 +29,55 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
   const [searching, setSearching] = React.useState(false);
   const [profileOpen, setProfileOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
-  const [notifications, setNotifications] = React.useState<{ message: string; time: string }[]>([]);
+  // Real notifications — @mentions in lead notes (Shimmie 8/6). The bell was
+  // here all along but nothing ever populated it.
+  type Notif = { id: string; title: string; body: string | null; url: string | null; isRead: boolean; createdAt: string };
+  const [notifications, setNotifications] = React.useState<Notif[]>([]);
+  const [unread, setUnread] = React.useState(0);
+  const loadNotifs = React.useCallback(() => {
+    fetch("/api/notifications")
+      .then((r) => r.json())
+      .then((d) => { setNotifications(d.notifications || []); setUnread(d.unread || 0); })
+      .catch(() => {});
+  }, []);
+  React.useEffect(() => {
+    loadNotifs();
+    // Someone tagging you is only useful if it shows up while you're working.
+    const t = setInterval(loadNotifs, 60000);
+    return () => clearInterval(t);
+  }, [loadNotifs]);
+  const markAllRead = async () => {
+    setUnread(0);
+    setNotifications((p) => p.map((n) => ({ ...n, isRead: true })));
+    await fetch("/api/notifications", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) }).catch(() => {});
+  };
+  const ago = (s: string) => {
+    const m = Math.round((Date.now() - new Date(s).getTime()) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    if (m < 1440) return `${Math.round(m / 60)}h ago`;
+    return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
 
+  // Production alerts + recent activity from the dashboard feed. These are
+  // informational and have no read state of their own, so they sit UNDER the
+  // real notifications and never drive the unread badge.
   React.useEffect(() => {
     fetch("/api/dashboard")
       .then(r => r.json())
       .then(d => {
-        const notifs: { message: string; time: string }[] = [];
+        const feed: Notif[] = [];
         if (d.alerts) {
-          d.alerts.forEach((a: { title?: string; message?: string; createdAt?: string }) => {
-            notifs.push({ message: a.title || a.message || "Alert", time: a.createdAt || "" });
+          d.alerts.forEach((a: { title?: string; message?: string; createdAt?: string }, i: number) => {
+            feed.push({ id: `alert-${i}`, title: a.title || a.message || "Alert", body: null, url: null, isRead: true, createdAt: a.createdAt || new Date().toISOString() });
           });
         }
         if (d.recentActivity) {
-          d.recentActivity.slice(0, 5).forEach((a: { details?: string; action?: string; createdAt?: string }) => {
-            notifs.push({ message: a.details || a.action || "Activity", time: a.createdAt || "" });
+          d.recentActivity.slice(0, 5).forEach((a: { details?: string; action?: string; createdAt?: string }, i: number) => {
+            feed.push({ id: `act-${i}`, title: a.details || a.action || "Activity", body: null, url: null, isRead: true, createdAt: a.createdAt || new Date().toISOString() });
           });
         }
-        setNotifications(notifs.slice(0, 10));
+        setNotifications((prev) => [...prev.filter((n) => !n.id.startsWith("alert-") && !n.id.startsWith("act-")), ...feed].slice(0, 20));
       })
       .catch(() => {});
   }, []);
@@ -143,21 +174,28 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
             className="relative flex items-center justify-center h-9 w-9 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
           >
             <Bell className="h-5 w-5" />
-            {notifications.length > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />}
+            {unread > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
           </button>
           {notifOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
               <div className="absolute right-0 top-full mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg z-50 max-h-96 overflow-y-auto">
-                <div className="px-4 py-3 border-b border-gray-100">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-sm font-semibold text-gray-900">Notifications</p>
+                  {unread > 0 && <button onClick={markAllRead} className="text-xs text-brand-600 hover:underline">Mark all read</button>}
                 </div>
                 {notifications.length > 0 ? (
-                  notifications.map((n, i) => (
-                    <div key={i} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <p className="text-sm text-gray-900">{n.message}</p>
-                      <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-                    </div>
+                  notifications.map((n) => (
+                    <a key={n.id} href={n.url || "#"} onClick={markAllRead}
+                      className={`block px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${n.isRead ? "" : "bg-brand-50/40"}`}>
+                      <p className="text-sm text-gray-900">{n.title}</p>
+                      {n.body && <p className="mt-0.5 text-xs text-gray-500 line-clamp-2">{n.body}</p>}
+                      <p className="text-xs text-gray-400 mt-1">{ago(n.createdAt)}</p>
+                    </a>
                   ))
                 ) : (
                   <div className="px-4 py-8 text-center text-sm text-gray-400">No notifications</div>

@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import Link from "next/link";
 import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight, Bell } from "lucide-react";
 import { AttachmentPanel } from "@/components/attachments/attachment-panel";
+import { NotesTimeline } from "@/components/leads/notes-timeline";
+import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +156,8 @@ export default function PipelinePage() {
   // book. Keyed by lowercased first name, which is how ownerName is stored.
   const [ownerF, setOwnerF] = useState<Set<string>>(new Set());
   const [me, setMe] = useState<string>("");
+  // Per-field validation messages, keyed "<leadId>:<field>".
+  const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
   const toggle = (set: Set<string>, upd: (s: Set<string>) => void) => (k: string) => {
     const n = new Set(set);
     if (n.has(k)) n.delete(k); else n.add(k);
@@ -289,6 +293,12 @@ export default function PipelinePage() {
     const k = `${id}:${field}`;
     if (pending.current[k]) clearTimeout(pending.current[k].timer);
     pending.current[k] = { id, field, value, timer: setTimeout(() => { delete pending.current[k]; commit(id, field, value); }, 1000) };
+  };
+  // Drop a queued autosave — used when a value fails validation, so the
+  // debounce timer can't write the bad value a second after we rejected it.
+  const cancelPending = (id: string, field: string) => {
+    const k = `${id}:${field}`;
+    if (pending.current[k]) { clearTimeout(pending.current[k].timer); delete pending.current[k]; }
   };
   const flush = (id: string, field: string, value: any) => {
     const k = `${id}:${field}`;
@@ -536,7 +546,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                   )}
                   {(active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 min-w-[200px]">
-                      <Input className="h-8 text-xs" value={l.commentary || ""} placeholder="—" onChange={(e) => edit(l.id, "commentary", e.target.value)} onBlur={(e) => flush(l.id, "commentary", e.target.value)} />
+                      <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -556,12 +566,39 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
                     <td colSpan={10} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => (
+                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => {
+                          // A phone number in the email field means the agent
+                          // silently never emails this lead. Catch it here
+                          // rather than discovering it weeks later (Shimmie 8/6).
+                          const checked = (VALIDATED_FIELDS as readonly string[]).includes(f);
+                          const problem = checked ? fieldErr[`${l.id}:${f}`] : undefined;
+                          return (
                           <div key={f}>
                             <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                            <Input className="h-8 text-xs" value={(l as any)[f] || ""} onChange={(e) => edit(l.id, f, e.target.value)} onBlur={(e) => flush(l.id, f, e.target.value)} />
+                            <Input
+                              className={`h-8 text-xs ${problem ? "border-red-400 focus:border-red-500" : ""}`}
+                              value={(l as any)[f] || ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (checked) setFieldErr((p) => ({ ...p, [`${l.id}:${f}`]: validateField(f as FieldName, v) || "" }));
+                                edit(l.id, f, v);
+                              }}
+                              onBlur={(e) => {
+                                const v = e.target.value;
+                                if (!checked) { flush(l.id, f, v); return; }
+                                const msg = validateField(f as FieldName, v);
+                                setFieldErr((p) => ({ ...p, [`${l.id}:${f}`]: msg || "" }));
+                                // Never persist a value we just told them is wrong.
+                                if (msg) { cancelPending(l.id, f); return; }
+                                const clean = normalizeField(f as FieldName, v);
+                                if (clean !== v) setLocal(l.id, f, clean);
+                                flush(l.id, f, clean);
+                              }}
+                            />
+                            {problem && <p className="mt-1 text-[11px] text-red-600">{problem}</p>}
                           </div>
-                        ))}
+                          );
+                        })}
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1">State <span className="font-normal text-gray-400">— sets the region + the agent's geography angle</span></label>
                           <select className={selCls} value={(l.state || "").trim().toUpperCase()} onChange={(e) => patch(l.id, "state", e.target.value)}>
@@ -618,8 +655,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           </div>
                         )}
                         <div className="sm:col-span-3">
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.commentary || ""} onChange={(e) => edit(l.id, "commentary", e.target.value)} onBlur={(e) => flush(l.id, "commentary", e.target.value)} />
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Notes <span className="font-normal text-gray-400">— each note is saved with your name and time; type @ to tag someone</span></label>
+                          <NotesTimeline leadId={l.id} onPosted={load} />
                         </div>
                         {/* Artwork / dielines / specs collected during the chase.
                             These follow the account downstream — see AttachmentPanel. */}

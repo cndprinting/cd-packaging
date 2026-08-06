@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { leadMode, leadStage, leadType, leadRegion, isStalled } from "@/lib/lead-view";
+import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 
 // Sales pipeline API (Benjy 6/26) — proprietary CRM, gated by the per-user
 // pipelineAccess flag (not a role). Managers (Benjy/Nitay/Albert) see all.
@@ -140,6 +141,16 @@ async function updateLead(prisma: any, body: any) {
   for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary", "leadTypeOverride"]) {
     if (k in body) data[k] = body[k] || null;
   }
+  // Same checks the UI runs, enforced server-side so a bad value can't arrive
+  // by another path (Shimmie 8/6). Rejected outright rather than stored dirty:
+  // a phone number in contactEmail silently disables outbound on that lead.
+  for (const f of VALIDATED_FIELDS) {
+    if (!(f in data)) continue;
+    const problem = validateField(f as FieldName, data[f] || "");
+    if (problem) return NextResponse.json({ error: `${f}: ${problem}`, field: f }, { status: 400 });
+    if (data[f]) data[f] = normalizeField(f as FieldName, data[f]);
+  }
+
   // "I've got this" from the pipeline (Benjy 8/6) — a human taking a lead off
   // the daily digest. Only the stand-down is accepted from the UI; the agent's
   // other states are its own to manage.
