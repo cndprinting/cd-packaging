@@ -40,12 +40,19 @@ export async function GET(request: NextRequest) {
 
   const rows = await prisma.lead.findMany({
     orderBy: [{ priority: "asc" }, { lastInteraction: "desc" }],
+    // Newest note rides along so the row can preview the CURRENT note instead
+    // of the legacy commentary blob (Benjy 8/6).
+    include: { notes: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, authorName: true, createdAt: true } } },
   });
   // Presentation layer computed SERVER-SIDE (Benjy 8/2) so the UI never has to
   // re-derive it and every screen agrees. See src/lib/lead-view.ts.
   const now = new Date();
   const leads = rows.map((l) => ({
     ...l,
+    notes: undefined,
+    lastNote: l.notes?.[0]
+      ? { body: l.notes[0].body, authorName: l.notes[0].authorName, createdAt: l.notes[0].createdAt }
+      : null,
     mode: leadMode(l),            // ai | needs_you | human | idle
     stageLabel: leadStage(l),     // plain-English stage
     leadType: leadType(l),        // google_ad | website | mailercity | cold | referral | manual

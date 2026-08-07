@@ -22,6 +22,7 @@ type Lead = {
   // Derived server-side in GET /api/leads (src/lib/lead-view.ts) — never re-derived here.
   mode: LeadMode; stageLabel: string; leadType: LeadType; region: Region; stalled: boolean;
   leadTypeOverride?: string | null;
+  lastNote?: { body: string; authorName: string; createdAt: string } | null;
 };
 
 // Outbound-agent status → chip label + styling. null status = not yet emailed.
@@ -454,6 +455,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
                 {active === "LEAD" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
                 {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
+                {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="When this account was last touched, and the next follow-up if one is set">Last activity</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -545,8 +547,30 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                     </td>
                   )}
                   {(active === "CUSTOMER" || active === "LOST") && (
-                    <td className="px-3 py-2 min-w-[200px]">
-                      <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
+                    <td className="px-3 py-2 whitespace-nowrap align-top">
+                      {l.lastInteraction
+                        ? <span className="text-xs text-gray-700">{fmtShort(l.lastInteraction)}</span>
+                        : <span className="text-xs text-gray-300">—</span>}
+                      {l.followUpAt && !l.followUpDoneAt && (
+                        <span className={`block text-[11px] ${dueState(l) === "due" ? "text-amber-600" : "text-gray-400"}`}>
+                          next {fmtShort(l.followUpAt)}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {(active === "CUSTOMER" || active === "LOST") && (
+                    <td className="px-3 py-2 min-w-[200px] align-top">
+                      {/* Notes are an append-only timeline now, so this is a
+                          preview of the LATEST note (open the row to add one)
+                          rather than the stale legacy blob. */}
+                      {l.lastNote ? (
+                        <>
+                          <p className="line-clamp-2 text-xs text-gray-600" title={l.lastNote.body}>{l.lastNote.body}</p>
+                          <span className="text-[11px] text-gray-400">{l.lastNote.authorName} · {fmtShort(l.lastNote.createdAt)}</span>
+                        </>
+                      ) : (
+                        <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
+                      )}
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -564,7 +588,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={10} className="px-4 py-3">
+                    <td colSpan={11} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
                         {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
@@ -681,7 +705,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>
