@@ -54,7 +54,15 @@ export async function GET(request: NextRequest) {
       followUpAt: { not: null, lte: now },
       followUpDoneAt: null,
       OR: [{ reminderSentAt: null }, { reminderSentAt: { lt: startOfToday } }],
-      pipelineStage: { in: ["LEAD", "QUALIFIED"] },
+      // Customers get followed up with too — reorders, checking in, chasing a
+      // reprint. Restricting this to LEAD/QUALIFIED on 8/3 was wrong: it was
+      // meant to stop the AGENT digest nagging about closed leads, but it also
+      // silently killed the morning reminder for every existing customer,
+      // while the accountability nag kept telling owners to set dates on them
+      // (Benjy 8/6). A follow-up date is something a person deliberately set —
+      // if it's on the calendar, it gets emailed. LOST is excluded: reopening
+      // a dead lead is a manual act, not a standing reminder.
+      pipelineStage: { in: ["LEAD", "QUALIFIED", "CUSTOMER"] },
       // Agent-desk (Jessica) follow-ups are handled separately below and must
       // NEVER appear in a human owner personal due list (Benjy 7/16).
       NOT: { ownerName: { equals: "Jessica", mode: "insensitive" } },
@@ -204,7 +212,7 @@ export async function GET(request: NextRequest) {
   let agentDesk = 0;
   try {
     const jDue = await prisma.lead.findMany({
-      where: { ownerName: { equals: "Jessica", mode: "insensitive" }, followUpAt: { not: null, lte: now }, followUpDoneAt: null, pipelineStage: { in: ["LEAD", "QUALIFIED"] } },
+      where: { ownerName: { equals: "Jessica", mode: "insensitive" }, followUpAt: { not: null, lte: now }, followUpDoneAt: null, pipelineStage: { in: ["LEAD", "QUALIFIED", "CUSTOMER"] } },
       select: { id: true, companyName: true, pipelineStage: true, stage: true, followUpNote: true, agentStatus: true, outreachStatus: true, commentary: true },
       take: 100,
     });

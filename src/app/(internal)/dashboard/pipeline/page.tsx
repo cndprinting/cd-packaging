@@ -186,7 +186,10 @@ export default function PipelinePage() {
     return c;
   }, [leads]);
 
-  const dueCount = useMemo(() => leads.filter((l) => (l.pipelineStage === "LEAD" || l.pipelineStage === "QUALIFIED") && dueState(l) === "due").length, [leads]);
+  // Counts every stage the morning reminder email covers, so the badge and the
+  // email can never disagree about what's due (Benjy 8/6).
+  const REMINDER_STAGES = ["LEAD", "QUALIFIED", "CUSTOMER"];
+  const dueCount = useMemo(() => leads.filter((l) => REMINDER_STAGES.includes(l.pipelineStage) && dueState(l) === "due").length, [leads]);
 
   // Outbound-agent campaign counters (LEAD stage only).
   const outreach = useMemo(() => {
@@ -455,7 +458,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
                 {active === "LEAD" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
                 {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
-                {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="When this account was last touched, and the next follow-up if one is set">Last activity</th>}
+                {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -546,16 +549,35 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
                   )}
+                  {/* Follow-up scheduling, right in the row. Customers get
+                      chased for reorders and reprints as much as leads do, and
+                      burying the date picker in the expanded panel made it look
+                      like the feature didn't exist here (Benjy 8/6). */}
                   {(active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 whitespace-nowrap align-top">
-                      {l.lastInteraction
-                        ? <span className="text-xs text-gray-700">{fmtShort(l.lastInteraction)}</span>
-                        : <span className="text-xs text-gray-300">—</span>}
-                      {l.followUpAt && !l.followUpDoneAt && (
-                        <span className={`block text-[11px] ${dueState(l) === "due" ? "text-amber-600" : "text-gray-400"}`}>
-                          next {fmtShort(l.followUpAt)}
-                        </span>
+                      {l.followUpDoneAt ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-green-700">Done {fmtShort(l.followUpDoneAt)}</span>
+                          <button onClick={() => patch(l.id, "followUpDoneAt", null)} className="text-[11px] text-brand-600 hover:underline">new date</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Input type="date" className="h-8 w-[8.5rem] text-xs"
+                            value={l.followUpAt ? l.followUpAt.slice(0, 10) : ""}
+                            onChange={(e) => patch(l.id, "followUpAt", e.target.value || null)}
+                            title="Emails the owner every morning until marked done" />
+                          {l.followUpAt && (
+                            <button onClick={() => patch(l.id, "followUpDoneAt", new Date().toISOString())}
+                              title="Mark this follow-up done" className="text-[11px] font-medium text-green-700 hover:underline">✓</button>
+                          )}
+                        </div>
                       )}
+                      {l.followUpAt && !l.followUpDoneAt && dueState(l) === "due" && (
+                        <span className="block text-[11px] text-amber-600">● due</span>
+                      )}
+                      <span className="block text-[11px] text-gray-400">
+                        last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
+                      </span>
                     </td>
                   )}
                   {(active === "CUSTOMER" || active === "LOST") && (
