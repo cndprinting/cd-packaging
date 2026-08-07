@@ -96,19 +96,37 @@ export async function GET(request: NextRequest) {
   let sent = 0;
   const sentLeadIds: string[] = [];
   for (const [to, leads] of groups) {
-    const rows = leads.map((l) => {
+    const stageLabel = (p: string) => p === "QUALIFIED" ? "Qualified prospect" : p === "CUSTOMER" ? "Existing customer" : "Lead";
+    const isUnowned = (l: any) => !l.ownerName || l.ownerName.trim().toUpperCase() === "TBD";
+    const line = (l: any) => {
       const note = l.followUpNote ? ` — ${l.followUpNote}` : "";
-      const stage = l.pipelineStage === "QUALIFIED" ? "Qualified prospect" : "Lead";
-      return `<li style="margin-bottom:8px;"><strong>${l.companyName}</strong> <span style="color:#888;">(${stage}${l.stage ? ` · ${l.stage}` : ""})</span>${note}</li>`;
-    }).join("");
+      return `<li style="margin-bottom:8px;"><strong>${l.companyName}</strong> <span style="color:#888;">(${stageLabel(l.pipelineStage)}${l.stage ? ` · ${l.stage}` : ""})</span>${note}</li>`;
+    };
+    // Unowned follow-ups fall back to Benjy so nothing goes unseen — but they
+    // used to land in his personal list with no explanation, so a lead nobody
+    // owns read as "yours" (Benjy 8/7, Private Label Nutraceuticals). Split
+    // them out and say plainly why they're here.
+    const mine = leads.filter((l) => !isUnowned(l));
+    const orphans = leads.filter(isUnowned);
+    const mineBlock = mine.length
+      ? `<p>You have <strong>${mine.length}</strong> pipeline follow-up${mine.length > 1 ? "s" : ""} due:</p><ul style="padding-left:18px;">${mine.map(line).join("")}</ul>`
+      : "";
+    const orphanBlock = orphans.length
+      ? `<div style="margin-top:${mine.length ? "20px" : "0"};padding:12px 14px;background:#fff8e6;border-left:3px solid #e0a800;">
+           <p style="margin:0 0 6px;"><strong>${orphans.length} follow-up${orphans.length > 1 ? "s have" : " has"} no owner</strong> — these are not assigned to you. They come here because nobody is set as the owner, so set one in the pipeline and they'll go to that person instead.</p>
+           <ul style="padding-left:18px;margin:6px 0 0;">${orphans.map(line).join("")}</ul>
+         </div>`
+      : "";
     const body = `
       <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.6;">
-        <p>You have <strong>${leads.length}</strong> pipeline follow-up${leads.length > 1 ? "s" : ""} due:</p>
-        <ul style="padding-left:18px;">${rows}</ul>
+        ${mineBlock}${orphanBlock}
         <p style="margin-top:16px;"><a href="${PORTAL}" style="color:#27AAE1;">Open the sales pipeline →</a></p>
         <p style="color:#aaa;font-size:11px;margin-top:20px;">Automated reminder from Godzilla.</p>
       </div>`;
-    const res = await sendEmail({ from: SENDER, to, subject: `Pipeline follow-ups due (${leads.length})`, body });
+    const subject = mine.length
+      ? `Pipeline follow-ups due (${leads.length})`
+      : `Unassigned follow-up${orphans.length > 1 ? "s" : ""} due (${orphans.length}) - no owner set`;
+    const res = await sendEmail({ from: SENDER, to, subject, body });
     if (res.success) { sent++; sentLeadIds.push(...leads.map((l) => l.id)); }
   }
 
