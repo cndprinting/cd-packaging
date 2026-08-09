@@ -9,7 +9,7 @@ import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { US_STATES, REGIONS, TYPE_LABELS, ownerFirstName, type LeadMode, type LeadType, type Region } from "@/lib/lead-view";
+import { US_STATES, REGIONS, TYPE_LABELS, ownerFirstName, type LeadMode, type LeadType, type LeadOrigin, type Region } from "@/lib/lead-view";
 
 type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
@@ -20,7 +20,7 @@ type Lead = {
   outreachStatus: string | null; outreachNextAt: string | null; outreachTo: string | null; outreachEmailed: string | null; outreachLog: string | null;
   agentStatus: string | null;
   // Derived server-side in GET /api/leads (src/lib/lead-view.ts) — never re-derived here.
-  mode: LeadMode; stageLabel: string; leadType: LeadType; region: Region; stalled: boolean;
+  mode: LeadMode; stageLabel: string; leadType: LeadType; region: Region; origin: LeadOrigin; stalled: boolean;
   leadTypeOverride?: string | null;
   lastNote?: { body: string; authorName: string; createdAt: string } | null;
 };
@@ -46,9 +46,10 @@ const MODE_CHIP: Record<Exclude<LeadMode, "idle">, { label: string; cls: string;
   human:     { label: "👤",              cls: "bg-gray-100 text-gray-600 border-gray-200", title: "A person owns this lead; the agent is not driving it." },
 };
 
-const INBOUND_TYPES = new Set<LeadType>(["google_ad", "website", "mailercity"]);
+const INBOUND_TYPES = new Set<LeadType>(["google_ad", "facebook", "website", "mailercity"]);
 const TYPE_BADGE: Record<LeadType, string> = {
   google_ad:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  facebook:   "bg-emerald-50 text-emerald-700 border-emerald-200",
   website:    "bg-emerald-50 text-emerald-700 border-emerald-200",
   mailercity: "bg-emerald-50 text-emerald-700 border-emerald-200",
   referral:   "bg-violet-50 text-violet-700 border-violet-200",
@@ -60,7 +61,7 @@ const TYPE_BADGE: Record<LeadType, string> = {
 };
 // Green = they came to us (answer it). Slate = we sourced them (cold call it).
 function TypeBadge({ t }: { t: LeadType }) {
-  const inbound = t === "google_ad" || t === "website" || t === "mailercity";
+  const inbound = INBOUND_TYPES.has(t);
   return (
     <span title={inbound ? "Inbound - this lead contacted us" : t === "referral" ? "Referral" : "We sourced this lead for outreach - cold"}
       className={`mt-0.5 inline-flex w-fit items-center rounded border px-1.5 py-0 text-[10px] ${TYPE_BADGE[t]}`}>
@@ -92,7 +93,7 @@ const MODE_FILTERS: { key: LeadMode | "stalled" | "tocall"; label: string }[] = 
   { key: "stalled", label: "⚠ Stalled" },
   { key: "tocall", label: "☎ To call (cold, no sequence)" },
 ];
-const TYPE_FILTERS: LeadType[] = ["google_ad", "website", "mailercity", "cold", "referral", "tradeshow", "linkedin", "customer", "manual"];
+const TYPE_FILTERS: LeadType[] = ["google_ad", "facebook", "website", "mailercity", "cold", "referral", "tradeshow", "linkedin", "customer", "manual"];
 
 // Multi-select filter chip — an obvious button, not a dropdown (Benjy couldn't
 // find things behind menus).
@@ -129,12 +130,19 @@ const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "P
 const OWNERS = ["Benjy", "Albert", "Nitay", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
 const STAGE_LEAD = ["Break in", "Touch base", "Connected", "Requested info", "Quoting", "Meeting set", "Deprioritize", "Dead"];
 const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
+// Inbound and Prospecting are both the LEAD stage, split by how the record
+// ARRIVED (Benjy 8/7: "leave cold/organic entirely separate"). They're
+// top-level rather than a filter inside Leads because a filter is still one
+// shared pile you have to remember to narrow — which was the whole complaint.
+// Once a lead is qualified it leaves both and origin becomes a badge.
 const STAGES = [
-  { key: "LEAD", label: "Leads" },
-  { key: "QUALIFIED", label: "Qualified prospects" },
-  { key: "CUSTOMER", label: "Existing customers" },
-  { key: "LOST", label: "Lost" },
+  { key: "INBOUND", label: "Inbound", stage: "LEAD", origin: "inbound" as LeadOrigin },
+  { key: "PROSPECTING", label: "Prospecting", stage: "LEAD", origin: "prospecting" as LeadOrigin },
+  { key: "QUALIFIED", label: "Qualified prospects", stage: "QUALIFIED" },
+  { key: "CUSTOMER", label: "Existing customers", stage: "CUSTOMER" },
+  { key: "LOST", label: "Lost", stage: "LOST" },
 ] as const;
+const tabOf = (k: string) => STAGES.find((t) => t.key === k) || STAGES[1];
 
 const selCls = "h-8 w-full rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-800 focus:border-brand-500 focus:outline-none";
 const priColor = (p: number | null) => p === 1 ? "text-red-600" : p === 2 ? "text-amber-600" : "text-gray-400";
@@ -143,7 +151,7 @@ export default function PipelinePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
-  const [active, setActive] = useState<string>("LEAD");
+  const [active, setActive] = useState<string>("PROSPECTING");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -181,10 +189,16 @@ export default function PipelinePage() {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { LEAD: 0, QUALIFIED: 0, CUSTOMER: 0, LOST: 0 };
-    leads.forEach((l) => { c[l.pipelineStage] = (c[l.pipelineStage] || 0) + 1; });
+    const c: Record<string, number> = { INBOUND: 0, PROSPECTING: 0, QUALIFIED: 0, CUSTOMER: 0, LOST: 0 };
+    leads.forEach((l) => { STAGES.forEach((t) => { if (inTab(l, t.key)) c[t.key]++; }); });
     return c;
   }, [leads]);
+  // Anything in the Inbound queue that a person hasn't answered yet. Drives the
+  // amber treatment on the tab so a waiting inquiry is visible from any screen.
+  const inboundWaiting = useMemo(
+    () => leads.filter((l) => inTab(l, "INBOUND") && (l.mode === "needs_you" || l.mode === "idle")).length,
+    [leads],
+  );
 
   // Counts every stage the morning reminder email covers, so the badge and the
   // email can never disagree about what's due (Benjy 8/6).
@@ -193,7 +207,7 @@ export default function PipelinePage() {
 
   // Outbound-agent campaign counters (LEAD stage only).
   const outreach = useMemo(() => {
-    const L = leads.filter((l) => l.pipelineStage === "LEAD");
+    const L = leads.filter((l) => l.pipelineStage === "LEAD" && l.origin === "prospecting");
     const inSeq = ["intro_sent", "followup_1", "followup_2"];
     return {
       emailed: L.filter((l) => !!l.outreachStatus).length,
@@ -216,7 +230,20 @@ export default function PipelinePage() {
     l.mode !== "ai" && l.mode !== "needs_you";
   const matchesMode = (l: Lead) => modeF.size === 0 || [...modeF].some((k) =>
     k === "stalled" ? l.stalled : k === "tocall" ? isToCall(l) : l.mode === k);
-  const inStage = useMemo(() => leads.filter((l) => l.pipelineStage === active), [leads, active]);
+  const inTab = (l: Lead, key: string) => {
+    const t = tabOf(key);
+    return l.pipelineStage === t.stage && (!("origin" in t) || l.origin === (t as any).origin);
+  };
+  const inStage = useMemo(() => leads.filter((l) => inTab(l, active)), [leads, active]);
+  // Downstream tabs keep an origin toggle so the two sides stay measurable all
+  // the way to Customer / Lost — the blended hit rate describes neither.
+  const [originF, setOriginF] = useState<LeadOrigin | "">("");
+  const showOriginToggle = ["QUALIFIED", "CUSTOMER", "LOST"].includes(active);
+  const originCounts = useMemo(() => {
+    const c = { inbound: 0, prospecting: 0 };
+    inStage.forEach((l) => { c[l.origin] = (c[l.origin] || 0) + 1; });
+    return c;
+  }, [inStage]);
   const visible = inStage
     .filter((l) => !dueOnly || dueState(l) === "due")
     .filter(matchesMode)
@@ -224,6 +251,7 @@ export default function PipelinePage() {
     .filter((l) => regionF.size === 0 || regionF.has(l.region))
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
+    .filter((l) => !showOriginToggle || !originF || l.origin === originF)
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
 
   // Counts shown on the chips — scoped to the active pipeline stage so the
@@ -377,15 +405,26 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         </div>
       </div>
 
-      {/* Stage cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {STAGES.map((s) => (
-          <button key={s.key} onClick={() => setActive(s.key)}
-            className={`text-left rounded-xl p-3 transition-colors ${active === s.key ? "bg-white border-2 border-brand-500" : "bg-gray-50 border-2 border-transparent hover:bg-gray-100"}`}>
-            <div className="text-xs text-gray-500">{s.label}</div>
-            <div className="text-2xl font-bold text-gray-900">{counts[s.key] || 0}</div>
-          </button>
-        ))}
+      {/* Stage cards. Inbound goes amber whenever an inquiry is sitting
+          unanswered, so it's visible from whichever tab you're on. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {STAGES.map((s) => {
+          const waiting = s.key === "INBOUND" && inboundWaiting > 0 && active !== "INBOUND";
+          return (
+            <button key={s.key} onClick={() => setActive(s.key)}
+              title={s.key === "INBOUND" ? "Inquiries that came to us — website form, ads, MailerCity. Answer these."
+                   : s.key === "PROSPECTING" ? "Names we sourced ourselves. Call these." : undefined}
+              className={`text-left rounded-xl p-3 transition-colors border-2 ${
+                active === s.key ? "bg-white border-brand-500"
+                : waiting ? "bg-amber-50 border-amber-300 hover:bg-amber-100"
+                : "bg-gray-50 border-transparent hover:bg-gray-100"}`}>
+              <div className={`text-xs ${waiting ? "text-amber-700 font-medium" : "text-gray-500"}`}>
+                {s.label}{waiting ? ` · ${inboundWaiting} waiting` : ""}
+              </div>
+              <div className={`text-2xl font-bold ${waiting ? "text-amber-800" : "text-gray-900"}`}>{counts[s.key] || 0}</div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-3">
@@ -403,6 +442,15 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
           <Chip on={modeF.size === 0} label="All" count={inStage.length} onClick={() => setModeF(new Set())} />
           {MODE_FILTERS.map((m) => <Chip key={m.key} on={modeF.has(m.key)} label={m.label} count={f.mode[m.key] || 0} onClick={() => toggle(modeF, setModeF)(m.key)} />)}
         </div>
+        {showOriginToggle && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Came from</span>
+            <Chip on={!originF} label="Both" count={inStage.length} onClick={() => setOriginF("")} />
+            <Chip on={originF === "inbound"} label="↓ Inbound" count={originCounts.inbound} onClick={() => setOriginF(originF === "inbound" ? "" : "inbound")} />
+            <Chip on={originF === "prospecting"} label="↑ Prospecting" count={originCounts.prospecting} onClick={() => setOriginF(originF === "prospecting" ? "" : "prospecting")} />
+            <span className="text-[11px] text-gray-400">The two convert very differently — a blended number describes neither.</span>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Owner</span>
           <Chip on={ownerF.size === 0} label="Everyone" count={inStage.length} onClick={() => setOwnerF(new Set())} />
@@ -432,7 +480,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         </div>
       </div>
 
-      {active === "LEAD" && (
+      {active === "PROSPECTING" && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-gray-400">Outbound agent:</span>
           <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700"><b className="text-gray-900">{outreach.emailed}</b> emailed</span>
@@ -456,8 +504,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
-                {active === "LEAD" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
-                {active === "LEAD" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
+                {active === "PROSPECTING" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
+                {active === "PROSPECTING" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
@@ -537,14 +585,14 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       </select>
                     </td>
                   )}
-                  {active === "LEAD" && (
+                  {active === "PROSPECTING" && (
                     <td className="px-3 py-2 whitespace-nowrap">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
                         : <OutreachIdle l={l} />}
                     </td>
                   )}
-                  {active === "LEAD" && (
+                  {active === "PROSPECTING" && (
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
@@ -596,7 +644,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {active === "LEAD" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
+                    {active === "PROSPECTING" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
                     {active === "QUALIFIED" && <button onClick={() => move(l.id, "LEAD")} className="text-xs text-gray-500 hover:underline mr-3">← Lead</button>}
                     {active === "QUALIFIED" && <button onClick={() => convert(l.id)} className="text-xs text-emerald-700 hover:underline mr-3">Won → customer</button>}
                     {active === "CUSTOMER" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-gray-500 hover:underline mr-3">← Qualified</button>}

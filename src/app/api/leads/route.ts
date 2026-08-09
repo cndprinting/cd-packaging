@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { leadMode, leadStage, leadType, leadRegion, isStalled } from "@/lib/lead-view";
+import { leadMode, leadStage, leadType, leadRegion, leadOrigin, isStalled } from "@/lib/lead-view";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 
 // Sales pipeline API (Benjy 6/26) — proprietary CRM, gated by the per-user
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
     stageLabel: leadStage(l),     // plain-English stage
     leadType: leadType(l),        // google_ad | website | mailercity | cold | referral | manual
     region: leadRegion(l),        // Tampa Bay | Central FL | ... | Out of state | Unknown
+    origin: leadOrigin(l),        // inbound | prospecting — which side of the wall (Benjy 8/7)
     stalled: isStalled(l, now),   // no future clock AND untouched 3+ days
   }));
   return NextResponse.json({ leads });

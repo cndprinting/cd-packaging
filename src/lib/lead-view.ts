@@ -7,7 +7,7 @@
 // client component, and scripts/backfill-geography.ts.
 
 export type LeadMode = "ai" | "needs_you" | "human" | "idle";
-export type LeadType = "google_ad" | "website" | "mailercity" | "cold" | "referral" | "tradeshow" | "linkedin" | "customer" | "manual";
+export type LeadType = "google_ad" | "facebook" | "website" | "mailercity" | "cold" | "referral" | "tradeshow" | "linkedin" | "customer" | "manual";
 
 // The shape we need — kept loose so a Prisma Lead, an API row, or a script row
 // all satisfy it.
@@ -138,12 +138,41 @@ export function leadStage(lead: LeadViewInput): string {
   return "New inquiry";
 }
 
+// Which paid channel sent this inquiry, if we can tell. The website form posts
+// the landing Page URL, so a gclid / fbclid / utm_source rides along with it.
+// Anything with no marker at all is plain "website" — that is genuinely
+// unknown traffic, not a channel.
+function inboundChannel(intakeRaw?: string | null): LeadType {
+  const hay = payloadHay(intakeRaw);
+  if (!hay) return "website";
+  if (GOOGLE_AD_TOKENS.some((t) => hay.includes(t))) return "google_ad";
+  if (META_TOKENS.some((t) => hay.includes(t))) return "facebook";
+  if (LINKEDIN_TOKENS.some((t) => hay.includes(t))) return "linkedin";
+  return "website";
+}
+
+// ── Origin: which side of the wall a lead lives on ──────────────────────────
+//
+// Deliberately NOT the Source dropdown. That label is hand-editable and three
+// cold-sourced names are already wearing inbound labels; splitting the funnel
+// on it would let the two sides bleed into each other over time (Benjy 8/7).
+// This reads how the record ENTERED Godzilla, which a machine stamped on
+// arrival and nobody can change: the website form and the MailerCity feed are
+// inquiries we received, everything else is a name we went and found.
+export type LeadOrigin = "inbound" | "prospecting";
+export function leadOrigin(lead: LeadViewInput): LeadOrigin {
+  const src = (lead.source || "").trim().toLowerCase();
+  return src === "inbound" || src === "mailercity" ? "inbound" : "prospecting";
+}
+
 // ── Type (where the lead came from) ─────────────────────────────────────────
 
-const GOOGLE_AD_TOKENS = ["gclid", "gbraid", "utm_source=google"];
+const GOOGLE_AD_TOKENS = ["gclid", "gbraid", "utm_source=google", "utm_source=adwords"];
+const META_TOKENS = ["fbclid", "utm_source=facebook", "utm_source=fb", "utm_source=instagram", "utm_source=meta", "igshid"];
+const LINKEDIN_TOKENS = ["li_fat_id", "utm_source=linkedin"];
 
-function looksLikeGoogleAd(intakeRaw?: string | null): boolean {
-  if (!intakeRaw) return false;
+function payloadHay(intakeRaw?: string | null): string {
+  if (!intakeRaw) return "";
   let hay = "";
   try {
     const obj = JSON.parse(intakeRaw);
@@ -158,8 +187,7 @@ function looksLikeGoogleAd(intakeRaw?: string | null): boolean {
   } catch {
     hay = intakeRaw; // malformed JSON — fall back to scanning the raw string
   }
-  const h = hay.toLowerCase();
-  return GOOGLE_AD_TOKENS.some((t) => h.includes(t));
+  return hay.toLowerCase();
 }
 
 export function leadType(lead: LeadViewInput): LeadType {
@@ -168,17 +196,18 @@ export function leadType(lead: LeadViewInput): LeadType {
   if (ov && (TYPE_LABELS as Record<string, string>)[ov]) return ov;
   const src = (lead.source || "").toLowerCase();
   if (src === "mailercity") return "mailercity";
-  if (src === "inbound") return looksLikeGoogleAd(lead.intakeRaw) ? "google_ad" : "website";
-  // Referral beats cold — a referred prospect may still have been loaded via
-  // the prospecting list.
-  const notes = (lead.commentary || "").toLowerCase();
-  if (notes.includes("referral") || notes.includes("referred by")) return "referral";
+  if (src === "inbound") return inboundChannel(lead.intakeRaw);
+  // No keyword guessing. This used to return "referral" whenever that word
+  // appeared anywhere in the notes, so writing "ask them for a referral" on a
+  // cold call silently retagged the lead (Benjy 8/7). Referral is now only
+  // ever a deliberate choice, via the Source dropdown above.
   if (src === "prospecting") return "cold";
   return "manual";
 }
 
 export const TYPE_LABELS: Record<LeadType, string> = {
   google_ad: "Google Ad",
+  facebook: "Facebook / Meta",
   website: "Website",
   mailercity: "MailerCity",
   cold: "Cold outreach",
