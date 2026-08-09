@@ -143,6 +143,9 @@ const STAGES = [
   { key: "LOST", label: "Lost", stage: "LOST" },
 ] as const;
 const tabOf = (k: string) => STAGES.find((t) => t.key === k) || STAGES[1];
+// Both lead tabs render the same table. The only difference between them is
+// which records they hold — same columns, same controls, same actions.
+const isLeadTab = (k: string) => k === "INBOUND" || k === "PROSPECTING";
 // Module scope on purpose: the counts/waiting memos above the render use this,
 // and a const arrow declared lower in the component is not yet initialized when
 // they run.
@@ -214,7 +217,7 @@ export default function PipelinePage() {
 
   // Outbound-agent campaign counters (LEAD stage only).
   const outreach = useMemo(() => {
-    const L = leads.filter((l) => l.pipelineStage === "LEAD" && l.origin === "prospecting");
+    const L = leads.filter((l) => inTab(l, active));
     const inSeq = ["intro_sent", "followup_1", "followup_2"];
     return {
       emailed: L.filter((l) => !!l.outreachStatus).length,
@@ -224,7 +227,7 @@ export default function PipelinePage() {
       bounced: L.filter((l) => l.outreachStatus === "bounced").length,
       notContacted: L.filter((l) => !l.outreachStatus && !l.agentHold).length,
     };
-  }, [leads]);
+  }, [leads, active]);
 
   const q = search.trim().toLowerCase();
   const IN_SEQUENCE = ["intro_sent", "followup_1", "followup_2"];
@@ -483,7 +486,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         </div>
       </div>
 
-      {active === "PROSPECTING" && (
+      {isLeadTab(active) && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-gray-400">Outbound agent:</span>
           <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700"><b className="text-gray-900">{outreach.emailed}</b> emailed</span>
@@ -507,8 +510,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
                 <th className="px-3 py-2 font-medium">Owner</th>
                 {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
-                {active === "PROSPECTING" && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
-                {active === "PROSPECTING" && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
+                {isLeadTab(active) && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
+                {isLeadTab(active) && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>}
                 {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
@@ -588,14 +591,14 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       </select>
                     </td>
                   )}
-                  {active === "PROSPECTING" && (
+                  {isLeadTab(active) && (
                     <td className="px-3 py-2 whitespace-nowrap">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
                         : <OutreachIdle l={l} />}
                     </td>
                   )}
-                  {active === "PROSPECTING" && (
+                  {isLeadTab(active) && (
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
@@ -647,7 +650,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {active === "PROSPECTING" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
+                    {isLeadTab(active) && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
                     {active === "QUALIFIED" && <button onClick={() => move(l.id, "LEAD")} className="text-xs text-gray-500 hover:underline mr-3">← Lead</button>}
                     {active === "QUALIFIED" && <button onClick={() => convert(l.id)} className="text-xs text-emerald-700 hover:underline mr-3">Won → customer</button>}
                     {active === "CUSTOMER" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-gray-500 hover:underline mr-3">← Qualified</button>}
