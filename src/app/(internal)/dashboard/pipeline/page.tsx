@@ -143,6 +143,13 @@ const STAGES = [
   { key: "LOST", label: "Lost", stage: "LOST" },
 ] as const;
 const tabOf = (k: string) => STAGES.find((t) => t.key === k) || STAGES[1];
+// Module scope on purpose: the counts/waiting memos above the render use this,
+// and a const arrow declared lower in the component is not yet initialized when
+// they run.
+const inTab = (l: Lead, key: string) => {
+  const t = tabOf(key);
+  return l.pipelineStage === t.stage && (!("origin" in t) || l.origin === (t as any).origin);
+};
 
 const selCls = "h-8 w-full rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-800 focus:border-brand-500 focus:outline-none";
 const priColor = (p: number | null) => p === 1 ? "text-red-600" : p === 2 ? "text-amber-600" : "text-gray-400";
@@ -230,10 +237,6 @@ export default function PipelinePage() {
     l.mode !== "ai" && l.mode !== "needs_you";
   const matchesMode = (l: Lead) => modeF.size === 0 || [...modeF].some((k) =>
     k === "stalled" ? l.stalled : k === "tocall" ? isToCall(l) : l.mode === k);
-  const inTab = (l: Lead, key: string) => {
-    const t = tabOf(key);
-    return l.pipelineStage === t.stage && (!("origin" in t) || l.origin === (t as any).origin);
-  };
   const inStage = useMemo(() => leads.filter((l) => inTab(l, active)), [leads, active]);
   // Downstream tabs keep an origin toggle so the two sides stay measurable all
   // the way to Customer / Lost — the blended hit rate describes neither.
