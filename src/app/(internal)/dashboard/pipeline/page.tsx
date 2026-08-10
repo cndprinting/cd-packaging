@@ -518,7 +518,20 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-sm">
+          <table className="w-full min-w-[1130px] table-fixed text-sm">
+            <colgroup>
+              <col style={{ width: 140 }} /> {/* Company */}
+              <col style={{ width: 124 }} /> {/* Status */}
+              <col style={{ width: 96 }} /> {/* Product */}
+              <col style={{ width: 100 }} /> {/* Sub-status */}
+              <col style={{ width: 64 }} /> {/* Volume */}
+              <col style={{ width: 88 }} /> {/* Owner */}
+              <col style={{ width: 44 }} /> {/* Pri */}
+              <col style={{ width: 114 }} /> {/* Outreach */}
+              <col style={{ width: 116 }} /> {/* Follow-up */}
+              <col style={{ width: 140 }} /> {/* Notes */}
+              <col style={{ width: 104 }} /> {/* Actions */}
+            </colgroup>
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 text-left">
                 <th className="px-2 py-2 font-medium">Company</th>
@@ -527,7 +540,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 <th className="px-2 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
                 <th className="px-2 py-2 font-medium">Volume</th>
                 <th className="px-2 py-2 font-medium">Owner</th>
-                <th className="px-2 py-2 font-medium w-10">Pri</th>
+                <th className="px-2 py-2 font-medium">Pri</th>
                 <th className="px-2 py-2 font-medium" title="Where the outbound agent is in its email sequence, and the switch to keep it away from this lead">Outreach</th>
                 
                 <th className="px-2 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
@@ -552,7 +565,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       </span>
                     </button>
                   </td>
-                  <td className="px-2 py-2 w-[132px]">
+                  <td className="px-2 py-2">
                     <div className="flex flex-col items-start gap-1">
                       <ModeChip l={l} />
                       {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
@@ -576,22 +589,22 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
                     </div>
                   </td>
-                  <td className="px-2 py-2 w-[90px]">
+                  <td className="px-2 py-2">
                     <select className={selCls} value={l.productCategory || ""} onChange={(e) => patch(l.id, "productCategory", e.target.value)}>
                       <option value="">—</option>
                       {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </td>
-                    <td className="px-2 py-2 w-[100px]">
+                    <td className="px-2 py-2">
                       <select className={selCls} value={l.stage || ""} onChange={(e) => patch(l.id, "stage", e.target.value)}>
                         <option value="">—</option>
                         {(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                    <td className="px-2 py-2 w-[62px]">
+                    <td className="px-2 py-2">
                       <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => edit(l.id, "volume", e.target.value)} onBlur={(e) => flush(l.id, "volume", e.target.value)} />
                     </td>
-                  <td className="px-2 py-2 w-[90px]">
+                  <td className="px-2 py-2">
                     <select className={selCls} value={l.ownerName || ""} onChange={(e) => patch(l.id, "ownerName", e.target.value)}>
                       <option value="">—</option>
                       {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -603,7 +616,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
                       </select>
                     </td>
-                    <td className="px-2 py-2 w-[128px]">
+                    <td className="px-2 py-2">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>
                         : <OutreachIdle l={l} />}
@@ -645,17 +658,17 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
                       </span>
                     </td>
-                    <td className="px-2 py-2 w-[168px] align-top">
+                    <td className="px-2 py-2 align-top">
                       {/* Notes are an append-only timeline now, so this is a
                           preview of the LATEST note (open the row to add one)
                           rather than the stale legacy blob. */}
                       {l.lastNote ? (
                         <>
-                          <p className="line-clamp-2 text-xs text-gray-600" title={l.lastNote.body}>{l.lastNote.body}</p>
+                          <p className="line-clamp-2 break-words text-xs text-gray-600" title={l.lastNote.body}>{l.lastNote.body}</p>
                           <span className="text-[11px] text-gray-400">{l.lastNote.authorName} · {fmtShort(l.lastNote.createdAt)}</span>
                         </>
                       ) : (
-                        <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
+                        <p className="line-clamp-2 break-words text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
                       )}
                     </td>
                   <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">
