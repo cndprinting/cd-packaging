@@ -376,6 +376,24 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
     setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentStatus: "closed", mode: "human" as LeadMode } : x));
     await savePut({ id: l.id, agentStatus: "closed" });
   };
+  // Which tab a record currently sits in — so "Move to…" never offers you the
+  // tab you're already on.
+  const tabKeyOf = (l: Lead) => l.pipelineStage === "LEAD" ? (l.origin === "inbound" ? "INBOUND" : "PROSPECTING") : l.pipelineStage;
+  // Moving across the Inbound/Prospecting wall is a deliberate human act, so it
+  // sets originOverride; moving between stages sets pipelineStage. Some moves
+  // do both (Lost -> Inbound reopens the record AND puts it on the inbound side).
+  const moveToTab = async (l: Lead, key: string) => {
+    const t = tabOf(key);
+    const payload: Record<string, unknown> = { id: l.id };
+    if (l.pipelineStage !== t.stage) payload.pipelineStage = t.stage;
+    const wantOrigin = (t as any).origin as LeadOrigin | undefined;
+    if (wantOrigin && l.origin !== wantOrigin) payload.originOverride = wantOrigin;
+    if (Object.keys(payload).length === 1) return;
+    setLeads((p) => p.map((x) => x.id === l.id
+      ? { ...x, pipelineStage: t.stage, ...(wantOrigin ? { origin: wantOrigin } : {}) }
+      : x));
+    await savePut(payload);
+  };
   const convert = async (id: string) => {
     await savePut({ id, convert: true });
     load();
@@ -506,14 +524,14 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 <th className="px-3 py-2 font-medium">Company</th>
                 <th className="px-3 py-2 font-medium" title="Who's driving it, and where it actually stands — in plain English">Status</th>
                 <th className="px-3 py-2 font-medium">Product</th>
-                {active !== "LOST" && active !== "CUSTOMER" && <th className="px-3 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>}
-                {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Volume</th>}
+                <th className="px-3 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
+                <th className="px-3 py-2 font-medium">Volume</th>
                 <th className="px-3 py-2 font-medium">Owner</th>
-                {active !== "CUSTOMER" && active !== "LOST" && <th className="px-3 py-2 font-medium w-14">Pri</th>}
-                {isLeadTab(active) && <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>}
-                {isLeadTab(active) && <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>}
-                {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>}
-                {(active === "CUSTOMER" || active === "LOST") && <th className="px-3 py-2 font-medium">Notes</th>}
+                <th className="px-3 py-2 font-medium w-14">Pri</th>
+                <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>
+                <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
+                <th className="px-3 py-2 font-medium">Notes</th>
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -564,50 +582,39 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </td>
-                  {active !== "LOST" && active !== "CUSTOMER" && (
                     <td className="px-3 py-2 min-w-[140px]">
                       <select className={selCls} value={l.stage || ""} onChange={(e) => patch(l.id, "stage", e.target.value)}>
                         <option value="">—</option>
-                        {(active === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
+                        {(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                  )}
-                  {(active === "QUALIFIED" || active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 min-w-[100px]">
                       <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => edit(l.id, "volume", e.target.value)} onBlur={(e) => flush(l.id, "volume", e.target.value)} />
                     </td>
-                  )}
                   <td className="px-3 py-2 min-w-[110px]">
                     <select className={selCls} value={l.ownerName || ""} onChange={(e) => patch(l.id, "ownerName", e.target.value)}>
                       <option value="">—</option>
                       {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </td>
-                  {active !== "CUSTOMER" && active !== "LOST" && (
                     <td className="px-3 py-2">
                       <select className={`${selCls} font-semibold ${priColor(l.priority)}`} value={l.priority || ""} onChange={(e) => patch(l.id, "priority", e.target.value ? Number(e.target.value) : null)}>
                         <option value="">—</option>
                         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
                       </select>
                     </td>
-                  )}
-                  {isLeadTab(active) && (
                     <td className="px-3 py-2 whitespace-nowrap">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
                         : <OutreachIdle l={l} />}
                     </td>
-                  )}
-                  {isLeadTab(active) && (
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                     </td>
-                  )}
                   {/* Follow-up scheduling, right in the row. Customers get
                       chased for reorders and reprints as much as leads do, and
                       burying the date picker in the expanded panel made it look
                       like the feature didn't exist here (Benjy 8/6). */}
-                  {(active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 whitespace-nowrap align-top">
                       {l.followUpDoneAt ? (
                         <div className="flex items-center gap-1.5">
@@ -633,8 +640,6 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
                       </span>
                     </td>
-                  )}
-                  {(active === "CUSTOMER" || active === "LOST") && (
                     <td className="px-3 py-2 min-w-[200px] align-top">
                       {/* Notes are an append-only timeline now, so this is a
                           preview of the LATEST note (open the row to add one)
@@ -648,23 +653,33 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
                       )}
                     </td>
-                  )}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {isLeadTab(active) && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-brand-600 hover:underline mr-3">Qualify →</button>}
-                    {active === "QUALIFIED" && <button onClick={() => move(l.id, "LEAD")} className="text-xs text-gray-500 hover:underline mr-3">← Lead</button>}
-                    {active === "QUALIFIED" && <button onClick={() => convert(l.id)} className="text-xs text-emerald-700 hover:underline mr-3">Won → customer</button>}
-                    {active === "CUSTOMER" && <button onClick={() => move(l.id, "QUALIFIED")} className="text-xs text-gray-500 hover:underline mr-3">← Qualified</button>}
-                    {active === "CUSTOMER" && (l.companyId
-                      ? <Link href={`/dashboard/customers`} className="text-xs text-brand-600 hover:underline mr-3 inline-flex items-center gap-1"><Link2 className="h-3 w-3" />Customer</Link>
-                      : <button onClick={() => convert(l.id)} className="text-xs text-brand-600 hover:underline mr-3">Link customer</button>)}
-                    {active === "LOST"
-                      ? <button onClick={() => move(l.id, "LEAD")} className="text-xs text-gray-500 hover:underline">Reopen</button>
-                      : <button onClick={() => move(l.id, "LOST")} className="text-xs text-red-500 hover:underline">Lost</button>}
+                    {/* One control that reaches every tab (Benjy 8/7). The old
+                        per-tab buttons meant a record could only move where
+                        that particular screen allowed, so e.g. a prospect that
+                        later filled in the website form had no way to reach
+                        Inbound. */}
+                    <div className="flex items-center justify-end gap-2">
+                      <select
+                        className="h-8 rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-700 hover:bg-gray-50 focus:border-brand-500 focus:outline-none"
+                        value=""
+                        title="Move this record to another tab"
+                        onChange={(e) => { const v = e.target.value; e.currentTarget.value = ""; if (v) moveToTab(l, v); }}
+                      >
+                        <option value="">Move to…</option>
+                        {STAGES.filter((t) => t.key !== tabKeyOf(l)).map((t) => (
+                          <option key={t.key} value={t.key}>{t.label}</option>
+                        ))}
+                      </select>
+                      {l.pipelineStage === "CUSTOMER" && (l.companyId
+                        ? <Link href={`/dashboard/customers`} className="text-xs text-brand-600 hover:underline inline-flex items-center gap-1"><Link2 className="h-3 w-3" />Customer</Link>
+                        : <button onClick={() => convert(l.id)} className="text-xs text-brand-600 hover:underline">Link customer</button>)}
+                    </div>
                   </td>
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={11} className="px-4 py-3">
+                    <td colSpan={12} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
                         {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
@@ -781,7 +796,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={12} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>

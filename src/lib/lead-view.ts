@@ -16,7 +16,8 @@ export type LeadViewInput = {
   agentStatus?: string | null;
   outreachStatus?: string | null;
   pipelineStage?: string | null;
-  leadTypeOverride?: string | null; // human-set source; beats auto-detection
+  leadTypeOverride?: string | null;
+  originOverride?: string | null; // human-set source; beats auto-detection
   stage?: string | null; // the owner's own free-text Sub-status
   source?: string | null;
   intakeRaw?: string | null;
@@ -161,6 +162,11 @@ function inboundChannel(intakeRaw?: string | null): LeadType {
 // inquiries we received, everything else is a name we went and found.
 export type LeadOrigin = "inbound" | "prospecting";
 export function leadOrigin(lead: LeadViewInput): LeadOrigin {
+  // A person moving a record across on purpose beats the arrival stamp — a
+  // prospect who later fills in the website form really is inbound now
+  // (Benjy 8/7). Auto-detection still decides everything nobody has touched.
+  const ov = (lead.originOverride || "").trim().toLowerCase();
+  if (ov === "inbound" || ov === "prospecting") return ov;
   const src = (lead.source || "").trim().toLowerCase();
   return src === "inbound" || src === "mailercity" ? "inbound" : "prospecting";
 }

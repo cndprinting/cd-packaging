@@ -237,6 +237,12 @@ model Lead {
   // Human-set lead source, overriding the auto-detected type (Benjy 8/2).
   // Auto-detection fills the gaps; a person's choice always wins.
   leadTypeOverride String?
+  // Which side of the funnel this record belongs on: "inbound" | "prospecting".
+  // Origin is normally derived from how the record ARRIVED and is not editable,
+  // which is what keeps the two sides from bleeding together. This is the
+  // deliberate exception (Benjy 8/7): a person moving a record across on
+  // purpose, e.g. a prospect who has since filled in the website form.
+  originOverride   String?
   // Pattern-guessed address (Benjy 8/2) — unverified. emailAlternates holds the
   // runner-up patterns so a bounce rotates to the next instead of dead-ending.
   emailGuessed    Boolean   @default(false)
