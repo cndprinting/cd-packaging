@@ -142,6 +142,12 @@ function ClassicEstimatorContent() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<{ quoteNumber: string; id: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Draft autosave (Mary 8/10 lost an unsaved quote). Once the minimum fields
+  // exist, edits quietly persist as a DRAFT so nothing is lost by navigating
+  // away — the same failure the notes and inline-edit autosave already fixed.
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<number | null>(null);
+  const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const set = useCallback(<K extends keyof ClassicForm>(key: K, value: ClassicForm[K]) => {
@@ -485,14 +491,19 @@ function ClassicEstimatorContent() {
   }, [screen]);
 
   // ── Save: POST to the real quotes API (produces a quote in /dashboard/quotes) ──
-  async function saveQuote() {
-    setSaveError(null);
+  async function saveQuote(opts?: { silent?: boolean }) {
+    const silent = opts?.silent === true;
+    if (!silent) setSaveError(null);
     if (!form.customerName || !form.jobTitle || !form.quantity) {
+      // Autosave just waits until the minimum fields exist — no error, no jump.
+      if (silent) return;
       setSaveError("Customer name, job title and quantity are required (Screen 1).");
       setScreen(1);
       return;
     }
-    setSaving(true);
+    // A hand save must win over an in-flight autosave; never run two at once.
+    if (silent) { if (saving || autoSaving) return; setAutoSaving(true); }
+    else setSaving(true);
     try {
       const qty = form.quantity || 1;
       const isDigital = calc.isDigital;
@@ -679,10 +690,12 @@ function ClassicEstimatorContent() {
         setDraftQuoteId(data.quote.id);
         setDraftQuoteNumber(data.quote.quoteNumber);
       }
+      if (silent) { setLastAutoSavedAt(Date.now()); setAutoSaveFailed(false); return; }
       setSaved(savedQuote);
 
       // Started from a quote request → mark it completed so it leaves the
-      // Quote Requests queue (exactly like the wizard).
+      // Quote Requests queue (exactly like the wizard). Autosave must NOT do
+      // this — an in-progress draft shouldn't clear the request queue.
       if (fromRequestId && savedQuote?.id) {
         try {
           await fetch("/api/quote-requests", {
@@ -693,11 +706,31 @@ function ClassicEstimatorContent() {
         } catch { /* non-fatal */ }
       }
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed");
+      // Autosave failures are silent on screen (they retry on the next edit),
+      // but recorded so the indicator can warn if nothing has saved in a while.
+      if (silent) setAutoSaveFailed(true);
+      else setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
-      setSaving(false);
+      if (silent) setAutoSaving(false);
+      else setSaving(false);
     }
   }
+
+  // Keep the latest saveQuote reachable from the debounced effect without
+  // making it an effect dependency (it closes over form/calc every render).
+  const saveQuoteRef = useRef(saveQuote);
+  saveQuoteRef.current = saveQuote;
+
+  // Debounced draft autosave: every edit resets a 2.5s timer; when the user
+  // pauses, the draft persists. Fires only once the required fields exist and
+  // no manual save is mid-flight. Nothing is ever lost to navigating away.
+  useEffect(() => {
+    if (!form.customerName || !form.jobTitle || !form.quantity) return;
+    if (saving) return;
+    const t = setTimeout(() => { saveQuoteRef.current({ silent: true }); }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   // ── Screen bodies ──────────────────────────────────────────────────────
 
@@ -1568,7 +1601,7 @@ function ClassicEstimatorContent() {
           )}
 
           <div className="mt-4 flex items-center gap-3">
-            <Button onClick={saveQuote} disabled={saving} className="bg-amber-500 text-black hover:bg-amber-400">
+            <Button onClick={() => saveQuote()} disabled={saving} className="bg-amber-500 text-black hover:bg-amber-400">
               {saving ? "Saving…" : "Save Quote"}
             </Button>
             {saved && (
@@ -1577,6 +1610,17 @@ function ClassicEstimatorContent() {
               </span>
             )}
             {saveError && <span className="font-mono text-[13px] text-red-400">{saveError}</span>}
+            {/* Draft autosave status — so Mary can see her work is safe without
+                clicking Save (Mary 8/10). */}
+            {!saved && (
+              autoSaveFailed
+                ? <span className="font-mono text-[13px] text-red-400">Autosave failed — click Save Quote</span>
+                : autoSaving
+                  ? <span className="font-mono text-[13px] text-gray-400">Saving draft…</span>
+                  : lastAutoSavedAt
+                    ? <span className="font-mono text-[13px] text-gray-400">Draft saved automatically — in Quotes as a draft</span>
+                    : null
+            )}
           </div>
         </div>
       </div>
