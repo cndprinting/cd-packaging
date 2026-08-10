@@ -192,6 +192,11 @@ function ClassicEstimatorContent() {
             helperHourlyRate: f.helperHourlyRate || Number(s.handBinderyRate) || 22.5,
             // Folder machine rate (E&M #348538 folding line ≈ $48/hr)
             folderRatePerHr: Number(s.folder1Rate) || f.folderRatePerHr,
+            // Saddle stitcher (Mueller) rate + speed from plant standards
+            // (Mary 8/10 — the whole saddle line was missing before).
+            stitchRatePerHr: Number(s.saddleStitch1Rate) || f.stitchRatePerHr,
+            stitchSpeed: Number(s.saddleStitch1Speed) || f.stitchSpeed,
+            stitchHelpRatePerHr: Number(s.handBinderyRate) || f.stitchHelpRatePerHr,
           }));
         }
       })
@@ -1195,7 +1200,18 @@ function ClassicEstimatorContent() {
               <select
                 className={inputCls + " w-[220px]"}
                 value={pv("binderyOperation")}
-                onChange={(e) => setP("binderyOperation", parseInt(e.target.value))}
+                onChange={(e) => {
+                  // Picking the operation now PREFILLS its line, so it stops
+                  // being cosmetic — before, choosing "Saddle" added nothing
+                  // (Mary 8/10). Only fills setup when the line is still empty,
+                  // so it never clobbers hours Mary has already typed.
+                  const op = parseInt(e.target.value);
+                  const patch: Partial<ClassicPart> = { binderyOperation: op };
+                  const stitchOp = op === 2 || op === 4 || op === 5; // Saddle / Perfect / Multibind
+                  if (stitchOp && !pv("stitchSetupHrs") && !pv("stitchRunHrs")) patch.stitchSetupHrs = 0.5;
+                  if (op === 3 && !pv("foldSetupHrs") && !pv("foldRunHrs")) patch.foldSetupHrs = 0.4;
+                  patchP(patch);
+                }}
               >
                 {BINDERY_OPERATIONS.map((op, i) => (
                   <option key={op} value={i + 1}>{op}</option>
@@ -1223,6 +1239,19 @@ function ClassicEstimatorContent() {
             <Row label="Fold Run Hrs"><Num value={pv("foldRunHrs")} onChange={(v) => setP("foldRunHrs", v)} /></Row>
             <Row label="Folder Rate $/Hr"><Num value={pv("folderRatePerHr")} onChange={(v) => setP("folderRatePerHr", v)} /></Row>
             <Readout label="Fold Labor" value={`${pcalc.foldHrs.toFixed(2)} hrs / ${money(pcalc.foldLabor)}`} />
+            {/* Saddle stitching (Mueller) — the line Mary asked for (8/10).
+                Run auto-computes from the finished count ÷ stitcher speed; a
+                typed Run value overrides. Prefills when Operation Type =
+                Saddle / Perfect / Multibind. */}
+            <SectionTitle>Saddle Stitch</SectionTitle>
+            <Row label="Stitch Setup Hrs"><Num value={pv("stitchSetupHrs")} onChange={(v) => setP("stitchSetupHrs", v)} /></Row>
+            <Row label="Stitcher Speed (bk/hr)"><Num value={pv("stitchSpeed")} onChange={(v) => setP("stitchSpeed", v)} step={500} /></Row>
+            <Row label="Stitch Run Hrs (0 = Auto)"><Num value={pv("stitchRunHrs")} onChange={(v) => setP("stitchRunHrs", v)} /></Row>
+            <Readout label="Stitch Run Used" value={hrs(pcalc.stitchRunUsed)} />
+            <Row label="Stitch Help Hrs"><Num value={pv("stitchHelpHrs")} onChange={(v) => setP("stitchHelpHrs", v)} /></Row>
+            <Row label="Stitcher Rate $/Hr"><Num value={pv("stitchRatePerHr")} onChange={(v) => setP("stitchRatePerHr", v)} /></Row>
+            <Row label="Stitch Help Rate $/Hr"><Num value={pv("stitchHelpRatePerHr")} onChange={(v) => setP("stitchHelpRatePerHr", v)} /></Row>
+            <Readout label="Stitch Labor" value={`${pcalc.stitchHrs.toFixed(2)} hrs / ${money(pcalc.stitchLabor)}`} />
             <Row label="Bindery Rate $/Hr"><Num value={pv("binderyHourlyRate")} onChange={(v) => setP("binderyHourlyRate", v)} /></Row>
             {dieCuttingSection()}
           </div>
@@ -1449,7 +1478,7 @@ function ClassicEstimatorContent() {
                   hours={calc.pressHrs} cost={calc.pressCost} markup={`${form.markupLaborPct}%`} selling={calc.pressSelling} />
               )}
               <CostRow section="LABOR (BINDERY)"
-                detail={`Cut ${calc.cutterHrs.toFixed(2)} / Trim ${form.trimHrs.toFixed(2)} / Fold ${calc.foldHrs.toFixed(2)} / Drill ${calc.drillHrs.toFixed(2)} / Hand ${(calc.handOp1Hrs + calc.handOp2Hrs).toFixed(2)} / Pack ${form.packHrs.toFixed(2)}`}
+                detail={`Cut ${calc.cutterHrs.toFixed(2)} / Trim ${form.trimHrs.toFixed(2)} / Fold ${calc.foldHrs.toFixed(2)} / Stitch ${calc.stitchHrs.toFixed(2)} / Drill ${calc.drillHrs.toFixed(2)} / Hand ${(calc.handOp1Hrs + calc.handOp2Hrs).toFixed(2)} / Pack ${form.packHrs.toFixed(2)}`}
                 hours={calc.binderyHrs} cost={calc.binderyCost} markup={`${form.markupLaborPct}%`} selling={calc.binderySelling} />
               <CostRow section="OUTSIDE"
                 detail={`${form.outsidePurchases.length} item(s)${calc.isDigital ? ` + ${calc.digitalClickSheets} clicks @ $${calc.digitalClickRate.toFixed(4)}${form.digitalVariableData ? " +VD" : ""} = ${money(calc.digitalClickCost + calc.digitalVDCost + calc.digitalVDSetupCost)}` : ""}`}

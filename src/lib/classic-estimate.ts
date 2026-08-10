@@ -137,6 +137,7 @@ export const PART_FIELD_KEYS = [
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "foldSetupHrs", "foldRunHrs", "folderRatePerHr",
+  "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
   "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs", "bundleRatePerHr",
@@ -292,6 +293,17 @@ export interface ClassicForm {
   foldSetupHrs: number;
   foldRunHrs: number;
   folderRatePerHr: number; // prefills PlantStandard.folder1Rate ($48)
+  // Saddle stitching as its own machine line (E&M #348975: Saddlebind Setup
+  // 0.5hr @ $95 + Mueller run + Help). Missing entirely before — selecting
+  // "Saddle" as the operation did nothing (Mary 8/10). Auto run = books ÷
+  // stitcher speed; a typed Run value (0 = auto) overrides. Help runs at the
+  // hand-bindery rate.
+  stitchSetupHrs: number;    // prefill 0.5 (E&M setup)
+  stitchRunHrs: number;      // 0 = auto from qty / stitchSpeed
+  stitchHelpHrs: number;
+  stitchSpeed: number;       // books/hr, prefills PlantStandard.saddleStitch1Speed (8000)
+  stitchRatePerHr: number;   // prefills PlantStandard.saddleStitch1Rate ($95)
+  stitchHelpRatePerHr: number; // prefills handBinderyRate ($22.50)
   handOp1: HandOp;
   handOp2: HandOp;
   cartons: number;
@@ -370,6 +382,8 @@ export function defaultClassicForm(): ClassicForm {
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
+    stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
+    stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 22.5,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
@@ -420,6 +434,9 @@ export interface PartCalc {
   plateMaterialsCost: number; // platesUsed × plateCostEach → MATERIAL bucket
   foldHrs: number;            // fold setup + run hours
   foldLabor: number;          // fold hrs × folder rate → bindery labor
+  stitchRunUsed: number;      // saddle-stitch run hours actually used (auto or typed)
+  stitchHrs: number;          // stitch setup + run + help hours
+  stitchLabor: number;        // stitch labor → bindery labor
   pressLaborCost: number;     // HOURS × rates only (ink/coating are MATERIAL now)
   pressMaterialsCost: number; // die cost
   pressCost: number;
@@ -631,10 +648,27 @@ function computePart(
   // 0.6 setup + 1.4 run @ ~$48 = 30.00 + 67.25).
   const foldHrs = (p.foldSetupHrs || 0) + (p.foldRunHrs || 0);
   const foldLabor = foldHrs * (p.folderRatePerHr || 0);
+  // Saddle stitching (Mueller) as its own machine line — E&M #348975 charges
+  // Setup + Mueller run + Help. Run auto-computes from the finished piece
+  // count and the stitcher speed; a typed Run value overrides. Setup + run at
+  // the stitcher rate ($95), help at the hand-bindery rate. Missing before, so
+  // picking "Saddle" as the operation added nothing (Mary 8/10).
+  // Stitch is only "on" when the operation actually stitches (Saddle / Perfect
+  // / Multibind) OR Mary has typed any stitch hours. Otherwise a flat job would
+  // silently pick up auto run hours from qty ÷ speed and be charged phantom
+  // stitch labor.
+  const stitchActive = [2, 4, 5].includes(p.binderyOperation)
+    || (p.stitchSetupHrs || 0) > 0 || (p.stitchRunHrs || 0) > 0 || (p.stitchHelpHrs || 0) > 0;
+  const stitchRunAuto = (p.stitchSpeed || 0) > 0 ? qty / p.stitchSpeed : 0;
+  const stitchRunUsed = !stitchActive ? 0 : ((p.stitchRunHrs || 0) > 0 ? p.stitchRunHrs : stitchRunAuto);
+  const stitchMachineHrs = stitchActive ? (p.stitchSetupHrs || 0) + stitchRunUsed : 0;
+  const stitchHelpHrs = stitchActive ? (p.stitchHelpHrs || 0) : 0;
+  const stitchHrs = stitchMachineHrs + stitchHelpHrs;
+  const stitchLabor = stitchMachineHrs * (p.stitchRatePerHr || 0) + stitchHelpHrs * (p.stitchHelpRatePerHr || 0);
   const binderyRateHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
     + bandHrsUsed + padHrsUsed + wrapHrsUsed;
-  const binderyHrs = binderyRateHrs + foldHrs;
-  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor;
+  const binderyHrs = binderyRateHrs + foldHrs + stitchHrs;
+  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor + stitchLabor;
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
   // Cartons auto-compute from paper weight at Mary's rule: no carton over
@@ -650,7 +684,7 @@ function computePart(
     pressSheets, mrWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
-    plateMaterialsCost, foldHrs, foldLabor,
+    plateMaterialsCost, foldHrs, foldLabor, stitchRunUsed, stitchHrs, stitchLabor,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
@@ -722,6 +756,9 @@ export interface ClassicCalc {
   handOp2Hrs: number;
   foldHrs: number;
   foldLabor: number;
+  stitchRunUsed: number;
+  stitchHrs: number;
+  stitchLabor: number;
   binderyHrs: number;
   binderyLabor: number;
   cartonSkidCost: number;
@@ -894,6 +931,9 @@ export function computeClassic(
     handOp2Hrs: sum((c) => c.handOp2Hrs),
     foldHrs: sum((c) => c.foldHrs),
     foldLabor: sum((c) => c.foldLabor),
+    stitchRunUsed: sum((c) => c.stitchRunUsed),
+    stitchHrs: sum((c) => c.stitchHrs),
+    stitchLabor: sum((c) => c.stitchLabor),
     binderyHrs: sum((c) => c.binderyHrs),
     binderyLabor, cartonSkidCost, binderyCost, binderySelling,
     outsideCost, outsideSelling,
