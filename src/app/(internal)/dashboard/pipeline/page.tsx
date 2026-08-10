@@ -518,28 +518,28 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[1120px] text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 text-left">
-                <th className="px-3 py-2 font-medium">Company</th>
-                <th className="px-3 py-2 font-medium" title="Who's driving it, and where it actually stands — in plain English">Status</th>
-                <th className="px-3 py-2 font-medium">Product</th>
-                <th className="px-3 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
-                <th className="px-3 py-2 font-medium">Volume</th>
-                <th className="px-3 py-2 font-medium">Owner</th>
-                <th className="px-3 py-2 font-medium w-14">Pri</th>
-                <th className="px-3 py-2 font-medium" title="Where the outbound agent is in its email sequence for this lead">Outreach</th>
-                <th className="px-3 py-2 font-medium text-center w-24" title="Check to stop the outbound agent from emailing this lead">Agent Skips</th>
-                <th className="px-3 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
-                <th className="px-3 py-2 font-medium">Notes</th>
-                <th className="px-3 py-2 font-medium text-right">Actions</th>
+                <th className="px-2 py-2 font-medium">Company</th>
+                <th className="px-2 py-2 font-medium" title="Who's driving it, and where it actually stands — in plain English">Status</th>
+                <th className="px-2 py-2 font-medium">Product</th>
+                <th className="px-2 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
+                <th className="px-2 py-2 font-medium">Volume</th>
+                <th className="px-2 py-2 font-medium">Owner</th>
+                <th className="px-2 py-2 font-medium w-10">Pri</th>
+                <th className="px-2 py-2 font-medium" title="Where the outbound agent is in its email sequence, and the switch to keep it away from this lead">Outreach</th>
+                
+                <th className="px-2 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
+                <th className="px-2 py-2 font-medium">Notes</th>
+                <th className="sticky right-0 z-20 bg-gray-50 px-3 py-2 font-medium text-right shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {visible.map((l) => (
                 <Fragment key={l.id}>
                 <tr className="border-t border-gray-100 align-middle">
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2">
                     <button onClick={() => setExpanded(expanded === l.id ? null : l.id)} className="flex items-center gap-1.5 text-left group">
                       <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expanded === l.id ? "rotate-90" : ""}`} />
                       <span>
@@ -552,7 +552,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       </span>
                     </button>
                   </td>
-                  <td className="px-3 py-2 min-w-[150px]">
+                  <td className="px-2 py-2 w-[132px]">
                     <div className="flex flex-col items-start gap-1">
                       <ModeChip l={l} />
                       {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
@@ -576,46 +576,51 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
                     </div>
                   </td>
-                  <td className="px-3 py-2 min-w-[130px]">
+                  <td className="px-2 py-2 w-[90px]">
                     <select className={selCls} value={l.productCategory || ""} onChange={(e) => patch(l.id, "productCategory", e.target.value)}>
                       <option value="">—</option>
                       {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </td>
-                    <td className="px-3 py-2 min-w-[140px]">
+                    <td className="px-2 py-2 w-[100px]">
                       <select className={selCls} value={l.stage || ""} onChange={(e) => patch(l.id, "stage", e.target.value)}>
                         <option value="">—</option>
                         {(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-2 min-w-[100px]">
+                    <td className="px-2 py-2 w-[62px]">
                       <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => edit(l.id, "volume", e.target.value)} onBlur={(e) => flush(l.id, "volume", e.target.value)} />
                     </td>
-                  <td className="px-3 py-2 min-w-[110px]">
+                  <td className="px-2 py-2 w-[90px]">
                     <select className={selCls} value={l.ownerName || ""} onChange={(e) => patch(l.id, "ownerName", e.target.value)}>
                       <option value="">—</option>
                       {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2">
                       <select className={`${selCls} font-semibold ${priColor(l.priority)}`} value={l.priority || ""} onChange={(e) => patch(l.id, "priority", e.target.value ? Number(e.target.value) : null)}>
                         <option value="">—</option>
                         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-2 py-2 w-[128px]">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
-                        ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}{l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus) ? <span className="ml-1 opacity-70">· next {fmtShort(l.outreachNextAt)}</span> : null}</span>
+                        ? <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>
                         : <OutreachIdle l={l} />}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <input type="checkbox" title="Don't email (agent) — check to keep the outbound agent away from this lead" checked={!!l.agentHold} onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
+                      {l.outreachNextAt && ["intro_sent", "followup_1", "followup_2"].includes(l.outreachStatus || "") && (
+                        <span className="block text-[10px] text-gray-400">next {fmtShort(l.outreachNextAt)}</span>
+                      )}
+                      <label className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400" title="Don't email (agent) — check to keep the outbound agent away from this lead">
+                        <input type="checkbox" className="h-3 w-3" checked={!!l.agentHold}
+                          onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
+                        agent skip
+                      </label>
                     </td>
                   {/* Follow-up scheduling, right in the row. Customers get
                       chased for reorders and reprints as much as leads do, and
                       burying the date picker in the expanded panel made it look
                       like the feature didn't exist here (Benjy 8/6). */}
-                    <td className="px-3 py-2 whitespace-nowrap align-top">
+                    <td className="px-2 py-2 whitespace-nowrap align-top">
                       {l.followUpDoneAt ? (
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] text-green-700">Done {fmtShort(l.followUpDoneAt)}</span>
@@ -623,7 +628,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <Input type="date" className="h-8 w-[8.5rem] text-xs"
+                          <Input type="date" className="h-8 w-[6.6rem] text-xs"
                             value={l.followUpAt ? l.followUpAt.slice(0, 10) : ""}
                             onChange={(e) => patch(l.id, "followUpAt", e.target.value || null)}
                             title="Emails the owner every morning until marked done" />
@@ -640,7 +645,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-2 min-w-[200px] align-top">
+                    <td className="px-2 py-2 w-[168px] align-top">
                       {/* Notes are an append-only timeline now, so this is a
                           preview of the LATEST note (open the row to add one)
                           rather than the stale legacy blob. */}
@@ -653,7 +658,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <p className="truncate text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
                       )}
                     </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">
                     {/* One control that reaches every tab (Benjy 8/7). The old
                         per-tab buttons meant a record could only move where
                         that particular screen allowed, so e.g. a prospect that
@@ -661,7 +666,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         Inbound. */}
                     <div className="flex items-center justify-end gap-2">
                       <select
-                        className="h-8 rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-700 hover:bg-gray-50 focus:border-brand-500 focus:outline-none"
+                        className="h-8 w-[80px] rounded-md border border-gray-300 bg-white px-1 text-xs text-gray-700 hover:bg-gray-50 focus:border-brand-500 focus:outline-none"
                         value=""
                         title="Move this record to another tab"
                         onChange={(e) => { const v = e.target.value; e.currentTarget.value = ""; if (v) moveToTab(l, v); }}
@@ -679,7 +684,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={12} className="px-4 py-3">
+                    <td colSpan={11} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
                         {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
@@ -796,7 +801,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={12} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>
