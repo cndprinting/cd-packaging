@@ -1,5 +1,31 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { checkBlocked, isTestSubmission } from "@/lib/agent/blocklist";
+import { sendEmail } from "@/lib/email/graph-client";
+
+// Last-resort safety net (Benjy 8/11 — a real lead, Louis Hunt / LOUIS DELL LLC,
+// silently vanished when the DB was over its Neon transfer cap and the intake
+// write failed). If we ever CAN'T save an inbound lead, email the owners the
+// raw form payload so it lands somewhere a human sees it and can key it in by
+// hand — nothing inbound is ever lost silently again. Uses Graph mail directly,
+// no DB, so it works even when the database is the thing that's down.
+const DROP_ALERT_TO = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
+async function alertDroppedLead(flat: Record<string, string>, reason: string) {
+  try {
+    const rows = Object.entries(flat)
+      .map(([k, v]) => `<tr><td style="padding:2px 10px 2px 0;color:#666;">${k}</td><td style="padding:2px 0;">${String(v).replace(/</g, "&lt;")}</td></tr>`)
+      .join("");
+    await sendEmail({
+      from: "bwaxman@cndprinting.com",
+      to: DROP_ALERT_TO,
+      subject: "⚠ Website lead could NOT be saved — key it in by hand",
+      body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;">
+        <p>A submission came in through the website form but Godzilla <strong>could not save it</strong> (${reason}). The full form is below so it isn't lost — add it to the pipeline manually, or send it to Claude to add.</p>
+        <table style="border-collapse:collapse;font-size:13px;margin-top:8px;">${rows}</table>
+        <p style="color:#aaa;font-size:11px;margin-top:16px;">Automated safety net from Godzilla intake.</p>
+      </div>`,
+    });
+  } catch (e) { console.error("[Godzilla INTAKE] drop-alert email failed", e); }
+}
 
 // The website's Elementor webhook times out at ~5s. Give the background work
 // (Claude analysis + agent emails) room to finish after we've already replied.
@@ -59,10 +85,11 @@ export async function POST(req: NextRequest) {
   const flat = await readFlat(req);
 
   after(async () => {
+   let leadSaved = false; // so the catch only alerts when the lead never landed
    try {
   const prismaModule = await import("@/lib/prisma");
   const prisma = prismaModule.default;
-  if (!prisma) { console.error("[Godzilla INTAKE] database unavailable — payload:", JSON.stringify(flat)); return; }
+  if (!prisma) { console.error("[Godzilla INTAKE] database unavailable — payload:", JSON.stringify(flat)); await alertDroppedLead(flat, "database unavailable"); return; }
 
   const entries = Object.entries(flat);
 
@@ -212,6 +239,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  leadSaved = true; // the lead is safely in the DB; any later failure is non-fatal
   // eslint-disable-next-line no-console
   console.log("[Godzilla INTAKE] new lead", lead.id, company, productCategory);
 
@@ -276,7 +304,12 @@ export async function POST(req: NextRequest) {
       if (artworkMissing && email) await requestArtwork(prisma, named); // ask artwork in parallel
     }
   } catch (e) { console.error("[Godzilla INTAKE] agent kickoff failed", e); }
-   } catch (e) { console.error("[Godzilla INTAKE] background processing failed", e); }
+   } catch (e) {
+     console.error("[Godzilla INTAKE] background processing failed", e);
+     // Only alert if the lead never landed. A failure AFTER the save (e.g. the
+     // agent kickoff) means the lead is safe — no need to cry wolf (Benjy 8/11).
+     if (!leadSaved) await alertDroppedLead(flat, `processing error: ${e instanceof Error ? e.message : "unknown"}`);
+   }
   });
 
   // Instant 200 so the website form never shows a false "submission failed".
