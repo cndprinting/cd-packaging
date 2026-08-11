@@ -15,7 +15,7 @@ type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
-  ownerName: string | null; volume: string | null; numbers: string | null; commentary: string | null; companyId: string | null; agentHold: boolean;
+  ownerName: string | null; volume: string | null; numbers: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
   outreachStatus: string | null; outreachNextAt: string | null; outreachTo: string | null; outreachEmailed: string | null; outreachLog: string | null;
   agentStatus: string | null;
@@ -258,7 +258,7 @@ export default function PipelinePage() {
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
-    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.commentary || ""}`.toLowerCase().includes(q));
+    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q));
 
   // Counts shown on the chips — scoped to the active pipeline stage so the
   // numbers match what you're looking at.
@@ -668,7 +668,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           <span className="text-[11px] text-gray-400">{l.lastNote.authorName} · {fmtShort(l.lastNote.createdAt)}</span>
                         </>
                       ) : (
-                        <p className="line-clamp-2 break-words text-xs text-gray-500" title={l.commentary || ""}>{l.commentary || "—"}</p>
+                        <p className="text-xs text-gray-400">No notes yet</p>
                       )}
                     </td>
                   <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">

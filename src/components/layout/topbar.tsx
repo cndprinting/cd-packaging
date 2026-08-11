@@ -42,9 +42,15 @@ export function Topbar({ userName = "User", userEmail, companyName = "C&D Packag
   }, []);
   React.useEffect(() => {
     loadNotifs();
-    // Someone tagging you is only useful if it shows up while you're working.
-    const t = setInterval(loadNotifs, 60000);
-    return () => clearInterval(t);
+    // Poll every 3 minutes, and pause entirely when the tab is hidden — a
+    // mention doesn't need minute-fresh delivery, and 60s polling on every
+    // open tab was a top Neon-egress burner (Benjy 8/11). Refreshes
+    // immediately when the tab is refocused so it still feels live.
+    const tick = () => { if (!document.hidden) loadNotifs(); };
+    const t = setInterval(tick, 180000);
+    const onFocus = () => tick();
+    document.addEventListener("visibilitychange", onFocus);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onFocus); };
   }, [loadNotifs]);
   const markAllRead = async () => {
     setUnread(0);

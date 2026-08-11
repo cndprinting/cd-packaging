@@ -38,11 +38,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ leads, companies, quotes });
   }
 
+  // Explicit column list to cut Neon egress (Benjy 8/11 — the free-tier 5 GB
+  // transfer cap was blown). The full row was ~2.8 KB each × 357 leads ≈ 1 MB
+  // per pipeline load, and it reloads often. commentary alone was 303 KB and
+  // is no longer read: the view doesn't use it and the UI shows the note
+  // timeline instead. Dropping commentary + the agent-internal blobs
+  // (emailAlternates, agentDraft, agentQuote, conv ids, tokens) takes the
+  // payload down ~75%. intakeRaw is selected only because the lead-type
+  // derivation needs it, then stripped from the response below.
   const rows = await prisma.lead.findMany({
     orderBy: [{ priority: "asc" }, { lastInteraction: "desc" }],
-    // Newest note rides along so the row can preview the CURRENT note instead
-    // of the legacy commentary blob (Benjy 8/6).
-    include: { notes: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, authorName: true, createdAt: true } } },
+    select: {
+      id: true, companyName: true, endMarket: true, productCategory: true, website: true,
+      city: true, state: true, contactName: true, contactTitle: true, contactEmail: true,
+      contactName2: true, contactEmail2: true, contactPhone: true, lastInteraction: true,
+      priority: true, stage: true, pipelineStage: true, ownerName: true, volume: true, numbers: true,
+      companyId: true, agentHold: true, followUpAt: true, followUpNote: true, followUpDoneAt: true,
+      outreachStatus: true, outreachNextAt: true, outreachTo: true, outreachEmailed: true, outreachLog: true,
+      agentStatus: true, agentNextAt: true, leadTypeOverride: true, originOverride: true,
+      source: true, intakeRaw: true, updatedAt: true,
+      // Newest note rides along so the row previews the current note.
+      notes: { orderBy: { createdAt: "desc" as const }, take: 1, select: { body: true, authorName: true, createdAt: true } },
+    },
   });
   // Presentation layer computed SERVER-SIDE (Benjy 8/2) so the UI never has to
   // re-derive it and every screen agrees. See src/lib/lead-view.ts.
@@ -50,8 +67,9 @@ export async function GET(request: NextRequest) {
   const leads = rows.map((l) => ({
     ...l,
     notes: undefined,
+    intakeRaw: undefined, // used above for type derivation; never sent to the client
     lastNote: l.notes?.[0]
-      ? { body: l.notes[0].body, authorName: l.notes[0].authorName, createdAt: l.notes[0].createdAt }
+      ? { body: (l.notes[0].body || "").slice(0, 280), authorName: l.notes[0].authorName, createdAt: l.notes[0].createdAt }
       : null,
     mode: leadMode(l),            // ai | needs_you | human | idle
     stageLabel: leadStage(l),     // plain-English stage
