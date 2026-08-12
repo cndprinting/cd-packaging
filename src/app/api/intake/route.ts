@@ -65,6 +65,40 @@ async function readFlat(req: NextRequest): Promise<Record<string, string>> {
       for (const [k, v] of fd.entries()) put(k, typeof v === "string" ? v : (v as any).name);
     }
   } catch { /* ignore — return whatever we got */ }
+
+  // Elementor's current webhook sends a STRUCTURED payload, not flat fields:
+  //   fields[<id>][title] = "Company Name"   fields[<id>][value] = "SlashPie"
+  //   meta[page_url][title] = "Page URL"     meta[page_url][value] = "https://…"
+  // The old parser only knew the flat `form_fields[<id>]` shape, so on the real
+  // form it read the field IDs ("name", "email") instead of the values — every
+  // lead came in as garbage (company "name", email "email") and got deduped
+  // away. That's why real leads silently vanished (Habib/Benjy 8/12). Rebuild
+  // clean {label: value} pairs from the title/value halves so the field-finders
+  // below match on the human labels.
+  const titles: Record<string, string> = {};
+  const values: Record<string, string> = {};
+  let sawStructured = false;
+  for (const [k, v] of Object.entries(flat)) {
+    const m = k.match(/^(?:fields|meta)\[([^\]]+)\]\[(title|value|raw_value)\]$/);
+    if (!m) continue;
+    sawStructured = true;
+    const [, id, part] = m;
+    if (part === "title") titles[id] = v;
+    else if (part === "value" || (part === "raw_value" && !values[id])) values[id] = v;
+  }
+  if (sawStructured) {
+    // Drop the raw structured keys once consumed, otherwise `fields[email][id]`
+    // ("email") still matches the field-finders BEFORE the clean "Email" label
+    // and hands back the field id instead of the value.
+    for (const k of Object.keys(flat)) {
+      if (/^(?:fields|meta|form)\[/.test(k)) delete flat[k];
+    }
+    for (const id of Object.keys(titles)) {
+      const label = titles[id];
+      const val = values[id];
+      if (label && val && val.trim()) flat[label] = val.trim(); // e.g. flat["Company Name"] = "SlashPie"
+    }
+  }
   return flat;
 }
 
