@@ -13,9 +13,14 @@ export const MARY = "mbitting@cndprinting.com";
 // replies in agent threads are read like Mary's (Benjy 7/23, St.Agave freight).
 export const SHAYLA = "ssmith@cndprinting.com";
 export const OWNERS = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com"];
+// Simon (Shimmie) Jacoby — copied on ALL of Jessica's flows so he stays in the
+// loop (Benjy 8/12): owner alerts, Mary handoffs, and customer emails. Kept in
+// a CC-only list rather than OWNERS on purpose, so he sees everything but does
+// NOT gain quote-approval authority (the reply-to-approve gate checks OWNERS).
+export const AGENT_COPY = ["sjacoby@cndprinting.com"];
 // Thread CCs on Jessica's customer/Mary emails — Nitay asked off these
 // (Benjy 7/20); he stays on OWNERS for internal alerts and digests.
-export const THREAD_CC = ["bwaxman@cndprinting.com", "awaxman@cndprinting.com"];
+export const THREAD_CC = ["bwaxman@cndprinting.com", "awaxman@cndprinting.com", ...AGENT_COPY];
 // Customer-facing identity — driven by identity.ts (Albert today, Jessica once
 // AGENT_SENDER_EMAIL/NAME are set). Per-lead threads stick to the mailbox they
 // started in via leadMailbox().
@@ -137,14 +142,21 @@ export function isAutoReply(subject?: string | null, body?: string | null): bool
 export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
   const subject = noEmDash(opts.subject);
   const body = noEmDash(opts.body);
+  // Simon is copied on every agent notification (owner alerts, approvals,
+  // digests) — merged in here so no individual call site has to remember.
+  // Never CC someone who is already a direct recipient.
+  const toList = Array.isArray(opts.to) ? opts.to : [opts.to];
+  const ccIn = opts.cc ? (Array.isArray(opts.cc) ? opts.cc : [opts.cc]) : [];
+  const toLower = new Set(toList.map((e) => e.toLowerCase()));
+  const cc = [...new Set([...ccIn, ...AGENT_COPY])].filter((e) => !toLower.has(e.toLowerCase()));
   const test = process.env.AGENT_TEST_TO;
   if (test) {
     // AGENT_TEST_TO may be a comma-separated list so several owners can watch a dry run.
     const testTo = test.split(",").map((s) => s.trim()).filter(Boolean);
-    const realTo = (Array.isArray(opts.to) ? opts.to.join(", ") : opts.to) + (opts.cc ? `, cc ${Array.isArray(opts.cc) ? opts.cc.join(", ") : opts.cc}` : "");
+    const realTo = toList.join(", ") + (cc.length ? `, cc ${cc.join(", ")}` : "");
     return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${subject}`, body: body + `<p style="color:#bbb;font-size:11px;">[Test mode - in production this would go to: ${realTo}]</p>` });
   }
-  return sendEmail({ from: SENDER, to: opts.to, cc: opts.cc, subject, body });
+  return sendEmail({ from: SENDER, to: opts.to, cc: cc.length ? cc : undefined, subject, body });
 }
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
