@@ -291,7 +291,18 @@ export default function PipelinePage() {
       try {
         const res = await fetch("/api/leads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (res.ok) return true;
-      } catch { /* retry */ }
+        // A 400 is a VALIDATION rejection, not a server failure — the value the
+        // user typed is bad (e.g. a half-finished URL saved mid-type). Show the
+        // problem inline on that field and STOP: do NOT retry, do NOT reload,
+        // do NOT wipe their edit with a scary popup (Benjy 8/12 — this was
+        // eating edits all day). The bad value stays in the box to be fixed.
+        if (res.status === 400) {
+          const d = await res.json().catch(() => ({}));
+          const id = payload.id as string | undefined;
+          if (id && d.field) setFieldErr((p) => ({ ...p, [`${id}:${d.field}`]: (d.error || "Invalid value").replace(/^[^:]+:\s*/, "") }));
+          return false;
+        }
+      } catch { /* network error — retry */ }
       await new Promise((r) => setTimeout(r, 800));
     }
     alert("That change did NOT save (server hiccup). The page will refresh - please re-enter it.");
@@ -713,7 +724,14 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                               value={(l as any)[f] || ""}
                               onChange={(e) => {
                                 const v = e.target.value;
-                                if (checked) setFieldErr((p) => ({ ...p, [`${l.id}:${f}`]: validateField(f as FieldName, v) || "" }));
+                                if (checked) {
+                                  const msg = validateField(f as FieldName, v);
+                                  setFieldErr((p) => ({ ...p, [`${l.id}:${f}`]: msg || "" }));
+                                  // Invalid (usually mid-type) → update the box but do NOT
+                                  // schedule a save; a half-typed URL/email must never be
+                                  // committed and bounced back as a failure (Benjy 8/12).
+                                  if (msg) { setLocal(l.id, f, v); cancelPending(l.id, f); return; }
+                                }
                                 edit(l.id, f, v);
                               }}
                               onBlur={(e) => {
