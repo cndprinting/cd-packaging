@@ -15,12 +15,29 @@ const BASE = "https://packaging.cndprinting.com";
 
 // Loose company match: Mary may title her quote "Mid-Pacific Flyer pricing"
 // rather than the full lead name, so match on a distinctive word too.
-const COMPANY_STOP = new Set(["club", "llc", "inc", "corp", "co", "the", "company", "ltd", "group", "and"]);
+// Entity suffixes AND generic commerce/quote words. The latter matter a LOT:
+// Mary's quote subjects are literally "Pricing attached: X" / "Quotes 10K
+// units", and a lead with a junk name like "Quote - 1,000 pieces" (from the old
+// broken form parser) would otherwise match on the word "quote" or "pieces" and
+// get a DIFFERENT customer's quote stapled to it (Benjy 8/13 — clientdesks got
+// Skin Science Labs' pricing). None of these words identify a company.
+const COMPANY_STOP = new Set([
+  "club", "llc", "inc", "corp", "co", "the", "company", "ltd", "group", "and", "usa", "corporation", "incorporated",
+  "quote", "quotes", "quoted", "pricing", "price", "prices", "priced", "estimate", "estimates",
+  "piece", "pieces", "unit", "units", "quantity", "qty", "order", "orders", "job", "jobs",
+  "print", "printing", "printed", "packaging", "package", "product", "products", "sample", "samples",
+  "reprint", "proof", "proofs", "attached", "shipping", "included", "freight", "new", "your", "for", "with",
+]);
 function companyMatches(name: string | null, subjectLc: string): boolean {
   if (!name) return false;
-  const n = name.toLowerCase();
-  if (subjectLc.includes(n)) return true;
-  return n.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMPANY_STOP.has(w)).some((w) => subjectLc.includes(w));
+  const n = name.toLowerCase().trim();
+  // Full name in the subject is a strong match — but only if the name is itself
+  // distinctive (a junk name like "quote - 1,000 pieces" that survives to here
+  // must never full-match).
+  const tokens = n.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMPANY_STOP.has(w) && !/^\d+$/.test(w));
+  if (tokens.length === 0) return false; // no real company word to match on → don't guess
+  if (n.length >= 5 && subjectLc.includes(n)) return true;
+  return tokens.some((w) => subjectLc.includes(w));
 }
 
 export async function pollAgentInbox(prisma: any): Promise<{ checked: number; handled: number; error?: string }> {
