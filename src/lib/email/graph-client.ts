@@ -87,6 +87,19 @@ const toRecips = (v?: string | string[]) => (v ? (Array.isArray(v) ? v : [v]) : 
 
 // Send via a draft so we can capture the conversationId — lets later emails to
 // the same customer thread into one conversation.
+// A document attachment worth carrying (Mary's quote PDF, customer artwork).
+// We keep real file attachments, and — critically — do NOT drop them just
+// because Outlook flagged them isInline, which it often does to a PDF. We only
+// exclude inline items that are clearly embedded images (logos in a signature)
+// (Benjy 8/13 — a customer got a "see attached" quote with no attachment).
+const DOC_EXT = /\.(pdf|docx?|xlsx?|pptx?|ai|eps|zip|csv|txt)$/i;
+function isKeepAttachment(a: any): boolean {
+  if (a["@odata.type"] !== "#microsoft.graph.fileAttachment") return false;
+  if (!a.isInline) return true;                       // normal attachment
+  if (DOC_EXT.test(a.name || "")) return true;        // inline-flagged but a real doc (PDF etc.)
+  return false;                                        // inline image → skip
+}
+
 export async function sendEmailGetConversation(options: SendEmailOptions & { copyAttachmentsFrom?: string }): Promise<{ success: boolean; conversationId?: string; error?: string }> {
   const client = getGraphClient();
   if (!client) return { success: false, error: "Email not configured" };
@@ -103,7 +116,7 @@ export async function sendEmailGetConversation(options: SendEmailOptions & { cop
       try {
         const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
         for (const a of (atts.value || [])) {
-          if (a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline) {
+          if (isKeepAttachment(a)) {
             await client.api(`/users/${options.from}/messages/${draft.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
           }
         }
@@ -123,7 +136,7 @@ export async function getFirstPdfAttachment(from: string, messageId: string): Pr
   if (!client) return null;
   try {
     const atts: any = await client.api(`/users/${from}/messages/${messageId}/attachments`).get();
-    const files = (atts.value || []).filter((a: any) => a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline);
+    const files = (atts.value || []).filter(isKeepAttachment);
     const pdf = files.find((a: any) => /pdf$/i.test(a.name || "")) || files[0];
     if (!pdf) return null;
     return { name: pdf.name, contentType: pdf.contentType, contentBytes: pdf.contentBytes };
@@ -164,7 +177,7 @@ export async function replyInConversation(options: { from: string; conversationI
       try {
         const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
         for (const a of (atts.value || [])) {
-          if (a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline) {
+          if (isKeepAttachment(a)) {
             await client.api(`/users/${options.from}/messages/${reply.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
           }
         }

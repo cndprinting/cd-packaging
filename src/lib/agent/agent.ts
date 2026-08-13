@@ -442,13 +442,33 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
       }
     }
   } catch { /* fall back */ }
+  // The price must be IN THE EMAIL. If we couldn't read Mary's PDF to lay out
+  // the pricing (inner) AND Mary left no typed price (agentQuote), do NOT send
+  // a bare "see attached" with no price and — as happened — no attachment
+  // either (Benjy 8/13). Hand it to the owners to send Mary's quote by hand.
+  const priceText = (lead.agentQuote || "").trim();
+  if (!inner && !priceText) {
+    try {
+      await agentSend({
+        to: OWNERS,
+        subject: `Send quote manually: ${lead.companyName}`,
+        body: wrap(`<p>Mary's quote for <strong>${lead.companyName}</strong> is approved and ready, but I couldn't read her PDF to put the price in the email — so I did <strong>not</strong> send anything rather than email ${lead.contactEmail || "the customer"} a quote with no price.</p><p>Please forward Mary's quote to <strong>${lead.contactEmail || "the customer"}</strong> directly. (Her quote is on the lead's thread in ${leadMailbox(lead)}.)</p>`),
+      });
+    } catch { /* ignore */ }
+    await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "needs_owner", stage: "Send quote manually", agentNextAt: null, agentLog: logLine(lead.agentLog, "Quote send paused - couldn't read Mary's PDF, handed to owners") } });
+    return;
+  }
+  // Price always in the body: the PDF breakdown when we have it, else Mary's
+  // typed price. The PDF is still attached as a bonus (now including
+  // inline-flagged PDFs).
   const body = inner ? wrap(inner) : wrap(`
     <p>Hi ${firstName(lead.contactName)},</p>
-    <p>Thank you for your patience. Please find our pricing for your ${product} attached.</p>
+    <p>Thank you for your patience. Here's our pricing for your ${product}:</p>
+    <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${priceText.replace(/</g, "&lt;")}</pre>
     <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
     <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body, copyAttachmentsFrom: lead.agentQuoteMsgId });
-  await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote PDF sent to customer") } });
+  await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote sent to customer (price in body)") } });
 }
 
 const FOLLOWUPS: Record<string, { next: string; days: number; msg: string }> = {
