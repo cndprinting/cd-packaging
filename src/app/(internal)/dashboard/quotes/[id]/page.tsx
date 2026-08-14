@@ -208,11 +208,11 @@ export default function QuoteDetailPage() {
                 <Printer className="h-4 w-4" /> Print Quote
               </Button>
               {!isOutsourced && (
-                <Button variant="outline" onClick={() => {
+                <Button onClick={() => {
                   setSelectedVolume(quote.quantity);
                   setShowConvertModal(true);
-                }} disabled={updating} className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
-                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
+                }} disabled={updating} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job Ticket
                 </Button>
               )}
             </>
@@ -230,8 +230,8 @@ export default function QuoteDetailPage() {
           {quote.status === "approved" && (
             <>
               {!isOutsourced && (
-                <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job
+                <Button onClick={() => { setSelectedVolume(quote.quantity); setShowConvertModal(true); }} disabled={updating} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Convert to Job Ticket
                 </Button>
               )}
               <Button variant="outline" onClick={() => window.open(`/dashboard/quotes/${quote.id}/print`, '_blank')} className="gap-2">
@@ -447,13 +447,14 @@ export default function QuoteDetailPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Convert to Job</h2>
+                <h2 className="text-lg font-semibold">Convert to Job Ticket</h2>
                 <button onClick={() => setShowConvertModal(false)}><X className="h-5 w-5 text-gray-400" /></button>
               </div>
               <p className="text-sm text-gray-500 mb-4">
+                This turns the approved quote into a formal job ticket that starts at <strong>Pre-Press</strong>. Do this once the customer has approved the estimate.
                 {specs.quantityTiers && specs.quantityTiers.length > 1
-                  ? "This quote has multiple volume options. Select which quantity to produce:"
-                  : "Confirm the quantity for this job:"}
+                  ? " This quote has multiple volume options — pick the quantity to produce:"
+                  : " Confirm the quantity for the job:"}
               </p>
               <div className="space-y-2 mb-6">
                 {specs.quantityTiers && specs.quantityTiers.length > 1 ? (

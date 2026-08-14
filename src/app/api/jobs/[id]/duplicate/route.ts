@@ -45,7 +45,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       data: {
         orderNumber,
         companyId: sourceJob.order.companyId,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
         priority: sourceJob.priority,
         dueDate: sourceJob.dueDate,
       },
@@ -62,7 +62,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         quantity: sourceJob.quantity,
         dueDate: sourceJob.dueDate,
         productType: sourceJob.productType,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
 
         // Reprint linkage
         jobType: "EXACT_REPRINT",

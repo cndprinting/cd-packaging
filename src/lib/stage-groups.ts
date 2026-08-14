@@ -12,7 +12,7 @@
 export type StageGroup = "QUOTING" | "PRE_PRESS" | "READY" | "PRODUCTION" | "FULFILLMENT";
 
 export const STAGE_GROUP_MAP: Record<string, StageGroup> = {
-  QUOTE: "QUOTING",
+  QUOTE: "PRE_PRESS", // legacy: a job is never created at QUOTE anymore (Benjy 8/14)
   ARTWORK_RECEIVED: "PRE_PRESS",
   STRUCTURAL_DESIGN: "PRE_PRESS",
   PROOFING: "PRE_PRESS",
@@ -34,7 +34,7 @@ export const STAGE_GROUP_MAP: Record<string, StageGroup> = {
 };
 
 export function getStageGroup(status: string): StageGroup {
-  return STAGE_GROUP_MAP[status] || "QUOTING";
+  return STAGE_GROUP_MAP[status] || "PRE_PRESS";
 }
 
 export interface StageGroupMeta {

@@ -53,7 +53,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       data: {
         orderNumber,
         companyId,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
         priority: "NORMAL",
         dueDate: qr.dateNeeded || undefined,
       },
@@ -159,7 +159,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         description: qr.jobType && qr.jobType !== "new"
           ? `[${qr.jobType === "exact_reprint" ? "EXACT REPRINT" : "REPRINT W/ CHANGES"}${qr.pickupJobNumber ? ` of ${qr.pickupJobNumber}` : ""}]`.trim()
           : null,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
         priority: "NORMAL",
         quantity: totalQty,
         dueDate: qr.dateNeeded || null,

@@ -25,12 +25,12 @@ import { getStageGroupMeta } from "@/lib/stage-groups";
 // Stage definitions
 // ---------------------------------------------------------------------------
 const STAGES_FOLDING_CARTON = [
-  "QUOTE","ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL",
+  "ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL",
   "PREPRESS","PLATING","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
   "PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
 const STAGES_COMMERCIAL_PRINT = [
-  "QUOTE","ARTWORK_RECEIVED","PROOFING","CUSTOMER_APPROVAL",
+  "ARTWORK_RECEIVED","PROOFING","CUSTOMER_APPROVAL",
   "PREPRESS","MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED",
   "PRINTING","COATING_FINISHING","QA","PACKED","SHIPPED","DELIVERED","INVOICED",
 ];
@@ -850,7 +850,6 @@ export default function JobDetailPage() {
           {/* Primary: 5 phases */}
           {(() => {
             const PHASES: { key: string; label: string; firstStage: string; stages: string[] }[] = [
-              { key: "QUOTING",     label: "Quoting",     firstStage: "QUOTE",            stages: ["QUOTE"] },
               { key: "PRE_PRESS",   label: "Pre-Press",   firstStage: "ARTWORK_RECEIVED", stages: ["ARTWORK_RECEIVED","STRUCTURAL_DESIGN","PROOFING","CUSTOMER_APPROVAL","PREPRESS","PLATING"] },
               { key: "READY",       label: "Ready",       firstStage: "MATERIALS_ORDERED",stages: ["MATERIALS_ORDERED","MATERIALS_RECEIVED","SCHEDULED"] },
               { key: "PRODUCTION",  label: "Production",  firstStage: "PRINTING",         stages: ["PRINTING","COATING_FINISHING","DIE_CUTTING","GLUING_FOLDING","QA"] },

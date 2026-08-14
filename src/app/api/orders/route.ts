@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     const order = await prisma.order.create({
       data: {
-        orderNumber, companyId: resolvedCompanyId, poNumber, status: "QUOTE",
+        orderNumber, companyId: resolvedCompanyId, poNumber, status: "ARTWORK_RECEIVED",
         priority: priority || "NORMAL", dueDate: dueDate ? new Date(dueDate) : undefined, notes,
       },
       include: { company: true },
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         await prisma.job.create({
           data: {
             jobNumber, orderId: order.id, name: item.name || `Item ${i + 1}`,
-            description: item.description, status: "QUOTE", priority: priority || "NORMAL",
+            description: item.description, status: "ARTWORK_RECEIVED", priority: priority || "NORMAL",
             quantity: parseInt(item.quantity) || 1, dueDate: dueDate ? new Date(dueDate) : null,
           },
         });

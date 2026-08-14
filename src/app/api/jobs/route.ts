@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       data: {
         orderNumber,
         companyId: resolvedCompanyId,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
         priority: priority || "NORMAL",
         dueDate: dueDate ? new Date(dueDate) : undefined,
       },
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         orderId: order.id,
         name,
         description: description || null,
-        status: "QUOTE",
+        status: "ARTWORK_RECEIVED",
         priority: priority || "NORMAL",
         quantity: parseInt(quantity),
         dueDate: dueDate ? new Date(dueDate) : null,
