@@ -21,23 +21,37 @@ const BASE = "https://packaging.cndprinting.com";
 // broken form parser) would otherwise match on the word "quote" or "pieces" and
 // get a DIFFERENT customer's quote stapled to it (Benjy 8/13 — clientdesks got
 // Skin Science Labs' pricing). None of these words identify a company.
+// Words that DON'T identify a company: entity suffixes, generic quote/commerce
+// words, AND industry words. That last group is why "CS Innovation Labs" got
+// stapled onto "Meta Labs Pharmaceuticals" — both contain "labs" (Benjy 8/14).
+// Matching on one shared common word is never enough.
 const COMPANY_STOP = new Set([
   "club", "llc", "inc", "corp", "co", "the", "company", "ltd", "group", "and", "usa", "corporation", "incorporated",
   "quote", "quotes", "quoted", "pricing", "price", "prices", "priced", "estimate", "estimates",
   "piece", "pieces", "unit", "units", "quantity", "qty", "order", "orders", "job", "jobs",
   "print", "printing", "printed", "packaging", "package", "product", "products", "sample", "samples",
   "reprint", "proof", "proofs", "attached", "shipping", "included", "freight", "new", "your", "for", "with",
+  // industry / generic descriptors — common across many company names
+  "lab", "labs", "pharma", "pharmaceutical", "pharmaceuticals", "nutrition", "nutritionals",
+  "nutraceutical", "nutraceuticals", "food", "foods", "beverage", "beverages", "solution", "solutions",
+  "brand", "brands", "industries", "industry", "holdings", "enterprise", "enterprises", "international",
+  "global", "systems", "technologies", "technology", "services", "service", "supply", "supplies",
+  "wellness", "health", "healthcare", "beauty", "cosmetics", "organics", "organic", "naturals", "natural",
+  "farms", "farm", "studio", "studios", "media", "cannabis", "canna", "manufacturing", "mfg", "distribution",
 ]);
+// Match Mary/Shayla's reply to a lead by the company name in the subject.
+// STRICT: require EVERY distinctive token of the lead name to appear in the
+// subject (not just any one), so a single shared word like "labs" can never
+// cross-link two different companies. A name with no distinctive tokens left
+// (all generic, or junk like "quote - 1,000 pieces") never matches by subject —
+// it can only match by conversation id, which is exact.
 function companyMatches(name: string | null, subjectLc: string): boolean {
   if (!name) return false;
   const n = name.toLowerCase().trim();
-  // Full name in the subject is a strong match — but only if the name is itself
-  // distinctive (a junk name like "quote - 1,000 pieces" that survives to here
-  // must never full-match).
   const tokens = n.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMPANY_STOP.has(w) && !/^\d+$/.test(w));
-  if (tokens.length === 0) return false; // no real company word to match on → don't guess
-  if (n.length >= 5 && subjectLc.includes(n)) return true;
-  return tokens.some((w) => subjectLc.includes(w));
+  if (tokens.length === 0) return false; // nothing distinctive → don't guess
+  if (n.length >= 6 && subjectLc.includes(n)) return true; // exact full-name hit
+  return tokens.every((w) => subjectLc.includes(w));       // ALL distinctive tokens must be present
 }
 
 export async function pollAgentInbox(prisma: any): Promise<{ checked: number; handled: number; error?: string }> {

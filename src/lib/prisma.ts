@@ -43,13 +43,24 @@ function withNoteMirror(client: PrismaClient): PrismaClient {
           try {
             const leadId = (result as any)?.id;
             if (!leadId) return result;
+            // Attribute the note to who ACTUALLY did the thing, not a blanket
+            // "Jessica (AI)" — Benjy 8/14 saw Jessica credited for relayed Mary
+            // emails on a lead she never touched. Only agent sends are Jessica.
+            const isSystem = SYSTEM_MARKER.test(added);
+            const author =
+              /^\s*\[(Agent|Outbound)/i.test(added) ? "Jessica (AI)"
+              : /^\s*\[Mary\]/i.test(added) ? "Mary (relayed)"
+              : /^\s*\[Shayla\]/i.test(added) ? "Shayla (relayed)"
+              : /^\s*\[Customer replied\]/i.test(added) ? "Customer"
+              : isSystem ? "Godzilla"
+              : "Godzilla";
             await client.leadNote.create({
               data: {
                 leadId,
                 body: added.slice(0, 8000),
-                kind: SYSTEM_MARKER.test(added) ? "system" : "human",
+                kind: isSystem ? "system" : "human",
                 source: "agent",
-                authorName: SYSTEM_MARKER.test(added) ? "Jessica (AI)" : "Godzilla",
+                authorName: author,
               },
             });
           } catch (e) {
