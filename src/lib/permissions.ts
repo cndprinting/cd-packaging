@@ -1,7 +1,7 @@
 // Role-based permissions for Godzilla
 // Controls page visibility and action permissions per role
 
-export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "PREPRESS_MANAGER" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
+export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "PREPRESS_MANAGER" | "DIGITAL_PRESS" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
 
 // Full access roles — can see and do everything
 const FULL_ACCESS: AppRole[] = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING"];
@@ -9,14 +9,14 @@ const FULL_ACCESS: AppRole[] = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "S
 // Pages each role can access
 export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard":           [...FULL_ACCESS, "CSR"],
-  "/dashboard/quotes":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
-  "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
+  "/dashboard/quotes":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
+  "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
   "/dashboard/job-board":  [...FULL_ACCESS, "CSR"],
   "/dashboard/orders":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
-  "/dashboard/schedule":  [...FULL_ACCESS, "CSR"],
+  "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "/dashboard/inventory": [...FULL_ACCESS, "CSR"],
-  "/dashboard/production": [...FULL_ACCESS, "CSR"],
-  "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING"],
+  "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
   "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
   "/dashboard/vendors":   [...FULL_ACCESS, "CSR"],
   "/dashboard/reports":   [...FULL_ACCESS],
@@ -27,15 +27,15 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
 
 // Actions each role can perform
 export const ACTION_ACCESS: Record<string, AppRole[]> = {
-  "quote:create":     [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
-  "quote:edit":       [...FULL_ACCESS, "CSR"],
-  "quote:send":       [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
+  "quote:create":     [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
+  "quote:edit":       [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "quote:send":       [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
   "quote:approve":    [...FULL_ACCESS],
-  "quote:convert":    [...FULL_ACCESS, "CSR"],
+  "quote:convert":    [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "quote:delete":     ["OWNER", "GM", "ADMIN"],
-  "job:create":       [...FULL_ACCESS, "CSR"],
-  "job:edit":         [...FULL_ACCESS, "CSR"],
-  "job:advance":      [...FULL_ACCESS, "CSR", "OPERATOR"],
+  "job:create":       [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "job:edit":         [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "job:advance":      [...FULL_ACCESS, "CSR", "OPERATOR", "DIGITAL_PRESS"],
   "job:delete":       ["OWNER", "GM", "ADMIN"],
   "order:create":     [...FULL_ACCESS, "CSR"],
   "order:edit":       [...FULL_ACCESS, "CSR"],

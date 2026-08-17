@@ -9,6 +9,7 @@ import { getSession } from "@/lib/session";
 const ALLOWED_ROLES = new Set([
   "OWNER", "GM", "ADMIN", "ESTIMATOR",
   "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING",
+  "DIGITAL_PRESS", // Randy — quotes digital work (Benjy 8/17)
 ]);
 
 export default async function QuotesLayout({ children }: { children: React.ReactNode }) {

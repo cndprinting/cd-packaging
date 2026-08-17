@@ -18,6 +18,7 @@ enum Role {
   ACCOUNTING         // Full access
   ESTIMATOR          // Everything except dashboard — Mary Bitting
   PREPRESS_MANAGER   // Michael Metroka — Pre-Press, Proofing, Production, Plant Floor, Shipping. Acts on proofs (mark sent / approve).
+  DIGITAL_PRESS      // Randy Schulz — quoting + job tickets + pre-press/proofing/production/plant floor/shipping. No financials/customers/vendors/admin.
   CSR                // Everything except accounting/dashboard/executive features
   SALES_REP          // Quotes + their own customers only, job status tracking
   SALES_MANAGER      // Same as SALES_REP but with team view

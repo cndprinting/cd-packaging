@@ -114,6 +114,25 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
       return internalNav.filter(item => allowed.includes(item.href));
     }
 
+    // Digital Press (Randy Schulz) — quoting + job tickets + the pre-press/
+    // production floor he runs. No financials, customers, vendors, or admin.
+    if (role === "DIGITAL_PRESS") {
+      const allowed = [
+        "/dashboard/quote-requests",
+        "/dashboard/quotes",
+        "/dashboard/jobs",
+        "/dashboard/schedule",
+        "/dashboard/proofing",
+        "/dashboard/prepress",
+        "/dashboard/production",
+        "/dashboard/plant-floor",
+        "/dashboard/shipping",
+        "/dashboard/security", // 2FA setup
+        "/dashboard/settings",
+      ];
+      return internalNav.filter(item => allowed.includes(item.href));
+    }
+
     // CSRs and Sales Reps — limited view, no estimating data
     if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER") {
       return [
