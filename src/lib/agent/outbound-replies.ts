@@ -43,7 +43,7 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
   for (const mb of Object.keys(MAILBOXES)) {
     let items: any[] = [];
     try {
-      const res = await client.api(`/users/${mb}/mailFolders/Inbox/messages`).filter("isRead eq false").top(25).select("id,from,subject,bodyPreview,conversationId").get();
+      const res = await client.api(`/users/${mb}/mailFolders/Inbox/messages`).filter("isRead eq false").top(50).select("id,from,subject,bodyPreview,conversationId").get();
       items = res.value || [];
     } catch { continue; }
 
@@ -61,19 +61,29 @@ export async function processOutboundReplies(prisma: any): Promise<{ handled: nu
       // conversationId, which would otherwise look like a reply.
       const subj = (m.subject || "").trim();
       if (/postmaster|mailer-daemon|microsoftexchange/i.test(from) || /^undeliverable/i.test(subj)) {
+        // ALWAYS mark an NDR read once we've looked at it — matched or not.
+        // Before, an unmatched NDR was left unread and re-scanned every run, so
+        // 49 of them piled up and crowded out the top-25 unread window, which is
+        // why most bounces never got recorded (Benjy 8/17). Drain them.
+        try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
         const pluck = (t: string) => Array.from(new Set((t.match(EMAIL_RE) || []).map((e) => e.toLowerCase())))
           .filter((e) => !/postmaster|mailer-daemon|microsoftexchange/.test(e) && !MAILBOXES[e]);
         let cands = pluck(`${subj}\n${m.bodyPreview || ""}`);
         if (!cands.length) { // preview didn't carry the address — fetch the body
           try { const full: any = await client.api(`/users/${mb}/messages/${m.id}`).select("body").get(); cands = pluck((full.body?.content || "").replace(/<[^>]+>/g, " ")); } catch { /* ignore */ }
         }
+        // Match the failed address to a lead — by outreachTo OR the lead's
+        // current contactEmail (a guessed address that already rotated), and
+        // across any active/sent state, not only mid-sequence.
         let bLead: any = null, bad = "";
         for (const c of cands) {
-          bLead = await prisma.lead.findFirst({ where: { outreachTo: { equals: c, mode: "insensitive" }, outreachStatus: { in: ACTIVE_SEQ } } });
+          bLead = await prisma.lead.findFirst({ where: {
+            OR: [{ outreachTo: { equals: c, mode: "insensitive" } }, { contactEmail: { equals: c, mode: "insensitive" } }],
+            outreachStatus: { in: ["intro_sent", "followup_1", "followup_2", "done", "replied"] },
+          } });
           if (bLead) { bad = c; break; }
         }
         if (bLead) {
-          try { await client.api(`/users/${mb}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
 
           // GUESSED ADDRESS? Rotate to the next pattern instead of dead-ending
           // (Benjy 8/2). We store runners-up when we guess, so a bounce just
