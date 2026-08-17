@@ -104,6 +104,62 @@ async function readFlat(req: NextRequest): Promise<Record<string, string>> {
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 
+// --- CRM cross-reference (Benjy 8/17) ----------------------------------------
+// An inbound web lead that's already a CUSTOMER or a QUALIFIED prospect must not
+// become a duplicate and must not get cold outreach. Match on email domain or a
+// strict company-name comparison, then hand the warm inquiry to the owners.
+const GENERIC_EMAIL_DOMAINS = new Set([
+  "gmail.com", "yahoo.com", "hotmail.com", "aol.com", "outlook.com", "icloud.com",
+  "live.com", "msn.com", "comcast.net", "me.com", "proton.me", "protonmail.com",
+  "sbcglobal.net", "att.net", "verizon.net", "ymail.com", "gmx.com",
+]);
+// Generic words that don't distinguish one company from another — never match on
+// these alone (Benjy 8/13, the "labs"/"solutions" cross-filing mess).
+const COMPANY_STOP = new Set([
+  "inc", "llc", "ltd", "co", "corp", "corporation", "company", "group", "holdings",
+  "the", "and", "of", "packaging", "print", "printing", "label", "labels", "labs",
+  "lab", "pharma", "nutrition", "nutritional", "supplement", "supplements",
+  "solutions", "brands", "brand", "products", "cosmetics", "beauty", "health",
+  "wellness", "global", "international", "usa", "manufacturing", "industries",
+  "enterprises", "services", "incorporated",
+]);
+function coTokens(s: string): string[] {
+  return (s || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim()
+    .split(/\s+/).filter((t) => t.length >= 3 && !COMPANY_STOP.has(t));
+}
+// Same company iff every distinctive token of the shorter name is in the other.
+function companySame(a: string, b: string): boolean {
+  const ta = coTokens(a), tb = coTokens(b);
+  if (!ta.length || !tb.length) return false;
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  const set = new Set(long);
+  return short.every((t) => set.has(t));
+}
+async function findKnownAccount(prisma: any, company: string | null, email: string | null) {
+  const domain = email && email.includes("@") ? email.split("@")[1].toLowerCase() : "";
+  const usableDomain = domain && !GENERIC_EMAIL_DOMAINS.has(domain) ? domain : "";
+  const probe = company ? coTokens(company).sort((a, b) => b.length - a.length)[0] : "";
+  const or: any[] = [];
+  if (probe) or.push({ companyName: { contains: probe, mode: "insensitive" } });
+  if (usableDomain) or.push(
+    { contactEmail: { contains: `@${usableDomain}`, mode: "insensitive" } },
+    { contactEmail2: { contains: `@${usableDomain}`, mode: "insensitive" } },
+  );
+  if (!or.length) return null;
+  const cands = await prisma.lead.findMany({
+    where: { pipelineStage: { in: ["CUSTOMER", "QUALIFIED"] }, OR: or },
+    select: { id: true, companyName: true, contactEmail: true, contactEmail2: true, pipelineStage: true, outreachStatus: true, commentary: true },
+    take: 5,
+  });
+  for (const c of cands) {
+    const domainHit = !!usableDomain && [c.contactEmail, c.contactEmail2].some((e: string | null) => (e || "").toLowerCase().endsWith(`@${usableDomain}`));
+    const nameHit = !!company && companySame(company, c.companyName);
+    if (domainHit || nameHit) return c;
+  }
+  return null;
+}
+// -----------------------------------------------------------------------------
+
 export async function POST(req: NextRequest) {
   // Secret in the URL (?key=) when INTAKE_SECRET is set — keeps randoms from
   // spamming the pipeline. Public endpoint, so this matters once live.
@@ -186,6 +242,46 @@ export async function POST(req: NextRequest) {
   else if (/folding|carton/.test(blob)) productCategory = "Folding Carton";
   else if (/flexible|pouch|film/.test(blob)) productCategory = "Flexible Packaging";
   else if (/box|rigid|corrugat|packag|label/.test(blob)) productCategory = "Packaging";
+
+  // Cross-reference the CRM FIRST (Benjy 8/17). If this inbound web lead is
+  // already a CUSTOMER or a QUALIFIED prospect, it must not become a duplicate
+  // and must not get cold outreach — it's warm, and the owners own it. Log the
+  // inquiry on the existing record, stop any cold sequence, alert the owners,
+  // and stop. This runs before Claude/lead-creation so we never spend a call or
+  // create a second row for someone already in the pipeline (e.g. MedPak came
+  // in via the contact form while already a qualified prospect).
+  const known = await findKnownAccount(prisma, company, email);
+  if (known) {
+    const stageWord = known.pipelineStage === "CUSTOMER" ? "an existing customer" : "an existing qualified prospect";
+    const logged = [
+      known.commentary || "",
+      "",
+      `[Inbound ${new Date().toISOString().slice(0, 10)}] Same company came in through the website contact form — matched to this record (${stageWord}), so no duplicate was created and no cold outreach was sent.`,
+      contactName || email ? `Contact: ${[contactName, email].filter(Boolean).join(" · ")}` : null,
+      inquiry ? `Message: ${inquiry}` : null,
+      productField ? `Product: ${productField}` : null,
+    ].filter(Boolean).join(String.fromCharCode(10)).slice(0, 8000);
+    const stopCold = known.outreachStatus && ["intro_sent", "followup_1", "followup_2"].includes(known.outreachStatus);
+    await prisma.lead.update({
+      where: { id: known.id },
+      data: {
+        commentary: logged,
+        lastInteraction: new Date(),
+        ...(stopCold ? { agentHold: true, outreachStatus: "replied", outreachNextAt: null } : {}),
+      },
+    });
+    try {
+      const { OWNERS, agentSend } = await import("@/lib/agent/agent");
+      await agentSend({
+        to: OWNERS,
+        subject: `Known account inquired: ${known.companyName}`,
+        body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;"><p><strong>${known.companyName}</strong> just came in through the website form. They're already ${stageWord} in the pipeline, so I did <strong>not</strong> create a duplicate or send any outreach — this is warm, please pick it up.</p><p>${[contactName, email, phone].filter(Boolean).join(" · ") || "(no contact details on the form)"}</p>${inquiry ? `<p><strong>Their message:</strong><br>${inquiry.replace(/</g, "&lt;")}</p>` : ""}</div>`,
+      });
+    } catch (e) { console.error("[Godzilla INTAKE] known-account alert failed", e); }
+    leadSaved = true; // the inquiry is logged on the existing record; nothing else to save
+    console.log("[Godzilla INTAKE] known account — deduped into", known.id, known.companyName);
+    return NextResponse.json({ ok: true, id: known.id, known: true });
+  }
 
   // Dedup / triangulation — flag if this company is already known.
   let dupNote = "";
