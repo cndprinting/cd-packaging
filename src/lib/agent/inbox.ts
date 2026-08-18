@@ -111,16 +111,6 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
   items.length = 0; items.push(...deduped);
   if (preDedupe !== items.length) console.log(`[agent inbox] cross-mailbox de-dupe: ${preDedupe} -> ${items.length}`);
 
-  // Alert-once threshold: messages newer than the previous poll. Without this
-  // an unmatched reply would re-alert every day until it aged out (Benjy 7/27).
-  let alertSince = new Date(Date.now() - 26 * 3600 * 1000);
-  try {
-    const lastRun = await prisma.cronRun.findUnique({ where: { job: "agent-inbox" } });
-    if (lastRun?.ranAt) alertSince = new Date(lastRun.ranAt);
-  } catch { /* table missing -> 26h fallback */ }
-
-  const unmatchedInternal: { who: string; subject: string; preview: string }[] = [];
-
   let handled = 0;
   for (const m of items) {
     const MAILBOX = m._mb; // the mailbox this message lives in
@@ -226,16 +216,13 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         }
       }
       if (!ml) {
-        // NEVER silently drop an internal reply. If Mary or Shayla wrote to the
-        // agent and we can't tie it to a lead, tell the owners so a human sees
-        // it — the whole class of "we missed Mary's response" failures.
-        const fresh = new Date(m.receivedDateTime) > alertSince; // alert exactly once
-        if (fresh && /quote|estimate|freight|price|pricing/i.test(`${m.subject || ""} ${m.bodyPreview || ""}`)) {
-          const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
-          // Collect — ONE digest at the end of the poll, never one email per
-          // message (Benjy 7/27: that flooded the owners' inboxes).
-          unmatchedInternal.push({ who, subject: m.subject || "(no subject)", preview: (m.bodyPreview || "").slice(0, 300) });
-        }
+        // No lead at all. Mary/Shayla are quoting a job the team sources and
+        // runs itself — self-sourced qualified work, or freight on an existing
+        // job — none of which is the agent's business. Stay silent: no digest,
+        // no owner email. The "Quote emails with no matching lead" summary was
+        // pure inbox noise and is gone (Benjy 8/18). The agent only speaks up on
+        // leads it is actually handling, flagged-date reminders, and genuine
+        // asks for help.
         continue;
       }
       // Already handled this message (even if an owner opened it since)? skip.
@@ -474,14 +461,6 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     await agentSend({ to: OWNERS, subject: `Lead replied: ${lead.companyName}`, body });
     handled++;
   }
-  // ONE digest for everything Mary/Shayla sent that has no home in Godzilla.
-  if (unmatchedInternal.length) {
-    const rows = unmatchedInternal.map((u) => `<li style="margin-bottom:8px;"><strong>${u.who}</strong> - ${u.subject.replace(/</g, "&lt;")}<br><span style="color:#777;font-size:12px;">${u.preview.replace(/</g, "&lt;")}</span></li>`).join("");
-    try {
-      await agentSend({ to: OWNERS, subject: `Quote emails with no matching lead (${unmatchedInternal.length})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary or Shayla sent these about quotes, but they do not match any lead in Godzilla, so the agent could not act on them:</p><ul style="padding-left:18px;">${rows}</ul><p style="color:#888;font-size:12px;">One summary per day. Add a lead in the pipeline if any of these should be tracked.</p></div>` });
-    } catch { /* non-fatal */ }
-  }
-
   try {
     await prisma.cronRun.upsert({ where: { job: "agent-inbox" }, create: { job: "agent-inbox", ranAt: new Date() }, update: { ranAt: new Date() } });
   } catch { /* non-fatal */ }
