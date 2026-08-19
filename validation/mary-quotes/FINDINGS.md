@@ -51,3 +51,30 @@ Intersecting those intervals across every observation pins each rate down.
 3. **Digital click rate by stock.** Rates of .378 and .514 appear on
    nominally identical 4/4 jobs, so stock (not just size x ink) moves it.
    Deferred safely by letting a typed vendor amount win.
+
+## Set 3 (9 more quotes, 19 Aug) — 45 estimates total
+
+**Freight CONFIRMED at cost.** The Kolter case-bound book is the hardest outside
+block in the whole set and settles it to the cent: outside cost 21,641.30 =
+Finish Out 11,641.30 + Outside Freight 10,000.00, and E&M's printed markup is
+3,492.39 — which is 30% of 11,641.30 ONLY. Same on #348747 (175.43 = 32% of
+548.23, not of 583.53). Freight sits in the outside bucket (so it carries into
+commission) but takes NO markup. Our engine reproduces both to the cent.
+
+**Markups are NOT universal after all.** 33/18/32/40 holds on 54 parts, but the
+Kolter book runs 22/17/30/38 across all 5 parts, and there are 32/17/30/38 and
+28/17/30/38 too. Commission: 10% on 62 parts, but 0% (6), 15% (3) and 5% (1).
+So the defaults are right as defaults — and it matters that every one of them
+stays editable per quote.
+
+**Structurally new in set 3 (not yet supported):**
+- CASE binding (hardcover w/ case cover) — BINDERY_OPERATIONS has no case bind
+- End-sheet part, fold-out part, and multiple insert parts in one estimate
+  (Kolter is 5 parts on 5 different stocks, incl. Reich Shine metallic)
+- An estimate-level [Breakdown] roll-up page summarising Paper/Prep/Press/Bind
+  across parts
+- Collate/Bind and Emboss as named operations
+- "5 overs in Bindtech price" — a bindery VENDOR requiring extra copies, which
+  should flow back into the printed quantity
+- Mill Item Stock callout (lead-time warning on the letter)
+- Three-slot Outside Purchases block naming several vendors per part
