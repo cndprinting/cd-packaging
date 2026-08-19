@@ -122,8 +122,11 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach", "baseMakereadyHrsPerPlate",
+  "paperHandlingHrs", "paperHandlingRate",
+  "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach",
+  "pressSetupHrs", "pressSetupDiff", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
+  "runWastePct", "paperBuyRounding",
   "useSpeedCurve",
   "runDiff", "wasteFactorPct", "helpers",
   "coatingType", "coatingCoveragePct", "coatingDollarsPerLb",
@@ -214,6 +217,12 @@ export interface ClassicForm {
   bleedAllowance: string;
   brandColorFinish: string;
 
+  // Paper handling — E&M prints a "Paper handling 0.1 Hrs" line that rides
+  // with the paper block (#348988: paper 337.50 → 340.17 with handling).
+  // Missing before the 8/18 validation batch.
+  paperHandlingHrs: number;
+  paperHandlingRate: number;
+
   // ── Screen 7 — Press (part 1, offset) ──
   pressId: string;
   pressConfigId: string;
@@ -227,6 +236,11 @@ export interface ClassicForm {
   // Plate materials (E&M #348538: 4 plates @ $19 = $76 in the MATERIAL
   // bucket). Prefills from the selected press config's plateCost; editable.
   plateCostEach: number;
+  // Press SETUP line — E&M prints "Setup 0.1 Hrs ( 0.8 )" above Makeready
+  // (#348988). Flat per-run hours × its own difficulty factor; missing
+  // entirely before the 8/18 validation batch.
+  pressSetupHrs: number;
+  pressSetupDiff: number;
   baseMakereadyHrsPerPlate: number;
   makereadyDiff: number;
   washupHrsPerUnit: number;
@@ -247,6 +261,12 @@ export interface ClassicForm {
   wasteSheetsManual: number;       // 0 = auto formula
   wastePerColorSheets: number;     // default 100
   wastePerEquipmentSheets: number; // default 100
+  // Running spoilage % on top of makeready (E&M "Press waste"; #348988: 56 =
+  // 5% of 1,125 net press sheets). Validation batch 8/18.
+  runWastePct: number;             // default 5
+  // Paper is bought in whole increments — E&M rounds the parent-sheet buy up
+  // to the next 250 (#348988: 1,881 → 2,000; 6,640 → 6,750). 0/1 = no rounding.
+  paperBuyRounding: number;        // default 250
   equipmentPassesManual: number;   // 0 = auto-count from the job's operations
   helpers: number;
   inkCoverageBlackPct: number;
@@ -347,7 +367,10 @@ export function defaultClassicForm(): ClassicForm {
   return {
     customerName: "", customerNumber: "", address: "", jobTitle: "",
     quantity: 0, additionalQuantities: [], numParts: 1,
-    markupPaperPct: 33, markupMaterialPct: 16, markupOutsidePct: 24,
+    // Markup defaults confirmed against Mary's 36-quote E&M validation batch
+    // (8/18): Paper 33 / Material 18 / Outside 32 / Labor 40 / Commission 10
+    // held on nearly every estimate. (Material was 16, Outside 24 before.)
+    markupPaperPct: 33, markupMaterialPct: 18, markupOutsidePct: 32,
     markupLaborPct: 40, commissionPct: 10,
     instructions: "",
     jobType: "New With Pre-Press",
@@ -366,8 +389,11 @@ export function defaultClassicForm(): ClassicForm {
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
+    paperHandlingHrs: 0, paperHandlingRate: 22.5,
+    pressSetupHrs: 0.125, pressSetupDiff: 0.8,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
+    runWastePct: 5, paperBuyRounding: 250,
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
@@ -409,6 +435,7 @@ export function defaultClassicPart(): ClassicPart {
 export interface PartCalc {
   pressSheets: number;
   mrWasteSheets: number;
+  runWasteSheets: number; // running spoilage (E&M "Press waste") — 5% of net
   orderSheets: number;
   paperCost: number;
   plates: number;
@@ -502,30 +529,54 @@ function computePart(
     (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
     ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0);                // stitch/bind
   const equipmentPasses = (p.equipmentPassesManual || 0) > 0 ? p.equipmentPassesManual : passesAuto;
-  const wasteColors = (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
+  // Press UNITS (validation batch 8/18, #348988 Cover): WORK & TURN runs the
+  // same units on both sides, so units count ONCE (max, not side1+side2) —
+  // and a coating (varnish/AQ) occupies a press unit that washes up and
+  // wastes makeready sheets like ink but needs NO plate. E&M printed
+  // "5 Color(s)" and "Wash and Makereadys 5" with only 4 plates, and its 700
+  // makeready sheets = 5 units × 100 + 2 equipment passes × 100.
+  const pressUnits =
+    ((p.workAndTurn)
+      ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
+      : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) +
+    (p.coatingType ? 1 : 0);
+  const wasteColors = pressUnits;
   const mrWasteSheets = isDigital
     ? Math.ceil(p.digitalMakereadySheets || 0)
     : (p.wasteSheetsManual || 0) > 0
       ? Math.ceil(p.wasteSheetsManual)
       : wasteColors * (p.wastePerColorSheets || 0) + equipmentPasses * (p.wastePerEquipmentSheets || 0);
-  // Paper buy: press sheets + MR/overs + bindery spoilage, rounded up to whole
-  // PARENT sheets (E&M: "Use 1,110 sheets 19x25 ... 2 out of parent").
-  // pricePerM is per parent sheet when sheetsOutOfParent > 1.
+  // Running spoilage — separate from makeready (validation 8/18, #348988):
+  // E&M printed "Make ready 700  Press waste 56" where 56 = 5% of the 1,125
+  // net press sheets. Makeready is the setup burn; press waste is the running
+  // spoilage percentage on top of it.
+  const runWasteSheets = (p.wasteSheetsManual || 0) > 0
+    ? 0 // a typed manual waste count replaces the whole formula
+    : Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
+
+  // Paper buy: press sheets + MR/overs + running spoilage + bindery spoilage,
+  // converted to PARENT sheets, then rounded UP to the next 250-sheet
+  // increment — E&M never buys an odd count (#348988: 1,881 → 2,000 on the
+  // cover, 6,640 → 6,750 on the text). pricePerM is per parent sheet.
   const outOfParent = Math.max(1, p.sheetsOutOfParent || 1);
-  const sheetsToBuy = pressSheets + mrWasteSheets + Math.ceil(p.bindWasteSheets || 0);
-  const orderSheets = Math.ceil(sheetsToBuy / outOfParent);
+  const sheetsToBuy = pressSheets + mrWasteSheets + runWasteSheets + Math.ceil(p.bindWasteSheets || 0);
+  const parentSheets = Math.ceil(sheetsToBuy / outOfParent);
+  const buyRound = p.paperBuyRounding ?? 250;
+  const orderSheets = buyRound > 1 ? Math.ceil(parentSheets / buyRound) * buyRound : parentSheets;
   const paperCost = (orderSheets / 1000) * (p.pricePerM || 0);
 
   // ── Press (Screen 7) ──
   // WORK & TURN (E&M #348538): the same plates print both sides, so plates /
   // washups / makereadys = max(side1, side2). Sheet-wise: 4/4 W&T showed
   // "No. of Wash and Makereadys 4" and 4 plates ($76 @ $19).
+  // Plates = INK units only. A coating unit runs on press (see pressUnits
+  // above) but carries no plate — #348988 printed 5 units / 4 plates.
   const plates = p.workAndTurn
     ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
     : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
-  let makereadyHrs = 0, washupHrs = 0, runHrs = 0;
+  let makereadyHrs = 0, washupHrs = 0, runHrs = 0, setupHrs = 0;
   let inkLbs = 0, inkCost = 0, inkLbsBlackColor = 0, inkLbsVarnish = 0;
   let inkLbsBlack = 0, inkLbsProcess = 0, inkLbsLed = 0, inkLbsPms = 0;
   let coatingLbs = 0, coatingCost = 0;
@@ -556,8 +607,11 @@ function computePart(
     // outside bucket in computeClassic; press labor is only die/score/check hrs.
     pressLaborCost = pressHrs * (p.pressHourlyRate || 0);
   } else {
-    makereadyHrs = (p.baseMakereadyHrsPerPlate || 0) * (p.makereadyDiff || 1) * plates;
-    washupHrs = (p.washupHrsPerUnit || 0) * (p.washupDiff || 1) * plates;
+    // Makeready/washup follow press UNITS, not plates — the coating unit gets
+    // washed and made ready like an ink unit (#348988: "Wash and Makereadys 5"
+    // against 4 plates).
+    makereadyHrs = (p.baseMakereadyHrsPerPlate || 0) * (p.makereadyDiff || 1) * pressUnits;
+    washupHrs = (p.washupHrsPerUnit || 0) * (p.washupDiff || 1) * pressUnits;
     // Small-run speed curve (Mary 7/21): rated SPH derates on short runs —
     // she never hits 10,000/hr on a 500-sheet run. Factors are PLACEHOLDER
     // (see SMALL_RUN_SPEED_CURVE) pending her real speeds.
@@ -579,13 +633,26 @@ function computePart(
       if (speedRules.boardCapSpeed < baseSph) { baseSph = speedRules.boardCapSpeed; speedCapReason = "board thickness"; }
     }
     effectiveSph = baseSph * speedFactor;
-    runHrs = effectiveSph > 0 ? (pressSheets / effectiveSph) * (p.runDiff || 1) : 0;
-    pressHrs = makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
+    // Sheets that actually go THROUGH the press = net + makeready + running
+    // spoilage, and every unit-side is a pass (validation 8/18, #348988:
+    // 1,125 + 700 + 56 = 1,881; 1,881/6,500 = 0.29 → E&M's printed 0.3 hrs
+    // per side, twice for the two W&T sides).
+    const sheetsThroughPress = pressSheets + mrWasteSheets + runWasteSheets;
+    const runPasses = p.workAndTurn
+      ? ((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)
+      : 1;
+    runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
+    setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
+    pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb),
     // PER TYPE like E&M ("7.3 lbs black + 56.5 lbs color") — varnish prices at
     // its own $/lb ($5.50 std), not ink money (Mary 7/21).
+    // Ink is consumed per IMPRESSION — a sheet printed both sides takes twice
+    // the ink of a 1-sided one (validation 8/18, #348988: our 1-sided figure
+    // came out at exactly half E&M's printed 0.8 lb black / 4.1 lb color).
+    const inkImpressions = pressSheets * Math.max(1, runPasses);
     const lbsFor = (pct: number) => p.inkFactorMsqinPerLb > 0
-      ? (pressSheets * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
+      ? (inkImpressions * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;
     inkLbsBlack = lbsFor(p.inkCoverageBlackPct || 0);
     inkLbsProcess = lbsFor(p.inkCoverageColorPct || 0);
@@ -667,8 +734,11 @@ function computePart(
   const stitchLabor = stitchMachineHrs * (p.stitchRatePerHr || 0) + stitchHelpHrs * (p.stitchHelpRatePerHr || 0);
   const binderyRateHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
     + bandHrsUsed + padHrsUsed + wrapHrsUsed;
-  const binderyHrs = binderyRateHrs + foldHrs + stitchHrs;
-  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor + stitchLabor;
+  // Paper handling rides with the paper block on E&M's sheet but is LABOR
+  // (#348988: "Paper handling 0.1 Hrs" turns paper 337.50 into 340.17).
+  const paperHandlingCost = (p.paperHandlingHrs || 0) * (p.paperHandlingRate || 0);
+  const binderyHrs = binderyRateHrs + foldHrs + stitchHrs + (p.paperHandlingHrs || 0);
+  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor + stitchLabor + paperHandlingCost;
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
   // labor — they ride the prep/materials bucket at Material markup.
   // Cartons auto-compute from paper weight at Mary's rule: no carton over
@@ -681,7 +751,7 @@ function computePart(
   const binderyCost = binderyLabor;
 
   return {
-    pressSheets, mrWasteSheets, orderSheets, paperCost,
+    pressSheets, mrWasteSheets, runWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
     plateMaterialsCost, foldHrs, foldLabor, stitchRunUsed, stitchHrs, stitchLabor,

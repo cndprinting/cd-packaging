@@ -1,0 +1,469 @@
+[
+  {
+    "file": "scan9_doc30611120260818162723.pdf",
+    "estimateNo": "348519",
+    "date": "07-20-2026",
+    "customer": "Juvenile Welfare Board",
+    "contact": "Mindy Taylor",
+    "soldBy": "Lee Zerfas",
+    "description": "Water Smart Brochure - 11 x 8.5, Fold 3.66 x 8.5 - 4/4",
+    "finalTrimSize": "11 x 8 1/2 - with Bleeds",
+    "quantities": [{"qty": 10000, "price": 1536.00}],
+    "productType": "brochure",
+    "press": "KOMII Configuration 5C KOMORI",
+    "binding": "trifold",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Brochure (Pages 2)",
+        "paper": {"sheets": 3750, "parentSize": "19 x 25", "lb": "80 LB Coated Text", "brand": "Coated Text - White - Gloss", "pricePerM": 75.10, "pounds": 300, "weightPerM": "80M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "SHEETWISE (4 Pages Per Side for 4 2 Page Sigs)", "makeready": 1000, "pressWaste": 125, "bindWaste": 100, "washMakereadys": 8, "minimumCount": 2600},
+        "prep": {"typeOutputHrs": 0.3, "proofHrs": 0.1, "proofMaterial": 35.20, "platesHrs": 0.6, "plates": 8, "plateCost": 152.00, "hoursPrep": 0.9, "prepMaterials": 187.20, "prepTotal": 222.68},
+        "press": {"config": "KOMII Configuration 5C KOMORI", "setupHrs": 0.1, "makereadyHrs": 0.6, "runHrsSide1": 0.7, "runHrsSide2": 0.7, "sph": 5300, "inkLbs": "1.0 LBS Black + 4.5 LBS Color", "inkCost": 59.68, "colors": "4/4", "hoursPress": 2.1, "pressTotal": 447.89},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.1, "cost": 6.30, "note": "8 lifts"},
+          {"op": "Trim to Size", "hrs": 0.4, "cost": 15.93},
+          {"op": "1 Fold Setup", "hrs": 0.3, "cost": 12.00},
+          {"op": "Folding", "hrs": 0.6, "cost": 29.13, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Ctn Pack", "hrs": 0.3, "cost": 14.36, "note": "11 11.25x8.75x10, material 10.23"},
+          {"op": "Delivery", "hrs": 0.2, "cost": 53.61, "note": "Outside Freight 44.61"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 281.63, "total": 284.30},
+        "markups": {"paper": {"cost": 281.63, "pct": 33, "sell": 374.57}, "material": {"cost": 257.11, "pct": 18, "sell": 303.39}, "outside": {"cost": 44.61, "pct": 32, "sell": 45.61}, "labor": {"cost": 502.86, "pct": 40, "sell": 704.00}, "commissionPct": 10, "commission": 108.62},
+        "outsidePurchases": "none (Outside Freight 44.61 in Delivery line)",
+        "partTotal": 1536.18
+      }
+    ],
+    "anythingUnusual": "Quote Notes '3%'. Pages 1-2 of PDF are duplicate copies of the same quote letter. Total cost 1086.20, markup 449.98, selling 1536.18 vs quoted 1536.00."
+  },
+  {
+    "file": "scan11_doc30610920260818162435.pdf",
+    "estimateNo": "348795",
+    "date": "08-03-2026",
+    "customer": "Daily Dose",
+    "contact": "Mayank",
+    "soldBy": "Lee Zerfass",
+    "description": "8pg Self Cover - 5 x 7 - 4/4",
+    "finalTrimSize": "5 x 7 - 8 Pages with Bleeds",
+    "quantities": [{"qty": 150000, "price": 20172.00}],
+    "productType": "book (8pg self cover saddle bound booklet)",
+    "press": "KOMII Configuration 5C KOMORI",
+    "binding": "saddle",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Cover (Pages 8)",
+        "paper": {"sheets": 42000, "parentSize": "23 x 29", "lb": "80 LB Coated Cover", "brand": "Novaliith Plus Cover - White - Silk/Dull", "pricePerM": 178.35, "pounds": 8652, "weightPerM": "206M"},
+        "runPlan": {"pagesUp": 16, "workStyle": "SHEETWISE (16 Pages Per Side for 4 8 Page Sigs)", "makeready": 400, "pressWaste": 750, "bindWaste": 200, "washMakereadys": 8, "minimumCount": 37700},
+        "prep": {"typeOutputHrs": 0.4, "proofHrs": 0.3, "proofMaterial": 58.42, "platesHrs": 0.3, "plates": 6, "plateCost": 114.00, "hoursPrep": 0.9, "prepMaterials": 172.43, "prepTotal": 216.51},
+        "press": {"config": "KOMII Configuration 5C KOMORI", "setupHrs": 0.1, "makereadyHrs": 0.3, "runHrsSide1": 3.4, "runHrsSide2": 3.4, "sph": 12500, "inkLbs": "8.4 LBS Black + 41.0 LBS Color", "inkCost": 534.65, "colors": "4/4", "hoursPress": 7.1, "pressTotal": 1848.77},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.1, "cost": 3.51, "note": "4 lifts"},
+          {"op": "Trim to Size", "hrs": 0.3, "cost": 11.47},
+          {"op": "1 Fold Setup", "hrs": 0.2, "cost": 8.00},
+          {"op": "Folding", "hrs": 15.8, "cost": 759.27, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Setup", "hrs": 0.3, "cost": 28.50},
+          {"op": "Saddlebind", "hrs": 16.9, "cost": 1603.13, "note": "on the Mueller"},
+          {"op": "Help", "hrs": 16.9, "cost": 337.50},
+          {"op": "Ctn Pack", "hrs": 7.8, "cost": 407.16, "note": "312 11.25x8.75x10, material 290.16"},
+          {"op": "Finish Outside", "hrs": null, "cost": 1640.00},
+          {"op": "Delivery", "hrs": 0.2, "cost": 9.00, "note": "Outside Freight 0.00"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 7490.70, "total": 7493.37},
+        "markups": {"paper": {"cost": 7490.70, "pct": 28, "sell": 9588.10}, "material": {"cost": 997.24, "pct": 17, "sell": 1166.77}, "outside": {"cost": 1640.00, "pct": 30, "sell": 2132.00}, "labor": {"cost": 4238.25, "pct": 38, "sell": 5848.79}, "commissionPct": 10, "commission": 1436.62},
+        "outsidePurchases": "Additional Cut 620.00 + C&D 26 117-01 (crease) 1020.00 = Finish Out 1640.00",
+        "partTotal": 20172.28
+      }
+    ],
+    "anythingUnusual": "Page 5 is an internal C&D Print Finishing Department quote sheet #26 117-01 by Todd: Crease (crease for fold), 17 1/2 x 23 sheet, 14pt C2S, 1-up, MC press task; run prices $9,608/$12,795/$21,720/$1,345/$1,020 for 375M/500M/1000M/50M/37.5M finished pieces, unit costs 0.026/0.026/0.022/0.027/0.027. The 37.5M ($1,020) tier is the one used in the estimate's outside purchases. Terms: 3% surcharge if using credit/debit card. Totals: cost 14366.19, markup 5806.09, selling 20172.28."
+  },
+  {
+    "file": "scan13_doc30610720260818162246.pdf",
+    "estimateNo": "349100",
+    "date": "08-18-2026",
+    "customer": "RAYMOND JAMES & ASSOCIATES (cust 226)",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "10 x 13 Booklet Envelope - 2/0 K & PMS",
+    "finalTrimSize": "10 x 13",
+    "quantities": [
+      {"qty": 500, "price": 374.00},
+      {"qty": 1000, "price": 477.00},
+      {"qty": 1500, "price": 601.00},
+      {"qty": 2000, "price": 697.00}
+    ],
+    "productType": "other (booklet envelope, printed outside - GCI)",
+    "press": "Press 40 Configuration Phantom Press (1 SIDE on the 40)",
+    "binding": "flat (envelope, no bindery ops)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Booklet En @ 500 (Pages 2)",
+        "paper": {"sheets": 510, "parentSize": "10 x 13", "lb": "24 LB Envelopes", "brand": "Booklet Envelope - White - Wove", "pricePerM": 0.00, "pounds": 9, "weightPerM": "17M"},
+        "runPlan": {"pagesUp": 1, "workStyle": "1 SIDE (1 Pages Per Side for 1 2 Page Sigs)", "makeready": null, "pressWaste": null, "bindWaste": null, "washMakereadys": 2},
+        "prep": {"platesHrs": 0.0, "plates": 2, "plateCost": 0.00},
+        "press": {"config": "Press 40 Configuration Phantom Press", "setupHrs": null, "makereadyHrs": null, "runHrsSide1": null, "runHrsSide2": null, "sph": null, "inkLbs": "0.5 LBS Black + 0.5 LBS Color", "inkCost": 39.50, "colors": "2/0 K & PMS", "hoursPress": 0.0, "pressTotal": 39.50},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 210.00},
+          {"op": "Delivery", "hrs": 0.1, "cost": 16.86, "note": "Outside Freight 10.86"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 0.00, "total": 2.67},
+        "markups": {"paper": {"cost": 0.00, "pct": 33, "sell": 1.00}, "material": {"cost": 39.50, "pct": 18, "sell": 46.61}, "outside": {"cost": 220.86, "pct": 32, "sell": 288.06}, "labor": {"cost": 8.67, "pct": 40, "sell": 12.14}, "commissionPct": 10, "commission": 26.91},
+        "outsidePurchases": "GCI 180.00 + CGI Prepress 30.00 = Finish Out 210.00 (at 500)",
+        "partTotal": 374.72
+      },
+      {
+        "name": "Part 1 of 1 Booklet En @ 1000 (Pages 2)",
+        "paper": {"sheets": 1010, "parentSize": "10 x 13", "lb": "24 LB Envelopes", "brand": "Booklet Envelope - White - Wove", "pricePerM": 0.00, "pounds": 17, "weightPerM": "17M"},
+        "runPlan": {"pagesUp": 1, "workStyle": "1 SIDE", "makeready": null, "pressWaste": null, "bindWaste": null, "washMakereadys": 2},
+        "prep": {"platesHrs": 0.0, "plates": 2, "plateCost": 0.00},
+        "press": {"config": "Press 40 Configuration Phantom Press", "inkLbs": "0.5 LBS Black + 0.5 LBS Color", "inkCost": 39.50, "colors": "2/0 K & PMS", "hoursPress": 0.0, "pressTotal": 39.50},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 280.00},
+          {"op": "Delivery", "hrs": 0.1, "cost": 19.86, "note": "Outside Freight 13.86"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 0.00, "total": 2.67},
+        "markups": {"paper": {"cost": 0.00, "pct": 33, "sell": 1.00}, "material": {"cost": 39.50, "pct": 18, "sell": 46.61}, "outside": {"cost": 293.86, "pct": 32, "sell": 383.46}, "labor": {"cost": 8.67, "pct": 40, "sell": 12.14}, "commissionPct": 10, "commission": 34.21},
+        "outsidePurchases": "GCI 250.00 + CGI Prepress 30.00 = Finish Out 280.00 (at 1000)",
+        "partTotal": 477.42
+      },
+      {
+        "name": "Part 1 of 1 Booklet En @ 1500 (Pages 2)",
+        "paper": {"sheets": 1510, "parentSize": "10 x 13", "lb": "24 LB Envelopes", "brand": "Booklet Envelope - White - Wove", "pricePerM": 0.00, "pounds": 26, "weightPerM": "17M"},
+        "runPlan": {"pagesUp": 1, "workStyle": "1 SIDE", "makeready": null, "pressWaste": null, "bindWaste": null, "washMakereadys": 2},
+        "prep": {"platesHrs": 0.0, "plates": 2, "plateCost": 0.00},
+        "press": {"config": "Press 40 Configuration Phantom Press", "inkLbs": "0.5 LBS Black + 0.5 LBS Color", "inkCost": 39.50, "colors": "2/0 K & PMS", "hoursPress": 0.0, "pressTotal": 39.50},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 364.50},
+          {"op": "Delivery", "hrs": 0.1, "cost": 23.46, "note": "Outside Freight 17.46"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 0.00, "total": 2.67},
+        "markups": {"paper": {"cost": 0.00, "pct": 33, "sell": 1.00}, "material": {"cost": 39.50, "pct": 18, "sell": 46.61}, "outside": {"cost": 381.96, "pct": 32, "sell": 498.60}, "labor": {"cost": 8.67, "pct": 40, "sell": 12.14}, "commissionPct": 10, "commission": 43.02},
+        "outsidePurchases": "GCI 334.50 + CGI Prepress 30.00 = Finish Out 364.50 (at 1500)",
+        "partTotal": 601.37
+      },
+      {
+        "name": "Part 1 of 1 Booklet En @ 2000 (Pages 2) - layout page only, cost sheet not in scan",
+        "paper": {"sheets": 2010, "parentSize": "10 x 13", "lb": "24 LB Envelopes", "brand": "Booklet Envelope - White - Wove", "pricePerM": "?", "pounds": "?", "weightPerM": "17M"},
+        "runPlan": {"pagesUp": 1, "workStyle": "1 SIDE", "washMakereadys": 2},
+        "outsidePurchases": "GCI 400.00 + CGI Prepress 30.00 = Finish Out 430.00 (at 2000)",
+        "partTotal": "? (quoted 697.00)"
+      }
+    ],
+    "anythingUnusual": "Envelope job printed/converted outside (GCI envelope converter + CGI Prepress); paper cost 0.00 (envelopes are the outside purchase); 'Phantom Press' config on Press 40 with 0.0 press hrs — press cost is ink only. Quote Notes '3%'. Cost detail page for the 2,000 quantity is missing from the scan (only its layout page present). Terms 2% 10 Days Net 30."
+  },
+  {
+    "file": "scan14_doc30610620260818162218.pdf",
+    "estimateNo": "349099",
+    "date": "08-18-2026",
+    "customer": "ALL CHILDREN'S HOSPITAL (cust 16)",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - GI Gastro Tri fold - 10.4/4; 10.806 x 8.5 - folds 3.688 x 8.5",
+    "finalTrimSize": "10 13/16 x 8 1/2 - with Bleeds",
+    "quantities": [{"qty": 1000, "price": 488.00}],
+    "productType": "brochure (digital trifold)",
+    "press": "MILLE Configuration MILLER SHEETFED 1 COLOR (used as phantom; actual printing = outside Digital purchase)",
+    "binding": "trifold + score",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 360, "parentSize": "19 x 25", "lb": "100 LB Coated Cover", "brand": "Silk Cover - White - Silk", "pricePerM": 183.73, "pounds": 66, "weightPerM": "183M", "pressSize": "12 1/2 x 19", "sheetsOutOfParent": 2},
+        "runPlan": {"pagesUp": 2, "workStyle": "WORK & TURN (2 Pages Per Side for 2 2 Page Sigs) on the MILLE", "makeready": 60, "pressWaste": 43, "bindWaste": 100, "washMakereadys": 4, "minimumCount": 600},
+        "prep": {"platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 4800, "inkLbs": null, "inkCost": 0.00, "colors": "4/4", "hoursPress": 0.1, "pressTotal": 0.06},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.0, "cost": 1.35, "note": "2 lifts"},
+          {"op": "Trim to Size", "hrs": 0.2, "cost": 7.11},
+          {"op": "1 Fold Setup", "hrs": 0.3, "cost": 12.00},
+          {"op": "Folding", "hrs": 0.3, "cost": 12.00, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Hand Bind 1 - Score", "hrs": 0.1, "cost": 1.88},
+          {"op": "Ctn Pack", "hrs": 0.2, "cost": 9.24, "note": "12 cartons, material 6.24"},
+          {"op": "Finish Outside", "hrs": null, "cost": 243.45},
+          {"op": "Delivery", "hrs": 0.3, "cost": 29.16, "note": "Outside Freight 14.16"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 66.14, "total": 68.81},
+        "markups": {"paper": {"cost": 66.14, "pct": 33, "sell": 87.97}, "material": {"cost": 6.24, "pct": 18, "sell": 7.36}, "outside": {"cost": 257.61, "pct": 0, "sell": 258.61}, "labor": {"cost": 55.07, "pct": 40, "sell": 77.10}, "commissionPct": 15, "commission": 57.76},
+        "outsidePurchases": "Digital 198.45 + Score 45.00 = Finish Out 243.45",
+        "partTotal": 488.80
+      }
+    ],
+    "anythingUnusual": "Digital job run through as outside purchase ('Digital' 198.45) with 0% markup on Outside and 15% commission (vs the usual 10%). Quote Notes: '3%' and '25 overs .378'. Press section uses MILLER SHEETFED 1 COLOR phantom-style with 0.0 hrs. Score done outside (45.00) plus a Hand Bind Score line internally. Totals: cost 385.06, markup 103.74, selling 488.80."
+  },
+  {
+    "file": "scan15_doc30610520260818162148.pdf",
+    "estimateNo": "349098",
+    "date": "08-18-2026",
+    "customer": "RAYMOND JAMES & ASSOCIATES (cust 226)",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "Postcard mailing - 3 drops; 5.5 x 8.5 - 4/4 Inkjet address",
+    "finalTrimSize": "5 1/2 x 8 1/2 - with Bleeds",
+    "quantities": [{"qty": 6200, "price": 1521.00}],
+    "productType": "mailer (postcard, 3 drops)",
+    "press": "KOMII Configuration 5C KOMORI",
+    "binding": "flat (trim to size, inkjet address)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 1750, "parentSize": "19 x 25", "lb": "100 LB Coated Cover", "brand": "Silk Cover - White - Silk/Dull", "pricePerM": 183.73, "pounds": 320, "weightPerM": "183M"},
+        "runPlan": {"pagesUp": 8, "workStyle": "WORK & TURN (8 Pages Per Side for 8 2 Page Sigs)", "makeready": 720, "pressWaste": 47, "bindWaste": 0, "washMakereadys": 4, "minimumCount": 775},
+        "prep": {"typeOutputHrs": 0.1, "proofHrs": 0.1, "proofMaterial": 16.00, "platesHrs": 0.3, "plates": 4, "plateCost": 76.00, "hoursPrep": 0.5, "prepMaterials": 92.00, "prepTotal": 112.40},
+        "press": {"config": "KOMII Configuration 5C KOMORI", "setupHrs": 0.1, "makereadyHrs": 0.4, "runHrsSide1": 0.4, "runHrsSide2": 0.4, "sph": 4800, "inkLbs": "0.7 LBS Black + 2.9 LBS Color", "inkCost": 39.38, "colors": "4/4", "hoursPress": 1.2, "pressTotal": 259.08},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.2, "cost": 7.35, "note": "8 lifts"},
+          {"op": "Trim to Size", "hrs": 0.7, "cost": 30.35},
+          {"op": "Hand Bind 1 - Inkjet addres", "hrs": 0.1, "cost": 1.88},
+          {"op": "Finish Outside", "hrs": null, "cost": 277.80},
+          {"op": "Delivery", "hrs": 0.3, "cost": 62.16, "note": "Outside Freight 44.16"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 321.53, "total": 324.20},
+        "markups": {"paper": {"cost": 321.53, "pct": 33, "sell": 427.63}, "material": {"cost": 131.38, "pct": 18, "sell": 155.03}, "outside": {"cost": 321.96, "pct": 32, "sell": 410.86}, "labor": {"cost": 300.35, "pct": 40, "sell": 420.49}, "commissionPct": 10, "commission": 107.52},
+        "outsidePurchases": "Seacap 277.80 = Finish Out 277.80",
+        "partTotal": 1521.53
+      }
+    ],
+    "anythingUnusual": "Mailing job: 3 drops, inkjet addressing, postage NOT included (per quote letter notes). Outside purchase 'Seacap' 277.80 (mailing services / secap). Quote Notes '3%'. Terms 2% 10 Days Net 30. Totals: cost 1075.22, markup 446.31, selling 1521.53."
+  },
+  {
+    "file": "scan16_doc30610420260818162111.pdf",
+    "estimateNo": "349097",
+    "date": "08-18-2026",
+    "customer": "RAYMOND JAMES & ASSOCIATES (cust 226)",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - Postcard Mailing - 3 drops; 5.5 x 8.5 - 4/4 w/Variable addressing",
+    "finalTrimSize": "5 1/2 x 8 1/2 - with Bleeds",
+    "quantities": [{"qty": 6200, "price": 1447.00}],
+    "productType": "mailer (digital postcard, 3 drops, variable addressing)",
+    "press": "MILLE Configuration MILLER SHEETFED 1 COLOR (phantom; actual printing = outside Digital purchase)",
+    "binding": "flat (trim to size, address/sort, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 850, "parentSize": "19 x 25", "lb": "100 LB Coated Cover", "brand": "Silk Cover - White - Silk/Dull", "pricePerM": 183.73, "pounds": 156, "weightPerM": "183M", "pressSize": "12 1/2 x 19", "sheetsOutOfParent": 2},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN (4 Pages Per Side for 4 2 Page Sigs) on the MILLE", "makeready": 45, "pressWaste": 100, "bindWaste": 0, "washMakereadys": 4, "minimumCount": 1550},
+        "prep": {"platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 4800, "inkCost": 0.00, "colors": "4/4", "hoursPress": 0.1, "pressTotal": 0.06},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.1, "cost": 2.70, "note": "4 lifts"},
+          {"op": "Trim to Size", "hrs": 0.2, "cost": 10.89},
+          {"op": "Hand Bind 1 - Address/Sort", "hrs": 0.1, "cost": 1.88},
+          {"op": "Ctn Pack", "hrs": 0.2, "cost": 7.83, "note": "6 11.25x8.75x10, material 5.58"},
+          {"op": "Finish Outside", "hrs": null, "cost": 1011.40},
+          {"op": "Delivery", "hrs": 0.3, "cost": 60.03, "note": "Outside Freight 42.03"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 156.17, "total": 158.84},
+        "markups": {"paper": {"cost": 156.17, "pct": 33, "sell": 207.71}, "material": {"cost": 5.58, "pct": 18, "sell": 6.58}, "outside": {"cost": 1053.43, "pct": 0, "sell": 1054.43}, "labor": {"cost": 38.45, "pct": 40, "sell": 53.83}, "commissionPct": 10, "commission": 125.36},
+        "outsidePurchases": "Digital 822.40 + VD (variable data) 65.00 + Sort 124.00 = Finish Out 1011.40",
+        "partTotal": 1447.91
+      }
+    ],
+    "anythingUnusual": "Digital version of estimate 349098's postcard mailing (same customer/qty, digital instead of Komori). Outside markup 0%. Quote Notes: '3%' and '50 overs .514'. Postage not included, 3 drops. Totals: cost 1253.63, markup 194.28, selling 1447.91."
+  },
+  {
+    "file": "scan21_doc30612220260818163713.pdf",
+    "estimateNo": "348228",
+    "date": "06-26-2026",
+    "customer": "Falstaff Travel",
+    "contact": "",
+    "soldBy": "Albert Waxman",
+    "description": "Travel Europe Magazine - 9.17 x 11.8125; 216pgs plus cover w/Flood LED UV OFC/OBC",
+    "finalTrimSize": "9 3/16 x 11 13/16",
+    "quantities": [{"qty": 35000, "price": 217240.00}],
+    "productType": "book (216pg + cover perfect bound magazine)",
+    "press": "KOMII (Cover: Configuration Kom LED; Text: Configuration 5C KOMORI)",
+    "binding": "perfect bound",
+    "parts": [
+      {
+        "name": "Part 1 of 2 Cover (Pages 4)",
+        "paper": {"sheets": 18770, "parentSize": "20 x 26", "lb": "100 LB Coated Cover", "brand": "Novalith Cover - White - Dull", "pricePerM": 174.00, "pounds": 3754, "weightPerM": "200M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN (4 Pages Per Side for 2 4 Page Sigs)", "makeready": 560, "pressWaste": 700, "bindWaste": 0, "washMakereadys": 5, "minimumCount": 17500},
+        "prep": {"designHrs": 1.5, "proofHrs": 0.1, "proofMaterial": 88.93, "platesHrs": 0.2, "plates": "4 6c", "plateCost": 64.00, "hoursPrep": 1.8, "prepMaterials": 152.93, "prepTotal": 251.12},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 0.4, "runHrsSide1": 1.5, "runHrsSide2": 1.5, "sph": 12500, "inkLbs": "3.3 LBS Black + 21.3 LBS Color", "inkCost": 265.35, "varnishMaterial": 19.98, "colors": "5/4 (4c + varnish / K+3c)", "hoursPress": 3.5, "pressTotal": 1029.57},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 1.6, "cost": 74.03, "note": "94 lifts"},
+          {"op": "Trim to Size", "hrs": 2.8, "cost": 124.29}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 3265.98, "total": 3268.65},
+        "markups": {"paper": {"cost": 3265.98, "pct": 32, "sell": 4311.09}, "material": {"cost": 438.27, "pct": 17, "sell": 512.77}, "outside": {"cost": 0.00, "pct": 30, "sell": 1.00}, "labor": {"cost": 1043.41, "pct": 38, "sell": 1439.91}, "commissionPct": 10, "commission": 474.77},
+        "outsidePurchases": "(shared with part 2) Service 21125.00 + LED UV 1 side 486.00 = Finish Out 21611.00 — carried in Part 2 costs",
+        "partTotal": 6739.54
+      },
+      {
+        "name": "Part 2 of 2 Text (Pages 216)",
+        "paper": {"sheets": 986540, "parentSize": "20 x 26", "lb": "70 LB Coated Text", "brand": "Novalith Text - White - Dull", "pricePerM": 66.25, "pounds": 75964, "weightPerM": "77M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "SHEETWISE (Run 27, 4 Pages Per Side for 27 8 Page Sigs)", "makeready": 13080, "pressWaste": 28350, "bindWaste": 100, "washMakereadys": 216, "minimumCount": 945100},
+        "prep": {"proofHrs": 0.3, "proofMaterial": 4802.46, "platesHrs": 10.9, "plates": 216, "plateCost": 4104.00, "hoursPrep": 11.1, "prepMaterials": 8906.46, "prepTotal": 9155.18},
+        "press": {"config": "KOMII Configuration 5C KOMORI", "setupHrs": 0.1, "makereadyHrs": 16.2, "runHrsSide1": 78.9, "runHrsSide2": 78.9, "sph": 12500, "inkLbs": "145.3 LBS Black + 870.6 LBS Color", "inkCost": 10982.21, "colors": "4/4", "hoursPress": 174.1, "pressTotal": 43196.22},
+        "bindery": [
+          {"op": "1 Fold Setup", "hrs": 6.4, "cost": 305.20, "note": "Fold 945000"},
+          {"op": "Folding", "hrs": 156.4, "cost": 7505.02, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Ctn Pack", "hrs": 68.4, "cost": 3569.18, "note": "2735 11.25x8.75x10, material 2543.55"},
+          {"op": "Finish Outside", "hrs": null, "cost": 21611.00}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 65358.28, "total": 65360.95},
+        "markups": {"paper": {"cost": 65358.28, "pct": 32, "sell": 86272.93}, "material": {"cost": 22432.22, "pct": 17, "sell": 26245.70}, "outside": {"cost": 19631.00, "pct": 30, "sell": 26114.30}, "labor": {"cost": 41301.24, "pct": 38, "sell": 56995.71}, "commissionPct": 10, "commission": 14872.27},
+        "outsidePurchases": "Service 21125.00 + LED UV 1 side 486.00 + Outside Costs 3 0.00 = Finish Out 21611.00 (perfect binding service)",
+        "partTotal": 210500.91
+      }
+    ],
+    "summaryPage": {
+      "combined": {"cost": 153470.39, "paperMarkup": 21959.76, "materialMarkup": 3887.98, "outsideMarkup": 6484.30, "laborMarkup": 16090.97, "commission": 15347.04, "sellFor": 217240.45, "addlMs": 6039.32},
+      "operationsBreakdown": {"paperTotal": 68629.60, "prepTotals": 9406.30, "pressTotals": 44225.78, "bindTotals": 31208.72, "grandTotals": {"hours": 426.20, "labor": 42344.66, "material": 113105.75, "totalCost": 155450.40}}
+    },
+    "anythingUnusual": "Largest job in this batch ($217,240). Two-part magazine: LED UV flood coating on cover (Kom LED press config, 5/4 with varnish line 19.98); perfect binding done outside ('Service' 21125.00 + 'LED UV 1 side' 486.00). Quote Notes '-1980 = plate discount'. Note 'Allow 12 weeks for stock to deliver from Mill'; freight additional; 3% credit card surcharge. Text part: 27 press runs, 216 plates, 174.1 press hrs. Page 7 is a combined summary/operations-breakdown page (Cut to Size, Markup/Design, KOMII Set/Wash/Mkd x2, Ink & Mixing, Final Trim, baum-26x40, Carton Packing). Some figures printed with stray '%' OCR artifacts (e.g. %20914.65) transcribed as numbers. Outside cost on part 2 markup table shows 19631.00 vs Finish Out 21611.00 (difference likely allocated to material/freight lines)."
+  },
+  {
+    "file": "scan19_doc30610120260818161743.pdf",
+    "estimateNo": "347866",
+    "date": "08-18-2026",
+    "customer": "Printing Solutions of Florida (cust 349)",
+    "contact": "Shell Jaroy",
+    "soldBy": "Benjy Waxman",
+    "description": "Renuvion Body Brag Book - 16pgs plus Cover - w/Flood LED UV on all; Cover = EXACT REPRINT FROM ARCHIVED FILES",
+    "finalTrimSize": "8 1/2 x 11 (Cover 4 pgs, Text 16 pgs, with Bleeds)",
+    "quantities": [
+      {"qty": 1000, "price": 4412.00},
+      {"qty": 1500, "price": 4987.00},
+      {"qty": 2000, "price": 5704.00}
+    ],
+    "productType": "book (16pg + cover saddle bound brag book, LED UV flood on all)",
+    "press": "KOMII Configuration Kom LED",
+    "binding": "saddle (Mueller), wrapped 5 per package",
+    "parts": [
+      {
+        "name": "Qty 1000 - Part 1 of 2 Cover (Pages 4)",
+        "paper": {"sheets": 1250, "parentSize": "19 x 25", "lb": "120 LB Coated Cover", "brand": "Gloss Cover - White - Gloss", "pricePerM": 220.00, "pounds": 275, "weightPerM": "220M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN (4 Pages Per Side for 2 4 Page Sigs)", "makeready": 700, "pressWaste": 25, "bindWaste": 0, "washMakereadys": 5, "minimumCount": 500},
+        "prep": {"proofHrs": 0.1, "proofMaterial": 76.76, "platesHrs": 0.3, "plates": "4 6c", "plateCost": 64.00, "hoursPrep": 0.4, "prepMaterials": 140.76, "prepTotal": 149.80},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 0.4, "washUpHrs": 0.2, "runHrsSide1": 0.3, "runHrsSide2": 0.3, "sph": 4800, "inkLbs": "0.7 LBS Black + 3.3 LBS Color", "inkCost": 43.34, "varnishMaterial": 3.63, "colors": "5/5", "hoursPress": 1.2, "pressTotal": 300.49},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.1, "cost": 4.59, "note": "7 lifts"},
+          {"op": "Trim to Size", "hrs": 0.3, "cost": 12.23},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2", "hrs": 0.0, "cost": 0.23}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 275.00, "total": 277.67},
+        "markups": {"paper": {"cost": 275.00, "pct": 33, "sell": 365.75}, "material": {"cost": 187.72, "pct": 18, "sell": 221.51}, "outside": {"cost": 0.00, "pct": 32, "sell": 1.00}, "labor": {"cost": 284.17, "pct": 40, "sell": 397.84}, "commissionPct": 0},
+        "outsidePurchases": "Score 150.00 + Flood LED UV 260.05 = Finish Out 410.05 (at 1000; charged in Text part)",
+        "partTotal": 986.10
+      },
+      {
+        "name": "Qty 1000 - Part 2 of 2 Text (Pages 16)",
+        "paper": {"sheets": 4000, "parentSize": "19 x 25", "lb": "80 LB Coated Cover", "brand": "Coated Cover - White - Gloss", "pricePerM": 147.00, "pounds": 588, "weightPerM": "147M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "SHEETWISE (Run 2, 4 Pages Per Side for 2 8 Page Sigs)", "makeready": 1650, "pressWaste": 75, "bindWaste": 200, "washMakereadys": 20, "minimumCount": 2200},
+        "prep": {"proofHrs": 0.3, "proofMaterial": 307.05, "platesHrs": 0.8, "plates": "16 6c", "plateCost": 256.00, "hoursPrep": 1.0, "prepMaterials": 563.05, "prepTotal": 589.86},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 1.2, "runHrsSide1": 0.8, "runHrsSide2": 0.8, "sph": 5200, "inkLbs": "1.0 LBS Black + 6.3 LBS Color", "inkCost": 79.22, "varnishMaterial": 7.78, "colors": "5/5", "hoursPress": 2.8, "pressTotal": 693.68},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.0, "cost": 0.66, "note": "1 lifts"},
+          {"op": "Trim to Size", "hrs": 0.1, "cost": 5.14},
+          {"op": "1 Fold Setup", "hrs": 0.5, "cost": 25.20, "note": "Fold 2000"},
+          {"op": "Folding", "hrs": 0.3, "cost": 15.27, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Setup", "hrs": 1.1, "cost": 102.92},
+          {"op": "Saddlebind", "hrs": 0.3, "cost": 23.75, "note": "on the Mueller"},
+          {"op": "Help", "hrs": 0.3, "cost": 5.00},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2 - Score", "hrs": 0.0, "cost": 0.23},
+          {"op": "Wrapping", "hrs": 0.8, "cost": 29.17, "note": "5 Per Package"},
+          {"op": "Ctn Pack", "hrs": 0.6, "cost": 28.71, "note": "22 11.25x8.75x10, material 20.46"},
+          {"op": "Finish Outside", "hrs": null, "cost": 410.05},
+          {"op": "Delivery", "hrs": 0.0, "cost": 117.25, "note": "Outside Freight 117.25"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 588.00, "total": 590.67},
+        "markups": {"paper": {"cost": 588.00, "pct": 33, "sell": 782.04}, "material": {"cost": 670.51, "pct": 18, "sell": 791.20}, "outside": {"cost": 527.30, "pct": 32, "sell": 658.52}, "labor": {"cost": 853.63, "pct": 40, "sell": 1195.08}, "commissionPct": 0},
+        "outsidePurchases": "Score 150.00 + Flood LED UV 260.05 = Finish Out 410.05",
+        "partTotal": 3426.84
+      },
+      {
+        "name": "Qty 1500 - Part 1 of 2 Cover (Pages 4)",
+        "paper": {"sheets": 1500, "parentSize": "19 x 25", "lb": "120 LB Coated Cover", "brand": "Gloss Cover - White - Gloss", "pricePerM": 220.00, "pounds": 330, "weightPerM": "220M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN (4 Pages Per Side for 2 4 Page Sigs)", "makeready": 700, "pressWaste": 38, "bindWaste": 0, "washMakereadys": 5, "minimumCount": 750},
+        "prep": {"proofHrs": 0.1, "proofMaterial": 76.76, "platesHrs": 0.3, "plates": "4 6c", "plateCost": 64.00, "hoursPrep": 0.4, "prepMaterials": 140.76, "prepTotal": 149.80},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 0.4, "washUpHrs": 0.2, "runHrsSide1": 0.3, "runHrsSide2": 0.3, "sph": 4800, "inkLbs": "0.7 LBS Black + 3.6 LBS Color", "inkCost": 46.60, "varnishMaterial": 3.63, "colors": "5/5", "hoursPress": 1.3, "pressTotal": 326.15},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.1, "cost": 5.91, "note": "9 lifts"},
+          {"op": "Trim to Size", "hrs": 0.3, "cost": 14.32},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2", "hrs": 0.0, "cost": 0.23}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 330.00, "total": 332.67},
+        "markups": {"paper": {"cost": 330.00, "pct": 33, "sell": 438.90}, "material": {"cost": 190.98, "pct": 18, "sell": 225.36}, "outside": {"cost": 0.00, "pct": 32, "sell": 1.00}, "labor": {"cost": 309.98, "pct": 40, "sell": 433.97}, "commissionPct": 0},
+        "outsidePurchases": "(Finish Out charged in Text part)",
+        "partTotal": 1099.23
+      },
+      {
+        "name": "Qty 1500 - Part 2 of 2 Text (Pages 16)",
+        "paper": {"sheets": 5000, "parentSize": "19 x 25", "lb": "80 LB Coated Cover", "brand": "Coated Cover - White - Gloss", "pricePerM": 147.00, "pounds": 735, "weightPerM": "147M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "SHEETWISE (Run 2, 4 Pages Per Side for 2 8 Page Sigs)", "makeready": 1650, "pressWaste": 113, "bindWaste": 200, "washMakereadys": 20, "minimumCount": 3200},
+        "prep": {"proofHrs": 0.3, "proofMaterial": 307.05, "platesHrs": 0.8, "plates": "16 6c", "plateCost": 256.00, "hoursPrep": 1.0, "prepMaterials": 563.05, "prepTotal": 589.86},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 1.2, "runHrsSide1": 1.0, "runHrsSide2": 1.0, "sph": 5200, "inkLbs": "1.2 LBS Black + 7.4 LBS Color", "inkCost": 92.27, "varnishMaterial": 9.72, "colors": "5/5", "hoursPress": 3.2, "pressTotal": 791.37},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.0, "cost": 0.66, "note": "1 lifts"},
+          {"op": "Trim to Size", "hrs": 0.1, "cost": 5.14},
+          {"op": "1 Fold Setup", "hrs": 0.5, "cost": 25.20, "note": "Fold 3000"},
+          {"op": "Folding", "hrs": 0.5, "cost": 22.91, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Setup", "hrs": 1.1, "cost": 102.92},
+          {"op": "Saddlebind", "hrs": 0.3, "cost": 23.75, "note": "on the Mueller"},
+          {"op": "Help", "hrs": 0.3, "cost": 5.00},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2 - Score", "hrs": 0.0, "cost": 0.23},
+          {"op": "Wrapping", "hrs": 1.3, "cost": 43.75, "note": "5 Per Package"},
+          {"op": "Ctn Pack", "hrs": 0.7, "cost": 35.24, "note": "27 11.25x8.75x10, material 25.11"},
+          {"op": "Finish Outside", "hrs": null, "cost": 469.15},
+          {"op": "Delivery", "hrs": 0.0, "cost": 132.54, "note": "Outside Freight 132.54"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 735.00, "total": 737.67},
+        "markups": {"paper": {"cost": 735.00, "pct": 33, "sell": 977.55}, "material": {"cost": 690.15, "pct": 18, "sell": 814.38}, "outside": {"cost": 601.69, "pct": 32, "sell": 751.82}, "labor": {"cost": 960.43, "pct": 40, "sell": 1344.60}, "commissionPct": 0},
+        "outsidePurchases": "Score 150.00 + Flood LED UV 319.15 = Finish Out 469.15",
+        "partTotal": 3888.35
+      },
+      {
+        "name": "Qty 2000 - Part 1 of 2 Cover (Pages 4)",
+        "paper": {"sheets": 1875, "parentSize": "19 x 25", "lb": "120 LB Coated Cover", "brand": "Gloss Cover - White - Gloss", "pricePerM": 220.00, "pounds": 413, "weightPerM": "220M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN (4 Pages Per Side for 2 4 Page Sigs)", "makeready": 700, "pressWaste": 50, "bindWaste": 0, "washMakereadys": 5, "minimumCount": 1000},
+        "prep": {"proofHrs": 0.1, "proofMaterial": 76.76, "platesHrs": 0.3, "plates": "4 6c", "plateCost": 64.00, "hoursPrep": 0.4, "prepMaterials": 140.76, "prepTotal": 149.80},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 0.4, "washUpHrs": 0.2, "runHrsSide1": 0.4, "runHrsSide2": 0.4, "sph": 4800, "inkLbs": "0.8 LBS Black + 4.0 LBS Color", "inkCost": 51.49, "varnishMaterial": 3.65, "colors": "5/5", "hoursPress": 1.4, "pressTotal": 364.65},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.2, "cost": 7.22, "note": "11 lifts"},
+          {"op": "Trim to Size", "hrs": 0.4, "cost": 16.42},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2", "hrs": 0.0, "cost": 0.23}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 412.50, "total": 415.17},
+        "markups": {"paper": {"cost": 412.50, "pct": 33, "sell": 548.63}, "material": {"cost": 195.90, "pct": 18, "sell": 231.16}, "outside": {"cost": 0.00, "pct": 32, "sell": 1.00}, "labor": {"cost": 346.97, "pct": 40, "sell": 485.76}, "commissionPct": 0},
+        "outsidePurchases": "(Finish Out charged in Text part)",
+        "partTotal": 1266.55
+      },
+      {
+        "name": "Qty 2000 - Part 2 of 2 Text (Pages 16)",
+        "paper": {"sheets": 6250, "parentSize": "19 x 25", "lb": "80 LB Coated Cover", "brand": "Coated Cover - White - Gloss", "pricePerM": 147.00, "pounds": 919, "weightPerM": "147M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "SHEETWISE (Run 2, 4 Pages Per Side for 2 8 Page Sigs)", "makeready": 1650, "pressWaste": 150, "bindWaste": 200, "washMakereadys": 20, "minimumCount": 4200},
+        "prep": {"proofHrs": 0.3, "proofMaterial": 307.05, "platesHrs": 0.8, "plates": "16 6c", "plateCost": 256.00, "hoursPrep": 1.0, "prepMaterials": 563.05, "prepTotal": 589.86},
+        "press": {"config": "KOMII Configuration Kom LED", "setupHrs": 0.1, "makereadyHrs": 1.2, "runHrsSide1": 1.2, "runHrsSide2": 1.2, "sph": 5300, "inkLbs": "1.3 LBS Black + 8.7 LBS Color", "inkCost": 108.58, "varnishMaterial": 12.15, "colors": "5/5", "hoursPress": 3.6, "pressTotal": 903.73},
+        "bindery": [
+          {"op": "Load Cutter", "hrs": 0.0, "cost": 0.66, "note": "1 lifts"},
+          {"op": "Trim to Size", "hrs": 0.1, "cost": 5.14},
+          {"op": "1 Fold Setup", "hrs": 0.5, "cost": 25.20, "note": "Fold 4000"},
+          {"op": "Folding", "hrs": 0.6, "cost": 30.55, "note": "on the baum-26x40 Configuration Normal"},
+          {"op": "Setup", "hrs": 1.1, "cost": 102.92},
+          {"op": "Saddlebind", "hrs": 0.3, "cost": 30.87, "note": "on the Mueller"},
+          {"op": "Help", "hrs": 0.3, "cost": 6.50},
+          {"op": "Hand Bind 1 - Flood LED UV", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2 - Score", "hrs": 0.0, "cost": 0.23},
+          {"op": "Wrapping", "hrs": 1.7, "cost": 58.33, "note": "5 Per Package"},
+          {"op": "Ctn Pack", "hrs": 0.9, "cost": 44.37, "note": "34 11.25x8.75x10, material 31.62"},
+          {"op": "Finish Outside", "hrs": null, "cost": 528.25},
+          {"op": "Delivery", "hrs": 0.0, "cost": 151.60, "note": "Outside Freight 151.60"}
+        ],
+        "paperHandling": {"hrs": 0.1, "paperCost": 918.75, "total": 921.42},
+        "markups": {"paper": {"cost": 918.75, "pct": 33, "sell": 1221.94}, "material": {"cost": 715.40, "pct": 18, "sell": 844.17}, "outside": {"cost": 679.85, "pct": 32, "sell": 848.89}, "labor": {"cost": 1087.51, "pct": 40, "sell": 1522.52}, "commissionPct": 0},
+        "outsidePurchases": "Score 150.00 + Flood LED UV 378.25 = Finish Out 528.25",
+        "partTotal": 4437.52
+      }
+    ],
+    "summaryPages": {
+      "qty1000": {"combinedCost": 3386.33, "sellFor": 4412.94, "grandTotals": {"hours": 10.06, "labor": 1137.80, "material": 2248.53, "totalCost": 3386.33}},
+      "qty1500": {"combinedCost": 3818.23, "sellFor": 4987.57, "grandTotals": {"hours": 11.33, "labor": 1270.41, "material": 2547.83, "totalCost": 3818.23}},
+      "qty2000": {"combinedCost": 4356.88, "sellFor": 5704.07, "grandTotals": {"hours": 12.90, "labor": 1434.49, "material": 2922.40, "totalCost": 4356.89}}
+    },
+    "anythingUnusual": "Three full quantity variants (1000/1500/2000), each with Cover part, Text part, and a combined summary/operations-breakdown page (23 pages total). Commission 0% throughout (broker customer Printing Solutions of Florida). Kom LED press config with varnish material line on every run (Flood LED UV on all). Outside purchases: Score 150.00 flat + Flood LED UV scaling by qty (260.05/319.15/378.25). Cover is EXACT REPRINT FROM ARCHIVED FILES. Text stock listed as 80 LB Coated Cover (type Coated Cover) despite quote letter calling it 80 LB Coated Text-style text stock. Wrapped 5 per package. Terms Net C.O.D.; freight additional. Quote Notes '3%'."
+  }
+]

@@ -1,0 +1,414 @@
+[
+  {
+    "file": "s2_scan_doc30612420260818175439.pdf",
+    "estimateNo": "349104",
+    "date": "08-18-2026",
+    "customer": "MONIN, INC - 819",
+    "contact": "",
+    "soldBy": "Lee Zerfass",
+    "description": "Poster - 24\" x 36\" - 4/4 on Foamcore w/ Grommets",
+    "finalTrimSize": "",
+    "quantities": [{"qty": 2, "price": 122.00}],
+    "productType": "other (foamcore poster, fully outsourced)",
+    "press": "none (Finish Outside - outside purchase)",
+    "binding": "flat",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1",
+        "paper": {"sheets": 0, "parentSize": "0 x 0", "lb": "0 lb Uncoated Tex", "brand": "", "pricePerM": 0.00, "pounds": 0, "weightPerM": "0M"},
+        "runPlan": {"pagesUp": 0, "workStyle": "", "makeready": 0, "pressWaste": 0, "bindWaste": 0, "washMakereadys": 0},
+        "prep": {"designHrs": 0, "proofHrs": 0, "proofMaterial": 0, "platesHrs": 0, "plates": 0, "plateCost": 0},
+        "press": {"config": "none", "setupHrs": 0, "makereadyHrs": 0, "runHrsSide1": 0, "runHrsSide2": 0, "sph": 0, "inkLbs": 0, "inkCost": 0, "colors": "4/4", "clickCharges": ""},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 66.00},
+          {"op": "Delivery (Outside Freight 3.54)", "hrs": 0.3, "cost": 18.54}
+        ],
+        "markups": {"paper": {"cost": 0.00, "pct": 33}, "material": {"cost": 0.00, "pct": 18}, "outside": {"cost": 69.54, "pct": 32}, "labor": {"cost": 15.00, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "Outside Purchases: Quantities [Accurate] 2 @ 66.00 - Finish Out 66.00; Quote Notes 3%",
+        "partTotal": 122.11
+      }
+    ],
+    "anythingUnusual": "Entirely outsourced job (no paper, no press) - Finish Outside 66.00 + Outside Freight 3.54. Qty = 1 each of 2 different. Ready-to-rip file supplied. Quote letter price 122.00 vs internal total 122.11. Vendor name '[Accurate]' in Outside Purchases."
+  },
+  {
+    "file": "s2_scan1_doc30613520260818180156.pdf",
+    "estimateNo": "349115",
+    "date": "08-18-2026",
+    "customer": "Nakery Beauty - 0",
+    "contact": "Rina Foster",
+    "soldBy": "Suzanne Alvarez",
+    "description": "Digital - Make It Vanish Insert - 7 x 5, 4/4",
+    "finalTrimSize": "7 x 5 - with Bleeds",
+    "quantities": [{"qty": 50, "price": 65.00}],
+    "productType": "flat sheet (digital insert card)",
+    "press": "digital (MILLE Configuration MILLER SHEETFED 1 COLOR - digital outsourced finish, Outside Purchases [Digital])",
+    "binding": "flat (trim to size, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Card (Pages 2)",
+        "paper": {"sheets": 20, "parentSize": "26 x 40", "lb": "120 LB Coated Cover", "brand": "Coated Cover - White - Silk", "pricePerM": 481.93, "pounds": 10, "weightPerM": "480M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN on the MILLE", "makeready": 30, "pressWaste": 1, "bindWaste": 0, "washMakereadys": 4, "minimumCount": 13, "pressSheetsOutOfParent": 4, "pressSize": "12 1/2 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 7500, "inkLbs": null, "inkCost": null, "colors": "4/4", "clickCharges": "Outside Purchases [Digital] 50 @ 14.37 Finish Out 14.37"},
+        "bindery": [
+          {"op": "Load Cutter (1 lifts)", "hrs": 0.0, "cost": 0.68},
+          {"op": "Trim to Size (0.6)", "hrs": 0.2, "cost": 7.11},
+          {"op": "Ctn Pack 1 11.25x8.75x10 (materials 0.93)", "hrs": 0.1, "cost": 2.18},
+          {"op": "Finish Outside", "hrs": null, "cost": 14.37},
+          {"op": "Delivery (Outside Freight 1.89)", "hrs": 0.2, "cost": 10.89}
+        ],
+        "markups": {"paper": {"cost": 9.64, "pct": 32}, "material": {"cost": 0.93, "pct": 18}, "outside": {"cost": 16.26, "pct": 0}, "labor": {"cost": 20.77, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 50 @ 14.37 Finish Out 14.37; Quote Notes: 3%, 25 overs .378",
+        "partTotal": 65.75
+      }
+    ],
+    "anythingUnusual": "Digital job priced with outside purchase line labeled [Digital] 14.37 rather than internal click charges; press section shows MILLER SHEETFED 1 COLOR at 0.0 hrs (nominal). Outside markup 0%. Quote 65.00 vs internal 65.75. Paper handling paper cost 9.64 -> 12.31 extended."
+  },
+  {
+    "file": "s2_scan2_doc30613420260818180015.pdf",
+    "estimateNo": "349114",
+    "date": "08-18-2026",
+    "customer": "DON CESAR BEACH RESO - 94",
+    "contact": "",
+    "soldBy": "BENJY WAXMAN",
+    "description": "Digital - Key Packet/Check in Card, 7 x 2 folds 3.5 x 2 - 4/4",
+    "finalTrimSize": "7 x 2 - with Bleeds",
+    "quantities": [{"qty": 5000, "price": 677.00}],
+    "productType": "other (key packet / check-in card, folded)",
+    "press": "digital ([Digital] outside purchase; internal press line: MILLE Configuration MILLER SHEETFED 1 COLOR)",
+    "binding": "fold (7x2 folds to 3.5x2, score, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 160, "parentSize": "26 x 40", "lb": "120 LB Uncoated Cover", "brand": "Opaque Cover - White - Smooth", "pricePerM": 963.20, "pounds": 77, "weightPerM": "480M"},
+        "runPlan": {"pagesUp": 10, "workStyle": "WORK & TURN on the MILLE", "makeready": 0, "pressWaste": 0, "bindWaste": 100, "washMakereadys": 4, "minimumCount": 600, "pressSheetsOutOfParent": 4, "pressSize": "13 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 4800, "inkLbs": null, "inkCost": null, "colors": "4/4", "clickCharges": "Outside Purchases [Digital] 5000 @ 198.45 - [C&D 26 229-04] 89.00 - [32%] 28.48 - Finish Out 315.93"},
+        "bindery": [
+          {"op": "Load Cutter (2 lifts)", "hrs": 0.0, "cost": 1.35},
+          {"op": "Trim to Size (0.6)", "hrs": 0.3, "cost": 12.15},
+          {"op": "1 Fold Setup, Fold 5000", "hrs": 0.2, "cost": 10.00},
+          {"op": "Folding (0.5) on the baum-26x40 Configuration Normal", "hrs": 0.3, "cost": 12.00},
+          {"op": "Hand Bind 1 - Score", "hrs": 0.1, "cost": 1.88},
+          {"op": "Ctn Pack 3 11.25x8.75x10 (materials 2.79)", "hrs": 0.1, "cost": 4.04},
+          {"op": "Finish Outside", "hrs": null, "cost": 315.93},
+          {"op": "Delivery (Outside Freight 19.65)", "hrs": 0.3, "cost": 34.65}
+        ],
+        "markups": {"paper": {"cost": 154.11, "pct": 32}, "material": {"cost": 2.79, "pct": 18}, "outside": {"cost": 335.58, "pct": 0}, "labor": {"cost": 56.36, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 5000 @ 198.45 - [C&D 26 229-04] 89.00 - [32%] 28.48 = Finish Out 315.93; Quote Notes: 25 overs .378, 3%",
+        "partTotal": 677.59
+      }
+    ],
+    "anythingUnusual": "Digital job with three-component outside purchase line ([Digital] 198.45 + [C&D 26 229-04] 89.00 + [32%] 28.48). Hand Bind score op. Folding on baum-26x40. Sold by Benjy Waxman. Quote 677.00 vs internal 677.59."
+  },
+  {
+    "file": "s2_scan3_doc30613320260818175950.pdf",
+    "estimateNo": "349113",
+    "date": "08-18-2026",
+    "customer": "Bloomin Brands - 1622",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - Imprint existing shell - 1/0, Apply stamps and mail",
+    "finalTrimSize": "9 x 6 - with Bleeds",
+    "quantities": [{"qty": 85, "price": 72.00}],
+    "productType": "mailer (imprint preprinted shells, variable data, stamp & mail)",
+    "press": "digital ([Digital] outside purchase; internal press line: Press 40 Configuration Phantom Press)",
+    "binding": "flat (trim to size, variable data, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 40, "parentSize": "12 1/2 x 19", "lb": "100 LB Coated Cover", "brand": "Preprinted Shells", "pricePerM": 0.00, "pounds": 4, "weightPerM": "92M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "1 SIDE on the 40", "makeready": 15, "pressWaste": 0, "bindWaste": 0, "washMakereadys": 1, "minimumCount": 21, "pressSheetsOutOfParent": 1, "pressSize": "12 1/2 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 1, "plateCost": 0.00},
+        "press": {"config": "Press 40 Configuration Phantom Press", "setupHrs": null, "makereadyHrs": null, "runHrsSide1": null, "runHrsSide2": null, "sph": null, "inkLbs": 0.5, "inkCost": 5.41, "colors": "1/0 (0.5 LBS of Black, 0.0 LBS of Color Ink)", "clickCharges": "Outside Purchases [Digital] 85 @ 14.62 - [VD] 10.00 - [Apply Stamp] 8.50 - Finish Out 33.12"},
+        "bindery": [
+          {"op": "Load Cutter (1 lifts)", "hrs": 0.0, "cost": 0.68},
+          {"op": "Trim to Size (0.6)", "hrs": 0.2, "cost": 7.11},
+          {"op": "Hand Bind 1 - Variable data", "hrs": 0.1, "cost": 1.88},
+          {"op": "Ctn Pack 1 11.25x8.75x10 (materials 0.93)", "hrs": 0.1, "cost": 2.18},
+          {"op": "Finish Outside", "hrs": null, "cost": 33.12},
+          {"op": "Delivery (Outside Freight 4.79)", "hrs": 0.0, "cost": 4.79}
+        ],
+        "markups": {"paper": {"cost": 0.00, "pct": 32}, "material": {"cost": 6.34, "pct": 18}, "outside": {"cost": 37.91, "pct": 0}, "labor": {"cost": 13.59, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 85 @ 14.62 - [VD] 10.00 - [Apply Stamp] 8.50 = Finish Out 33.12; Quote Notes: 32%, 50 overs .203, 3%",
+        "partTotal": 72.20
+      }
+    ],
+    "anythingUnusual": "Customer-supplied preprinted shells (paper cost 0.00). Variable data + apply stamps and mail; postage NOT included. 'Phantom Press' config with ink lbs on a digital job. Terms Net C.O.D. Quote 72.00 vs internal 72.20."
+  },
+  {
+    "file": "s2_scan4_doc30613220260818175921.pdf",
+    "estimateNo": "349110",
+    "date": "08-18-2026",
+    "customer": "MGE INCORPORATED - 936",
+    "contact": "",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - Postcards 11 x 6 - 4/4 with Variable Data - Sort - Mail",
+    "finalTrimSize": "11 x 6 - with Bleeds",
+    "quantities": [{"qty": 5523, "price": 1775.00}],
+    "productType": "mailer (digital postcards with variable data, sort, mail)",
+    "press": "digital ([Digital] outside purchase; internal press line: MILLE Configuration MILLER SHEETFED 1 COLOR)",
+    "binding": "flat (trim to size, variable data, sort/mail)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 2000, "parentSize": "13 x 19", "lb": "100 LB Coated Cover", "brand": "10pt Tango C2S - White - C2S", "pricePerM": 131.86, "pounds": 190, "weightPerM": "95M"},
+        "runPlan": {"pagesUp": 3, "workStyle": "SHEETWISE on the MILLE", "makeready": null, "pressWaste": null, "bindWaste": null, "washMakereadys": 8, "pressSize": "13 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 8, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 5200, "inkLbs": null, "inkCost": null, "colors": "4/4", "clickCharges": "Outside Purchases [Digital] 5523 @ 971.97 - [Variable] 65.00 - [Sort] 110.46 - Finish Out 1147.43"},
+        "bindery": [
+          {"op": "Load Cutter (5 lifts)", "hrs": 0.1, "cost": 2.81},
+          {"op": "Trim to Size (0.5)", "hrs": 0.2, "cost": 8.81},
+          {"op": "Hand Bind 1 - Variable Data", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2 - Sort/Mail", "hrs": 0.0, "cost": 0.23},
+          {"op": "Finish Outside", "hrs": null, "cost": 1147.43},
+          {"op": "Delivery (Outside Freight 86.89)", "hrs": 0.2, "cost": 95.89}
+        ],
+        "markups": {"paper": {"cost": 263.72, "pct": 33}, "material": {"cost": 0.00, "pct": 18}, "outside": {"cost": 1234.32, "pct": 0}, "labor": {"cost": 25.46, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 5523 @ 971.97 - [Variable] 65.00 - [Sort] 110.46 = Finish Out 1147.43; Quote Notes: 3%, 32%, 50 overs .514",
+        "partTotal": 1775.06
+      }
+    ],
+    "anythingUnusual": "Odd quantity 5,523 (mailing list count). Variable data + sort/mail; postage not included. Outside purchases dominate cost (98% material). Quote 1,775.00 vs internal 1,775.06."
+  },
+  {
+    "file": "s2_scan5_doc30613120260818175821.pdf",
+    "estimateNo": "349112",
+    "date": "08-18-2026",
+    "customer": "MGE INCORPORATED - 936",
+    "contact": "Adam Mortimer",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - #10 Envelopes - 9.5 x 4.125, 4/0 - w/Variable Data - insert/mail",
+    "finalTrimSize": "9 1/2 x 4 1/8",
+    "quantities": [{"qty": 2839, "price": 1580.00}],
+    "productType": "other (#10 envelopes with variable data, insert/mail)",
+    "press": "digital ([Digital / VD] outside purchase; internal press line: Press SMALL Configuration small)",
+    "binding": "flat (insert/sort, mail)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 #10 Envelo (Pages 2)",
+        "paper": {"sheets": 3000, "parentSize": "9 1/2 x 4 1/8", "lb": "24 LB Envelopes", "brand": "#10 Reg Envelopes - White - Wove", "pricePerM": 28.01, "pounds": 15, "weightPerM": "5M"},
+        "runPlan": {"pagesUp": 1, "workStyle": "1 SIDE on the SMALL", "makeready": 60, "pressWaste": 14, "bindWaste": 0, "washMakereadys": 4, "minimumCount": 2839, "pressSheetsOutOfParent": 1, "pressSize": "9 1/2 x 4 1/8"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "Press SMALL Configuration small", "setupHrs": 0.1, "makereadyHrs": null, "runHrsSide1": 0.1, "runHrsSide2": null, "sph": 4500, "inkLbs": null, "inkCost": null, "colors": "4/0", "clickCharges": "Outside Purchases [Digital / VD] 2839 @ 1003.93 - [Insert/Sort] 188.88 - [32%] 60.44 - Finish Out 1253.25"},
+        "bindery": [
+          {"op": "Hand Bind 1 - Insert/sort", "hrs": 0.1, "cost": 1.88},
+          {"op": "Hand Bind 2 - Mail", "hrs": 0.0, "cost": 0.23},
+          {"op": "Finish Outside", "hrs": null, "cost": 1253.25},
+          {"op": "Delivery (Outside Freight 45.87)", "hrs": 0.2, "cost": 54.87}
+        ],
+        "markups": {"paper": {"cost": 84.03, "pct": 33}, "material": {"cost": 0.00, "pct": 18}, "outside": {"cost": 1299.12, "pct": 0}, "labor": {"cost": 19.34, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital / VD] 2839 @ 1003.93 - [Insert/Sort] 188.88 - [32%] 60.44 = Finish Out 1253.25; Quote Notes: 3%, 50 overs .325",
+        "partTotal": 1580.20
+      }
+    ],
+    "anythingUnusual": "Envelope stock run on 'SMALL' press config; outside Digital/VD + Insert/Sort + 32% uplift. Odd quantity 2,839 (mail list). Postage not included. Quote 1,580.00 vs internal 1,580.20."
+  },
+  {
+    "file": "s2_scan6_doc30613020260818175755.pdf",
+    "estimateNo": "349111",
+    "date": "08-18-2026",
+    "customer": "MGE INCORPORATED - 936",
+    "contact": "Adam Mortimer",
+    "soldBy": "Benjy Waxman",
+    "description": "Digital - Letter - 8.5 x 11 - 4/0",
+    "finalTrimSize": "8 1/2 x 11 - with Bleeds",
+    "quantities": [{"qty": 2839, "price": 483.00}],
+    "productType": "flat sheet (letter, letter-folded for mail room inserting)",
+    "press": "digital ([Digital] outside purchase; internal press line: MILLE Configuration MILLER SHEETFED 1 COLOR)",
+    "binding": "fold (letter fold, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 800, "parentSize": "19 x 25", "lb": "70 LB Uncoated Text", "brand": "Starbrite Text - White - Smooth", "pricePerM": 86.27, "pounds": 56, "weightPerM": "70M"},
+        "runPlan": {"pagesUp": 2, "workStyle": "1 SIDE on the MILLE", "makeready": 30, "pressWaste": 44, "bindWaste": 100, "washMakereadys": 4, "minimumCount": 1520, "pressSheetsOutOfParent": 2, "pressSize": "12 1/2 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": null, "sph": 4800, "inkLbs": null, "inkCost": null, "colors": "4/0", "clickCharges": "Outside Purchases [Digital] 2839 @ 277.83 - Finish Out 277.83"},
+        "bindery": [
+          {"op": "Load Cutter (2 lifts)", "hrs": 0.0, "cost": 1.35},
+          {"op": "Trim to Size (0.6)", "hrs": 0.2, "cost": 7.11},
+          {"op": "1 Fold Setup, Fold 2839", "hrs": 0.3, "cost": 12.00},
+          {"op": "Folding (0.6) on the baum-26x40 Configuration Normal", "hrs": 0.3, "cost": 12.00},
+          {"op": "Ctn Pack 3 11.25x8.75x10 (materials 2.79)", "hrs": 0.1, "cost": 4.04},
+          {"op": "Finish Outside", "hrs": null, "cost": 277.83},
+          {"op": "Delivery (Outside Freight 14.04)", "hrs": 0.1, "cost": 17.04}
+        ],
+        "markups": {"paper": {"cost": 69.02, "pct": 33}, "material": {"cost": 2.79, "pct": 18}, "outside": {"cost": 291.87, "pct": 0}, "labor": {"cost": 39.42, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 2839 @ 277.83 = Finish Out 277.83; Quote Notes: 3%, 50 overs .189",
+        "partTotal": 483.95
+      }
+    ],
+    "anythingUnusual": "Companion piece to 349112 envelopes (same 2,839 mail qty); note 'move to mail room for inserting'. Quote 483.00 vs internal 483.95."
+  },
+  {
+    "file": "s2_scan7_doc30612920260818175721.pdf",
+    "estimateNo": "349109",
+    "date": "08-18-2026",
+    "customer": "FN Funding/DG Group - 0",
+    "contact": "",
+    "soldBy": "Lee Zerfass",
+    "description": "Large Check Poster - 36 x 18 - 4/4 on Gatorboard",
+    "finalTrimSize": "",
+    "quantities": [{"qty": 1, "price": 69.00}],
+    "productType": "other (large check presentation poster on gatorboard, fully outsourced)",
+    "press": "none (Finish Outside - outside purchase)",
+    "binding": "flat",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1",
+        "paper": {"sheets": 0, "parentSize": "0 x 0", "lb": "0 lb Uncoated Tex", "brand": "", "pricePerM": 0.00, "pounds": 0, "weightPerM": "0M"},
+        "runPlan": {"pagesUp": 0, "workStyle": "", "makeready": 0, "pressWaste": 0, "bindWaste": 0, "washMakereadys": 0},
+        "prep": {"designHrs": 0, "proofHrs": 0, "proofMaterial": 0, "platesHrs": 0, "plates": 0, "plateCost": 0},
+        "press": {"config": "none", "setupHrs": 0, "makereadyHrs": 0, "runHrsSide1": 0, "runHrsSide2": 0, "sph": 0, "inkLbs": 0, "inkCost": 0, "colors": "4/4", "clickCharges": ""},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 30.00},
+          {"op": "Delivery (Outside Freight 2.01)", "hrs": 0.3, "cost": 17.01}
+        ],
+        "markups": {"paper": {"cost": 0.00, "pct": 33}, "material": {"cost": 0.00, "pct": 18}, "outside": {"cost": 32.01, "pct": 32}, "labor": {"cost": 15.00, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Accurate] 1 @ 30.00 - [Outside Costs 2] 0.00 - [Outside Costs 3] 0.00 = Finish Out 30.00; Quote Notes 3%",
+        "partTotal": 69.31
+      }
+    ],
+    "anythingUnusual": "Fully outsourced 'big check' gatorboard poster via vendor [Accurate], qty 1. No paper/press internally. Quote 69.00 vs internal 69.31."
+  },
+  {
+    "file": "s2_scan8_doc30612820260818175650.pdf",
+    "estimateNo": "349108",
+    "date": "08-18-2026",
+    "customer": "Integrated Graphic S - 1527 (Integrated Graphic Solutions)",
+    "contact": "Jules Fogel",
+    "soldBy": "Benjy Waxman",
+    "description": "CryoCell Maternity Booklets - Spanish, 8pgs Self Cover - w/ Foil on OFC",
+    "finalTrimSize": "5 1/2 x 8 1/2 - 8 Pages with Bleeds",
+    "quantities": [{"qty": 10000, "price": 4337.00}],
+    "productType": "book (8pg self-cover saddle-stitched booklet with foil)",
+    "press": "KOMII Configuration 5C KOMORI",
+    "binding": "saddle (Saddle Bound, foil stamp, wrap 50 per package)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 8)",
+        "paper": {"sheets": 6000, "parentSize": "19 x 25", "lb": "80 LB Coated Cover", "brand": "MacGregor Cover - White - Gloss", "pricePerM": 140.70, "pounds": 882, "weightPerM": "147M"},
+        "runPlan": {"pagesUp": 8, "workStyle": "SHEETWISE on the KOMII", "makeready": 600, "pressWaste": 125, "bindWaste": 200, "washMakereadys": 10, "minimumCount": 5200, "pressSheetsOutOfParent": 1, "pressSize": "19 x 25"},
+        "prep": {"designHrs": null, "proofHrs": 0.3, "proofMaterial": 46.58, "platesHrs": 1.4, "plates": 16, "plateCost": 304.00, "proofDevice": "1 Sherpa4", "prepHrsTotal": 1.6, "prepMaterials": 350.58},
+        "press": {"config": "KOMII Configuration 5C KOMORI", "setupHrs": 0.1, "makereadyHrs": 1.2, "runHrsSide1": 1.1, "runHrsSide2": 1.1, "sph": 5600, "inkLbs": "1.3 LBS Black + 7.4 LBS Color", "inkCost": 93.72, "colors": "5/5 (4c process + 1 varnish each side)", "clickCharges": ""},
+        "bindery": [
+          {"op": "Load Cutter (1 lifts)", "hrs": 0.0, "cost": 0.90},
+          {"op": "Trim to Size (0.5)", "hrs": 0.1, "cost": 5.60},
+          {"op": "1 Fold Setup, Fold 10000", "hrs": 0.3, "cost": 14.00},
+          {"op": "Folding (0.7) on the baum-26x40 Configuration Normal", "hrs": 1.6, "cost": 76.36},
+          {"op": "Setup (saddle)", "hrs": 0.4, "cost": 38.00},
+          {"op": "Saddlebind (1.2) on the Mueller", "hrs": 1.5, "cost": 142.50},
+          {"op": "Help", "hrs": 1.5, "cost": 30.00},
+          {"op": "Hand Bind 1 - Foil Stamp", "hrs": 0.1, "cost": 1.88},
+          {"op": "Wrapping 50 Per Package", "hrs": 0.8, "cost": 29.17},
+          {"op": "Finish Outside", "hrs": null, "cost": 919.88},
+          {"op": "Delivery (Outside Freight 43.26)", "hrs": 0.2, "cost": 52.26}
+        ],
+        "markups": {"paper": {"cost": 844.20, "pct": 33}, "material": {"cost": 444.29, "pct": 18}, "outside": {"cost": 963.14, "pct": 32}, "labor": {"cost": 1023.58, "pct": 40}, "commissionPct": "? (commission row not visible; markup sum 1062.35 equals the four markups exactly, implying no commission)"},
+        "outsidePurchases": "[C&D 26 43-01] 10000 @ 872.00 - [Aqueous] 47.38 = Finish Out 919.88; Quote Notes: 3%, -72 plate discount",
+        "partTotal": 4337.57
+      }
+    ],
+    "anythingUnusual": "Offset KOMORI 5C job: exact reprint from archived files with existing foil die; outside foil ([C&D 26 43-01] 872.00) + Aqueous 47.38; '-72 plate discount' quote note; Sherpa proof; commission line cut off at page break (totals 3275.22 cost / 1062.35 markup / 4337.57 sell, no commission in sum). Terms Net C.O.D."
+  },
+  {
+    "file": "s2_scan9_doc30612720260818175612.pdf",
+    "estimateNo": "349107",
+    "date": "08-18-2026",
+    "customer": "Achieva Credit Union - 140",
+    "contact": "Melissa Coon",
+    "soldBy": "Suzanne alvarez",
+    "description": "Board Room Posters - 28.25 x 30 - 4/0 on 8mil Matte Stock",
+    "finalTrimSize": "",
+    "quantities": [{"qty": 2, "price": 67.00}],
+    "productType": "other (wide-format posters on 8mil matte, fully outsourced)",
+    "press": "none (Finish Outside - outside purchase)",
+    "binding": "flat",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1",
+        "paper": {"sheets": 0, "parentSize": "0 x 0", "lb": "0 lb Uncoated Tex", "brand": "", "pricePerM": 0.00, "pounds": 0, "weightPerM": "0M"},
+        "runPlan": {"pagesUp": 0, "workStyle": "", "makeready": 0, "pressWaste": 0, "bindWaste": 0, "washMakereadys": 0},
+        "prep": {"designHrs": 0, "proofHrs": 0, "proofMaterial": 0, "platesHrs": 0, "plates": 0, "plateCost": 0},
+        "press": {"config": "none", "setupHrs": 0, "makereadyHrs": 0, "runHrsSide1": 0, "runHrsSide2": 0, "sph": 0, "inkLbs": 0, "inkCost": 0, "colors": "4/0", "clickCharges": ""},
+        "bindery": [
+          {"op": "Finish Outside", "hrs": null, "cost": 28.00},
+          {"op": "Delivery (Outside Freight 3.20)", "hrs": 0.3, "cost": 18.20}
+        ],
+        "markups": {"paper": {"cost": 0.00, "pct": 33}, "material": {"cost": 0.00, "pct": 18}, "outside": {"cost": 31.20, "pct": 32}, "labor": {"cost": 15.00, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Accurate] 2 @ 28.00 = Finish Out 28.00; Quote Notes 5%",
+        "partTotal": 67.78
+      }
+    ],
+    "anythingUnusual": "Fully outsourced wide-format posters via [Accurate]. Quote note 5% (not the usual 3%). Terms Net C.O.D. Quote 67.00 vs internal 67.78."
+  },
+  {
+    "file": "s2_scan10_doc30612620260818175540.pdf",
+    "estimateNo": "349106",
+    "date": "08-18-2026",
+    "customer": "Nakery Beauty - 0",
+    "contact": "Rina Foster",
+    "soldBy": "Suzanne Alvarez",
+    "description": "Digital - Liz Writing Card Insert - 4/4, 7 x 5",
+    "finalTrimSize": "7 x 5 - with Bleeds",
+    "quantities": [{"qty": 100, "price": 70.00}],
+    "productType": "flat sheet (digital insert card)",
+    "press": "digital ([Digital] outside purchase; internal press line: MILLE Configuration MILLER SHEETFED 1 COLOR)",
+    "binding": "flat (trim to size, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Card (Pages 2)",
+        "paper": {"sheets": 20, "parentSize": "26 x 40", "lb": "120 LB Coated Cover", "brand": "Coated Cover - White - Silk", "pricePerM": 481.93, "pounds": 10, "weightPerM": "480M"},
+        "runPlan": {"pagesUp": 4, "workStyle": "WORK & TURN on the MILLE", "makeready": 30, "pressWaste": 1, "bindWaste": 0, "washMakereadys": 4, "minimumCount": 25, "pressSheetsOutOfParent": 4, "pressSize": "13 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 4, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 7500, "inkLbs": null, "inkCost": null, "colors": "4/4", "clickCharges": "Outside Purchases [Digital] 100 @ 18.90 - Finish Out 18.90"},
+        "bindery": [
+          {"op": "Load Cutter (1 lifts)", "hrs": 0.0, "cost": 0.68},
+          {"op": "Trim to Size (0.6)", "hrs": 0.2, "cost": 7.11},
+          {"op": "Ctn Pack 1 11.25x8.75x10 (materials 0.93)", "hrs": 0.1, "cost": 2.18},
+          {"op": "Finish Outside", "hrs": null, "cost": 18.90},
+          {"op": "Delivery (Outside Freight 2.04)", "hrs": 0.2, "cost": 11.04}
+        ],
+        "markups": {"paper": {"cost": 9.64, "pct": 32}, "material": {"cost": 0.93, "pct": 18}, "outside": {"cost": 20.94, "pct": 0}, "labor": {"cost": 20.77, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital] 100 @ 18.90 = Finish Out 18.90; Quote Notes: 3%, 25 overs .378",
+        "partTotal": 70.89
+      }
+    ],
+    "anythingUnusual": "Near-twin of 349115 (same customer/spec, qty 100 vs 50; note sheet-layout page shows press size 13 x 19 here vs 12 1/2 x 19 on 349115). Quote 70.00 vs internal 70.89."
+  },
+  {
+    "file": "s2_scan11_doc30612520260818175510.pdf",
+    "estimateNo": "349105",
+    "date": "08-18-2026",
+    "customer": "JANE BROOKWELL PUBLI - 2266 (Jane Brookwell Publishing)",
+    "contact": "MELISSA MCMAHAN",
+    "soldBy": "Lee Zerfass",
+    "description": "Digital - Letter Flash Cards - 5 x 3, 4/4 39 cards per deck",
+    "finalTrimSize": "5 x 3 - with Bleeds",
+    "quantities": [{"qty": 5850, "price": 508.00}],
+    "productType": "other (flash card decks: 150 decks x 39 cards)",
+    "press": "digital ([Digital 4/4] outside purchase; internal press line: MILLE Configuration MILLER SHEETFED 1 COLOR)",
+    "binding": "flat (trim to size, wrap in sets, carton pack)",
+    "parts": [
+      {
+        "name": "Part 1 of 1 Pt 1 (Pages 2)",
+        "paper": {"sheets": 530, "parentSize": "19 x 25", "lb": "80 LB Coated Cover", "brand": "Silk Cover - White - Silk", "pricePerM": 146.58, "pounds": 78, "weightPerM": "147M"},
+        "runPlan": {"pagesUp": 12, "workStyle": "SHEETWISE on the MILLE", "makeready": 400, "pressWaste": 168, "bindWaste": 0, "washMakereadys": 8, "minimumCount": 488, "pressSheetsOutOfParent": 2, "pressSize": "12 1/2 x 19"},
+        "prep": {"designHrs": null, "proofHrs": null, "proofMaterial": null, "platesHrs": 0.0, "plates": 8, "plateCost": 0.00},
+        "press": {"config": "MILLE Configuration MILLER SHEETFED 1 COLOR", "setupHrs": 0.0, "makereadyHrs": null, "runHrsSide1": 0.0, "runHrsSide2": 0.0, "sph": 4800, "inkLbs": null, "inkCost": null, "colors": "4/4", "clickCharges": "Outside Purchases [Digital 4/4] 5850 @ 265.36 - [Wrap in sets] 34.50 - [32%] 11.04 - Finish Out 310.90"},
+        "bindery": [
+          {"op": "Load Cutter (2 lifts)", "hrs": 0.0, "cost": 1.58},
+          {"op": "Trim to Size (0.7)", "hrs": 0.3, "cost": 15.65},
+          {"op": "Hand Bind 1 - Wrap in sets", "hrs": 0.1, "cost": 1.88},
+          {"op": "Ctn Pack 3 11.25x8.75x10 (materials 2.79)", "hrs": 0.1, "cost": 4.04},
+          {"op": "Finish Outside", "hrs": null, "cost": 310.90},
+          {"op": "Delivery (Outside Freight 14.28)", "hrs": 0.0, "cost": 14.28}
+        ],
+        "markups": {"paper": {"cost": 77.69, "pct": 33}, "material": {"cost": 2.79, "pct": 18}, "outside": {"cost": 325.18, "pct": 0}, "labor": {"cost": 23.09, "pct": 40}, "commissionPct": 10},
+        "outsidePurchases": "[Digital 4/4] 5850 @ 265.36 - [Wrap in sets] 34.50 - [32%] 11.04 = Finish Out 310.90; Quote Notes: 3%, 5 overs .0378, Collate in line digital",
+        "partTotal": 508.49
+      }
+    ],
+    "anythingUnusual": "Flash card decks (150 decks x 39 cards = 5,850 cards); 'Collate in line digital' note; outside wrap-in-sets charge; delivery 'Freight Additional'. Quote 508.00 vs internal 508.49."
+  }
+]
