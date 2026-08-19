@@ -114,7 +114,17 @@ function buildPart(p: Any, isFirst: boolean, qtyForPart: number, jobText = ""): 
   for (const b of (p.bindery || [])) {
     const op = String(b.op || "").toLowerCase();
     const h = num(b.hrs);
-    if (op.includes("load cutter")) part.cutterHrsManual = h;
+    if (op.includes("load cutter")) {
+      // E&M prints the lift count; feed it to the lifts model
+      const lm = String(b.op || "").match(/(\d+)\s*lift/i) || String(b.note || "").match(/(\d+)\s*lift/i);
+      if (lm) part.cutterLifts = parseInt(lm[1]);
+      else part.cutterHrsManual = h;
+      const cost = num(b.cost);
+      if (lm && cost > 0) {
+        const lifts = parseInt(lm[1]);
+        part.cutterDiff = Math.round((cost / (lifts * 0.0146 * 45)) * 10) / 10 || 1.2;
+      }
+    }
     else if (op.includes("trim")) part.trimHrs = h;
     else if (op.includes("hand bind")) {
       // E&M's flat hand-bindery tokens carry the real op name

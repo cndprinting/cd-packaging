@@ -1410,7 +1410,13 @@ function ClassicEstimatorContent() {
             <StdRow label="Sheets Per Lift" show={showStd}><Num value={pv("sheetsPerLift")} onChange={(v) => setP("sheetsPerLift", v)} step={50} /></StdRow>
             <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
             <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            <Row label="Cutter Lifts (0 = Auto)"><Num value={pv("cutterLifts")} onChange={(v) => setP("cutterLifts", v)} step={1} /></Row>
+            <StdRow label="Cutter Difficulty" show={showStd}><Num value={pv("cutterDiff")} onChange={(v) => setP("cutterDiff", v)} step={0.1} /></StdRow>
             <Row label="Load Cutter Hrs (0=Auto)"><Num value={pv("cutterHrsManual")} onChange={(v) => setP("cutterHrsManual", v)} /></Row>
+            <div className="col-span-2 pl-[224px] text-[11px] text-amber-400/70">
+              {pcalc.liftsUsed} lifts × {pv("cutterHrsPerLift")} hr × {pv("cutterDiff") || 1} difficulty
+              = {pcalc.cutterHrs.toFixed(2)} hrs{(pv("cutterHrsManual") || 0) > 0 ? " (overridden)" : " (auto)"}
+            </div>
             <StdRow label="Cutter $/Hr" show={showStd}><Num value={pv("cutterRatePerHr")} onChange={(v) => setP("cutterRatePerHr", v)} /></StdRow>
             <StdRow label="Trim $/Hr" show={showStd}><Num value={pv("trimRatePerHr")} onChange={(v) => setP("trimRatePerHr", v)} /></StdRow>
             <Readout label="Trim Hrs Used" value={hrs(pcalc.trimHrsUsed)} />

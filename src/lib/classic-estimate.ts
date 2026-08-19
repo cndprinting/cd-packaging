@@ -184,7 +184,7 @@ export const PART_FIELD_KEYS = [
   "inkLbsManual",
   // Screen 8 — Bindery
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
-  "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual",
+  "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual", "cutterLifts", "cutterHrsPerLift", "cutterDiff",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff",
   "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
@@ -418,6 +418,14 @@ export interface ClassicForm {
   // E&M prints "Load Cutter (N lifts)" with its own hours; 0 = auto from
   // sheets/cutterSheetsPerHr. Added 8/18 -- no manual override existed.
   cutterHrsManual: number;
+  // E&M's Load Cutter is LIFTS-driven, not sheets-per-hour: hours = lifts x
+  // 0.0146 x difficulty. Verified to the cent on 7 quotes (10 lifts -> $7.88,
+  // 94 -> $74.03, 32 -> $29.40 ...). Mary enters lifts, we compute the hours.
+  cutterLifts: number;      // 0 = auto from sheets / sheetsPerLift
+  // The cutter has its OWN difficulty (E&M prints 1.0 / 1.2 / 1.4), separate
+  // from the trim difficulty (0.6 / 0.8). Sharing one broke both.
+  cutterDiff: number;
+  cutterHrsPerLift: number; // 0.0146 at difficulty 1.0
   sheetsPerLift: number;     // sheets the cutter takes per lift (default 500)
   cutSecPerCut: number;      // seconds per cut (plant standard: 8)
   drillHoles: number;
@@ -557,7 +565,8 @@ export function defaultClassicForm(): ClassicForm {
     digitalOversSheets: 0, digitalVendorAmount: 0, digitalOnPart: false,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
     binderyOperation: 1, cuttingDiff: 0.5, cutterSheetsPerHr: 5000,
-    trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, sheetsPerLift: 500, cutSecPerCut: 8,
+    trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, cutterLifts: 0, cutterHrsPerLift: 0.0146, cutterDiff: 1.2,
+    sheetsPerLift: 500, cutSecPerCut: 8,
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
@@ -633,6 +642,7 @@ export interface PartCalc {
   digitalVDCost: number;
   digitalVDSetupCost: number;
   cutterHrs: number;
+  liftsUsed: number;
   drillHrs: number;
   handOp1Hrs: number;
   handOp2Hrs: number;
@@ -914,9 +924,10 @@ function computePart(
   const pressCost = pressLaborCost + pressMaterialsCost;
 
   // ── Bindery (Screen 8) ──
-  const cutterHrs = p.cutterSheetsPerHr > 0
-    ? (pressSheets / p.cutterSheetsPerHr) * (p.cuttingDiff || 1)
-    : 0;
+  // Lifts-driven, the way E&M did it (validated to the cent on 7 quotes).
+  const liftsAuto = (p.sheetsPerLift || 0) > 0 ? Math.ceil(orderSheets / p.sheetsPerLift) : 0;
+  const liftsUsed = (p.cutterLifts || 0) > 0 ? p.cutterLifts : liftsAuto;
+  const cutterHrs = liftsUsed * (p.cutterHrsPerLift || 0) * (p.cutterDiff || 1);
   const cutterHrsUsed = (p.cutterHrsManual || 0) > 0 ? p.cutterHrsManual : cutterHrs;
   const drillHrs = (p.drillHoles || 0) * (p.drillHrsPerHole || 0) * (p.drillDiff || 1);
   const op1 = p.handOp1, op2 = p.handOp2;
@@ -1031,7 +1042,7 @@ function computePart(
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
-    cutterHrs, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
+    cutterHrs, liftsUsed, drillHrs, handOp1Hrs, handOp2Hrs, binderyHrs, binderyLabor,
     cartonSkidCost, binderyCost,
     paperLbs, cartonsAuto, cartonsUsed,
     bandHrsUsed, padHrsUsed, wrapHrsUsed,
