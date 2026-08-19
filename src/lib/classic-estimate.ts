@@ -866,7 +866,14 @@ function computePart(
     return size > 0 && rate > 0 ? Math.ceil(qty / size) / rate : 0;
   };
   const bandHrsUsed = opHrs(p.bandIn, p.bandHrs || 0);
-  const padHrsUsed = opHrs(p.padIn, p.padHrs || 0);
+  // Padding runs on its OWN standard, not the generic bundle rate: E&M is a
+  // clean 500 pads/hr at $18/hr across the forms/notepad quotes (derived 8/18).
+  const padHrsUsed = (() => {
+    if ((p.padHrs || 0) > 0) return p.padHrs;
+    const perPad = perBundle(p.padIn);
+    const padRate = (p.padsPerHour || 0) > 0 ? p.padsPerHour : rate;
+    return perPad > 0 && padRate > 0 ? Math.ceil(qty / perPad) / padRate : 0;
+  })();
   const wrapHrsUsed = opHrs(p.wrapIn, p.wrapHrs || 0);
   // Trim-to-size: E&M computed it once the difficulty was entered (Mary 7/20).
   // Auto = lifts × cuts (from Screen 6 sheet info, or her override) × sec/cut
