@@ -163,7 +163,7 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
+  "partName", "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
   "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
   "cutterRatePerHr", "trimRatePerHr", "handBindRatePerHr", "packRatePerHr",
   "wrapRatePerHr", "deliveryHrs", "deliveryRatePerHr", "cartonsPerHour",
@@ -320,6 +320,9 @@ export interface ClassicForm {
   // Carton packing auto-derives at ~40 cartons/hr (clean fit from 4 to 2,735
   // cartons across 13 estimates). packHrs typed = override.
   cartonsPerHour: number;
+  // What this part IS — E&M prints "Part 1 of 5 End sheet", "Fold out",
+  // "6 inserts". A five-part case-bound book is unreadable without it.
+  partName: string;
   // Explicit per-run breakdown. When non-empty this REPLACES the flat
   // single-run press fields for sheets/plates/makeready/waste/run hours.
   runs: PressRun[];
@@ -495,6 +498,14 @@ export interface ClassicForm {
   // commission for Lee") or none at all on broker jobs (#347866).
   commissionMode: "pct" | "flat" | "none";
   commissionFlat: number;
+  // A bindery VENDOR can require extra copies to run their line -- E&M
+  // #343786: "5 overs in Bindtech price / see overs needed for bindtech on
+  // thier quote". Those overs must be PRINTED, so they lift the press
+  // quantity without changing what the customer is billed for.
+  binderyOvers: number;
+  // "Mill Item Stock — allow time for delivery": a special-order stock not on
+  // the floor. Prints as a lead-time warning on the letter.
+  millItemStock: boolean;
   // "3% Surcharge added if paying by Credit Card" boilerplate (0 = none;
   // #348440 says "NO 3%").
   cardSurchargePct: number;
@@ -510,6 +521,11 @@ export const BINDERY_OPERATIONS = [
   "4 Perfect",
   "5 Multibind",
   "6 Plastic",
+  // Case (hardcover) binding — E&M #343786 "Perfect Bound with Case Cover",
+  // a 250-copy Kolter book with end sheets, a fold-out and 7 inserts. The
+  // case work itself is bought out (BindTech); this drives the equipment
+  // pass and the bindery description.
+  "7 Case Bound",
 ] as const;
 
 export function defaultClassicForm(): ClassicForm {
@@ -539,7 +555,7 @@ export function defaultClassicForm(): ClassicForm {
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
-    paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
+    partName: "", paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,
     padRatePerHr: 18, padsPerHour: 500,
     preprintedPass: false, versions: 1,
@@ -586,6 +602,7 @@ export function defaultClassicForm(): ClassicForm {
     parts: [],
     additionalCosts: 0, freight: 0, outsidePurchases: [],
     freightInOutside: true, plateDiscount: 0, oneTimeCharges: [],
+    binderyOvers: 0, millItemStock: false,
     commissionMode: "pct", commissionFlat: 0, cardSurchargePct: 3,
     deliveryZone: "", quoteNotes: "",
   };
@@ -704,7 +721,7 @@ function computePart(
     ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
     ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
     (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
-    ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0) +               // stitch/bind
+    ([2, 4, 5, 7].includes(p.binderyOperation) ? 1 : 0) +            // stitch / perfect / multi / CASE bind
     // Mary 8/19: "100 sheets per machine it has to go on after that" — she
     // counts foil, emboss, die cutter and folder/gluer each as a machine. Those
     // ride the hand-bindery op lines, so pick them up by name.
@@ -1158,7 +1175,11 @@ export function computeClassic(
   digitalStd: DigitalClickStandards | null
 ): ClassicCalc {
   const isDigital = f.jobType === "Digital Direct";
-  const qty = Math.max(0, f.quantity || 0);
+  // A bindery vendor's required overs get PRINTED but are not billed as extra
+  // pieces (E&M #343786: "5 overs in Bindtech price"). They lift the press
+  // quantity only; per-unit pricing still divides by the customer's quantity.
+  const billQty = Math.max(0, f.quantity || 0);
+  const qty = billQty + Math.max(0, f.binderyOvers || 0);
 
   const speedRules: SpeedRules = {
     solidCoverageSpeed: f.solidCoverageSpeed ?? DEFAULT_SPEED_RULES.solidCoverageSpeed,
@@ -1336,8 +1357,8 @@ export function computeClassic(
     outsideVendorCost: outsideVendorCost + digitalClickTotal,
     freightAndAdditional, freightSelling,
     totalCost, sellingSubtotal, commission, total,
-    costPerUnit: qty > 0 ? total / qty : 0,
-    costPerM: qty > 0 ? (total / qty) * 1000 : 0,
+    costPerUnit: billQty > 0 ? total / billQty : 0,
+    costPerM: billQty > 0 ? (total / billQty) * 1000 : 0,
   };
 }
 

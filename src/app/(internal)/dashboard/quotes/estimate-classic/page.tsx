@@ -708,6 +708,7 @@ function ClassicEstimatorContent() {
           ...(form.oneTimeCharges || [])
             .filter((c) => c.description.trim() || c.amount > 0)
             .map((c) => `Includes 1 time ${c.description.trim() || "charge"} of $${c.amount.toFixed(2)}`),
+          form.millItemStock ? "Mill Item Stock — please allow additional time for delivery." : "",
           (form.cardSurchargePct || 0) > 0
             ? `${form.cardSurchargePct}% Surcharge added if paying by Credit/Debit`
             : "",
@@ -975,7 +976,13 @@ function ClassicEstimatorContent() {
                 : "border border-amber-700/50 text-amber-400/80 hover:bg-amber-400/10"
             }`}
           >
-            Part {i + 1}
+            {/* Show the part's NAME once given — a 5-part case-bound book
+                reading "Part 1 / Part 2 / Part 3" is unusable (Kolter #343786
+                is End sheet / 128pgs / Fold out / 6 inserts / 1 insert). */}
+            {(() => {
+              const nm = String((i === 0 ? form.partName : form.parts[i - 1]?.partName) || "").trim();
+              return nm ? `${i + 1}. ${nm}` : `Part ${i + 1}`;
+            })()}
           </button>
         ))}
       </div>
@@ -1000,6 +1007,10 @@ function ClassicEstimatorContent() {
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
+            <Row label="Part Name" wide>
+              <Txt value={String(pv("partName") || "")} onChange={(v) => setP("partName", v)}
+                placeholder="e.g. End sheet, 128pgs, Fold out, 6 inserts" />
+            </Row>
             <Row label="Buy Rounding (Shts)"><Num value={pv("paperBuyRounding")} onChange={(v) => setP("paperBuyRounding", v)} step={10} /></Row>
             <Row label="Paper Handling Hrs"><Num value={pv("paperHandlingHrs")} onChange={(v) => setP("paperHandlingHrs", v)} /></Row>
             <StdRow label="Paper Handling $/Hr" show={showStd}><Num value={pv("paperHandlingRate")} onChange={(v) => setP("paperHandlingRate", v)} /></StdRow>
@@ -1581,6 +1592,13 @@ function ClassicEstimatorContent() {
             <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
               <input type="checkbox" checked={form.freightInOutside !== false} onChange={(e) => set("freightInOutside", e.target.checked)} />
               freight sits in the Outside bucket at COST (E&amp;M marks up purchase rows only)
+            </label>
+          </Row>
+          <Row label="Bindery Overs (printed, not billed)"><Num value={form.binderyOvers} onChange={(v) => set("binderyOvers", v)} step={1} /></Row>
+          <Row label="Mill Item Stock" wide>
+            <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+              <input type="checkbox" checked={!!form.millItemStock} onChange={(e) => set("millItemStock", e.target.checked)} />
+              special-order stock — adds a lead-time note to the letter
             </label>
           </Row>
           <Row label="Plate Discount $"><Num value={form.plateDiscount} onChange={(v) => set("plateDiscount", v)} /></Row>
