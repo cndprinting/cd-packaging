@@ -550,9 +550,10 @@ function computePart(
   // E&M printed "Make ready 700  Press waste 56" where 56 = 5% of the 1,125
   // net press sheets. Makeready is the setup burn; press waste is the running
   // spoilage percentage on top of it.
-  const runWasteSheets = (p.wasteSheetsManual || 0) > 0
-    ? 0 // a typed manual waste count replaces the whole formula
-    : Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
+  // A typed makeready count overrides only the MAKEREADY formula — running
+  // spoilage still applies on top, because E&M prints BOTH ("Make ready 1760
+  // Press waste 180" on #348988 part 2).
+  const runWasteSheets = Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
 
   // Paper buy: press sheets + MR/overs + running spoilage + bindery spoilage,
   // converted to PARENT sheets, then rounded UP to the next 250-sheet

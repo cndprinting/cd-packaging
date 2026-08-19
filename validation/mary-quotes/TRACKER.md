@@ -21,7 +21,7 @@ Status legend: ⬜ not started · 🔄 in progress · ⚠ delta found · ✅ mat
 | 13 | 348747 | Madico | folding carton | KOMORI | 50 @ $1,322.00; 100 @ $1,332.00; 250 @ $1,365.00; 500 @ $1,417.00; 1,000 @ $1,534.00 | ⬜ not started |  |  |
 | 14 | 348795 | Daily Dose | book | KOMORI | 150,000 @ $20,172.00 | ⬜ not started |  |  |
 | 15 | 348946 | Dixie BBQ | folding carton | PHANTOM/OUTSIDE | 10,000 @ $4,420.00; 20,000 @ $7,521.00 | ⬜ not started |  |  |
-| 16 | 348988 | Complete Management Solutions | book | KOMORI | 2,250 @ $7,420.00 | 🔄 in progress | Cover: press sheets ✓, paper/press/bindery Δ | decoding E&M rules — see G16-G20 |
+| 16 | 348988 | Complete Management Solutions | book | KOMORI | 2,250 @ $7,420.00 | 🔄 Cover ✅ 0.05% | Cover cost 809.69 vs 810.07 | parts 2-3 next |
 | 17 | 349049 | BioThrive Sciences | folding carton | KOMORI | 5,000 @ $2,965.00 | ⬜ not started |  |  |
 | 18 | 349095 | ECKERD COLLEGE (ECKERD COLLEGE - | flat sheet | DIGITAL | 2,000 @ $230.00 | ⬜ not started |  |  |
 | 19 | 349096 | DON CESAR BEACH RESORT (DON CESA | other | KOMORI | 10,000 @ $816.00 | ⬜ not started |  |  |
@@ -47,7 +47,7 @@ Status legend: ⬜ not started · 🔄 in progress · ⚠ delta found · ✅ mat
 
 | # | Gap | Seen on | Status |
 |---|---|---|---|
-| G1 | Default markups: Material 16%→18%, Outside 24%→32% (Paper 33/Labor 40/Comm 10 already match) | nearly all | ⬜ |
+| G1 | Default markups: Material 16%→18%, Outside 24%→32% (Paper 33/Labor 40/Comm 10 already match) | nearly all | ✅ done |
 | G2 | Digital = OUTSIDE purchase at 0% markup + phantom carrier press (Miller/SMALL, 0 hrs) — not internal click model | all 12 digital | ⬜ decide with Benjy/Mary |
 | G3 | "Phantom Press" / zero-press jobs (converted-only boxes, envelope blanks from GCI) | 348946, 349100, 349101, 349113 | ⬜ |
 | G4 | Two-pass jobs: preprinted sheets re-enter as ZERO-COST paper for SpotLED UV pass on Kom LED | 348478, 349049 | ⬜ |
@@ -62,8 +62,14 @@ Status legend: ⬜ not started · 🔄 in progress · ⚠ delta found · ✅ mat
 | G13 | Mail-shop ops: inkjet addressing, sort, drops, postage-excluded | 348472, 349098, 349110-112 | ⬜ |
 | G14 | "Add'l for ctns" extra outside column + hourly packing line | 348352 | ⬜ |
 | G15 | 3% credit-card surcharge note on letter | nearly all | ⬜ verify wording |
-| G16 | Paper buy rounds UP to next 250 sheets (1881→2000, 6640→6750 both confirm) | 348988 | ⬜ add |
-| G17 | WORK & TURN waste counts colors ONCE (5×100 + 2 passes×100 = 700), not side1+side2; plus separate ~5% run waste (56 = 5% of 1125) | 348988 | ⬜ fix formula |
-| G18 | Varnish unit runs on press (counts in wash/makeready/waste as a unit) but needs NO plate (5 units, 4 plates) | 348988 | ⬜ fix |
-| G19 | Run hrs = (press sheets + MR + waste)/SPH per side (1881/6500=0.29≈0.3 ✓), not net sheets | 348988 | ⬜ verify formula |
+| G16 | Paper buy rounds UP to next 250 sheets (1881→2000, 6640→6750 both confirm) | 348988 | ✅ done |
+| G17 | WORK & TURN waste counts colors ONCE (5×100 + 2 passes×100 = 700), not side1+side2; plus separate ~5% run waste (56 = 5% of 1125) | 348988 | ✅ done |
+| G18 | Varnish unit runs on press (counts in wash/makeready/waste as a unit) but needs NO plate (5 units, 4 plates) | 348988 | ✅ done |
+| G19 | Run hrs = (press sheets + MR + waste)/SPH per side (1881/6500=0.29≈0.3 ✓), not net sheets | 348988 | ✅ done |
 | G20 | E&M keeps unrounded hours internally (displays 0.1/0.4/0.3 but dollars imply ~$190/hr KOMII on exact hrs); Paper-handling 0.1-hr line; Load Cutter lifts op (10 lifts = 0.2 hr) | 348988 | ⬜ |
+| G21 | Press Setup line (hrs x diff) — E&M prints it, no field existed | 348988 | ✅ added |
+| G22 | Paper handling line (hrs x rate, rides paper, books as labor) | 348988 | ✅ added |
+| G23 | Ink consumed per IMPRESSION not per sheet (was 2x light) | 348988 | ✅ fixed |
+| G24 | The (0.8)/(0.3) numbers on E&M press lines are DIFFICULTY FACTORS Mary types | 348988 | ✅ decoded |
+| G25 | Cartons charged ONCE on the final part, not per part | 348988 | ⬜ auto-handle |
+| G26 | NEED FROM MARY: rate table — KOMII ~$188.5/hr, prepress $60/hr, paper handling ~$26.70/hr, process ink $10.81/lb, and standard ink coverage % per config (derived, not confirmed) | all | ⬜ ask Mary |
