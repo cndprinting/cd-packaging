@@ -782,7 +782,18 @@ function ClassicEstimatorContent() {
           <Row label="Material %"><Num value={form.markupMaterialPct} onChange={(v) => set("markupMaterialPct", v)} /></Row>
           <Row label="Outside %"><Num value={form.markupOutsidePct} onChange={(v) => set("markupOutsidePct", v)} /></Row>
           <Row label="Labor %"><Num value={form.markupLaborPct} onChange={(v) => set("markupLaborPct", v)} /></Row>
+          <Row label="Commission Mode" wide>
+            <select className={inputCls} value={form.commissionMode || "pct"}
+              onChange={(e) => set("commissionMode", e.target.value as "pct" | "flat" | "none")}>
+              <option value="pct">Percent of cost</option>
+              <option value="flat">Flat dollar amount</option>
+              <option value="none">None (broker job)</option>
+            </select>
+          </Row>
           <Row label="Commission %"><Num value={form.commissionPct} onChange={(v) => set("commissionPct", v)} /></Row>
+          {form.commissionMode === "flat" && (
+            <Row label="Commission $ Flat"><Num value={form.commissionFlat} onChange={(v) => set("commissionFlat", v)} /></Row>
+          )}
         </div>
       </div>
     );
@@ -932,6 +943,15 @@ function ClassicEstimatorContent() {
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
+            <Row label="Buy Rounding (Shts)"><Num value={pv("paperBuyRounding")} onChange={(v) => setP("paperBuyRounding", v)} step={10} /></Row>
+            <Row label="Paper Handling Hrs"><Num value={pv("paperHandlingHrs")} onChange={(v) => setP("paperHandlingHrs", v)} /></Row>
+            <Row label="Paper Handling $/Hr"><Num value={pv("paperHandlingRate")} onChange={(v) => setP("paperHandlingRate", v)} /></Row>
+            <Row label="Preprinted 2nd Pass" wide>
+              <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+                <input type="checkbox" checked={!!pv("preprintedPass")} onChange={(e) => setP("preprintedPass", e.target.checked)} />
+                sheets already in-house (no paper cost, no cartons) — LED-UV re-pass
+              </label>
+            </Row>
             {/* Cuts derive from the sheet info above (Mary 7/20) — number-up
                 and out-of-parent drive the cutting math on Pg 8. */}
             <Readout label="Cuts To Final (Auto)" value={String(pcalc.cutsUsed)} />
@@ -1116,10 +1136,18 @@ function ClassicEstimatorContent() {
                 <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
                 <Row label="Helper Rate $/Hr"><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></Row>
                 <Row label="Base Makeready Hrs/Plate"><Num value={pv("baseMakereadyHrsPerPlate")} onChange={(v) => setP("baseMakereadyHrsPerPlate", v)} /></Row>
+                <Row label="Setup Hrs"><Num value={pv("pressSetupHrs")} onChange={(v) => setP("pressSetupHrs", v)} /></Row>
+                <Row label="Setup Diff"><Num value={pv("pressSetupDiff")} onChange={(v) => setP("pressSetupDiff", v)} /></Row>
                 <Row label="Makeready Diff"><Num value={pv("makereadyDiff")} onChange={(v) => setP("makereadyDiff", v)} /></Row>
                 <Row label="Washup Hrs/Unit"><Num value={pv("washupHrsPerUnit")} onChange={(v) => setP("washupHrsPerUnit", v)} /></Row>
                 <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
                 <Row label="Run Speed (SPH, Rated)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
+                <Row label="Signature Runs"><Num value={pv("signatureRuns")} onChange={(v) => setP("signatureRuns", v)} step={1} /></Row>
+                <Row label="Versions"><Num value={pv("versions")} onChange={(v) => setP("versions", v)} step={1} /></Row>
+                <Row label="Run Waste %"><Num value={pv("runWastePct")} onChange={(v) => setP("runWastePct", v)} /></Row>
+                <Row label="Plate Hrs / Plate"><Num value={pv("plateHrsPerPlate")} onChange={(v) => setP("plateHrsPerPlate", v)} /></Row>
+                <Row label="Plate Hrs Diff"><Num value={pv("plateHrsDiff")} onChange={(v) => setP("plateHrsDiff", v)} /></Row>
+                <Row label="Plate Labor $/Hr"><Num value={pv("plateLaborRate")} onChange={(v) => setP("plateLaborRate", v)} /></Row>
                 {/* Small-run speed curve (Mary 7/21): "not going to hit
                     10,000/hr on smaller runs" — thresholds are PLACEHOLDER
                     (SMALL_RUN_SPEED_CURVE in classic-estimate.ts). */}
@@ -1200,6 +1228,12 @@ function ClassicEstimatorContent() {
                 </Row>
                 {pv("coatingType") && (
                   <>
+                    <Row label="Spot Coating" wide>
+                      <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+                        <input type="checkbox" checked={!!pv("coatingIsSpot")} onChange={(e) => setP("coatingIsSpot", e.target.checked)} />
+                        spot (carries an image — needs its own plate); unchecked = flood
+                      </label>
+                    </Row>
                     <Row label="Coating % Coverage"><Num value={pv("coatingCoveragePct")} onChange={(v) => setP("coatingCoveragePct", v)} /></Row>
                     <Row label="Coating $/Lb"><Num value={pv("coatingDollarsPerLb")} onChange={(v) => setP("coatingDollarsPerLb", v)} /></Row>
                     <Readout label="Coating" value={`${pcalc.coatingLbs.toFixed(2)} lbs / ${money(pcalc.coatingCost)}`} />
@@ -1262,6 +1296,9 @@ function ClassicEstimatorContent() {
             <Row label="Sheets Per Lift"><Num value={pv("sheetsPerLift")} onChange={(v) => setP("sheetsPerLift", v)} step={50} /></Row>
             <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
             <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            <Row label="Load Cutter Hrs (0=Auto)"><Num value={pv("cutterHrsManual")} onChange={(v) => setP("cutterHrsManual", v)} /></Row>
+            <Row label="Cutter $/Hr"><Num value={pv("cutterRatePerHr")} onChange={(v) => setP("cutterRatePerHr", v)} /></Row>
+            <Row label="Trim $/Hr"><Num value={pv("trimRatePerHr")} onChange={(v) => setP("trimRatePerHr", v)} /></Row>
             <Readout label="Trim Hrs Used" value={hrs(pcalc.trimHrsUsed)} />
             <Row label="Drill Holes"><Num value={pv("drillHoles")} onChange={(v) => setP("drillHoles", v)} step={1} /></Row>
             <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
@@ -1329,7 +1366,15 @@ function ClassicEstimatorContent() {
             <Row label="  @ $ each"><Num value={pv("cartonCost")} onChange={(v) => setP("cartonCost", v)} /></Row>
             <Row label="Skid Pack (skids)"><Num value={pv("skids")} onChange={(v) => setP("skids", v)} step={1} /></Row>
             <Row label="  @ $ each"><Num value={pv("skidCost")} onChange={(v) => setP("skidCost", v)} /></Row>
+            <Row label="Cartons / Hr (Auto Pack)"><Num value={pv("cartonsPerHour")} onChange={(v) => setP("cartonsPerHour", v)} step={1} /></Row>
             <Row label="Pack Hrs"><Num value={pv("packHrs")} onChange={(v) => setP("packHrs", v)} /></Row>
+            <Row label="Pack $/Hr"><Num value={pv("packRatePerHr")} onChange={(v) => setP("packRatePerHr", v)} /></Row>
+            <Row label="Wrap $/Hr"><Num value={pv("wrapRatePerHr")} onChange={(v) => setP("wrapRatePerHr", v)} /></Row>
+            <Row label="Hand Bind $/Hr"><Num value={pv("handBindRatePerHr")} onChange={(v) => setP("handBindRatePerHr", v)} /></Row>
+            <Row label="Pad $/Hr"><Num value={pv("padRatePerHr")} onChange={(v) => setP("padRatePerHr", v)} /></Row>
+            <Row label="Pads / Hr"><Num value={pv("padsPerHour")} onChange={(v) => setP("padsPerHour", v)} step={10} /></Row>
+            <Row label="Delivery Hrs"><Num value={pv("deliveryHrs")} onChange={(v) => setP("deliveryHrs", v)} /></Row>
+            <Row label="Delivery $/Hr"><Num value={pv("deliveryRatePerHr")} onChange={(v) => setP("deliveryRatePerHr", v)} /></Row>
             <Readout label={numParts > 1 ? `Bindery Hrs — Part ${partIndex + 1}` : "Bindery Hrs Total"}
               value={`${hrs(pcalc.binderyHrs)}${(pcalc.cutterHrs + pcalc.trimHrsUsed) > 0 ? ` (incl auto cut ${pcalc.cutterHrs.toFixed(2)} + trim ${pcalc.trimHrsUsed.toFixed(2)} — Cutting Diff 0 removes)` : ""}`} />
             <Readout label={numParts > 1 ? `Bindery Cost — Part ${partIndex + 1}` : "Bindery Cost"} value={money(pcalc.binderyCost)} />
@@ -1347,6 +1392,49 @@ function ClassicEstimatorContent() {
           <SectionTitle>Additional</SectionTitle>
           <Row label="Additional Costs $"><Num value={form.additionalCosts} onChange={(v) => set("additionalCosts", v)} /></Row>
           <Row label="Freight $"><Num value={form.freight} onChange={(v) => set("freight", v)} /></Row>
+          <Row label="Freight In Outside" wide>
+            <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+              <input type="checkbox" checked={form.freightInOutside !== false} onChange={(e) => set("freightInOutside", e.target.checked)} />
+              freight sits in the Outside bucket at COST (E&amp;M marks up purchase rows only)
+            </label>
+          </Row>
+          <Row label="Plate Discount $"><Num value={form.plateDiscount} onChange={(v) => set("plateDiscount", v)} /></Row>
+          {/* One-time die / cutting / stripping fees — E&M states these in the
+              quote NOTES ("Includes 1 time new die fee of $X") and deliberately
+              keeps them OUT of the priced buildup. */}
+          <div className="mt-3 border-t border-amber-800/40 pt-2">
+            <div className="mb-1 text-[12px] uppercase tracking-wide text-amber-400/90">
+              One-Time Charges (print on letter, NOT in price)
+            </div>
+            {(form.oneTimeCharges || []).map((c, i) => (
+              <div key={i} className="mb-1 flex items-center gap-2">
+                <input className={inputCls} placeholder="e.g. 1 time new die fee"
+                  value={c.description}
+                  onChange={(e) => {
+                    const next = [...(form.oneTimeCharges || [])];
+                    next[i] = { ...next[i], description: e.target.value };
+                    set("oneTimeCharges", next);
+                  }} />
+                <div className="w-[140px]">
+                  <Num value={c.amount} onChange={(v) => {
+                    const next = [...(form.oneTimeCharges || [])];
+                    next[i] = { ...next[i], amount: v };
+                    set("oneTimeCharges", next);
+                  }} />
+                </div>
+                <button type="button" className="px-2 text-[12px] text-amber-400/70 hover:text-amber-200"
+                  onClick={() => set("oneTimeCharges", (form.oneTimeCharges || []).filter((_, j) => j !== i))}>
+                  ×
+                </button>
+              </div>
+            ))}
+            <button type="button"
+              className="mt-1 rounded-sm border border-amber-700/60 px-2 py-1 text-[12px] text-amber-300 hover:bg-amber-900/30"
+              onClick={() => set("oneTimeCharges", [...(form.oneTimeCharges || []), { description: "", amount: 0 }])}>
+              + Add one-time charge
+            </button>
+          </div>
+          <Row label="Card Surcharge %"><Num value={form.cardSurchargePct} onChange={(v) => set("cardSurchargePct", v)} /></Row>
           <Row label="Delivery Zone" wide><Txt value={form.deliveryZone} onChange={(v) => set("deliveryZone", v)} /></Row>
           <SectionTitle>Outside Purchases</SectionTitle>
           {/* Mary 7/21: outside services can be $/M (scale to each quoted
