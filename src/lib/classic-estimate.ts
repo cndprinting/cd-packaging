@@ -412,7 +412,9 @@ export interface ClassicForm {
   // ── Screen 8 — Bindery (part 1) ──
   binderyOperation: number; // 1 Flat / 2 Saddle / 3 Folded / 4 Perfect / 5 Multibind / 6 Plastic
   cuttingDiff: number;       // Mary eyeballs .5/.6/.7 — more cuts to final size = higher (7/20)
-  cutterSheetsPerHr: number; // divisor for auto cutter hours
+  // DEAD since 8/19 -- the lifts model replaced it. Kept so saved drafts
+  // still parse; no longer read by the math and no longer on screen.
+  cutterSheetsPerHr: number;
   trimHrs: number;           // 0 = auto from cuts × sec/cut × diff (E&M computed trim from difficulty)
   cutsToFinalSize: number;   // cuts to get a lift to final size (0 = auto trim off)
   // E&M prints "Load Cutter (N lifts)" with its own hours; 0 = auto from

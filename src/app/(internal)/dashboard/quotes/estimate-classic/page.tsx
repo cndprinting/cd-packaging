@@ -917,7 +917,7 @@ function ClassicEstimatorContent() {
       <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
         <div>
           <SectionTitle>Camera / Stripping / Platemaking</SectionTitle>
-          <StdRow label="Plate Diff Factor" show={showStd}><Num value={form.plateDiffFactor} onChange={(v) => set("plateDiffFactor", v)} /></StdRow>
+          <Row label="Plate Diff Factor"><Num value={form.plateDiffFactor} onChange={(v) => set("plateDiffFactor", v)} /></Row>
           <Row label="Dylux Proofs"><Num value={form.dyluxProofs} onChange={(v) => set("dyluxProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.dyluxCharge} onChange={(v) => set("dyluxCharge", v)} /></Row>
           <Row label="Matchprint Proofs"><Num value={form.matchprintProofs} onChange={(v) => set("matchprintProofs", v)} step={1} /></Row>
@@ -979,7 +979,7 @@ function ClassicEstimatorContent() {
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
-            <StdRow label="Buy Rounding (Shts)" show={showStd}><Num value={pv("paperBuyRounding")} onChange={(v) => setP("paperBuyRounding", v)} step={10} /></StdRow>
+            <Row label="Buy Rounding (Shts)"><Num value={pv("paperBuyRounding")} onChange={(v) => setP("paperBuyRounding", v)} step={10} /></Row>
             <Row label="Paper Handling Hrs"><Num value={pv("paperHandlingHrs")} onChange={(v) => setP("paperHandlingHrs", v)} /></Row>
             <StdRow label="Paper Handling $/Hr" show={showStd}><Num value={pv("paperHandlingRate")} onChange={(v) => setP("paperHandlingRate", v)} /></StdRow>
             <Row label="Preprinted 2nd Pass" wide>
@@ -1202,10 +1202,10 @@ function ClassicEstimatorContent() {
                 <StdRow label="Helper Rate $/Hr" show={showStd}><Num value={pv("helperHourlyRate")} onChange={(v) => setP("helperHourlyRate", v)} /></StdRow>
                 <StdRow label="Base Makeready Hrs/Plate" show={showStd}><Num value={pv("baseMakereadyHrsPerPlate")} onChange={(v) => setP("baseMakereadyHrsPerPlate", v)} /></StdRow>
                 <Row label="Setup Hrs"><Num value={pv("pressSetupHrs")} onChange={(v) => setP("pressSetupHrs", v)} /></Row>
-                <StdRow label="Setup Diff" show={showStd}><Num value={pv("pressSetupDiff")} onChange={(v) => setP("pressSetupDiff", v)} /></StdRow>
-                <StdRow label="Makeready Diff" show={showStd}><Num value={pv("makereadyDiff")} onChange={(v) => setP("makereadyDiff", v)} /></StdRow>
+                <Row label="Setup Diff"><Num value={pv("pressSetupDiff")} onChange={(v) => setP("pressSetupDiff", v)} /></Row>
+                <Row label="Makeready Diff"><Num value={pv("makereadyDiff")} onChange={(v) => setP("makereadyDiff", v)} /></Row>
                 <StdRow label="Washup Hrs/Unit" show={showStd}><Num value={pv("washupHrsPerUnit")} onChange={(v) => setP("washupHrsPerUnit", v)} /></StdRow>
-                <StdRow label="Washup Diff" show={showStd}><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></StdRow>
+                <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
                 <Row label="Run Speed (SPH, Rated)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
                 <Row label="Signature Runs"><Num value={pv("signatureRuns")} onChange={(v) => setP("signatureRuns", v)} step={1} /></Row>
                 {/* Explicit multi-run breakdown — E&M prints a separate run
@@ -1233,7 +1233,7 @@ function ClassicEstimatorContent() {
                         <Row label="Net Sheets"><Num value={r.sheets || 0} onChange={(v) => upd({ sheets: v })} step={1} /></Row>
                         <Row label="Plates (0 = Auto)"><Num value={r.plates || 0} onChange={(v) => upd({ plates: v })} step={1} /></Row>
                         <Row label="Makeready Shts"><Num value={r.makereadySheets || 0} onChange={(v) => upd({ makereadySheets: v })} step={1} /></Row>
-                        <StdRow label="Run Waste %" show={showStd}><Num value={r.runWastePct ?? 5} onChange={(v) => upd({ runWastePct: v })} /></StdRow>
+                        <Row label="Run Waste %"><Num value={r.runWastePct ?? 5} onChange={(v) => upd({ runWastePct: v })} /></Row>
                         <Row label="Bind Waste Shts"><Num value={r.bindWasteSheets || 0} onChange={(v) => upd({ bindWasteSheets: v })} step={1} /></Row>
                         <Row label="Colors Side 1 / 2" wide>
                           <div className="flex gap-2">
@@ -1258,9 +1258,9 @@ function ClassicEstimatorContent() {
                   </button>
                 </div>
                 <Row label="Versions"><Num value={pv("versions")} onChange={(v) => setP("versions", v)} step={1} /></Row>
-                <StdRow label="Run Waste %" show={showStd}><Num value={pv("runWastePct")} onChange={(v) => setP("runWastePct", v)} /></StdRow>
+                <Row label="Run Waste %"><Num value={pv("runWastePct")} onChange={(v) => setP("runWastePct", v)} /></Row>
                 <StdRow label="Plate Hrs / Plate" show={showStd}><Num value={pv("plateHrsPerPlate")} onChange={(v) => setP("plateHrsPerPlate", v)} /></StdRow>
-                <StdRow label="Plate Hrs Diff" show={showStd}><Num value={pv("plateHrsDiff")} onChange={(v) => setP("plateHrsDiff", v)} /></StdRow>
+                <Row label="Plate Hrs Diff"><Num value={pv("plateHrsDiff")} onChange={(v) => setP("plateHrsDiff", v)} /></Row>
                 <StdRow label="Plate Labor $/Hr" show={showStd}><Num value={pv("plateLaborRate")} onChange={(v) => setP("plateLaborRate", v)} /></StdRow>
                 {/* Small-run speed curve (Mary 7/21): "not going to hit
                     10,000/hr on smaller runs" — thresholds are PLACEHOLDER
@@ -1281,7 +1281,7 @@ function ClassicEstimatorContent() {
                 <Row label="Heavy Coverage ≥ %"><Num value={form.heavyCoveragePct} onChange={(v) => set("heavyCoveragePct", v)} /></Row>
                 <StdRow label="Board Cap (Inches)" show={showStd}><Num value={form.boardCapInches} onChange={(v) => set("boardCapInches", v)} /></StdRow>
                 <StdRow label="Board Cap Speed (SPH)" show={showStd}><Num value={form.boardCapSpeed} onChange={(v) => set("boardCapSpeed", v)} step={100} /></StdRow>
-                <StdRow label="Run Diff" show={showStd}><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></StdRow>
+                <Row label="Run Diff"><Num value={pv("runDiff")} onChange={(v) => setP("runDiff", v)} /></Row>
                 {/* Mary's waste rule (7/20): 100 shts/color/side + 100 per
                     equipment pass; all editable, manual sheets override. */}
                 <Row label="Waste / Color / Side Shts"><Num value={pv("wastePerColorSheets")} onChange={(v) => setP("wastePerColorSheets", v)} step={10} /></Row>
@@ -1400,8 +1400,7 @@ function ClassicEstimatorContent() {
               </select>
             </Row>
             <SectionTitle>Cutting / Trimming / Drilling</SectionTitle>
-            <StdRow label="Cutting Diff" show={showStd}><Num value={pv("cuttingDiff")} onChange={(v) => setP("cuttingDiff", v)} /></StdRow>
-            <StdRow label="Cutter Sheets/Hr" show={showStd}><Num value={pv("cutterSheetsPerHr")} onChange={(v) => setP("cutterSheetsPerHr", v)} step={100} /></StdRow>
+            <Row label="Cutting Diff"><Num value={pv("cuttingDiff")} onChange={(v) => setP("cuttingDiff", v)} /></Row>
             <Readout label="Load Cutter Hrs (auto)" value={hrs(pcalc.cutterHrs)} />
             {/* Trim auto-computes from cuts × sec/cut × cutting diff, like
                 E&M did once Mary entered the difficulty (7/20). */}
@@ -1411,7 +1410,7 @@ function ClassicEstimatorContent() {
             <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
             <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
             <Row label="Cutter Lifts (0 = Auto)"><Num value={pv("cutterLifts")} onChange={(v) => setP("cutterLifts", v)} step={1} /></Row>
-            <StdRow label="Cutter Difficulty" show={showStd}><Num value={pv("cutterDiff")} onChange={(v) => setP("cutterDiff", v)} step={0.1} /></StdRow>
+            <Row label="Cutter Difficulty"><Num value={pv("cutterDiff")} onChange={(v) => setP("cutterDiff", v)} step={0.1} /></Row>
             <Row label="Load Cutter Hrs (0=Auto)"><Num value={pv("cutterHrsManual")} onChange={(v) => setP("cutterHrsManual", v)} /></Row>
             <div className="col-span-2 pl-[224px] text-[11px] text-amber-400/70">
               {pcalc.liftsUsed} lifts × {pv("cutterHrsPerLift")} hr × {pv("cutterDiff") || 1} difficulty
@@ -1421,13 +1420,13 @@ function ClassicEstimatorContent() {
             <StdRow label="Trim $/Hr" show={showStd}><Num value={pv("trimRatePerHr")} onChange={(v) => setP("trimRatePerHr", v)} /></StdRow>
             <Readout label="Trim Hrs Used" value={hrs(pcalc.trimHrsUsed)} />
             <Row label="Drill Holes"><Num value={pv("drillHoles")} onChange={(v) => setP("drillHoles", v)} step={1} /></Row>
-            <StdRow label="Drill Diff" show={showStd}><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></StdRow>
+            <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
             <StdRow label="Drill Hrs/Hole" show={showStd}><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></StdRow>
             <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
             {/* Folding machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48) */}
             <Row label="Pieces To Fold (0 = Qty)"><Num value={pv("foldCount")} onChange={(v) => setP("foldCount", v)} step={100} /></Row>
-            <StdRow label="Folder Speed / Hr" show={showStd}><Num value={pv("folderSpeedPerHr")} onChange={(v) => setP("folderSpeedPerHr", v)} step={100} /></StdRow>
-            <StdRow label="Fold Difficulty" show={showStd}><Num value={pv("foldDiff")} onChange={(v) => setP("foldDiff", v)} step={0.1} /></StdRow>
+            <Row label="Folder Speed / Hr"><Num value={pv("folderSpeedPerHr")} onChange={(v) => setP("folderSpeedPerHr", v)} step={100} /></Row>
+            <Row label="Fold Difficulty"><Num value={pv("foldDiff")} onChange={(v) => setP("foldDiff", v)} step={0.1} /></Row>
             <Row label="Fold Setup Hrs"><Num value={pv("foldSetupHrs")} onChange={(v) => setP("foldSetupHrs", v)} /></Row>
             <Row label="Fold Run Hrs (0 = Auto)"><Num value={pv("foldRunHrs")} onChange={(v) => setP("foldRunHrs", v)} /></Row>
             {/* Show the arithmetic. Mary 8/19: "folding I have no clue how to
