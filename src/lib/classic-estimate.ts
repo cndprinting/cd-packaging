@@ -109,6 +109,10 @@ export interface HandOp {
   description: string;
   piecesPerHour: number;
   pctOfQty: number; // % of quantity that goes through this op
+  // E&M's "Hand Bind 1 - Diecut/Strip" lines are flat hour tokens (0.1 hr,
+  // $1.88) naming the real operation, not qty-driven. 0 = derive from rate.
+  hours?: number;
+  ratePerHr?: number; // 0/undefined = the part's hand-bindery rate
 }
 
 // ── Per-part field set (Screens 6 + 7 + 8) ──────────────────────────────
@@ -123,6 +127,9 @@ export const PART_FIELD_KEYS = [
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
   "paperHandlingHrs", "paperHandlingRate", "signatureRuns",
+  "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
+  "cutterRatePerHr", "trimRatePerHr", "handBindRatePerHr", "packRatePerHr",
+  "wrapRatePerHr", "deliveryHrs", "deliveryRatePerHr", "cartonsPerHour",
   "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach",
   "pressSetupHrs", "pressSetupDiff", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
@@ -236,6 +243,32 @@ export interface ClassicForm {
   // Plate materials (E&M #348538: 4 plates @ $19 = $76 in the MATERIAL
   // bucket). Prefills from the selected press config's plateCost; editable.
   plateCostEach: number;
+  // Plate-MAKING labor — E&M bills a "Plates" line with hours and a diff
+  // paren (0.3 hr for 4 plates, 10.9 hrs for 216) at ~$95/hr, separate from
+  // the plate material. No field existed before 8/18.
+  plateHrsPerPlate: number;
+  plateHrsDiff: number;
+  plateLaborRate: number;
+  // Second pass over PREPRINTED sheets (LED-UV spot/flood re-pass, #348478
+  // p2 / #349049 p2): paper is already in-house, so no paper cost and no
+  // auto-cartons — but the pass still has its own makeready, waste and hours.
+  preprintedPass: boolean;
+  // Two versions of one product on a single layout (#348627 2x25,000;
+  // #348352 2x58,000) — scales plates/proofs, not sheet math.
+  versions: number;
+  // Per-operation bindery rates — E&M runs each machine at its own rate
+  // (Load Cutter $46, Trim $44, Ctn Pack $15, Wrap $35, Hand Bind $18.80,
+  // Delivery $45). The engine lumped them all at binderyHourlyRate.
+  cutterRatePerHr: number;
+  trimRatePerHr: number;
+  handBindRatePerHr: number;
+  packRatePerHr: number;
+  wrapRatePerHr: number;
+  deliveryHrs: number;
+  deliveryRatePerHr: number;
+  // Carton packing auto-derives at ~40 cartons/hr (clean fit from 4 to 2,735
+  // cartons across 13 estimates). packHrs typed = override.
+  cartonsPerHour: number;
   // Signature runs inside ONE part — E&M prints "Run 2 ... 2 12-Page Sigs"
   // (#348988 part 2: 24pp text = 2 sig runs, 20 wash/makereadys, 24 plates).
   // Multiplies plates, press units and run passes for the part. 1 = single run.
@@ -353,6 +386,23 @@ export interface ClassicForm {
   // ── Screen 9 — Cost Summary ──
   additionalCosts: number;
   freight: number;
+  // Freight rides the OUTSIDE bucket and takes outside markup in E&M
+  // (#348747 qty 50: outside base 583.53 = Finish Out 548.23 + freight 35.30).
+  freightInOutside: boolean;
+  // Plate discount — E&M subtracts it from the OUTSIDE base before markup
+  // (#348472 -252.00, #348228 -1,980.00, both confirmed to the cent).
+  plateDiscount: number;
+  // One-time die / cutting / stripping-board fees. These print on the letter
+  // ("Includes 1 time new die fee of $X") but are deliberately EXCLUDED from
+  // the priced buildup (#348484 $602, #348478 $1,382, #349049 $1,205).
+  oneTimeCharges: { description: string; amount: number }[];
+  // Commission: E&M sometimes bills a flat dollar amount (#348440 "$500.00
+  // commission for Lee") or none at all on broker jobs (#347866).
+  commissionMode: "pct" | "flat" | "none";
+  commissionFlat: number;
+  // "3% Surcharge added if paying by Credit Card" boilerplate (0 = none;
+  // #348440 says "NO 3%").
+  cardSurchargePct: number;
   outsidePurchases: OutsidePurchase[];
   deliveryZone: string;
   quoteNotes: string;
@@ -394,10 +444,15 @@ export function defaultClassicForm(): ClassicForm {
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
     paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1,
+    plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 95,
+    preprintedPass: false, versions: 1,
+    cutterRatePerHr: 46, trimRatePerHr: 44, handBindRatePerHr: 18.8,
+    packRatePerHr: 15, wrapRatePerHr: 35, deliveryHrs: 0, deliveryRatePerHr: 45,
+    cartonsPerHour: 40,
     pressSetupHrs: 0.125, pressSetupDiff: 0.8,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
-    runWastePct: 5, paperBuyRounding: 250,
+    runWastePct: 5, paperBuyRounding: 10,
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
@@ -423,6 +478,8 @@ export function defaultClassicForm(): ClassicForm {
 
     parts: [],
     additionalCosts: 0, freight: 0, outsidePurchases: [],
+    freightInOutside: true, plateDiscount: 0, oneTimeCharges: [],
+    commissionMode: "pct", commissionFlat: 0, cardSurchargePct: 3,
     deliveryZone: "", quoteNotes: "",
   };
 }
@@ -569,7 +626,8 @@ function computePart(
   const parentSheets = Math.ceil(sheetsToBuy / outOfParent);
   const buyRound = p.paperBuyRounding ?? 250;
   const orderSheets = buyRound > 1 ? Math.ceil(parentSheets / buyRound) * buyRound : parentSheets;
-  const paperCost = (orderSheets / 1000) * (p.pricePerM || 0);
+  // A preprinted second pass buys no paper — the sheets are already in-house.
+  const paperCost = p.preprintedPass ? 0 : (orderSheets / 1000) * (p.pricePerM || 0);
 
   // ── Press (Screen 7) ──
   // WORK & TURN (E&M #348538): the same plates print both sides, so plates /
@@ -579,7 +637,9 @@ function computePart(
   // above) but carries no plate — #348988 printed 5 units / 4 plates.
   const plates = (p.workAndTurn
     ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
-    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) * sigRuns;
+    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) * sigRuns * Math.max(1, p.versions || 1);
+  const plateLaborHrs = plates * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
+  const plateLaborCost = plateLaborHrs * (p.plateLaborRate || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0, setupHrs = 0;
@@ -738,22 +798,42 @@ function computePart(
   const stitchHelpHrs = stitchActive ? (p.stitchHelpHrs || 0) : 0;
   const stitchHrs = stitchMachineHrs + stitchHelpHrs;
   const stitchLabor = stitchMachineHrs * (p.stitchRatePerHr || 0) + stitchHelpHrs * (p.stitchHelpRatePerHr || 0);
-  const binderyRateHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs + (p.packHrs || 0)
-    + bandHrsUsed + padHrsUsed + wrapHrsUsed;
   // Paper handling rides with the paper block on E&M's sheet but is LABOR
   // (#348988: "Paper handling 0.1 Hrs" turns paper 337.50 into 340.17).
-  const paperHandlingCost = (p.paperHandlingHrs || 0) * (p.paperHandlingRate || 0);
-  const binderyHrs = binderyRateHrs + foldHrs + stitchHrs + (p.paperHandlingHrs || 0);
-  const binderyLabor = binderyRateHrs * (p.binderyHourlyRate || 0) + foldLabor + stitchLabor + paperHandlingCost;
   // Cartons/skids are E&M MATERIAL (18% line on Cybake #347528), not bindery
-  // labor — they ride the prep/materials bucket at Material markup.
-  // Cartons auto-compute from paper weight at Mary's rule: no carton over
-  // 35 lbs (7/20). paperLbs = order sheets × lbs-per-M ("147M" on her sheets).
-  // A hand-entered carton count overrides the auto (0 = auto).
-  const paperLbs = (orderSheets / 1000) * (p.weightPerMSheets || 0);
+  // labor. Cartons auto-compute from paper weight at Mary's 35-lb rule; a
+  // preprinted re-pass boxes nothing (the paper was already counted).
+  const paperLbs = p.preprintedPass ? 0 : (orderSheets / 1000) * (p.weightPerMSheets || 0);
   const cartonsAuto = paperLbs > 0 ? Math.ceil(paperLbs / 35) : 0;
   const cartonsUsed = (p.cartons || 0) > 0 ? p.cartons : cartonsAuto;
   const cartonSkidCost = cartonsUsed * (p.cartonCost || 0) + (p.skids || 0) * (p.skidCost || 0);
+  // Carton PACKING labor auto-derives at ~40 cartons/hr (clean fit across 13
+  // estimates, 4 to 2,735 cartons); a typed packHrs overrides.
+  const packHrsUsed = (p.packHrs || 0) > 0
+    ? p.packHrs
+    : ((p.cartonsPerHour || 0) > 0 ? cartonsUsed / p.cartonsPerHour : 0);
+  const paperHandlingCost = (p.paperHandlingHrs || 0) * (p.paperHandlingRate || 0);
+  const deliveryHrs = p.deliveryHrs || 0;
+  // Each bindery machine bills at its OWN rate in E&M (validation 8/18):
+  // Load Cutter $46, Trim $44, Ctn Pack $15, Wrap $35, Hand Bind $18.80,
+  // Delivery $45. Anything without a specific rate falls back to the part's
+  // general bindery rate.
+  const opRate = (r: number | undefined) => (r && r > 0 ? r : (p.binderyHourlyRate || 0));
+  const opLabor =
+    cutterHrs * opRate(p.cutterRatePerHr) +
+    trimHrsUsed * opRate(p.trimRatePerHr) +
+    drillHrs * (p.binderyHourlyRate || 0) +
+    handOp1Hrs * opRate(p.handOp1?.ratePerHr ?? p.handBindRatePerHr) +
+    handOp2Hrs * opRate(p.handOp2?.ratePerHr ?? p.handBindRatePerHr) +
+    packHrsUsed * opRate(p.packRatePerHr) +
+    bandHrsUsed * (p.binderyHourlyRate || 0) +
+    padHrsUsed * (p.binderyHourlyRate || 0) +
+    wrapHrsUsed * opRate(p.wrapRatePerHr) +
+    deliveryHrs * opRate(p.deliveryRatePerHr);
+  const binderyHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs
+    + packHrsUsed + bandHrsUsed + padHrsUsed + wrapHrsUsed + deliveryHrs
+    + foldHrs + stitchHrs + (p.paperHandlingHrs || 0);
+  const binderyLabor = opLabor + foldLabor + stitchLabor + paperHandlingCost;
   const binderyCost = binderyLabor;
 
   return {
@@ -945,14 +1025,23 @@ export function computeClassic(
     if (p.source === "todd") outsideToddCost += rowCost; else outsideVendorCost += rowCost;
   }
   const outsidePurchaseCost = outsideToddCost + outsideVendorCost;
-  const outsideCost = outsidePurchaseCost + digitalClickTotal;
-  const freightAndAdditional = (f.freight || 0) + (f.additionalCosts || 0);
+  // Freight rides the OUTSIDE bucket (and takes outside markup) unless turned
+  // off; the plate discount comes off the outside base BEFORE markup.
+  const freightInOutside = f.freightInOutside !== false;
+  const outsideFreight = freightInOutside ? (f.freight || 0) : 0;
+  // Marked-up portion of the outside bucket: purchase rows and clicks, less
+  // the plate discount. FREIGHT sits in the bucket but rides at COST — E&M
+  // marks up only the purchase rows (verified on 10 estimates, 8/18).
+  const outsideMarkable = Math.max(0, outsidePurchaseCost + digitalClickTotal - (f.plateDiscount || 0));
+  const outsideCost = outsideMarkable + outsideFreight;
+  const freightAndAdditional = (freightInOutside ? 0 : (f.freight || 0)) + (f.additionalCosts || 0);
 
   // ── Sellings (E&M cost sheet) ──
   // E&M charges a $1 minimum markup on any nonzero cost line (Cybake #347528:
   // Outside 843.80 at 0% still shows +1.00).
-  const mk = (cost: number, pct: number) =>
-    cost > 0 ? cost + Math.max((cost * (pct || 0)) / 100, 1) : 0;
+  // E&M applies the $1 floor even to a ZERO-cost bucket — #348988's cover
+  // prints Outside 0.00 with a 1.00 markup (validation 8/18).
+  const mk = (cost: number, pct: number) => cost + Math.max((cost * (pct || 0)) / 100, 1);
   const paperSelling = mk(paperCost, f.markupPaperPct);
   const materialSelling = mk(materialCost, f.markupMaterialPct);
   // Prep LABOR sells at the Labor markup (E&M #348538: all hours ride the
@@ -960,7 +1049,7 @@ export function computeClassic(
   const prepLaborSelling = mk(prepLabor, f.markupLaborPct);
   const pressSelling = mk(pressCost, f.markupLaborPct);
   const binderySelling = mk(binderyCost, f.markupLaborPct);
-  const outsideSelling = mk(outsideCost, f.markupOutsidePct);
+  const outsideSelling = mk(outsideMarkable, f.markupOutsidePct) + outsideFreight;
   // Freight/additional: pass-through plus E&M's $1 minimum when nonzero
   // (#348538: 46.17 → 47.17).
   const freightSelling = freightAndAdditional > 0 ? freightAndAdditional + 1 : 0;
@@ -968,7 +1057,10 @@ export function computeClassic(
   const totalCost = paperCost + materialCost + prepLabor + pressCost + binderyCost + outsideCost + freightAndAdditional;
   // Commission is % of total COST, not of selling — verified against Cybake
   // #347528 (117.33 = 10% × 1,173.28) — added on top like a markup line.
-  const commission = totalCost * ((f.commissionPct || 0) / 100);
+  const commission =
+    f.commissionMode === "none" ? 0
+    : f.commissionMode === "flat" ? (f.commissionFlat || 0)
+    : totalCost * ((f.commissionPct || 0) / 100);
   const sellingSubtotal =
     paperSelling + materialSelling + prepLaborSelling + pressSelling + binderySelling + outsideSelling + freightSelling;
   const total = sellingSubtotal + commission;

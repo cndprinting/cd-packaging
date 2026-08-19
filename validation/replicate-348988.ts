@@ -62,6 +62,7 @@ Object.assign(form, {
   pressHourlyRate: 188.5,   // KOMII — E&M labor 198.64 / 1.054 actual hrs
   cartonCost: 0,            // E&M charges cartons once, on the final part
   paperHandlingHrs: 0.1, paperHandlingRate: 26.7,  // E&M: 340.17 - 337.50 = 2.67
+  paperBuyRounding: 250,   // this quote rounds to 250; most round to 10
   cutsToFinalSize: 0,       // let auto derive; E&M shows Load Cutter .2 + Trim .4
 } as Partial<ClassicPart>);
 

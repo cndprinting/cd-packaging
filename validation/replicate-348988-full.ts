@@ -34,7 +34,7 @@ Object.assign(form, {
   makereadyDiff: 0.3, washupHrsPerUnit: 0,
   pressHourlyRate: 188.5, cartonCost: 0,
   paperHandlingHrs: 0.1, paperHandlingRate: 26.7,
-  runWastePct: 5,
+  runWastePct: 5, paperBuyRounding: 250,
 } as Partial<ClassicPart>);
 
 // ── Part 2 — 24pg Text: 23x29 parent, SHEETWISE, 12-pg sigs, 2 runs ──
@@ -53,7 +53,7 @@ Object.assign(p2, {
   makereadyDiff: 0.3, washupHrsPerUnit: 0,
   pressHourlyRate: 188.5, cartonCost: 0,
   paperHandlingHrs: 0.2, paperHandlingRate: 26.7,
-  runWastePct: 4,                    // 180 / 4500 = 4%
+  runWastePct: 4, paperBuyRounding: 250,   // 180 / 4500 = 4%
   wasteSheetsManual: 1760,           // E&M's printed makeready; per-unit rule unknown (needs Mary)
   signatureRuns: 2,                  // E&M "Run 2 ... 2 12-Page Sigs" 
   foldSetupHrs: 0.6, foldRunHrs: 0.9, folderRatePerHr: 48,
@@ -73,7 +73,7 @@ Object.assign(p3, {
   makereadyDiff: 0.3, washupHrsPerUnit: 0,
   pressHourlyRate: 188.5,
   paperHandlingHrs: 0.1, paperHandlingRate: 26.7,
-  runWastePct: 4,
+  runWastePct: 4, paperBuyRounding: 250,
 } as Partial<ClassicPart>);
 
 form.parts = [p2, p3];
