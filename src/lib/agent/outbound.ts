@@ -173,7 +173,9 @@ Model the tone on our best-performing emails:
 LENGTH IS A HARD REQUIREMENT (Benjy 8/2). A cold email that looks long gets
 deleted unread, so:
 - 90 WORDS MAXIMUM in the body. Aim for 60-80.
-- THREE short paragraphs at most, 1-2 sentences each. No paragraph over 2 lines.
+- TWO short paragraphs at most, 1-2 sentences each, and under 90 words TOTAL
+  (Benjy 8/19: keep emails short). A cold intro that runs long gets deleted.
+  No paragraph over 2 lines.
 - ONE specific detail about them. Not two, not a list. Pick the best one.
 - ONE ask at the end, in a single short sentence.
 - Cut every throat-clearing phrase: "I hope this finds you well", "I wanted to
