@@ -657,7 +657,19 @@ function ClassicEstimatorContent() {
         // "Notes" block) — so it carries ONLY Mary's quote-letter notes.
         // The classic method marker lives in specs; internal instructions
         // live in specs.classicForm + jobTicket.pressNotes.
-        notes: form.quoteNotes || "",
+        // One-time die/cutting fees and the card surcharge are LETTER text in
+        // E&M ("Includes 1 time new die fee of $X", "3% Surcharge added if
+        // paying by Credit Card") -- they are deliberately NOT in the price,
+        // so they have to ride the notes or the customer never sees them.
+        notes: [
+          form.quoteNotes || "",
+          ...(form.oneTimeCharges || [])
+            .filter((c) => c.description.trim() || c.amount > 0)
+            .map((c) => `Includes 1 time ${c.description.trim() || "charge"} of $${c.amount.toFixed(2)}`),
+          (form.cardSurchargePct || 0) > 0
+            ? `${form.cardSurchargePct}% Surcharge added if paying by Credit/Debit`
+            : "",
+        ].filter(Boolean).join(String.fromCharCode(10)),
       };
 
       let res: Response;

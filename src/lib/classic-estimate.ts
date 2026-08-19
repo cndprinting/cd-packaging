@@ -1070,7 +1070,13 @@ export function computeClassic(
   // Outside 843.80 at 0% still shows +1.00).
   // E&M applies the $1 floor even to a ZERO-cost bucket — #348988's cover
   // prints Outside 0.00 with a 1.00 markup (validation 8/18).
-  const mk = (cost: number, pct: number) => cost + Math.max((cost * (pct || 0)) / 100, 1);
+  // Applied only once the job actually has cost — E&M charges the $1 floor on
+  // a zero bucket INSIDE a real quote (#348988 prints Outside 0.00 -> 1.00),
+  // but a blank estimate is $0.00, not $5.00 worth of minimums.
+  const anyCost =
+    paperCost + materialCost + prepLabor + pressCost + binderyCost + outsideCost + freightAndAdditional > 0;
+  const mk = (cost: number, pct: number) =>
+    anyCost ? cost + Math.max((cost * (pct || 0)) / 100, 1) : 0;
   const paperSelling = mk(paperCost, f.markupPaperPct);
   const materialSelling = mk(materialCost, f.markupMaterialPct);
   // Prep LABOR sells at the Labor markup (E&M #348538: all hours ride the
