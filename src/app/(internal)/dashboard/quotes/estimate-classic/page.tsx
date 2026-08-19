@@ -142,6 +142,10 @@ function ClassicEstimatorContent() {
   // Plant standards (rates/speeds/difficulties) are hidden by default so the
   // quoting screens show only what Mary actually decides (Benjy/Mary 8/19).
   const [showStd, setShowStd] = useState(false);
+  // Bindery machines from plant standards — E&M picks a folder/stitcher by
+  // name and takes its speed and rate from the machine (Benjy 8/19).
+  const [folders, setFolders] = useState<{ name: string; rate: number; speed: number; setupHrs: number }[]>([]);
+  const [stitchers, setStitchers] = useState<{ name: string; rate: number; speed: number }[]>([]);
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   // Resume-from-draft: once set, Save updates this quote instead of creating
   // a new one each time (mirrors the wizard's draftQuoteId flow).
@@ -183,6 +187,20 @@ function ClassicEstimatorContent() {
         if (data.presses) setPresses(data.presses);
         if (data.standards) {
           const s = data.standards;
+          {
+          setFolders([1, 2, 3].map((i) => ({
+            name: String((s as any)[`folder${i}Name`] || "").trim(),
+            rate: Number((s as any)[`folder${i}Rate`]) || 48,
+            speed: Number((s as any)[`folder${i}Speed`]) || 6500,
+            setupHrs: (Number((s as any)[`folder${i}SetupMinutes`]) || 20) / 60,
+          })).filter((m) => m.name));
+          setStitchers([1, 2].map((i) => ({
+            name: String((s as any)[`saddleStitch${i}Name`] || "").trim(),
+            rate: Number((s as any)[`saddleStitch${i}Rate`]) || 95,
+            speed: Number((s as any)[`saddleStitch${i}Speed`]) || 8000,
+          })).filter((m) => m.name));
+                  }
+
           setStandards(s);
           setForm((f) => ({
             ...f,
@@ -219,6 +237,9 @@ function ClassicEstimatorContent() {
             helperHourlyRate: f.helperHourlyRate || Number(s.handBinderyRate) || 22.5,
             // Folder machine rate (E&M #348538 folding line ≈ $48/hr)
             folderRatePerHr: Number(s.folder1Rate) || f.folderRatePerHr,
+            folderConfig: f.folderConfig || String(s.folder1Name || ""),
+            folderSpeedPerHr: Number(s.folder1Speed) || f.folderSpeedPerHr,
+            foldSetupHrs: f.foldSetupHrs || (Number(s.folder1SetupMinutes) || 0) / 60,
             // Saddle stitcher (Mueller) rate + speed from plant standards
             // (Mary 8/10 — the whole saddle line was missing before).
             stitchRatePerHr: Number(s.saddleStitch1Rate) || f.stitchRatePerHr,
@@ -1422,7 +1443,28 @@ function ClassicEstimatorContent() {
             <Row label="Drill Holes"><Num value={pv("drillHoles")} onChange={(v) => setP("drillHoles", v)} step={1} /></Row>
             <Row label="Drill Diff"><Num value={pv("drillDiff")} onChange={(v) => setP("drillDiff", v)} /></Row>
             <StdRow label="Drill Hrs/Hole" show={showStd}><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></StdRow>
-            <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
+            {/* Folder PICKER, the way E&M did it: her cost sheets read
+                "Folding on the baum-26x40 Configuration Normal". Choosing the
+                machine sets its rate, speed and setup time. */}
+            <Row label="Folder" wide>
+              <select className={inputCls} value={pv("folderConfig") || ""}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const m = folders.find((x) => x.name === name);
+                  setP("folderConfig", name);
+                  if (m) patchP({
+                    folderConfig: name,
+                    folderRatePerHr: m.rate,
+                    folderSpeedPerHr: m.speed,
+                    foldSetupHrs: pv("foldSetupHrs") || m.setupHrs,
+                  } as any);
+                }}>
+                <option value="">(no folding)</option>
+                {folders.map((m) => (
+                  <option key={m.name} value={m.name}>{m.name} — {m.speed.toLocaleString()}/hr, ${m.rate}/hr</option>
+                ))}
+              </select>
+            </Row>
             {/* Folding machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48) */}
             <Row label="Pieces To Fold (0 = Qty)"><Num value={pv("foldCount")} onChange={(v) => setP("foldCount", v)} step={100} /></Row>
             <Row label="Folder Speed / Hr"><Num value={pv("folderSpeedPerHr")} onChange={(v) => setP("folderSpeedPerHr", v)} step={100} /></Row>
@@ -1444,6 +1486,19 @@ function ClassicEstimatorContent() {
                 typed Run value overrides. Prefills when Operation Type =
                 Saddle / Perfect / Multibind. */}
             <SectionTitle>Saddle Stitch</SectionTitle>
+            <Row label="Stitcher" wide>
+              <select className={inputCls} value={pv("stitcherName") || ""}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const x = stitchers.find((z) => z.name === name);
+                  patchP({ stitcherName: name, ...(x ? { stitchRatePerHr: x.rate, stitchSpeed: x.speed } : {}) } as any);
+                }}>
+                <option value="">(default)</option>
+                {stitchers.map((x) => (
+                  <option key={x.name} value={x.name}>{x.name} — {x.speed.toLocaleString()} books/hr, ${x.rate}/hr</option>
+                ))}
+              </select>
+            </Row>
             <Row label="Stitch Setup Hrs"><Num value={pv("stitchSetupHrs")} onChange={(v) => setP("stitchSetupHrs", v)} /></Row>
             <Row label="Stitcher Speed (bk/hr)"><Num value={pv("stitchSpeed")} onChange={(v) => setP("stitchSpeed", v)} step={500} /></Row>
             <Row label="Stitch Run Hrs (0 = Auto)"><Num value={pv("stitchRunHrs")} onChange={(v) => setP("stitchRunHrs", v)} /></Row>

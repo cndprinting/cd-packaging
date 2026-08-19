@@ -187,7 +187,7 @@ export const PART_FIELD_KEYS = [
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual", "cutterLifts", "cutterHrsPerLift", "cutterDiff",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff",
-  "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
+  "stitcherName", "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
   "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs", "bundleRatePerHr",
@@ -449,6 +449,7 @@ export interface ClassicForm {
   // "Saddle" as the operation did nothing (Mary 8/10). Auto run = books ÷
   // stitcher speed; a typed Run value (0 = auto) overrides. Help runs at the
   // hand-bindery rate.
+  stitcherName: string;      // E&M names the machine: "Saddlebind on the Mueller"
   stitchSetupHrs: number;    // prefill 0.5 (E&M setup)
   stitchRunHrs: number;      // 0 = auto from qty / stitchSpeed
   stitchHelpHrs: number;
@@ -573,7 +574,7 @@ export function defaultClassicForm(): ClassicForm {
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
     foldCount: 0, folderSpeedPerHr: 6500, foldDiff: 1,
-    stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
+    stitcherName: "", stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
     stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 20,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },

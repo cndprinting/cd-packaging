@@ -1121,12 +1121,17 @@ model PlantStandard {
   folder1Name           String   @default("Baum-26x40")
   folder1Rate           Float    @default(48)
   folder1SetupMinutes   Float    @default(20)
+  // Folder run speed, derived from Mary's own quotes (29,700 pieces / 4.7 hrs,
+  // 38,000 / 5.6, 10,000 / 1.6 all land 6,250-6,800 on the baum-26x40).
+  folder1Speed          Int      @default(6500)
   folder2Name           String   @default("Small Baum")
   folder2Rate           Float    @default(35)
   folder2SetupMinutes   Float    @default(30)
+  folder2Speed          Int      @default(4500)
   folder3Name           String   @default("Stahl")
   folder3Rate           Float    @default(48)
   folder3SetupMinutes   Float    @default(20)
+  folder3Speed          Int      @default(6500)
 
   // Saddle stitching ($/hr)
   saddleStitch1Name     String   @default("Mueller")
