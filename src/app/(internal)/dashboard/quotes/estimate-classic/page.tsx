@@ -23,6 +23,7 @@ import {
   computeQuantityBreaks,
   defaultClassicForm,
   defaultClassicPart,
+  defaultPressRun,
 } from "@/lib/classic-estimate";
 import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
@@ -1155,6 +1156,55 @@ function ClassicEstimatorContent() {
                 <Row label="Washup Diff"><Num value={pv("washupDiff")} onChange={(v) => setP("washupDiff", v)} /></Row>
                 <Row label="Run Speed (SPH, Rated)"><Num value={pv("runSpeedSph")} onChange={(v) => setP("runSpeedSph", v)} step={100} /></Row>
                 <Row label="Signature Runs"><Num value={pv("signatureRuns")} onChange={(v) => setP("signatureRuns", v)} step={1} /></Row>
+                {/* Explicit multi-run breakdown — E&M prints a separate run
+                    block per signature group, and they can differ WITHIN one
+                    part (#348472: a 3-sig SHEETWISE run + a 2-sig W&T run;
+                    #348228: 27 runs). Leave empty for a single-run part. */}
+                <div className="mt-3 border-t border-amber-800/40 pt-2">
+                  <div className="mb-1 text-[12px] uppercase tracking-wide text-amber-400/90">
+                    Press Runs (leave empty for one run)
+                  </div>
+                  {((pv("runs") as any[]) || []).map((r: any, i: number) => {
+                    const upd = (patch: any) => {
+                      const next = [...((pv("runs") as any[]) || [])];
+                      next[i] = { ...next[i], ...patch };
+                      setP("runs", next as any);
+                    };
+                    return (
+                      <div key={i} className="mb-2 rounded-sm border border-amber-800/40 p-2">
+                        <div className="mb-1 flex items-center gap-2">
+                          <input className={inputCls} placeholder="e.g. Run 3: 3 8-page sigs SHEETWISE"
+                            value={r.label || ""} onChange={(e) => upd({ label: e.target.value })} />
+                          <button type="button" className="px-2 text-[12px] text-amber-400/70 hover:text-amber-200"
+                            onClick={() => setP("runs", (((pv("runs") as any[]) || []).filter((_: any, j: number) => j !== i)) as any)}>×</button>
+                        </div>
+                        <Row label="Net Sheets"><Num value={r.sheets || 0} onChange={(v) => upd({ sheets: v })} step={1} /></Row>
+                        <Row label="Plates (0 = Auto)"><Num value={r.plates || 0} onChange={(v) => upd({ plates: v })} step={1} /></Row>
+                        <Row label="Makeready Shts"><Num value={r.makereadySheets || 0} onChange={(v) => upd({ makereadySheets: v })} step={1} /></Row>
+                        <Row label="Run Waste %"><Num value={r.runWastePct ?? 5} onChange={(v) => upd({ runWastePct: v })} /></Row>
+                        <Row label="Bind Waste Shts"><Num value={r.bindWasteSheets || 0} onChange={(v) => upd({ bindWasteSheets: v })} step={1} /></Row>
+                        <Row label="Colors Side 1 / 2" wide>
+                          <div className="flex gap-2">
+                            <Num value={r.runColorsSide1 || 0} onChange={(v) => upd({ runColorsSide1: v })} step={1} />
+                            <Num value={r.runColorsSide2 || 0} onChange={(v) => upd({ runColorsSide2: v })} step={1} />
+                          </div>
+                        </Row>
+                        <Row label="Speed (SPH)"><Num value={r.runSpeedSph || 0} onChange={(v) => upd({ runSpeedSph: v })} step={100} /></Row>
+                        <Row label="Work & Turn" wide>
+                          <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+                            <input type="checkbox" checked={!!r.workAndTurn} onChange={(e) => upd({ workAndTurn: e.target.checked })} />
+                            same plates print both sides
+                          </label>
+                        </Row>
+                      </div>
+                    );
+                  })}
+                  <button type="button"
+                    className="mt-1 rounded-sm border border-amber-700/60 px-2 py-1 text-[12px] text-amber-300 hover:bg-amber-900/30"
+                    onClick={() => setP("runs", ([...(((pv("runs") as any[]) || [])), defaultPressRun()]) as any)}>
+                    + Add press run
+                  </button>
+                </div>
                 <Row label="Versions"><Num value={pv("versions")} onChange={(v) => setP("versions", v)} step={1} /></Row>
                 <Row label="Run Waste %"><Num value={pv("runWastePct")} onChange={(v) => setP("runWastePct", v)} /></Row>
                 <Row label="Plate Hrs / Plate"><Num value={pv("plateHrsPerPlate")} onChange={(v) => setP("plateHrsPerPlate", v)} /></Row>

@@ -105,6 +105,38 @@ export function parseCaliperInches(caliperBasisWeight: string): number {
 export const COATING_TYPES = ["", "Gloss AQ", "Matte AQ", "Satin AQ", "UV", "Varnish"] as const;
 export type CoatingType = (typeof COATING_TYPES)[number];
 
+// ── One press RUN inside a part ─────────────────────────────────────────
+// E&M prints a separate run block per signature group, each with its own work
+// style, sheet count, plate count, makeready and waste — and they can differ
+// WITHIN one part (#348472: a 3-sig SHEETWISE run plus a 2-sig WORK & TURN run;
+// #348228: 27 runs / 216 plates in a single part). A part with an empty runs[]
+// behaves exactly as before, using the flat single-run fields.
+export interface PressRun {
+  label: string;              // "Run 3: 3 8-page sigs SHEETWISE"
+  sheets: number;             // NET press sheets for this run
+  workAndTurn: boolean;
+  runColorsSide1: number;
+  runColorsSide2: number;
+  // E&M prints a plate/washup count per run, and it depends on the signature
+  // layout (#348472 Run 3 = 3 8-pg sigs sheetwise -> 24; Run 1 = 2 4-pg sigs
+  // W&T -> 4), which colors alone cannot express. 0 = derive from colors.
+  plates: number;
+  makereadySheets: number;    // E&M prints it per run
+  runWastePct: number;        // running spoilage on this run's sheets
+  bindWasteSheets: number;
+  runSpeedSph: number;
+  runDiff: number;
+}
+
+export function defaultPressRun(): PressRun {
+  return {
+    label: "", sheets: 0, workAndTurn: false,
+    runColorsSide1: 4, runColorsSide2: 4, plates: 0,
+    makereadySheets: 0, runWastePct: 5, bindWasteSheets: 0,
+    runSpeedSph: 0, runDiff: 1,
+  };
+}
+
 export interface HandOp {
   description: string;
   piecesPerHour: number;
@@ -126,7 +158,7 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "paperHandlingHrs", "paperHandlingRate", "signatureRuns",
+  "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
   "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
   "cutterRatePerHr", "trimRatePerHr", "handBindRatePerHr", "packRatePerHr",
   "wrapRatePerHr", "deliveryHrs", "deliveryRatePerHr", "cartonsPerHour",
@@ -273,6 +305,9 @@ export interface ClassicForm {
   // Carton packing auto-derives at ~40 cartons/hr (clean fit from 4 to 2,735
   // cartons across 13 estimates). packHrs typed = override.
   cartonsPerHour: number;
+  // Explicit per-run breakdown. When non-empty this REPLACES the flat
+  // single-run press fields for sheets/plates/makeready/waste/run hours.
+  runs: PressRun[];
   // Signature runs inside ONE part — E&M prints "Run 2 ... 2 12-Page Sigs"
   // (#348988 part 2: 24pp text = 2 sig runs, 20 wash/makereadys, 24 plates).
   // Multiplies plates, press units and run passes for the part. 1 = single run.
@@ -457,7 +492,7 @@ export function defaultClassicForm(): ClassicForm {
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
-    paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1,
+    paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,
     padRatePerHr: 18, padsPerHour: 500,
     preprintedPass: false, versions: 1,
@@ -586,7 +621,13 @@ function computePart(
 
   // ── Paper (Screen 6, waste from Screen 7) ──
   const sheetsPerPiece = Math.max(1, p.sheetsPerPiece || 1);
-  const pressSheets = Math.ceil((qty * sheetsPerPiece) / numberUp);
+  // Multi-run part: E&M gives each run its own net sheet count, so the part's
+  // press sheets are their sum rather than a single qty-derived figure.
+  const runList: PressRun[] = Array.isArray(p.runs) ? p.runs.filter((r) => r && (r.sheets || 0) > 0) : [];
+  const multiRun = runList.length > 0;
+  const pressSheets = multiRun
+    ? runList.reduce((t, r) => t + Math.ceil(r.sheets || 0), 0)
+    : Math.ceil((qty * sheetsPerPiece) / numberUp);
   // Cuts to final size — auto-derived from Screen 6's sheet info (Mary 7/20:
   // "cutting should get summed based on the sheet info"). Guillotine cuts for
   // an N-up layout ≈ N + 3 (4 edge trims + strip/cross cuts), plus parent→press
@@ -615,17 +656,21 @@ function computePart(
   // wastes makeready sheets like ink but needs NO plate. E&M printed
   // "5 Color(s)" and "Wash and Makereadys 5" with only 4 plates, and its 700
   // makeready sheets = 5 units × 100 + 2 equipment passes × 100.
-  const pressUnits =
-    (((p.workAndTurn)
-      ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
-      : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) +
-    (p.coatingType ? 1 : 0)) * sigRuns;
+  const unitsForRun = (wt: boolean, c1: number, c2: number) =>
+    (wt ? Math.max(c1 || 0, c2 || 0) : (c1 || 0) + (c2 || 0)) + (p.coatingType ? 1 : 0);
+  const pressUnits = multiRun
+    ? runList.reduce((t, r) => t + ((r.plates || 0) > 0
+        ? r.plates + (p.coatingType ? 1 : 0)
+        : unitsForRun(r.workAndTurn, r.runColorsSide1, r.runColorsSide2)), 0)
+    : unitsForRun(p.workAndTurn, p.runColorsSide1, p.runColorsSide2) * sigRuns;
   const wasteColors = pressUnits;
   const mrWasteSheets = isDigital
     ? Math.ceil(p.digitalMakereadySheets || 0)
-    : (p.wasteSheetsManual || 0) > 0
-      ? Math.ceil(p.wasteSheetsManual)
-      : wasteColors * (p.wastePerColorSheets || 0) + equipmentPasses * (p.wastePerEquipmentSheets || 0);
+    : multiRun
+      ? runList.reduce((t, r) => t + Math.ceil(r.makereadySheets || 0), 0)
+      : (p.wasteSheetsManual || 0) > 0
+        ? Math.ceil(p.wasteSheetsManual)
+        : wasteColors * (p.wastePerColorSheets || 0) + equipmentPasses * (p.wastePerEquipmentSheets || 0);
   // Running spoilage — separate from makeready (validation 8/18, #348988):
   // E&M printed "Make ready 700  Press waste 56" where 56 = 5% of the 1,125
   // net press sheets. Makeready is the setup burn; press waste is the running
@@ -633,14 +678,19 @@ function computePart(
   // A typed makeready count overrides only the MAKEREADY formula — running
   // spoilage still applies on top, because E&M prints BOTH ("Make ready 1760
   // Press waste 180" on #348988 part 2).
-  const runWasteSheets = Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
+  const runWasteSheets = multiRun
+    ? runList.reduce((t, r) => t + Math.ceil((r.sheets || 0) * ((r.runWastePct ?? 5) / 100)), 0)
+    : Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
 
   // Paper buy: press sheets + MR/overs + running spoilage + bindery spoilage,
   // converted to PARENT sheets, then rounded UP to the next 250-sheet
   // increment — E&M never buys an odd count (#348988: 1,881 → 2,000 on the
   // cover, 6,640 → 6,750 on the text). pricePerM is per parent sheet.
   const outOfParent = Math.max(1, p.sheetsOutOfParent || 1);
-  const sheetsToBuy = pressSheets + mrWasteSheets + runWasteSheets + Math.ceil(p.bindWasteSheets || 0);
+  const bindWasteTotal = multiRun
+    ? runList.reduce((t, r) => t + Math.ceil(r.bindWasteSheets || 0), 0)
+    : Math.ceil(p.bindWasteSheets || 0);
+  const sheetsToBuy = pressSheets + mrWasteSheets + runWasteSheets + bindWasteTotal;
   const parentSheets = Math.ceil(sheetsToBuy / outOfParent);
   const buyRound = p.paperBuyRounding ?? 250;
   const orderSheets = buyRound > 1 ? Math.ceil(parentSheets / buyRound) * buyRound : parentSheets;
@@ -653,11 +703,16 @@ function computePart(
   // "No. of Wash and Makereadys 4" and 4 plates ($76 @ $19).
   // Plates = INK units only. A coating unit runs on press (see pressUnits
   // above) but carries no plate — #348988 printed 5 units / 4 plates.
-  const plates = (p.workAndTurn
-    ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
-    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)
-   ) * sigRuns * Math.max(1, p.versions || 1)
-   + (p.coatingType && p.coatingIsSpot ? sigRuns * Math.max(1, p.versions || 1) : 0);
+  const versionMult = Math.max(1, p.versions || 1);
+  const platesForRun = (wt: boolean, c1: number, c2: number) =>
+    wt ? Math.max(c1 || 0, c2 || 0) : (c1 || 0) + (c2 || 0);
+  const plates = multiRun
+    ? runList.reduce((t, r) => t + ((r.plates || 0) > 0
+        ? r.plates
+        : platesForRun(r.workAndTurn, r.runColorsSide1, r.runColorsSide2)), 0) * versionMult
+      + (p.coatingType && p.coatingIsSpot ? runList.length * versionMult : 0)
+    : platesForRun(p.workAndTurn, p.runColorsSide1, p.runColorsSide2) * sigRuns * versionMult
+      + (p.coatingType && p.coatingIsSpot ? sigRuns * versionMult : 0);
   const plateLaborHrs = plates * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
   const plateLaborCost = plateLaborHrs * (p.plateLaborRate || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
@@ -731,7 +786,21 @@ function computePart(
     const runPasses = p.workAndTurn
       ? ((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)
       : 1;
-    runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
+    if (multiRun) {
+      // Each run carries its own sheets, speed, sides and difficulty.
+      const passesFor = (wt: boolean, c1: number, c2: number) =>
+        wt ? ((c1 || 0) > 0 ? 1 : 0) + ((c2 || 0) > 0 ? 1 : 0) : 1;
+      runHrs = runList.reduce((t, r) => {
+        const thru = Math.ceil(r.sheets || 0)
+          + Math.ceil(r.makereadySheets || 0)
+          + Math.ceil((r.sheets || 0) * ((r.runWastePct ?? 5) / 100));
+        const sph = (r.runSpeedSph || 0) > 0 ? r.runSpeedSph : effectiveSph;
+        if (!sph) return t;
+        return t + ((thru * passesFor(r.workAndTurn, r.runColorsSide1, r.runColorsSide2)) / sph) * (r.runDiff || 1);
+      }, 0);
+    } else {
+      runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
+    }
     setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
     pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb),
