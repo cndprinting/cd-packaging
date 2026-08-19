@@ -55,6 +55,7 @@ Object.assign(p2, {
   paperHandlingHrs: 0.2, paperHandlingRate: 26.7,
   runWastePct: 4,                    // 180 / 4500 = 4%
   wasteSheetsManual: 1760,           // E&M's printed makeready; per-unit rule unknown (needs Mary)
+  signatureRuns: 2,                  // E&M "Run 2 ... 2 12-Page Sigs" 
   foldSetupHrs: 0.6, foldRunHrs: 0.9, folderRatePerHr: 48,
 } as Partial<ClassicPart>);
 
@@ -79,7 +80,7 @@ form.parts = [p2, p3];
 
 const calc: any = computeClassic(form, null);
 console.log("#348988 — all 3 parts, qty 2,250\n");
-console.log("part          E&M sheets  GZ sheets   E&M paper$   GZ paper$");
+console.log("part          E&M sheets  GZ sheets   E&M paper$   GZ paper$   plates");
 (calc.partCalcs || []).forEach((c: any, i: number) => {
   const em = EM.parts[i];
   const okS = c.orderSheets === em.orderSheets ? "✓" : "Δ";
@@ -87,7 +88,8 @@ console.log("part          E&M sheets  GZ sheets   E&M paper$   GZ paper$");
   console.log(
     String(em.name).padEnd(12),
     String(em.orderSheets).padStart(10), String(c.orderSheets).padStart(10), okS,
-    em.paperCost.toFixed(2).padStart(10), c.paperCost.toFixed(2).padStart(10), okP
+    em.paperCost.toFixed(2).padStart(10), c.paperCost.toFixed(2).padStart(10), okP,
+    String(c.plates).padStart(6)
   );
 });
 console.log("\nJOB TOTAL   E&M", EM.jobTotal.toFixed(2), "  Godzilla", (calc.total || 0).toFixed(2),

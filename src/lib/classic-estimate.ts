@@ -122,7 +122,7 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "paperHandlingHrs", "paperHandlingRate",
+  "paperHandlingHrs", "paperHandlingRate", "signatureRuns",
   "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach",
   "pressSetupHrs", "pressSetupDiff", "baseMakereadyHrsPerPlate",
   "makereadyDiff", "washupHrsPerUnit", "washupDiff", "runSpeedSph",
@@ -236,6 +236,10 @@ export interface ClassicForm {
   // Plate materials (E&M #348538: 4 plates @ $19 = $76 in the MATERIAL
   // bucket). Prefills from the selected press config's plateCost; editable.
   plateCostEach: number;
+  // Signature runs inside ONE part — E&M prints "Run 2 ... 2 12-Page Sigs"
+  // (#348988 part 2: 24pp text = 2 sig runs, 20 wash/makereadys, 24 plates).
+  // Multiplies plates, press units and run passes for the part. 1 = single run.
+  signatureRuns: number;
   // Press SETUP line — E&M prints "Setup 0.1 Hrs ( 0.8 )" above Makeready
   // (#348988). Flat per-run hours × its own difficulty factor; missing
   // entirely before the 8/18 validation batch.
@@ -389,7 +393,7 @@ export function defaultClassicForm(): ClassicForm {
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
-    paperHandlingHrs: 0, paperHandlingRate: 22.5,
+    paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1,
     pressSetupHrs: 0.125, pressSetupDiff: 0.8,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
@@ -529,6 +533,7 @@ function computePart(
     (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
     ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0);                // stitch/bind
   const equipmentPasses = (p.equipmentPassesManual || 0) > 0 ? p.equipmentPassesManual : passesAuto;
+  const sigRuns = Math.max(1, p.signatureRuns || 1);
   // Press UNITS (validation batch 8/18, #348988 Cover): WORK & TURN runs the
   // same units on both sides, so units count ONCE (max, not side1+side2) —
   // and a coating (varnish/AQ) occupies a press unit that washes up and
@@ -536,10 +541,10 @@ function computePart(
   // "5 Color(s)" and "Wash and Makereadys 5" with only 4 plates, and its 700
   // makeready sheets = 5 units × 100 + 2 equipment passes × 100.
   const pressUnits =
-    ((p.workAndTurn)
+    (((p.workAndTurn)
       ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
       : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) +
-    (p.coatingType ? 1 : 0);
+    (p.coatingType ? 1 : 0)) * sigRuns;
   const wasteColors = pressUnits;
   const mrWasteSheets = isDigital
     ? Math.ceil(p.digitalMakereadySheets || 0)
@@ -572,9 +577,9 @@ function computePart(
   // "No. of Wash and Makereadys 4" and 4 plates ($76 @ $19).
   // Plates = INK units only. A coating unit runs on press (see pressUnits
   // above) but carries no plate — #348988 printed 5 units / 4 plates.
-  const plates = p.workAndTurn
+  const plates = (p.workAndTurn
     ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
-    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0);
+    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) * sigRuns;
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
   let makereadyHrs = 0, washupHrs = 0, runHrs = 0, setupHrs = 0;
@@ -639,9 +644,9 @@ function computePart(
     // 1,125 + 700 + 56 = 1,881; 1,881/6,500 = 0.29 → E&M's printed 0.3 hrs
     // per side, twice for the two W&T sides).
     const sheetsThroughPress = pressSheets + mrWasteSheets + runWasteSheets;
-    const runPasses = p.workAndTurn
+    const runPasses = (p.workAndTurn
       ? ((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)
-      : 1;
+      : 1) * sigRuns;
     runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
     setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
     pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
