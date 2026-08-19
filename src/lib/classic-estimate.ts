@@ -536,11 +536,15 @@ export function defaultClassicForm(): ClassicForm {
     runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
-    inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageLedPct: 0, inkCoveragePmsPct: 0, inkCoverageVarnishPct: 0,
+    // Mary 8/19: standard 4-color coverage is 6% black and 12% for EACH of
+    // C/M/Y (= 36% process), per side. She raises them for heavy coverage.
+    inkCoverageBlackPct: 6, inkCoverageColorPct: 36, inkCoverageLedPct: 0, inkCoveragePmsPct: 0, inkCoverageVarnishPct: 0,
     // Ink $/lb DERIVED from Mary's 36 quotes (8/18): black and process both
     // land on $10.84 (26 observations, 10.73-10.85). PMS/spot is a separate
     // cluster at $39.50 -- the old 19.50 default was less than half.
-    inkLbsManual: 0, inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
+    // Calibrated against #348988's cover at Mary's stated 6%/36% coverage
+    // (E&M printed 0.8 lb black + 4.1 lb colour, $53.12). Was a 425 placeholder.
+    inkLbsManual: 0, inkFactorMsqinPerLb: 153, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
     coatingType: "", coatingCoveragePct: 100, coatingIsSpot: false, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
@@ -678,7 +682,13 @@ function computePart(
     ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
     ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
     (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
-    ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0);                // stitch/bind
+    ([2, 4, 5].includes(p.binderyOperation) ? 1 : 0) +               // stitch/bind
+    // Mary 8/19: "100 sheets per machine it has to go on after that" — she
+    // counts foil, emboss, die cutter and folder/gluer each as a machine. Those
+    // ride the hand-bindery op lines, so pick them up by name.
+    [p.handOp1, p.handOp2].filter((o) =>
+      o && /foil|emboss|glue|glu|diecut|die cut|dc\/|score|crease|laminat|drill|round ?corner/i
+        .test(String(o.description || ""))).length;
   const equipmentPasses = (p.equipmentPassesManual || 0) > 0 ? p.equipmentPassesManual : passesAuto;
   const sigRuns = Math.max(1, p.signatureRuns || 1);
   // Press UNITS (validation batch 8/18, #348988 Cover): WORK & TURN runs the
@@ -850,7 +860,9 @@ function computePart(
     // Ink is consumed per IMPRESSION — a sheet printed both sides takes twice
     // the ink of a 1-sided one (validation 8/18, #348988: our 1-sided figure
     // came out at exactly half E&M's printed 0.8 lb black / 4.1 lb color).
-    const inkImpressions = pressSheets * Math.max(1, runPasses);
+    // Every sheet that goes through the press takes ink -- makeready and
+    // spoilage included, not just the good sheets (Mary 8/19).
+    const inkImpressions = (pressSheets + mrWasteSheets + runWasteSheets) * Math.max(1, runPasses);
     const lbsFor = (pct: number) => p.inkFactorMsqinPerLb > 0
       ? (inkImpressions * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;

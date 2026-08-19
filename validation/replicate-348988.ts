@@ -55,9 +55,9 @@ Object.assign(form, {
   binderyOperation: 4,      // Perfect — the cover is bound onto the book (2 equip passes: cut + bind)
   // Ink coverage: E&M printed 0.8 lbs black + 4.1 lbs color. Derived below;
   // needs Mary's confirmation of E&M's standard coverage per ink config.
-  inkCoverageBlackPct: 31.8, inkCoverageColorPct: 163,
+  // Mary's standard coverage now comes from the defaults (6% / 36%)
   makereadyDiff: 0.3, washupHrsPerUnit: 0,
-  inkDollarsPerLb: 10.81,   // implied by 53.12 total (was 8.50 default)
+  inkDollarsPerLb: 10.84,
   inkCoverageVarnishPct: 0,
   pressHourlyRate: 188.5,   // KOMII — E&M labor 198.64 / 1.054 actual hrs
   cartonCost: 0,            // E&M charges cartons once, on the final part
