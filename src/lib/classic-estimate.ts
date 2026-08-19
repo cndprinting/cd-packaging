@@ -247,8 +247,11 @@ export interface ClassicForm {
   // Plate-MAKING labor — E&M bills a "Plates" line with hours and a diff
   // paren (0.3 hr for 4 plates, 10.9 hrs for 216) at ~$95/hr, separate from
   // the plate material. No field existed before 8/18.
-  plateHrsPerPlate: number;
+  plateHrsPerPlate: number;   // 0.075/plate reproduces E&M's printed hours
   plateHrsDiff: number;
+  // Plate-making labor rate DERIVED from #348988: 4 plates print "0.3 Hrs"
+  // and $81.92 against $76.00 of plate material -> $5.92 / 0.3 = $19.73/hr.
+  // (Not the $95 prepress rate -- platemaking bills lower.)
   plateLaborRate: number;
   // Second pass over PREPRINTED sheets (LED-UV spot/flood re-pass, #348478
   // p2 / #349049 p2): paper is already in-house, so no paper cost and no
@@ -455,7 +458,7 @@ export function defaultClassicForm(): ClassicForm {
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
     paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1,
-    plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 95,
+    plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,
     padRatePerHr: 18, padsPerHour: 500,
     preprintedPass: false, versions: 1,
     cutterRatePerHr: 45, trimRatePerHr: 45, handBindRatePerHr: 18.8,
@@ -688,7 +691,7 @@ function computePart(
     // Clicks are NOT press labor — E&M books digital as an outside purchase
     // (Cybake #347528: Digital 793.80 under Outside at 0%). They land in the
     // outside bucket in computeClassic; press labor is only die/score/check hrs.
-    pressLaborCost = pressHrs * (p.pressHourlyRate || 0);
+    pressLaborCost = pressHrs * (p.pressHourlyRate || 0) + plateLaborCost;
   } else {
     // Makeready/washup follow press UNITS, not plates — the coating unit gets
     // washed and made ready like an ink unit (#348988: "Wash and Makereadys 5"

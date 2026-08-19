@@ -41,7 +41,7 @@ const pressRate = (cfg: any): number => {
 };
 const isPhantom = (cfg: any) => /phantom|miller/i.test(String(cfg || ""));
 
-function buildPart(p: Any, isFirst: boolean, qtyForPart: number): ClassicPart {
+function buildPart(p: Any, isFirst: boolean, qtyForPart: number, jobText = ""): ClassicPart {
   const part = defaultClassicPart() as Any;
   const pa = p.paper || {}, pr = p.press || {}, rp = p.runPlan || {}, pe = p.prep || {};
   const [pw, ph] = dims(pa.parentSize);
@@ -52,10 +52,13 @@ function buildPart(p: Any, isFirst: boolean, qtyForPart: number): ClassicPart {
   part.weightPerMSheets = num(String(pa.weightPerM || "").replace(/M/i, ""));
   part.sheetWidthRun = pw; part.sheetHeightRun = ph;
   part.caliperBasisWeight = String(pa.lb || "");
-  part.sheetsOutOfParent = 1;
-  // Derive number-up / sheets-per-piece from E&M's OWN printed counts:
-  // net press sheets = ordered - makeready - press waste - bind waste.
-  const netSheets = Math.max(0, num(pa.sheets) - num(rp.makeready) - num(rp.pressWaste) - num(rp.bindWaste));
+  // E&M buys PARENT sheets but counts makeready/waste in PRESS sheets, so the
+  // two are different units. It prints both facts we need: "minimum count" is
+  // the net press-sheet count, and pressSheetsOutOfParent is the split.
+  part.sheetsOutOfParent = Math.max(1, num(rp.pressSheetsOutOfParent) || 1);
+  const netSheets = num(rp.minimumCount) > 0
+    ? num(rp.minimumCount)
+    : Math.max(0, (num(pa.sheets) * part.sheetsOutOfParent) - num(rp.makeready) - num(rp.pressWaste) - num(rp.bindWaste));
   if (netSheets > 0 && qtyForPart > 0) {
     if (netSheets >= qtyForPart) {
       part.sheetsPerPiece = Math.max(1, Math.round(netSheets / qtyForPart));
@@ -87,6 +90,13 @@ function buildPart(p: Any, isFirst: boolean, qtyForPart: number): ClassicPart {
   part.runWastePct = num(rp.pressWaste) > 0 && num(pa.sheets) > 0
     ? (num(rp.pressWaste) / num(pa.sheets)) * 100 : 0;
   part.paperBuyRounding = 10;
+  part.cartonCost = 0.93;   // E&M carton material, derived from #348352 (396.18/426)
+  // coating: E&M names it in the colors text ("+ 1 varnish", "AQ", "matte")
+  const ctxt = [pr.colors, p.name, rp.workStyle, pr.config, jobText].map((x) => String(x || "")).join(" ");
+  if (/varnish/i.test(ctxt)) part.coatingType = "Varnish";
+  else if (/matte\s*aq/i.test(ctxt)) part.coatingType = "Matte AQ";
+  else if (/aq|aqueous/i.test(ctxt)) part.coatingType = "Gloss AQ";
+  if (/spot/i.test(ctxt)) part.coatingIsSpot = true;
   part.makereadyDiff = 0.3;
   part.washupHrsPerUnit = 0;
   part.inkDollarsPerLb = 10.84; part.inkBlackDollarsPerLb = 10.84;
@@ -116,7 +126,7 @@ function buildPart(p: Any, isFirst: boolean, qtyForPart: number): ClassicPart {
     else if (op.includes("folding")) part.foldRunHrs = h;
     else if (op.includes("saddle") && op.includes("setup")) part.stitchSetupHrs = h;
     else if (op.includes("mueller") || (op.includes("saddle") && !op.includes("setup"))) part.stitchRunHrs = h;
-    else if (op.includes("ctn pack")) { part.packHrs = h; part.cartonCost = 0.93; }
+    else if (op.includes("ctn pack")) { part.packHrs = h; }
     else if (op.includes("pad")) part.padHrs = h;
     else if (op.includes("wrap")) part.wrapHrs = h;
   }
@@ -173,8 +183,9 @@ for (const e of cat) {
   form.markupLaborPct = num(parts[0]?.markups?.labor?.pct) || 40;
 
   // part 1 lives flat on the form
-  Object.assign(form, buildPart(parts[0], true, qty));
-  form.parts = parts.slice(1).map((p) => buildPart(p, false, qty));
+  const jobText = [e.description, e.binding, e.anythingUnusual].map((x: any) => String(x || "")).join(" ");
+  Object.assign(form, buildPart(parts[0], true, qty, jobText));
+  form.parts = parts.slice(1).map((p) => buildPart(p, false, qty, jobText));
 
   // outside purchases: sum the printed outside cost per part
   let outside = 0;
@@ -189,6 +200,15 @@ for (const e of cat) {
   try { gz = (computeClassic(form as ClassicForm, null) as Any).total || 0; }
   catch { unscored++; continue; }
 
+  if (process.argv.includes("--debug") && String(e.estimateNo) === process.argv[process.argv.indexOf("--debug")+1]) {
+    const k: Any = computeClassic(form as ClassicForm, null);
+    console.log("DEBUG", e.estimateNo);
+    console.log("  paper   ", k.paperCost?.toFixed(2), " material", k.materialCost?.toFixed(2));
+    console.log("  prep lab", k.prepLabor?.toFixed(2), " press", k.pressCost?.toFixed(2), " bind", k.binderyCost?.toFixed(2));
+    console.log("  outside ", k.outsideCost?.toFixed(2), " (mapped", outside.toFixed(2), ")");
+    console.log("  totalCost", k.totalCost?.toFixed(2), " commission", k.commission?.toFixed(2), " TOTAL", k.total?.toFixed(2));
+    console.log("  E&M part costs:", parts.map((x:Any)=>x.partTotal).join(" + "), "= expected", emTotal);
+  }
   const pct = emTotal ? ((gz - emTotal) / emTotal) * 100 : 0;
   scored++;
   if (Math.abs(pct) <= 0.5) exact++;
