@@ -136,7 +136,8 @@ export const PART_FIELD_KEYS = [
   "runWastePct", "paperBuyRounding",
   "useSpeedCurve",
   "runDiff", "wasteFactorPct", "helpers",
-  "coatingType", "coatingCoveragePct", "coatingDollarsPerLb",
+  "coatingType", "coatingCoveragePct", "coatingDollarsPerLb", "coatingIsSpot",
+  "padRatePerHr", "padsPerHour",
   "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
   "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageLedPct", "inkCoveragePmsPct", "inkCoverageVarnishPct",
   "inkFactorMsqinPerLb", "inkBlackDollarsPerLb", "inkDollarsPerLb", "inkLedDollarsPerLb", "inkPmsDollarsPerLb", "varnishDollarsPerLb",
@@ -144,7 +145,7 @@ export const PART_FIELD_KEYS = [
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   // Screen 8 — Bindery
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
-  "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut",
+  "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
   "foldSetupHrs", "foldRunHrs", "folderRatePerHr",
   "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
@@ -321,6 +322,13 @@ export interface ClassicForm {
   // ink; $/lb prefills by type from PlantStandard, always hand-editable.
   coatingType: string;          // "" = none; see COATING_TYPES
   coatingCoveragePct: number;   // default 100 (flood)
+  // SPOT coating carries an image so it needs its own plate; FLOOD does not.
+  // Resolves E&M's apparent contradiction (#348988 4c+varnish = 4 plates
+  // flood; #348627 1c+varnish = 2 plates spot). Derived 8/18.
+  coatingIsSpot: boolean;
+  // Padding (notepads/forms): E&M runs a clean 500 pads/hr at $18/hr.
+  padRatePerHr: number;
+  padsPerHour: number;
   coatingDollarsPerLb: number;  // prefilled by type, editable
   dieCutHrs: number;
   scorePerfHrs: number;
@@ -340,6 +348,9 @@ export interface ClassicForm {
   cutterSheetsPerHr: number; // divisor for auto cutter hours
   trimHrs: number;           // 0 = auto from cuts × sec/cut × diff (E&M computed trim from difficulty)
   cutsToFinalSize: number;   // cuts to get a lift to final size (0 = auto trim off)
+  // E&M prints "Load Cutter (N lifts)" with its own hours; 0 = auto from
+  // sheets/cutterSheetsPerHr. Added 8/18 -- no manual override existed.
+  cutterHrsManual: number;
   sheetsPerLift: number;     // sheets the cutter takes per lift (default 500)
   cutSecPerCut: number;      // seconds per cut (plant standard: 8)
   drillHoles: number;
@@ -445,8 +456,9 @@ export function defaultClassicForm(): ClassicForm {
     workAndTurn: false, plateCostEach: 0,
     paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1,
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 95,
+    padRatePerHr: 18, padsPerHour: 500,
     preprintedPass: false, versions: 1,
-    cutterRatePerHr: 46, trimRatePerHr: 44, handBindRatePerHr: 18.8,
+    cutterRatePerHr: 45, trimRatePerHr: 45, handBindRatePerHr: 18.8,
     packRatePerHr: 15, wrapRatePerHr: 35, deliveryHrs: 0, deliveryRatePerHr: 45,
     cartonsPerHour: 40,
     pressSetupHrs: 0.125, pressSetupDiff: 0.8,
@@ -457,18 +469,21 @@ export function defaultClassicForm(): ClassicForm {
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     inkCoverageBlackPct: 0, inkCoverageColorPct: 0, inkCoverageLedPct: 0, inkCoveragePmsPct: 0, inkCoverageVarnishPct: 0,
-    inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.81, inkDollarsPerLb: 8.5, inkLedDollarsPerLb: 10.81, inkPmsDollarsPerLb: 19.5, varnishDollarsPerLb: 5.5,
-    coatingType: "", coatingCoveragePct: 100, coatingDollarsPerLb: 0,
+    // Ink $/lb DERIVED from Mary's 36 quotes (8/18): black and process both
+    // land on $10.84 (26 observations, 10.73-10.85). PMS/spot is a separate
+    // cluster at $39.50 -- the old 19.50 default was less than half.
+    inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
+    coatingType: "", coatingCoveragePct: 100, coatingIsSpot: false, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
     binderyOperation: 1, cuttingDiff: 0.5, cutterSheetsPerHr: 5000,
-    trimHrs: 0, cutsToFinalSize: 0, sheetsPerLift: 500, cutSecPerCut: 8,
+    trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, sheetsPerLift: 500, cutSecPerCut: 8,
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
     stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
-    stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 22.5,
+    stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 20,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     handOp2: { description: "", piecesPerHour: 0, pctOfQty: 0 },
     cartons: 0, cartonCost: 0.93, skids: 0, skidCost: 5, packHrs: 0,
@@ -637,7 +652,9 @@ function computePart(
   // above) but carries no plate — #348988 printed 5 units / 4 plates.
   const plates = (p.workAndTurn
     ? Math.max(p.runColorsSide1 || 0, p.runColorsSide2 || 0)
-    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)) * sigRuns * Math.max(1, p.versions || 1);
+    : (p.runColorsSide1 || 0) + (p.runColorsSide2 || 0)
+   ) * sigRuns * Math.max(1, p.versions || 1)
+   + (p.coatingType && p.coatingIsSpot ? sigRuns * Math.max(1, p.versions || 1) : 0);
   const plateLaborHrs = plates * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
   const plateLaborCost = plateLaborHrs * (p.plateLaborRate || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
@@ -704,9 +721,13 @@ function computePart(
     // 1,125 + 700 + 56 = 1,881; 1,881/6,500 = 0.29 → E&M's printed 0.3 hrs
     // per side, twice for the two W&T sides).
     const sheetsThroughPress = pressSheets + mrWasteSheets + runWasteSheets;
-    const runPasses = (p.workAndTurn
+    // Passes = SIDES only. Signature runs must NOT multiply here: the sheet
+    // count (qty x sheetsPerPiece / numberUp) already covers every signature,
+    // so scaling by sigRuns again double-counts the run (caught on #348228,
+    // the 216-page 27-run magazine). sigRuns still scales PLATES.
+    const runPasses = p.workAndTurn
       ? ((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)
-      : 1) * sigRuns;
+      : 1;
     runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
     setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
     pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
@@ -754,10 +775,15 @@ function computePart(
   const cutterHrs = p.cutterSheetsPerHr > 0
     ? (pressSheets / p.cutterSheetsPerHr) * (p.cuttingDiff || 1)
     : 0;
+  const cutterHrsUsed = (p.cutterHrsManual || 0) > 0 ? p.cutterHrsManual : cutterHrs;
   const drillHrs = (p.drillHoles || 0) * (p.drillHrsPerHole || 0) * (p.drillDiff || 1);
   const op1 = p.handOp1, op2 = p.handOp2;
-  const handOp1Hrs = op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0;
-  const handOp2Hrs = op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0;
+  // A typed hours value wins over the qty/rate derivation — E&M's hand-bindery
+  // lines are flat 0.1-hr tokens naming the operation (validation 8/18).
+  const handOp1Hrs = (op1.hours || 0) > 0 ? (op1.hours as number)
+    : (op1.piecesPerHour > 0 ? (qty * (op1.pctOfQty || 0)) / 100 / op1.piecesPerHour : 0);
+  const handOp2Hrs = (op2.hours || 0) > 0 ? (op2.hours as number)
+    : (op2.piecesPerHour > 0 ? (qty * (op2.pctOfQty || 0)) / 100 / op2.piecesPerHour : 0);
   // Band/Pad/Wrap: "In" = pieces per bundle → bundles = ceil(qty / in);
   // auto hrs = bundles ÷ bundle rate; a typed Hrs value overrides (0 = auto).
   const perBundle = (s: string) => parseFloat(String(s || "").replace(/[^0-9.]/g, "")) || 0;
@@ -820,17 +846,17 @@ function computePart(
   // general bindery rate.
   const opRate = (r: number | undefined) => (r && r > 0 ? r : (p.binderyHourlyRate || 0));
   const opLabor =
-    cutterHrs * opRate(p.cutterRatePerHr) +
+    cutterHrsUsed * opRate(p.cutterRatePerHr) +
     trimHrsUsed * opRate(p.trimRatePerHr) +
     drillHrs * (p.binderyHourlyRate || 0) +
     handOp1Hrs * opRate(p.handOp1?.ratePerHr ?? p.handBindRatePerHr) +
     handOp2Hrs * opRate(p.handOp2?.ratePerHr ?? p.handBindRatePerHr) +
     packHrsUsed * opRate(p.packRatePerHr) +
     bandHrsUsed * (p.binderyHourlyRate || 0) +
-    padHrsUsed * (p.binderyHourlyRate || 0) +
+    padHrsUsed * opRate(p.padRatePerHr) +
     wrapHrsUsed * opRate(p.wrapRatePerHr) +
     deliveryHrs * opRate(p.deliveryRatePerHr);
-  const binderyHrs = cutterHrs + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs
+  const binderyHrs = cutterHrsUsed + trimHrsUsed + drillHrs + handOp1Hrs + handOp2Hrs
     + packHrsUsed + bandHrsUsed + padHrsUsed + wrapHrsUsed + deliveryHrs
     + foldHrs + stitchHrs + (p.paperHandlingHrs || 0);
   const binderyLabor = opLabor + foldLabor + stitchLabor + paperHandlingCost;
