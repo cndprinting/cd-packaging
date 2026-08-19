@@ -50,6 +50,11 @@ export interface OutsidePurchase {
   // routes Todd rows into the finishing cost bucket for reports; missing
   // tag = vendor (true outsourced), matching all old rows.
   source?: "todd" | "vendor";
+  // Per-row markup. Mary routinely mixes buckets on ONE quote: bought-out
+  // DIGITAL rides at 0% while die/glue/foil services ride at 32%. A single
+  // job-level outside % cannot express that. undefined/null = use the job
+  // default; 0 = carry this row at cost (still gets E&M's $1 minimum).
+  markupPct?: number | null;
 }
 
 // ── Small-run speed curve (Mary 7/21: "not going to hit 10,000/hr on smaller
@@ -175,6 +180,8 @@ export const PART_FIELD_KEYS = [
   "inkFactorMsqinPerLb", "inkBlackDollarsPerLb", "inkDollarsPerLb", "inkLedDollarsPerLb", "inkPmsDollarsPerLb", "varnishDollarsPerLb",
   "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
+  "digitalOversSheets", "digitalVendorAmount", "digitalOnPart",
+  "inkLbsManual",
   // Screen 8 — Bindery
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual",
@@ -218,6 +225,14 @@ export interface ClassicForm {
   designHours: number;
   photoshopHours: number;
   prepressRate: number; // $/hr
+  // E&M bills "Type/Output" as its own prep line, separate from Design and
+  // from Proofs (0.1 hr/$10, 0.3 hr/$20, 0.4, 0.7 across the batch).
+  typeOutputHrs: number;
+  typeOutputRate: number;
+  // Proof material scales PER PLATE, not as a flat count x charge: #348988 and
+  // #347866 both land on exactly $19.19/plate (4 -> 76.76, 16 -> 307.05,
+  // 24 -> 460.58). 0 = use the flat proof counts below.
+  proofMaterialPerPlate: number;
   scans85x11: number;
   scans11x17: number;
   scans20x25: number;
@@ -350,6 +365,10 @@ export interface ClassicForm {
   inkCoverageLedPct: number;     // LED-cured process coverage (Mary 7/21)
   inkCoveragePmsPct: number;     // PMS/spot coverage
   inkCoverageVarnishPct: number;
+  // Directly entered ink pounds -- overrides the coverage model. E&M prints a
+  // flat ink figure on carrier-press jobs (#349100 envelopes: $39.50 on a
+  // 0-hour press = 23% of cost) that no coverage calc can produce.
+  inkLbsManual: number;
   inkFactorMsqinPerLb: number; // thousand sq-in of coverage per lb of ink
   inkBlackDollarsPerLb: number; // black ink $/lb (std 10.81)
   inkDollarsPerLb: number; // PROCESS ink $/lb (std 10.81)
@@ -377,6 +396,16 @@ export interface ClassicForm {
   // ── Screen 7 — Digital branch (part 1) ──
   digitalInkConfig: InkConfig;
   digitalMakereadySheets: number;
+  // Sheets used for CLICK PRICING. E&M routinely disagrees with the paper
+  // makeready count, so keep them separate (0 = fall back to makeready).
+  digitalOversSheets: number;
+  // A typed vendor price WINS over the computed click cost -- the click calc
+  // becomes a suggestion. Mary quotes digital off the vendor's actual number.
+  digitalVendorAmount: number;
+  // Run the digital click engine on THIS part regardless of the job-level
+  // jobType. Mary's carrier-press jobs mix bought-out digital with real ink
+  // and setup, which the all-or-nothing job type forbids.
+  digitalOnPart: boolean;
   digitalVariableData: boolean;
   digitalVDSetupHrs: number;
 
@@ -478,6 +507,7 @@ export function defaultClassicForm(): ClassicForm {
     instructions: "",
     jobType: "New With Pre-Press",
     designHours: 0, photoshopHours: 0, prepressRate: 95,
+    typeOutputHrs: 0, typeOutputRate: 60, proofMaterialPerPlate: 0,
     scans85x11: 0, scans11x17: 0, scans20x25: 0,
     scanCharge85x11: 15, scanCharge11x17: 25, scanCharge20x25: 40,
     furnishedDisks: 0, furnishedDiskCharge: 10,
@@ -510,10 +540,11 @@ export function defaultClassicForm(): ClassicForm {
     // Ink $/lb DERIVED from Mary's 36 quotes (8/18): black and process both
     // land on $10.84 (26 observations, 10.73-10.85). PMS/spot is a separate
     // cluster at $39.50 -- the old 19.50 default was less than half.
-    inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
+    inkLbsManual: 0, inkFactorMsqinPerLb: 425, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
     coatingType: "", coatingCoveragePct: 100, coatingIsSpot: false, coatingDollarsPerLb: 0,
     dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
+    digitalOversSheets: 0, digitalVendorAmount: 0, digitalOnPart: false,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
     binderyOperation: 1, cuttingDiff: 0.5, cutterSheetsPerHr: 5000,
     trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, sheetsPerLift: 500, cutSecPerCut: 8,
@@ -731,18 +762,28 @@ function computePart(
   const pressCheckHrs = p.pressCheckHrs || 0;
   let pressHrs = 0;
 
-  if (isDigital && digitalStd) {
+  const partDigital = isDigital || !!p.digitalOnPart;
+  if (partDigital && digitalStd) {
     // Digital click engine (Mary's tier × ink-config table).
     digitalTier = getDigitalSizeTier(p.sheetWidthRun || 0, p.sheetHeightRun || 0, digitalStd);
     digitalClickRate = getDigitalClickRate(digitalTier, p.digitalInkConfig, digitalStd);
     digitalVDRate = getDigitalVDRate(digitalTier, digitalStd);
-    digitalClickSheets = pressSheets + (p.digitalMakereadySheets || 0);
-    digitalClickCost = digitalClickSheets * digitalClickRate;
+    const overs = (p.digitalOversSheets || 0) > 0 ? p.digitalOversSheets : (p.digitalMakereadySheets || 0);
+    digitalClickSheets = pressSheets + overs;
+    digitalClickCost = (p.digitalVendorAmount || 0) > 0
+      ? p.digitalVendorAmount              // vendor's real price wins
+      : digitalClickSheets * digitalClickRate;
     if (p.digitalVariableData) {
       digitalVDCost = digitalClickSheets * digitalVDRate;
       digitalVDSetupCost = (p.digitalVDSetupHrs || 0) * (digitalStd.digitalVDSetupRate || 0);
     }
     pressHrs = dieScoreHrs + pressCheckHrs;
+    // Carrier-press jobs can still carry a flat ink charge (#349100 envelopes).
+    if ((p.inkLbsManual || 0) > 0) {
+      inkLbs = p.inkLbsManual;
+      inkLbsProcess = inkLbs; inkLbsBlackColor = inkLbs;
+      inkCost = inkLbs * (p.inkDollarsPerLb || 0);
+    }
     // Clicks are NOT press labor — E&M books digital as an outside purchase
     // (Cybake #347528: Digital 793.80 under Outside at 0%). They land in the
     // outside bucket in computeClassic; press labor is only die/score/check hrs.
@@ -820,6 +861,14 @@ function computePart(
     inkLbsBlackColor = inkLbsBlack + inkLbsProcess; // legacy display bucket
     inkLbsVarnish = lbsFor(p.inkCoverageVarnishPct || 0);
     inkLbs = inkLbsBlack + inkLbsProcess + inkLbsLed + inkLbsPms + inkLbsVarnish;
+    if ((p.inkLbsManual || 0) > 0) {
+      // Typed pounds replace the coverage model entirely; price them as
+      // process ink unless PMS coverage was the only thing entered.
+      const onlyPms = (p.inkCoveragePmsPct || 0) > 0 && (p.inkCoverageColorPct || 0) === 0 && (p.inkCoverageBlackPct || 0) === 0;
+      inkLbs = p.inkLbsManual;
+      inkLbsBlack = 0; inkLbsProcess = onlyPms ? 0 : inkLbs; inkLbsPms = onlyPms ? inkLbs : 0;
+      inkLbsLed = 0; inkLbsVarnish = 0; inkLbsBlackColor = inkLbsProcess;
+    }
     inkCost =
       inkLbsBlack * (p.inkBlackDollarsPerLb || 0) +
       inkLbsProcess * (p.inkDollarsPerLb || 0) +
@@ -1081,9 +1130,17 @@ export function computeClassic(
   const paperCost = sum((c) => c.paperCost);
 
   // ── Prep = Electronic Prepress (4) + Camera/Stripping/Platemaking (5) — job-level ──
-  const prepHours = (f.designHours || 0) + (f.photoshopHours || 0);
-  const prepLabor = prepHours * (f.prepressRate || 0);
+  const prepHours = (f.designHours || 0) + (f.photoshopHours || 0) + (f.typeOutputHrs || 0);
+  // Type/Output can bill at its own rate; the rest ride the prepress rate.
+  const prepLabor =
+    ((f.designHours || 0) + (f.photoshopHours || 0)) * (f.prepressRate || 0)
+    + (f.typeOutputHrs || 0) * (f.typeOutputRate || f.prepressRate || 0);
+  const totalPlates = partCalcs.reduce((t, c) => t + (c.plates || 0), 0);
+  const proofByPlate = (f.proofMaterialPerPlate || 0) > 0
+    ? totalPlates * f.proofMaterialPerPlate
+    : 0;
   const prepMaterials =
+    proofByPlate +
     (f.scans85x11 || 0) * (f.scanCharge85x11 || 0) +
     (f.scans11x17 || 0) * (f.scanCharge11x17 || 0) +
     (f.scans20x25 || 0) * (f.scanCharge20x25 || 0) +
@@ -1120,6 +1177,8 @@ export function computeClassic(
   // Digital clicks are added AFTER this reduce — they never get the 3%.
   const tierIdx = f.activeTierIndex || 0;
   let outsideToddCost = 0, outsideVendorCost = 0;
+  // rows carrying their own markup %, grouped so each group marks up separately
+  const rowGroups = new Map<number, number>();
   for (const p of f.outsidePurchases) {
     // Per-tier vendor price when one is entered for this tier; else primary.
     const tierAmt = tierIdx > 0 && Array.isArray(p.amountsByTier) && (Number(p.amountsByTier[tierIdx - 1]) || 0) > 0
@@ -1128,7 +1187,13 @@ export function computeClassic(
     const base = p.per === "perM" ? (tierAmt * qty) / 1000 : tierAmt;
     const rowCost = base * (p.plus3 ? 1.03 : 1);
     if (p.source === "todd") outsideToddCost += rowCost; else outsideVendorCost += rowCost;
+    if (p.markupPct !== undefined && p.markupPct !== null) {
+      rowGroups.set(p.markupPct, (rowGroups.get(p.markupPct) || 0) + rowCost);
+    }
   }
+  // Cost sitting in an explicit per-row group is billed by that group, so it
+  // must not also ride the job-default outside markup.
+  const rowGroupCost = Array.from(rowGroups.values()).reduce((t, v) => t + v, 0);
   const outsidePurchaseCost = outsideToddCost + outsideVendorCost;
   // Freight rides the OUTSIDE bucket (and takes outside markup) unless turned
   // off; the plate discount comes off the outside base BEFORE markup.
@@ -1137,7 +1202,8 @@ export function computeClassic(
   // Marked-up portion of the outside bucket: purchase rows and clicks, less
   // the plate discount. FREIGHT sits in the bucket but rides at COST — E&M
   // marks up only the purchase rows (verified on 10 estimates, 8/18).
-  const outsideMarkable = Math.max(0, outsidePurchaseCost + digitalClickTotal - (f.plateDiscount || 0));
+  const outsideMarkable = Math.max(0,
+    outsidePurchaseCost - rowGroupCost + digitalClickTotal - (f.plateDiscount || 0));
   const outsideCost = outsideMarkable + outsideFreight;
   const freightAndAdditional = (freightInOutside ? 0 : (f.freight || 0)) + (f.additionalCosts || 0);
 
@@ -1160,7 +1226,10 @@ export function computeClassic(
   const prepLaborSelling = mk(prepLabor, f.markupLaborPct);
   const pressSelling = mk(pressCost, f.markupLaborPct);
   const binderySelling = mk(binderyCost, f.markupLaborPct);
-  const outsideSelling = mk(outsideMarkable, f.markupOutsidePct) + outsideFreight;
+  const outsideSelling =
+    mk(outsideMarkable, f.markupOutsidePct)
+    + Array.from(rowGroups.entries()).reduce((t, [pct, cost]) => t + mk(cost, pct), 0)
+    + outsideFreight;
   // Freight/additional: pass-through plus E&M's $1 minimum when nonzero
   // (#348538: 46.17 → 47.17).
   const freightSelling = freightAndAdditional > 0 ? freightAndAdditional + 1 : 0;

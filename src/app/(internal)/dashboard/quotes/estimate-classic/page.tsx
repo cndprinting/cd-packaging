@@ -869,6 +869,9 @@ function ClassicEstimatorContent() {
           <Row label="Design/Layout/Artwork Hrs"><Num value={form.designHours} onChange={(v) => set("designHours", v)} /></Row>
           <Row label="Photoshop Hrs"><Num value={form.photoshopHours} onChange={(v) => set("photoshopHours", v)} /></Row>
           <Row label="Prepress Rate $/Hr"><Num value={form.prepressRate} onChange={(v) => set("prepressRate", v)} /></Row>
+          <Row label="Type/Output Hrs"><Num value={form.typeOutputHrs} onChange={(v) => set("typeOutputHrs", v)} /></Row>
+          <Row label="Type/Output $/Hr"><Num value={form.typeOutputRate} onChange={(v) => set("typeOutputRate", v)} /></Row>
+          <Row label="Proof Matl $/Plate"><Num value={form.proofMaterialPerPlate} onChange={(v) => set("proofMaterialPerPlate", v)} /></Row>
           {/* Scans section removed per Mary 7/21 — she only uses the Hours
               block. Fields remain in the data model (old drafts still price). */}
         </div>
@@ -1096,6 +1099,13 @@ function ClassicEstimatorContent() {
               </Row>
             )}
             <Row label="Press Rate $/Hr"><Num value={pv("pressHourlyRate")} onChange={(v) => setP("pressHourlyRate", v)} /></Row>
+            <Row label="Digital On This Part" wide>
+              <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+                <input type="checkbox" checked={!!pv("digitalOnPart")} onChange={(e) => setP("digitalOnPart", e.target.checked)} />
+                buy the printing out as clicks (carrier press) even on an offset job
+              </label>
+            </Row>
+            <Row label="Ink Lbs (0 = From Coverage)"><Num value={pv("inkLbsManual")} onChange={(v) => setP("inkLbsManual", v)} /></Row>
 
             {digital ? (
               <>
@@ -1111,6 +1121,8 @@ function ClassicEstimatorContent() {
                   </select>
                 </Row>
                 <Row label="Makeready Sheets"><Num value={pv("digitalMakereadySheets")} onChange={(v) => setP("digitalMakereadySheets", v)} step={1} /></Row>
+                <Row label="Overs For Clicks"><Num value={pv("digitalOversSheets")} onChange={(v) => setP("digitalOversSheets", v)} step={1} /></Row>
+                <Row label="Vendor $ (wins over calc)"><Num value={pv("digitalVendorAmount")} onChange={(v) => setP("digitalVendorAmount", v)} /></Row>
                 <Row label="Variable Data" wide>
                   <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
                     <input
@@ -1511,7 +1523,7 @@ function ClassicEstimatorContent() {
             const rowCost = (p.per === "perM" ? (p.amount || 0) * (form.quantity || 0) / 1000 : (p.amount || 0)) * (p.plus3 ? 1.03 : 1);
             return (
               <div key={i} className="mb-1">
-                <div className="grid grid-cols-[96px_1fr_80px_84px_52px_28px] gap-1">
+                <div className="grid grid-cols-[96px_1fr_80px_84px_78px_52px_28px] gap-1">
                   <select
                     className={inputCls}
                     value={p.source === "todd" ? "todd" : "vendor"}
@@ -1541,6 +1553,17 @@ function ClassicEstimatorContent() {
                     <option value="job">$ / Job</option>
                     <option value="perM">$ / M</option>
                   </select>
+                  {/* Per-row markup: Mary mixes bought-out DIGITAL at 0% with
+                      die/glue/foil services at 32% on the SAME quote. Blank =
+                      use the job default. */}
+                  <input
+                    type="number" step="any" className={inputCls + " text-right"}
+                    placeholder="mk%"
+                    title="Markup % for this row — blank uses the job default"
+                    value={p.markupPct === undefined || p.markupPct === null ? "" : p.markupPct}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => upd({ markupPct: e.target.value === "" ? null : (parseFloat(e.target.value) || 0) })}
+                  />
                   <label className="flex items-center justify-center gap-1 font-mono text-[11px] text-amber-300">
                     <input
                       type="checkbox"
