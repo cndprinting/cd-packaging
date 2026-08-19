@@ -1012,7 +1012,27 @@ function ClassicEstimatorContent() {
       <>
         <SectionTitle>Die Cutting</SectionTitle>
         <Row label="Die Cut Time (Hrs)"><Num value={pv("dieCutHrs")} onChange={(v) => setP("dieCutHrs", v)} /></Row>
-        <Row label="Score/Perf Time (Hrs)"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></Row>
+        <Row label="Scoring / Perforating" wide>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
+              <input type="checkbox" checked={(pv("scorePerfHrs") || 0) > 0}
+                onChange={(e) => setP("scorePerfHrs", e.target.checked ? 0.1 : 0)} />
+              score / perf this job
+            </label>
+            {(pv("scorePerfHrs") || 0) > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-amber-400/70">hrs</span>
+                <div className="w-[90px]"><Num value={pv("scorePerfHrs")} onChange={(v) => setP("scorePerfHrs", v)} /></div>
+              </div>
+            )}
+          </div>
+        </Row>
+        {(pv("scorePerfHrs") || 0) > 0 && (
+          <div className="pl-[224px] text-[11px] text-amber-400/70">
+            E&amp;M bills this as a 0.1 hr hand-bindery line. If the score is bought out,
+            add the vendor charge as an Outside Purchase on Screen 9.
+          </div>
+        )}
         <Row label="Die #" wide>
           <Txt value={String(pv("dieNumber") || "")} onChange={(v) => setP("dieNumber", v)} list="classic-dies" placeholder="existing die # (blank = new die)" />
         </Row>
@@ -1379,8 +1399,19 @@ function ClassicEstimatorContent() {
             <Row label="Drill Hrs/Hole"><Num value={pv("drillHrsPerHole")} onChange={(v) => setP("drillHrsPerHole", v)} /></Row>
             <Row label="Folder Config" wide><Txt value={pv("folderConfig")} onChange={(v) => setP("folderConfig", v)} placeholder="e.g. Baum 26x40, 2 parallel" /></Row>
             {/* Folding machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48) */}
+            <Row label="Pieces To Fold (0 = Qty)"><Num value={pv("foldCount")} onChange={(v) => setP("foldCount", v)} step={100} /></Row>
+            <Row label="Folder Speed / Hr"><Num value={pv("folderSpeedPerHr")} onChange={(v) => setP("folderSpeedPerHr", v)} step={100} /></Row>
+            <Row label="Fold Difficulty"><Num value={pv("foldDiff")} onChange={(v) => setP("foldDiff", v)} step={0.1} /></Row>
             <Row label="Fold Setup Hrs"><Num value={pv("foldSetupHrs")} onChange={(v) => setP("foldSetupHrs", v)} /></Row>
-            <Row label="Fold Run Hrs"><Num value={pv("foldRunHrs")} onChange={(v) => setP("foldRunHrs", v)} /></Row>
+            <Row label="Fold Run Hrs (0 = Auto)"><Num value={pv("foldRunHrs")} onChange={(v) => setP("foldRunHrs", v)} /></Row>
+            {/* Show the arithmetic. Mary 8/19: "folding I have no clue how to
+                even put this in" -- E&M computed the run hours for her, so
+                spell out exactly what we computed and from what. */}
+            <div className="col-span-2 pl-[224px] text-[11px] text-amber-400/70">
+              {pcalc.foldPieces.toLocaleString()} pieces ÷ {(pv("folderSpeedPerHr") || 0).toLocaleString()}/hr
+              {(pv("foldDiff") || 1) !== 1 ? ` × ${pv("foldDiff")} difficulty` : ""} = {pcalc.foldRunUsed.toFixed(2)} run hrs
+              {(pv("foldRunHrs") || 0) > 0 ? " (overridden above)" : " (auto)"}
+            </div>
             <Row label="Folder Rate $/Hr"><Num value={pv("folderRatePerHr")} onChange={(v) => setP("folderRatePerHr", v)} /></Row>
             <Readout label="Fold Labor" value={`${pcalc.foldHrs.toFixed(2)} hrs / ${money(pcalc.foldLabor)}`} />
             {/* Saddle stitching (Mueller) — the line Mary asked for (8/10).

@@ -186,7 +186,7 @@ export const PART_FIELD_KEYS = [
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
-  "foldSetupHrs", "foldRunHrs", "folderRatePerHr",
+  "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff",
   "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
@@ -426,7 +426,13 @@ export interface ClassicForm {
   folderConfig: string;
   // Folding as its own machine line (E&M #348538: 0.6 setup + 1.4 run @ ~$48).
   foldSetupHrs: number;
+  // Fold RUN hours auto-compute like E&M did: pieces to fold / folder speed x
+  // difficulty. Mary never knew the hours -- E&M told HER (8/19: "folding I
+  // have no clue how to even put this in"). 0 = auto; a typed value overrides.
   foldRunHrs: number;
+  foldCount: number;        // pieces to fold (0 = job qty x sheets per piece)
+  folderSpeedPerHr: number; // baum-26x40 runs ~6,500/hr across her quotes
+  foldDiff: number;         // E&M's parenthesised difficulty, e.g. (0.9)
   folderRatePerHr: number; // prefills PlantStandard.folder1Rate ($48)
   // Saddle stitching as its own machine line (E&M #348975: Saddlebind Setup
   // 0.5hr @ $95 + Mueller run + Help). Missing entirely before — selecting
@@ -555,6 +561,7 @@ export function defaultClassicForm(): ClassicForm {
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
+    foldCount: 0, folderSpeedPerHr: 6500, foldDiff: 1,
     stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
     stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 20,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
@@ -609,6 +616,8 @@ export interface PartCalc {
   speedCapReason: string; // "" | "solid coverage" | "board thickness" — which cap bound the speed
   plateMaterialsCost: number; // platesUsed × plateCostEach → MATERIAL bucket
   foldHrs: number;            // fold setup + run hours
+  foldPieces: number;         // pieces folded (auto or typed)
+  foldRunUsed: number;        // run hours actually used
   foldLabor: number;          // fold hrs × folder rate → bindery labor
   stitchRunUsed: number;      // saddle-stitch run hours actually used (auto or typed)
   stitchHrs: number;          // stitch setup + run + help hours
@@ -945,7 +954,19 @@ function computePart(
   const trimHrsUsed = (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
   // Folding is its own machine line at the folder rate (E&M #348538:
   // 0.6 setup + 1.4 run @ ~$48 = 30.00 + 67.25).
-  const foldHrs = (p.foldSetupHrs || 0) + (p.foldRunHrs || 0);
+  // Folding: E&M prints "1 Fold Setup (Fold 10000)" then "Folding 0.8 Hrs
+  // (0.9) on the baum-26x40" -- it computed the run from the piece count and
+  // the folder's speed. Do the same so Mary enters the JOB, not the hours.
+  const foldPieces = (p.foldCount || 0) > 0
+    ? p.foldCount
+    : qty * Math.max(1, p.sheetsPerPiece || 1);
+  const foldRunAuto = (p.folderSpeedPerHr || 0) > 0
+    ? (foldPieces / p.folderSpeedPerHr) * (p.foldDiff || 1)
+    : 0;
+  const foldRunUsed = (p.foldRunHrs || 0) > 0 ? p.foldRunHrs : foldRunAuto;
+  const foldActive = (p.foldSetupHrs || 0) > 0 || (p.foldRunHrs || 0) > 0
+    || !!p.folderConfig || p.binderyOperation === 3;
+  const foldHrs = foldActive ? (p.foldSetupHrs || 0) + foldRunUsed : 0;
   const foldLabor = foldHrs * (p.folderRatePerHr || 0);
   // Saddle stitching (Mueller) as its own machine line — E&M #348975 charges
   // Setup + Mueller run + Help. Run auto-computes from the finished piece
@@ -1006,7 +1027,7 @@ function computePart(
     pressSheets, mrWasteSheets, runWasteSheets, orderSheets, paperCost,
     plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
-    plateMaterialsCost, foldHrs, foldLabor, stitchRunUsed, stitchHrs, stitchLabor,
+    plateMaterialsCost, foldHrs, foldPieces, foldRunUsed, foldLabor, stitchRunUsed, stitchHrs, stitchLabor,
     pressLaborCost, pressMaterialsCost, pressCost,
     digitalTier, digitalClickRate, digitalVDRate, digitalClickSheets,
     digitalClickCost, digitalVDCost, digitalVDSetupCost,
