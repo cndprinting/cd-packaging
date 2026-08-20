@@ -1,0 +1,109 @@
+Yes. I think a visual mock-up of the estimator screen will make this much easier to explain to Boss Man.
+Imagine the estimator has a FOLDING section that looks something like this:
+┌─────────────────────────────────────────────────────────────┐
+│                    FOLDING / FINISHING                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Fold Type:        [ Letter Fold                 ▼ ]         │
+│                                                             │
+│  Quantity:         [ 25,000 ]                                │
+│                                                             │
+│  Flat Sheet:       [ 11.00 ] x [ 17.00 ]                    │
+│                                                             │
+│  Finished Size:    [ 8.50 ] x [ 11.00 ]                     │
+│                                                             │
+│  Paper:            [ 80# Uncoated Text          ▼ ]         │
+│                                                             │
+│  Caliper:          [ 5.0 mil ]      ← pulled from paper DB  │
+│                                                             │
+│  Machine:           [ MBO B306/4/4               ▼ ]        │
+│                                                             │
+│  Fold Configuration: [ 1st Pocket / 2nd Pocket   ▼ ]       │
+│                                                             │
+│  Score Required:    [ No ▼ ]                                │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│                    PRODUCTION CALCULATION                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Setup Time:        15 min                                  │
+│  Running Speed:     8,000 sheets/hour                       │
+│  Waste:             2%                                      │
+│                                                             │
+│  Run Time:          3.19 hours                              │
+│  Total Time:        3.44 hours                              │
+│                                                             │
+│  Machine/Labor Rate: $____ / hour                           │
+│                                                             │
+│  FOLDING COST:      $____________                           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+And this is what happens behind the scenes
+The estimator should not have to manually enter everything.
+For example, they enter:
+Quantity: 25,000
+Paper: 80# Uncoated Text
+Fold: Letter Fold
+Finished Size: 8.5 × 11
+The system then pulls information from the tables:
+                 ESTIMATE
+                    │
+                    ▼
+             ┌──────────────┐
+             │ PAPER TABLE  │
+             │ 80# Text     │
+             │ 5.0 mil      │
+             └──────┬───────┘
+                    │
+                    ▼
+             ┌──────────────┐
+             │ FOLD TABLE   │
+             │ Letter Fold  │
+             │ 2 folds      │
+             └──────┬───────┘
+                    │
+                    ▼
+             ┌──────────────┐
+             │ MACHINE      │
+             │ MBO B306     │
+             │ Speed/Setup  │
+             └──────┬───────┘
+                    │
+                    ▼
+             ┌──────────────┐
+             │ CALCULATION  │
+             │ Quantity     │
+             │ ÷ Speed      │
+             │ + Setup      │
+             │ + Waste      │
+             └──────┬───────┘
+                    │
+                    ▼
+             ┌──────────────┐
+             │ FOLDING COST │
+             │    $_____    │
+             └──────────────┘
+This is what I would show Boss Man.
+The important concept is that the estimator enters the job information, while the system pulls the production rules from the folding, paper, and machine tables.
+That is what will eventually make your estimating system much faster and more consistent.
+
+
+Best Regards,
+Mary Bitting
+Estimating
+C&D Printing & Packaging  Co.
+M: 727-555-5555
+O: 727-572-9999
+F: 727-573-5839
+12150 28th St No
+St Petersburg, Fl 33716
+
+[A blue and black logo  AI-generated content may be incorrect.]<https://www.linkedin.com/company/c&d-printing-company/>
+Connect with C&D on LinkedIn.<https://www.linkedin.com/company/c&d-printing-company/>
+
+[cid:image002.png@01DD3085.C7E3C680]<https://cndprinting.com/>
+[A blue and white logo  AI-generated content may be incorrect.]
+A G7 compliant printer.
+
+Responsibly Produced Print and Packaging is Sustainable, Recyclable, and Powerful!
+

@@ -1124,14 +1124,25 @@ model PlantStandard {
   // Folder run speed, derived from Mary's own quotes (29,700 pieces / 4.7 hrs,
   // 38,000 / 5.6, 10,000 / 1.6 all land 6,250-6,800 on the baum-26x40).
   folder1Speed          Int      @default(6500)
+  // Machine capability (Mary 8/20) — lets the estimator say whether the
+  // selected stock can even run on the selected folder.
+  folder1MinCaliper     Float    @default(2)
+  folder1MaxCaliper     Float    @default(12)
+  folder1CanScore       Boolean  @default(true)
   folder2Name           String   @default("Small Baum")
   folder2Rate           Float    @default(35)
   folder2SetupMinutes   Float    @default(30)
   folder2Speed          Int      @default(4500)
+  folder2MinCaliper     Float    @default(2)
+  folder2MaxCaliper     Float    @default(10)
+  folder2CanScore       Boolean  @default(false)
   folder3Name           String   @default("Stahl")
   folder3Rate           Float    @default(48)
   folder3SetupMinutes   Float    @default(20)
   folder3Speed          Int      @default(6500)
+  folder3MinCaliper     Float    @default(2)
+  folder3MaxCaliper     Float    @default(14)
+  folder3CanScore       Boolean  @default(true)
 
   // Saddle stitching ($/hr)
   saddleStitch1Name     String   @default("Mueller")
@@ -1542,4 +1553,56 @@ model ComplianceCheck {
   key       String   @id
   checkedAt DateTime @default(now())
   checkedBy String?
+}
+
+// ─── PAPER CALIPER MASTER (Mary 8/20) ────────────────────────────
+// Her spec: caliper drives cutting, folding, scoring and special handling.
+// "If the actual paper supplier provides a caliper, use the supplier's actual
+// caliper instead of the default table value." So this table is the DEFAULT;
+// a stock's own caliper always wins.
+model PaperCaliper {
+  id           String   @id @default(cuid())
+  category     String   // "Uncoated Text" | "Coated Text" | "Uncoated Cover" | "C1S / Coated Cover"
+  stockName    String   // "80# Uncoated Text", "18 pt C1S"
+  basisWeight  String?  // "80#" (blank for point stocks)
+  caliperMil   Float    // default caliper in mil (= pt for board)
+  paperCategory String  @default("Text") // Text | Cover | Board
+  coated       Boolean  @default(false)
+  coating      String?  // C1S / C2S
+  foldable     Boolean  @default(true)
+  scoreRequired String  @default("No")   // Yes | No | Conditional
+  specialHandling String?
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([stockName])
+  @@index([category])
+}
+
+// ─── FOLD TYPES (Mary 8/20) ──────────────────────────────────────
+// "Do not make the folding table just a list of folding speeds. It needs to
+// describe the entire production process."
+//   Folding Run Time = Quantity / Running Speed
+//   Total = Setup + Run + Allowances;  Cost = Total x Machine/Labor Rate
+model FoldType {
+  id              String   @id @default(cuid())
+  name            String   @unique // Half fold, Letter fold, Tri-fold, ...
+  numFolds        Int      @default(1)
+  configuration   String?  // how the sheet is folded
+  machineName     String?  // MBO B306/4/4, Baum-26x40, ...
+  pockets         String?  // which pockets are used
+  setupMinutes    Float    @default(20)
+  speedPerHour    Int      @default(6500)
+  scoringRequired String   @default("No") // Yes | No | Conditional
+  minCaliperMil   Float?   // stock range this fold can handle
+  maxCaliperMil   Float?
+  wasteSheets     Int      @default(0)
+  specialNotes    String?
+  isSpecialty     Boolean  @default(false) // step 2 folds (gate, accordion, ...)
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

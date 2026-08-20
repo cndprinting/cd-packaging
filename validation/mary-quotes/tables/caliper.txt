@@ -1,0 +1,283 @@
+Paper Caliper Master Table - Estimating System
+Purpose
+Use this table as the estimating system's paper-caliper reference for determining cutting, folding, scoring, and special-handling requirements.
+Important: Caliper varies by paper manufacturer, grade, finish, and sheet construction. The actual supplier/mill caliper should take precedence over the default value below.
+1. Uncoated Text
+Paper Stock
+Basis Weight
+Default Caliper (mil)
+Default Caliper (pt)
+Category
+50# Uncoated Text
+50#
+3.5
+3.5
+Text
+60# Uncoated Text
+60#
+4.0
+4.0
+Text
+70# Uncoated Text
+70#
+4.5
+4.5
+Text
+80# Uncoated Text
+80#
+5.0
+5.0
+Text
+90# Uncoated Text
+90#
+5.8
+5.8
+Text
+100# Uncoated Text
+100#
+6.5
+6.5
+Text
+110# Uncoated Text
+110#
+7.0
+7.0
+Text
+120# Uncoated Text
+120#
+8.0
+8.0
+Text
+2. Coated Text
+Paper Stock
+Basis Weight
+Default Caliper (mil)
+Default Caliper (pt)
+Category
+60# Coated Text
+60#
+3.8
+3.8
+Text
+70# Coated Text
+70#
+4.5
+4.5
+Text
+80# Coated Text
+80#
+5.0
+5.0
+Text
+100# Coated Text
+100#
+6.5
+6.5
+Text
+110# Coated Text
+110#
+7.2
+7.2
+Text
+120# Coated Text
+120#
+8.0
+8.0
+Text
+3. Uncoated Cover
+Paper Stock
+Basis Weight
+Default Caliper (mil)
+Default Caliper (pt)
+Category
+60# Uncoated Cover
+60#
+6.0
+6.0
+Cover
+65# Uncoated Cover
+65#
+6.5
+6.5
+Cover
+80# Uncoated Cover
+80#
+8.0
+8.0
+Cover
+90# Uncoated Cover
+90#
+9.0
+9.0
+Cover
+100# Uncoated Cover
+100#
+10.0
+10.0
+Cover
+110# Uncoated Cover
+110#
+11.0
+11.0
+Cover
+120# Uncoated Cover
+120#
+12.0
+12.0
+Cover
+4. C1S / Coated Cover
+Paper Stock
+Default Caliper (mil)
+Default Caliper (pt)
+Category
+8 pt C1S
+8
+8
+Cover
+10 pt C1S
+10
+10
+Cover
+12 pt C1S
+12
+12
+Cover
+14 pt C1S
+14
+14
+Cover
+16 pt C1S
+16
+16
+Cover
+18 pt C1S
+18
+18
+Cover
+20 pt C1S
+20
+20
+Cover
+22 pt C1S
+22
+22
+Cover
+24 pt C1S
+24
+24
+Cover
+26 pt C1S
+26
+26
+Cover
+28 pt C1S
+28
+28
+Cover
+5. Estimating-System Fields
+Each paper record should contain these fields:
+Field
+Purpose
+Paper ID
+Unique identifier
+Paper Description
+User-selected paper name
+Basis Weight
+Example: 80# Text
+Caliper
+Actual mill caliper
+Caliper Unit
+mil / pt
+Paper Category
+Text / Cover / Board
+Coated
+Yes / No
+Coating
+C1S / C2S / etc.
+Grain Direction
+Long / Short
+Sheet Size
+Example: 23 × 29
+Foldable
+Yes / No
+Score Required
+Yes / No / Conditional
+Maximum Folder Caliper
+Machine-specific
+Cutting Allowed
+Yes / No
+Special Handling
+Notes/rules
+6. Rules the Estimating System Should Use
+The system should not make folding decisions from paper name alone.
+The calculation should be:
+Paper Selection → Actual Caliper → Fold Type → Machine → Machine Capability → Production Rule
+For example:
+
+  *   Thin text stock → normal folding
+  *   Heavier text stock → check folding configuration
+  *   Cover stock → check scoring requirement
+  *   Heavy cover → scoring normally required before folding
+  *   Very heavy stock → check machine maximum
+  *   Stock beyond machine capability → flag for estimator review
+7. Critical Database Rule
+If the actual paper supplier provides a caliper, use the supplier's actual caliper instead of the default table value.
+Example:
+18 pt C1S
+Default database value: 18 mil
+If the mill specification says the actual caliper is 17.2 mil, the system should use 17.2 mil for machine and finishing calculations.
+8. Recommended Machine Logic
+The paper table should connect to a separate Machine Capability Table.
+Example:
+Machine
+Minimum Caliper
+Maximum Caliper
+Scoring Available
+Standard Folding
+Folder #1
+___
+___
+Yes/No
+Yes/No
+Folder #2
+___
+___
+Yes/No
+Yes/No
+Folder #3
+___
+___
+Yes/No
+Yes/No
+This allows the estimating program to automatically determine whether the selected paper can be processed on the selected machine.
+Final instruction for the programmer
+Do not hard-code folding or scoring decisions into the paper table.
+Keep these as separate databases:
+
+  1.  Paper Master
+  2.  Paper Caliper
+  3.  Machine Capabilities
+  4.  Fold Types
+  5.  Finishing Rules
+The estimating engine should use these tables together to determine the correct production method and cost.
+
+
+Best Regards,
+Mary Bitting
+Estimating
+C&D Printing & Packaging  Co.
+M: 727-555-5555
+O: 727-572-9999
+F: 727-573-5839
+12150 28th St No
+St Petersburg, Fl 33716
+
+[A blue and black logo  AI-generated content may be incorrect.]<https://www.linkedin.com/company/c&d-printing-company/>
+Connect with C&D on LinkedIn.<https://www.linkedin.com/company/c&d-printing-company/>
+
+[cid:image002.png@01DD3082.6E521DE0]<https://cndprinting.com/>
+[A blue and white logo  AI-generated content may be incorrect.]
+A G7 compliant printer.
+
+Responsibly Produced Print and Packaging is Sustainable, Recyclable, and Powerful!
+

@@ -186,7 +186,7 @@ export const PART_FIELD_KEYS = [
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual", "cutterLifts", "cutterHrsPerLift", "cutterDiff",
   "drillHoles", "drillDiff", "drillHrsPerHole", "folderConfig",
-  "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff",
+  "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff", "foldWastePct", "foldTypeName",
   "stitcherName", "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
   "packHrs", "binderyHourlyRate",
@@ -446,6 +446,10 @@ export interface ClassicForm {
   foldCount: number;        // pieces to fold (0 = job qty x sheets per piece)
   folderSpeedPerHr: number; // baum-26x40 runs ~6,500/hr across her quotes
   foldDiff: number;         // E&M's parenthesised difficulty, e.g. (0.9)
+  // Fold waste %, from the Fold Types table. Mary 8/20: 25,000 x 1.02 / 8,000
+  // = 3.19 run hrs, so waste lifts the sheets fed BEFORE the speed divide.
+  foldWastePct: number;
+  foldTypeName: string;     // the row chosen from the Fold Types table
   folderRatePerHr: number; // prefills PlantStandard.folder1Rate ($48)
   // Saddle stitching as its own machine line (E&M #348975: Saddlebind Setup
   // 0.5hr @ $95 + Mueller run + Help). Missing entirely before — selecting
@@ -589,7 +593,7 @@ export function defaultClassicForm(): ClassicForm {
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
     foldSetupHrs: 0, foldRunHrs: 0, folderRatePerHr: 48,
-    foldCount: 0, folderSpeedPerHr: 6500, foldDiff: 1,
+    foldCount: 0, folderSpeedPerHr: 6500, foldDiff: 1, foldWastePct: 0, foldTypeName: "",
     stitcherName: "", stitchSetupHrs: 0, stitchRunHrs: 0, stitchHelpHrs: 0,
     stitchSpeed: 8000, stitchRatePerHr: 95, stitchHelpRatePerHr: 20,
     handOp1: { description: "", piecesPerHour: 0, pctOfQty: 0 },
@@ -992,7 +996,7 @@ function computePart(
     ? p.foldCount
     : qty * Math.max(1, p.sheetsPerPiece || 1);
   const foldRunAuto = (p.folderSpeedPerHr || 0) > 0
-    ? (foldPieces / p.folderSpeedPerHr) * (p.foldDiff || 1)
+    ? ((foldPieces * (1 + (p.foldWastePct || 0) / 100)) / p.folderSpeedPerHr) * (p.foldDiff || 1)
     : 0;
   const foldRunUsed = (p.foldRunHrs || 0) > 0 ? p.foldRunHrs : foldRunAuto;
   const foldActive = (p.foldSetupHrs || 0) > 0 || (p.foldRunHrs || 0) > 0

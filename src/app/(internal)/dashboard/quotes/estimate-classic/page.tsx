@@ -146,6 +146,14 @@ function ClassicEstimatorContent() {
   // name and takes its speed and rate from the machine (Benjy 8/19).
   const [folders, setFolders] = useState<{ name: string; rate: number; speed: number; setupHrs: number }[]>([]);
   const [stitchers, setStitchers] = useState<{ name: string; rate: number; speed: number }[]>([]);
+  // Mary's two reference tables (8/20) — Paper Caliper Master and Fold Types.
+  const [foldTypes, setFoldTypes] = useState<any[]>([]);
+  const [calipers, setCalipers] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/paper-fold-tables").then((r) => r.json())
+      .then((d) => { setFoldTypes(d.folds || []); setCalipers(d.calipers || []); })
+      .catch(() => {});
+  }, []);
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   // Resume-from-draft: once set, Save updates this quote instead of creating
   // a new one each time (mirrors the wizard's draftQuoteId flow).
@@ -1007,6 +1015,23 @@ function ClassicEstimatorContent() {
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>
+            {/* Caliper from Mary's Paper Caliper Master. Her rule: this is the
+                DEFAULT — a mill's actual caliper overrides it, so the box stays
+                editable and the lookup only fills it in. */}
+            <Row label="Stock (caliper lookup)" wide>
+              <select className={inputCls} value=""
+                onChange={(e) => {
+                  const c = calipers.find((x) => x.stockName === e.target.value);
+                  if (c) setP("caliperBasisWeight", `${c.stockName} (${c.caliperMil} pt)`);
+                }}>
+                <option value="">pick a stock to fill the caliper…</option>
+                {calipers.map((c) => (
+                  <option key={c.id} value={c.stockName}>
+                    {c.stockName} — {c.caliperMil} mil{c.scoreRequired !== "No" ? `, score ${String(c.scoreRequired).toLowerCase()}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Row>
             <Row label="Part Name" wide>
               <Txt value={String(pv("partName") || "")} onChange={(v) => setP("partName", v)}
                 placeholder="e.g. End sheet, 128pgs, Fold out, 6 inserts" />
@@ -1457,6 +1482,36 @@ function ClassicEstimatorContent() {
             {/* Folder PICKER, the way E&M did it: her cost sheets read
                 "Folding on the baum-26x40 Configuration Normal". Choosing the
                 machine sets its rate, speed and setup time. */}
+            {/* FOLD TYPE — Mary's Fold Types table (8/20). Choosing the fold
+                pulls the machine, setup, speed and waste, exactly as she drew
+                it: "the estimator enters the job information, while the system
+                pulls the production rules from the tables". */}
+            <Row label="Fold Type" wide>
+              <select className={inputCls} value={String(pv("foldTypeName") || "")}
+                onChange={(e) => {
+                  const nm = e.target.value;
+                  const ft = foldTypes.find((x) => x.name === nm);
+                  patchP({
+                    foldTypeName: nm,
+                    ...(ft ? {
+                      folderConfig: ft.machineName || pv("folderConfig"),
+                      folderSpeedPerHr: ft.speedPerHour,
+                      foldSetupHrs: (ft.setupMinutes || 0) / 60,
+                      foldWastePct: ft.wasteSheets || 0,
+                      scorePerfHrs: ft.scoringRequired === "Yes" ? (pv("scorePerfHrs") || 0.1) : pv("scorePerfHrs"),
+                    } : {}),
+                  } as any);
+                }}>
+                <option value="">(choose a fold)</option>
+                {foldTypes.map((ft) => (
+                  <option key={ft.id} value={ft.name}>
+                    {ft.name} — {ft.machineName}, {ft.speedPerHour.toLocaleString()}/hr, {ft.setupMinutes}min setup
+                    {ft.scoringRequired !== "No" ? `, score ${String(ft.scoringRequired).toLowerCase()}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Row>
+            <Row label="Fold Waste %"><Num value={pv("foldWastePct")} onChange={(v) => setP("foldWastePct", v)} /></Row>
             <Row label="Folder" wide>
               <select className={inputCls} value={pv("folderConfig") || ""}
                 onChange={(e) => {
@@ -1975,6 +2030,10 @@ function ClassicEstimatorContent() {
               <input type="checkbox" checked={showStd} onChange={(e) => setShowStd(e.target.checked)} />
               show plant standards (rates, speeds, difficulty)
             </label>
+            <Link href="/dashboard/quotes/tables"
+              className="ml-3 text-[11px] normal-case tracking-normal text-amber-400/70 underline hover:text-amber-200">
+              estimating tables (paper caliper / folds)
+            </Link>
           </div>
         </div>
 

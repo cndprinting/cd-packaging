@@ -1,0 +1,147 @@
+Absolutely. Let's keep this very simple,
+Folding Table — What It Is and Why We Need It
+What is the folding table?
+The folding table is a set of rules that tells the estimating system how a printed sheet will be folded, what machine can do it, how long it should take, and what it should cost.
+The system should be able to look at a quote and say:
+“This job requires a letter fold on the MBO. The paper is 80# text, the quantity is 25,000, setup is X minutes, production speed is Y sheets/hour, therefore folding time is Z.”
+Without a folding table, the computer doesn't really know how we actually produce the job.
+________________________________
+Why We Need It
+A commercial printing estimate has several major components:
+Paper → Printing → Cutting → Folding → Finishing → Packaging
+We are working on the Folding portion.
+The folding table allows the estimating program to turn your production knowledge into repeatable rules.
+For example:
+A CSR enters:
+
+  *   Quantity: 25,000
+  *   Flat size: 11 × 17
+  *   Finished size: 8.5 × 11
+  *   Paper: 80# text
+  *   Fold: Letter fold
+The system looks at the tables:
+Paper Table
+80# text → approximately 5 mil
+⬇️
+Folding Table
+Letter fold + 5 mil + MBO → appropriate production speed
+⬇️
+Machine Table
+MBO → setup and running parameters
+⬇️
+Estimate
+25,000 sheets → calculated folding hours → folding cost
+________________________________
+What We Need to Put Into the Folding Table
+I recommend these columns:
+Field
+What It Tells the System
+Fold ID
+Unique identification
+Fold Name
+Letter fold, gate fold, etc.
+Flat Sheet Size
+Size before folding
+Finished Size
+Size after folding
+Number of Folds
+1, 2, 3, etc.
+Fold Configuration
+How the sheet is folded
+Machine
+MBO B306, etc.
+Pocket Configuration
+Which pockets are used
+Setup Time
+Minutes to set up
+Running Speed
+Sheets per hour
+Scoring Required
+Yes / No / Conditional
+Paper Caliper Range
+Stock the fold can handle
+Waste
+Setup/run waste
+Special Instructions
+Any unusual requirements
+________________________________
+The Most Important Part
+Do not make the folding table just a list of folding speeds.
+It needs to describe the entire production process.
+For example:
+Letter Fold
+Input:
+11 × 17 sheet
+80# text
+25,000 sheets
+System determines:
+
+  *   Fold type = Letter
+  *   Machine = MBO
+  *   Number of folds = 2
+  *   Setup time = predetermined
+  *   Running speed = predetermined
+  *   Waste = predetermined
+  *   Scoring = No
+  *   Production time = calculated
+Basic Formula
+Folding Run Time = Quantity ÷ Running Speed
+Then:
+Total Folding Time = Setup Time + Run Time + Allowances
+And finally:
+Folding Cost = Total Folding Time × Machine/Labor Rate
+________________________________
+How We Should Build It
+I recommend we don't try to fill in 50 different folds at once.
+We'll build it in this order:
+Step 1 — Common folds
+
+  *   Half fold
+  *   Letter fold
+  *   Tri-fold
+  *   Double parallel
+  *   Right-angle
+Step 2 — Specialty folds
+
+  *   Open gate
+  *   Closed gate
+  *   Accordion
+  *   8-page configurations
+  *   12-page configurations
+Step 3 — Machine information
+
+  *   MBO B306/4/4
+  *   MBO 4/4/4
+  *   Other folders you use
+Step 4 — Paper interaction
+Connect the folding table to the caliper table we just discussed.
+Step 5 — Cost calculation
+Connect setup, speed, waste, labor and machine rates.
+________________________________
+The end goal
+We want Boss Man to be able to take your production knowledge and put it into the estimating system so that the computer doesn't have to "guess."
+You provide the rules.
+The tables organize the rules.
+The estimating program applies the rules.
+That's the key reason we're building the folding table.
+
+
+Best Regards,
+Mary Bitting
+Estimating
+C&D Printing & Packaging  Co.
+M: 727-555-5555
+O: 727-572-9999
+F: 727-573-5839
+12150 28th St No
+St Petersburg, Fl 33716
+
+[A blue and black logo  AI-generated content may be incorrect.]<https://www.linkedin.com/company/c&d-printing-company/>
+Connect with C&D on LinkedIn.<https://www.linkedin.com/company/c&d-printing-company/>
+
+[cid:image002.png@01DD3085.52EA18C0]<https://cndprinting.com/>
+[A blue and white logo  AI-generated content may be incorrect.]
+A G7 compliant printer.
+
+Responsibly Produced Print and Packaging is Sustainable, Recyclable, and Powerful!
+
