@@ -103,7 +103,7 @@ export default function QuotesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3"><DollarSign className="h-6 w-6 text-brand-600" /><div><h1 className="text-2xl font-bold text-gray-900">Quotes & Estimates</h1><p className="text-sm text-gray-500">{quotes.length} quotes</p></div></div>
-        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate-classic"><Button className="gap-2 bg-amber-600 hover:bg-amber-700 text-white">Classic Estimator (E&amp;M)</Button></Link><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button variant="outline" className="gap-2" onClick={() => { setError(""); setShowOutsource(true); }}><Package className="h-4 w-4" />Outsource</Button><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
+        <div className="flex items-center gap-2"><Link href="/dashboard/quotes/estimate-classic"><Button className="gap-2 bg-amber-600 hover:bg-amber-700 text-white">Classic Estimator (E&amp;M)</Button></Link><Link href="/dashboard/flexpack"><Button className="gap-2 bg-teal-700 hover:bg-teal-800 text-white">FlexPack</Button></Link><Link href="/dashboard/quotes/estimate"><Button variant="outline" className="gap-2"><BarChart3 className="h-4 w-4" />New Estimate</Button></Link><Button variant="outline" className="gap-2" onClick={() => { setError(""); setShowOutsource(true); }}><Package className="h-4 w-4" />Outsource</Button><Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />New Quote</Button></div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -148,10 +148,10 @@ export default function QuotesPage() {
                         (specs.method === "classic" → estimateMethod flag). */}
                     {q.status === "draft" && ((q as any).sourcingVendor
                       ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>
-                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>)}
+                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "flexpack" ? "../flexpack" : q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Resume</Button></Link>)}
                     {(q.status === "sent" || q.status === "approved" || q.status === "rejected") && ((q as any).sourcingVendor
                       ? <Link href={`/dashboard/quotes/${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>
-                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>)}
+                      : <Link href={`/dashboard/quotes/${q.estimateMethod === "flexpack" ? "../flexpack" : q.estimateMethod === "classic" ? "estimate-classic" : "estimate"}?draftId=${q.id}`}><Button variant="ghost" size="sm" className="gap-1 text-emerald-700 font-semibold">✏️ Edit</Button></Link>)}
                     {/* Internal-only actions — hidden on wholesale rows so the
                         sourcing card's Won/Lost is the only lifecycle control
                         (Benjy 6/23, after a wholesale quote got rejected→Lost

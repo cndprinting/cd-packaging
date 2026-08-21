@@ -55,7 +55,7 @@ export default function FlexPackPage() {
   const [form, setForm] = useState<FlexPackForm>(() => defaultFlexPackForm());
   const [ref, setRef] = useState<{ materials: Any[]; structures: Any[]; machines: Any[]; formats: Any[]; settings: Any | null; quotes: Any[] }>(
     { materials: [], structures: [], machines: [], formats: [], settings: null, quotes: [] });
-  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(null);
   const [quoteNumber, setQuoteNumber] = useState<string>("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -106,6 +106,23 @@ export default function FlexPackPage() {
     }).catch(() => setMsg("Could not load the reference tables."));
   }, []);
 
+  // Reopen a saved FlexPack quote (Resume from Quotes & Estimates).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("draftId");
+    if (!id) return;
+    fetch(`/api/quotes?id=${id}`).then((r) => r.json()).then((d) => {
+      const q = d.quote || (Array.isArray(d.quotes) ? d.quotes[0] : null);
+      if (!q?.specs) return;
+      try {
+        const parsed = JSON.parse(q.specs);
+        if (parsed.method !== "flexpack" || !parsed.flexForm) return;
+        setForm({ ...defaultFlexPackForm(), ...parsed.flexForm });
+        setDraftQuoteId(q.id);
+        setQuoteNumber(q.quoteNumber);
+      } catch { /* not ours */ }
+    }).catch(() => {});
+  }, []);
+
   const calc = useMemo(() => computeFlexPack(form), [form]);
 
   const pickStructure = (name: string) => {
@@ -124,34 +141,53 @@ export default function FlexPackPage() {
     if (!form.customerName.trim() || !form.jobTitle.trim()) { setMsg("Customer and job title are required."); return; }
     setBusy(true); setMsg("");
     try {
-      const res = await fetch("/api/flexpack", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: quoteId, customerName: form.customerName, jobTitle: form.jobTitle,
-          quantity: form.quantity, skus: form.skus, specs: form,
-          totalCost: calc.totalCost, sellingPrice: calc.sellingPrice,
-          pricePerM: calc.pricePerMOut, marginPct: calc.marginPct * 100,
-        }),
-      });
+      // Save into the MAIN quote table, the same way the classic estimator
+      // does (specs.method tags which estimator made it). That way a FlexPack
+      // quote shows up in Quotes & Estimates with every existing action —
+      // send, print, archive, convert to job — instead of living in a silo.
+      const payload = {
+        customerName: form.customerName,
+        productType: "Flexible Packaging",
+        productName: form.jobTitle,
+        description: [
+          form.structureName,
+          form.bagWidthIn && form.bagLengthIn ? `${form.bagWidthIn}x${form.bagLengthIn}${form.gussetIn ? `x${form.gussetIn}` : ""} pouch` : "",
+          `${form.skus} SKU${form.skus === 1 ? "" : "s"}`,
+        ].filter(Boolean).join(" — "),
+        quantity: form.quantity,
+        unitPrice: calc.pricePerUnit,
+        notes: "",
+        specs: { method: "flexpack", flexForm: form },
+      };
+      const res = draftQuoteId
+        ? await fetch("/api/quotes", { method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: draftQuoteId, ...payload, specs: JSON.stringify(payload.specs) }) })
+        : await fetch("/api/quotes", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...payload, specs: JSON.stringify(payload.specs) }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Save failed");
-      setQuoteId(d.quote.id); setQuoteNumber(d.quote.quoteNumber);
-      setMsg(`Saved as ${d.quote.quoteNumber}.`);
+      const q = d.quote || d;
+      setDraftQuoteId(q.id); setQuoteNumber(q.quoteNumber);
+      setMsg(`Saved as ${q.quoteNumber} — it's now in Quotes & Estimates.`);
     } catch (e: any) { setMsg(e.message || "Save failed."); }
     finally { setBusy(false); }
   };
 
   const convert = async () => {
-    if (!quoteId) { setMsg("Save the quote first."); return; }
+    if (!draftQuoteId) { setMsg("Save the quote first."); return; }
     setBusy(true); setMsg("");
     try {
-      const res = await fetch("/api/flexpack", {
+      // Same endpoint a carton quote uses, so a pouch job lands in the normal
+      // production queue with every downstream step attached.
+      const res = await fetch("/api/quotes", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quoteId, convertToJob: true }),
+        body: JSON.stringify({ id: draftQuoteId, status: "ACCEPTED" }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Could not convert");
-      setMsg(`Job ticket ${d.job.jobNumber} created.`);
+      setMsg(d.job?.jobNumber
+        ? `Job ticket ${d.job.jobNumber} created — it's in Jobs & Job Tickets.`
+        : "Quote accepted. Open it in Quotes & Estimates to create the job ticket.");
     } catch (e: any) { setMsg(e.message || "Could not convert."); }
     finally { setBusy(false); }
   };
@@ -189,9 +225,9 @@ export default function FlexPackPage() {
           <Link href="/dashboard/quotes" className="text-sm text-gray-500 hover:text-gray-800">Sheetfed quotes</Link>
           <button onClick={save} disabled={busy}
             className="rounded-md bg-teal-700 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50">
-            {quoteId ? "Save changes" : "Save quote"}
+            {draftQuoteId ? "Save changes" : "Save quote"}
           </button>
-          <button onClick={convert} disabled={busy || !quoteId}
+          <button onClick={convert} disabled={busy || !draftQuoteId}
             className="rounded-md border border-gray-300 px-3.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40">
             Convert to job ticket
           </button>
@@ -248,12 +284,19 @@ export default function FlexPackPage() {
                   <option>Bottom</option><option>Side</option><option>None</option>
                 </select>
               </Field>
+              <Field label="Header (in)"><input type="number" step="0.01" className={inp} value={form.headerIn} onChange={(e) => set("headerIn", parseFloat(e.target.value) || 0)} /></Field>
               <Field label="Substrate width (in)"><input type="number" step="0.1" className={inp} value={form.substrateWidthIn} onChange={(e) => set("substrateWidthIn", parseFloat(e.target.value) || 0)} /></Field>
-              <Field label="Repeat length (in)"><input type="number" step="0.1" className={inp} value={form.repeatLengthIn} onChange={(e) => set("repeatLengthIn", parseFloat(e.target.value) || 0)} /></Field>
-              <Field label="Number across"><input type="number" className={inp} value={form.numberAcross} onChange={(e) => set("numberAcross", parseInt(e.target.value) || 1)} /></Field>
-              <Field label="Number around"><input type="number" className={inp} value={form.numberAround} onChange={(e) => set("numberAround", parseInt(e.target.value) || 1)} /></Field>
+              <Field label="Usable web (in)" hint="after press marks"><input type="number" step="0.001" className={inp} value={form.usableWebWidthIn} onChange={(e) => set("usableWebWidthIn", parseFloat(e.target.value) || 0)} /></Field>
+              <Field label="Max repeat (in)" hint="cylinder limit"><input type="number" step="0.1" className={inp} value={form.maxRepeatLengthIn} onChange={(e) => set("maxRepeatLengthIn", parseFloat(e.target.value) || 0)} /></Field>
+              <Field label="Override across" hint="0 = calculated"><input type="number" className={inp} value={form.overrideAcross} onChange={(e) => set("overrideAcross", parseInt(e.target.value) || 0)} /></Field>
+              <Field label="Override around" hint="0 = calculated"><input type="number" className={inp} value={form.overrideAround} onChange={(e) => set("overrideAround", parseInt(e.target.value) || 0)} /></Field>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 rounded-md bg-gray-50 px-3 py-2 font-mono text-xs tabular-nums text-gray-600">
+            <div className="mt-3 rounded-md bg-gray-50 px-3 py-2">
+              <div className="mb-1 font-mono text-[11px] text-gray-500">
+                {form.bagLengthIn || 0}&quot; × 2 {form.gussetLocation !== "None" && `+ ${form.gussetIn || 0}" gusset`} = {calc.printWidthIn.toFixed(2)}&quot; across ·
+                {" "}{calc.repeatIn.toFixed(2)}&quot; around → {calc.perFrame} up
+              </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs tabular-nums text-gray-600">
               <span>{calc.perFrame} per frame</span>
               <span>{calc.productionFrames.toLocaleString()} frames</span>
               <span>{n1(calc.productionLinFt)} production ft</span>
@@ -261,6 +304,7 @@ export default function FlexPackPage() {
               <span>{n1(calc.totalLinFt)} total ft</span>
               <span>{n1(calc.totalMsi)} MSI</span>
               <span className="text-amber-700">{(calc.wasteFactor * 100).toFixed(1)}% waste</span>
+            </div>
             </div>
           </Card>
 

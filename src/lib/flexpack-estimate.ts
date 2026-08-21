@@ -79,10 +79,19 @@ export interface FlexPackForm {
   headerIn: number;
 
   // ── Imposition ──
-  substrateWidthIn: number;   // 30
-  repeatLengthIn: number;     // 44
-  numberAcross: number;       // 2
-  numberAround: number;       // 11
+  // HP derives the layout from the bag itself. Verified against their sheet:
+  // a 4x6 bag with a 2" bottom gusset gives Print Width 14 (= length x2 +
+  // gusset) and Repeat 4 (= bag width), which lands 2 across x 11 around = 22
+  // per frame on a 30" web with a 44" cylinder. Overrides win when set.
+  substrateWidthIn: number;   // 30 — the roll we buy
+  usableWebWidthIn: number;   // 28.669 — after press marks (CCC/CSC)
+  maxRepeatLengthIn: number;  // 44 — imaging cylinder limit
+  repeatLengthIn: number;     // computed, or overridden
+  numberAcross: number;       // computed, or overridden
+  numberAround: number;       // computed, or overridden
+  overrideAcross: number;     // 0 = use the calculated value
+  overrideAround: number;
+  overrideRepeat: number;
 
   // ── Colour ──
   colorsCmyovg: number;       // 3
@@ -138,7 +147,9 @@ export function defaultFlexPackForm(): FlexPackForm {
     customerName: "", jobTitle: "", quantity: 0, skus: 1,
     structureName: "", primerCostPerMsi: 0.015, layers: [],
     bagWidthIn: 0, bagLengthIn: 0, gussetIn: 0, gussetLocation: "Bottom", headerIn: 0,
-    substrateWidthIn: 30, repeatLengthIn: 44, numberAcross: 1, numberAround: 1,
+    substrateWidthIn: 30, usableWebWidthIn: 28.669, maxRepeatLengthIn: 44,
+    repeatLengthIn: 44, numberAcross: 1, numberAround: 1,
+    overrideAcross: 0, overrideAround: 0, overrideRepeat: 0,
     colorsCmyovg: 0, colorsK: 0, colorsWhite: 0, colorsPremiumWhite: 0, colorsSpot: 0,
     clickRates: { ...DEFAULT_CLICK_RATES },
     pressCostPerHour: 351.9435606060606,
@@ -160,6 +171,8 @@ export function defaultFlexPackForm(): FlexPackForm {
 }
 
 export interface FlexPackCalc {
+  printWidthIn: number;   // web width one pouch occupies
+  repeatIn: number;       // web length one pouch occupies
   perFrame: number;
   productionFrames: number;
   productionLinFt: number;
@@ -222,10 +235,31 @@ export function computeFlexPack(f: FlexPackForm): FlexPackCalc {
   const qty = Math.max(0, f.quantity || 0);
   const skus = Math.max(1, f.skus || 1);
 
-  // ── Imposition → how much web the job actually needs ──
-  const perFrame = Math.max(1, (f.numberAcross || 1) * (f.numberAround || 1));
+  // ── Pouch calculator → imposition (HP's own derivation) ──
+  // Across the web a pouch needs front + back, plus the gusset panel; around
+  // the web it needs its width. A header adds to the length.
+  const gusset = f.gussetLocation === "None" ? 0 : (f.gussetIn || 0);
+  const lengthWithHeader = (f.bagLengthIn || 0) + (f.headerIn || 0);
+  const printWidthIn = f.gussetLocation === "Side"
+    ? lengthWithHeader * 2 + gusset * 2       // gussets on both edges
+    : lengthWithHeader * 2 + gusset;          // bottom gusset (or none)
+  const repeatIn = f.bagWidthIn || 0;
+
+  const acrossCalc = printWidthIn > 0 && (f.usableWebWidthIn || 0) > 0
+    ? Math.max(1, Math.floor(f.usableWebWidthIn / printWidthIn)) : 0;
+  const aroundCalc = repeatIn > 0 && (f.maxRepeatLengthIn || 0) > 0
+    ? Math.max(1, Math.floor(f.maxRepeatLengthIn / repeatIn)) : 0;
+
+  const numberAcross = (f.overrideAcross || 0) > 0 ? f.overrideAcross
+    : (acrossCalc || f.numberAcross || 1);
+  const numberAround = (f.overrideAround || 0) > 0 ? f.overrideAround
+    : (aroundCalc || f.numberAround || 1);
+  const repeatLengthIn = (f.overrideRepeat || 0) > 0 ? f.overrideRepeat
+    : (repeatIn > 0 ? numberAround * repeatIn : (f.repeatLengthIn || 0));
+
+  const perFrame = Math.max(1, numberAcross * numberAround);
   const productionFrames = qty > 0 ? Math.ceil(qty / perFrame) : 0;
-  const repeatFt = (f.repeatLengthIn || 0) / 12;
+  const repeatFt = repeatLengthIn / 12;
   const productionLinFt = productionFrames * repeatFt;
 
   // ── Setup material: every process burns feet before it runs clean ──
@@ -313,7 +347,7 @@ export function computeFlexPack(f: FlexPackForm): FlexPackCalc {
   const marginDollars = sellingPrice - totalCost - commission;
 
   return {
-    perFrame, productionFrames, productionLinFt, setupLinFt, runningWasteLinFt,
+    printWidthIn, repeatIn, perFrame, productionFrames, productionLinFt, setupLinFt, runningWasteLinFt,
     totalLinFt, totalMsi, wasteFactor,
     prepressMinutes, pressMinutes,
     laminationMinutes: lam.minutes, slitRewindMinutes: slit.minutes,

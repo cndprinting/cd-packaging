@@ -8,8 +8,9 @@ f.layers = [
   { name: "48g Met PET", costPerMsi: 0.046 },
   { name: "3.5mil Clear PE | 3.5mil LDPE", costPerMsi: 0.205 },
 ];
-f.substrateWidthIn = 30; f.repeatLengthIn = 44;
-f.numberAcross = 2; f.numberAround = 11;
+// layout now derives from the bag itself — 4x6 with a 2" bottom gusset
+f.bagWidthIn = 4; f.bagLengthIn = 6; f.gussetIn = 2; f.gussetLocation = "Bottom";
+f.substrateWidthIn = 30; f.usableWebWidthIn = 28.669; f.maxRepeatLengthIn = 44;
 f.colorsCmyovg = 3; f.colorsK = 1; f.colorsPremiumWhite = 1;
 f.pressSpeedFpm = 110; f.runningWastePct = 4;
 f.lamination = { ...f.lamination, enabled: true };
@@ -23,6 +24,9 @@ const chk = (k: string, hp: number, got: number, tol = 0.02) => {
   return ok;
 };
 let pass = true;
+pass = chk("print width (in)", 14, c.printWidthIn, 0.001) && pass;
+pass = chk("repeat (in)", 4, c.repeatIn, 0.001) && pass;
+pass = chk("per frame", 22, c.perFrame, 0.001) && pass;
 pass = chk("total lin ft", 1524.64, c.totalLinFt, 0.05) && pass;
 pass = chk("total MSI", 548.8704, c.totalMsi, 0.05) && pass;
 pass = chk("press", 169.28698564, c.pressCost) && pass;
