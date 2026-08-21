@@ -235,6 +235,10 @@ export function computeFlexPack(f: FlexPackForm): FlexPackCalc {
   const qty = Math.max(0, f.quantity || 0);
   const skus = Math.max(1, f.skus || 1);
 
+  // ── Material: the film stack, priced per MSI ──
+  const materialCostPerMsi = (f.primerCostPerMsi || 0)
+    + (f.layers || []).reduce((t, l) => t + (l.costPerMsi || 0), 0);
+
   // ── Pouch calculator → imposition (HP's own derivation) ──
   // Across the web a pouch needs front + back, plus the gusset panel; around
   // the web it needs its width. A header adds to the length.
@@ -305,9 +309,6 @@ export function computeFlexPack(f: FlexPackForm): FlexPackCalc {
     (f.colorsPremiumWhite || 0) * productionFramesForClicks * r.premiumWhite +
     (f.colorsSpot || 0) * productionFramesForClicks * r.spot;
 
-  // ── Material: the film stack, priced per MSI ──
-  const materialCostPerMsi = (f.primerCostPerMsi || 0)
-    + (f.layers || []).reduce((t, l) => t + (l.costPerMsi || 0), 0);
   const materialCost = materialCostPerMsi * totalMsi;
 
   // ── Bag extras ──
@@ -328,6 +329,24 @@ export function computeFlexPack(f: FlexPackForm): FlexPackCalc {
 
   const prepressCost = mins(prepressMinutes, f.prepressRatePerHour || 0);
   const pressCost = mins(pressMinutes, f.pressCostPerHour || 0);
+
+  // Nothing quoted yet -> no cost. Setup time is real, but a blank form
+  // showing ~$96 of press setup and a -100% margin is just noise.
+  if (qty <= 0) {
+    return {
+      printWidthIn, repeatIn, perFrame, productionFrames: 0, productionLinFt: 0,
+      setupLinFt: 0, runningWasteLinFt: 0, totalLinFt: 0, totalMsi: 0, wasteFactor: 0,
+      prepressMinutes: 0, pressMinutes: 0, laminationMinutes: 0, slitRewindMinutes: 0,
+      seamingMinutes: 0, cuttingMinutes: 0, inspectionMinutes: 0, bagMakingMinutes: 0,
+      totalMinutes: 0,
+      prepressCost: 0, pressCost: 0, laminationCost: 0, slitRewindCost: 0, seamingCost: 0,
+      cuttingCost: 0, inspectionCost: 0, bagMakingCost: 0, outsourcedBagCost: 0,
+      clickCost: 0, materialCost: 0, materialCostPerMsi, zipperCost: 0, bagConsumablesCost: 0,
+      totalCost: 0, costPerM: 0, costPerUnit: 0, costPerMsi: 0,
+      sellingPrice: 0, pricePerMOut: 0, pricePerUnit: 0,
+      commission: 0, marginDollars: 0, marginPct: 0,
+    };
+  }
 
   const totalDirect = (f.fixedSetupCharge || 0) + prepressCost + pressCost
     + lam.cost + slit.cost + seam.cost + cut.cost + insp.cost + bag.cost

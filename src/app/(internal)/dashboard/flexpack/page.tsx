@@ -59,6 +59,13 @@ export default function FlexPackPage() {
   const [quoteNumber, setQuoteNumber] = useState<string>("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  // Same customer source as the classic and wizard estimators, so FlexPack
+  // ties to the real Godzilla customer list. Free-typed names still work.
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/companies").then((r) => r.json())
+      .then((d) => setCompanies(d.companies || [])).catch(() => {});
+  }, []);
 
   const set = useCallback(<K extends keyof FlexPackForm>(k: K, v: FlexPackForm[K]) =>
     setForm((f) => ({ ...f, [k]: v })), []);
@@ -240,7 +247,13 @@ export default function FlexPackPage() {
         <div className="space-y-5">
           <Card title="Job">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Customer"><input className={inp} value={form.customerName} onChange={(e) => set("customerName", e.target.value)} /></Field>
+              <Field label="Customer">
+                <input className={inp} list="flexpack-customers" placeholder="type to search customers…"
+                  value={form.customerName} onChange={(e) => set("customerName", e.target.value)} />
+                <datalist id="flexpack-customers">
+                  {companies.map((c) => <option key={c.id} value={c.name} />)}
+                </datalist>
+              </Field>
               <Field label="Job title"><input className={inp} value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} /></Field>
               <Field label="Quantity"><input type="number" className={inp} value={form.quantity} onChange={(e) => set("quantity", parseInt(e.target.value) || 0)} /></Field>
               <Field label="SKUs" hint="each extra SKU adds setup"><input type="number" className={inp} value={form.skus} onChange={(e) => set("skus", parseInt(e.target.value) || 1)} /></Field>
