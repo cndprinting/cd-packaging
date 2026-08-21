@@ -1032,6 +1032,28 @@ function ClassicEstimatorContent() {
                 ))}
               </select>
             </Row>
+            {/* FINISHED SIZE (Mary 8/21) — real numbers, not "8.5 x 11" text.
+                A box is W x D x H; a flat product is W x H. The flat BLANK for
+                a box still comes from the die below, not from these. */}
+            <Row label="Product Type" wide>
+              <select className={inputCls} value={String(pv("productKind") || "flat")}
+                onChange={(e) => setP("productKind", e.target.value as "flat" | "box")}>
+                <option value="flat">Flat printed product</option>
+                <option value="box">Box / packaging</option>
+              </select>
+            </Row>
+            {String(pv("productKind") || "flat") === "box" ? (
+              <>
+                <Row label="Finished Box W"><Num value={pv("boxWidthIn")} onChange={(v) => setP("boxWidthIn", v)} /></Row>
+                <Row label="Finished Box D"><Num value={pv("boxDepthIn")} onChange={(v) => setP("boxDepthIn", v)} /></Row>
+                <Row label="Finished Box H"><Num value={pv("boxHeightIn")} onChange={(v) => setP("boxHeightIn", v)} /></Row>
+              </>
+            ) : (
+              <>
+                <Row label="Finished Width"><Num value={pv("finishedWidthIn")} onChange={(v) => setP("finishedWidthIn", v)} /></Row>
+                <Row label="Finished Height"><Num value={pv("finishedHeightIn")} onChange={(v) => setP("finishedHeightIn", v)} /></Row>
+              </>
+            )}
             <Row label="Part Name" wide>
               <Txt value={String(pv("partName") || "")} onChange={(v) => setP("partName", v)}
                 placeholder="e.g. End sheet, 128pgs, Fold out, 6 inserts" />

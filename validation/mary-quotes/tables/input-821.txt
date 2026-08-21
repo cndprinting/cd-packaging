@@ -1,0 +1,122 @@
+Yes - absolutely. I would add those as two separate size sections, each with Width (W) and Height (H) inputs. This is important because the system needs to know both the finished product size and the flat sheet size before it can determine cutting, folding, imposition, and production.
+Recommended estimator screen
+┌─────────────────────────────────────────────────────────────┐
+│                    STANDARD PRINTING                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  QUANTITY:       [ 25,000 ]                                 │
+│                                                             │
+│  FINISHED SIZE:                                             │
+│      Width (W): [ 8.50 ]     Height (H): [ 11.00 ]          │
+│                                                             │
+│  FLAT SIZE:                                                  │
+│      Width (W): [ 11.00 ]    Height (H): [ 17.00 ]          │
+│                                                             │
+│  PAPER:          [ 80# Uncoated Text ▼ ]                    │
+│                                                             │
+│  PRINTING:       [ 4/4 ▼ ]                                  │
+│                                                             │
+│  FOLDING:        [ Letter Fold ▼ ]                          │
+│                                                             │
+│  MACHINE:        [ MBO B306/4/4 ▼ ]                         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+I would also have the system calculate this automatically
+Once the estimator enters:
+Finished
+
+  *   W = 8.5"
+  *   H = 11"
+Flat
+
+  *   W = 11"
+  *   H = 17"
+the system should recognize:
+8.5 × 11 finished from an 11 × 17 flat sheet
+and use that information for the folding and cutting calculations.
+One important rule for Boss Man
+I would make W and H actual numeric fields, not one text field such as:
+8.5 x 11
+Instead:
+Finished Width: 8.50
+Finished Height: 11.00
+Flat Width: 11.00
+Flat Height: 17.00
+That will allow the estimating engine to perform calculations automatically.
+And I would make the system store the dimensions in inches as decimal numbers, so things like 8.5, 11, 17, 23.5, etc. can be calculated without having to interpret text.
+
+Yes - for boxes, we should have a separate Finished Size section with three inputs: Width, Depth, and Height. That will be important for packaging estimates.
+structure it like this:
+┌─────────────────────────────────────────────────────────────┐
+│                    STANDARD PRINTING                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  FINISHED SIZE - FLAT PRINTED PRODUCT                       │
+│                                                             │
+│      Width (W):   [ ______ ]                                │
+│      Height (H):  [ ______ ]                                │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│                    BOX / PACKAGING                           │
+│                                                             │
+│  FINISHED BOX SIZE:                                         │
+│                                                             │
+│      Width (W):   [ ______ ]                                │
+│      Depth (D):   [ ______ ]                                │
+│      Height (H):  [ ______ ]                                │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│                    FLAT SIZE                                │
+│                                                             │
+│      Width (W):   [ ______ ]                                │
+│      Height (H):  [ ______ ]                                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+So we now have two product types
+STANDARD PRINTING
+Finished:
+W × H
+Example: 8.5 × 11
+BOX / PACKAGING
+Finished:
+W × D × H
+Example: 6 × 4 × 2
+One thing I would add
+For boxes, the system should also have a Box Style / Construction field, because a 6 × 4 × 2 box can have very different flat sizes depending on how it is constructed.
+For example:
+Box Style: [ Auto Bottom ▼ ]
+
+Finished:
+W: [ 6.00 ]
+D: [ 4.00 ]
+H: [ 2.00 ]
+
+Flat Size:
+W: [ AUTO ]
+H: [ AUTO ]
+
+Glue Flaps: [ AUTO ]
+Bleed:      [ 0.125 ]
+That way the finished box dimensions drive the structural calculation, rather than the estimator having to manually figure out the flat blank every time.
+This is a very good addition to the system, especially since you're trying to make it eventually handle both commercial printing and packaging.
+
+
+Best Regards,
+Mary Bitting
+Estimating
+C&D Printing & Packaging  Co.
+M: 727-555-5555
+O: 727-572-9999
+F: 727-573-5839
+12150 28th St No
+St Petersburg, Fl 33716
+
+[A blue and black logo  AI-generated content may be incorrect.]<https://www.linkedin.com/company/c&d-printing-company/>
+Connect with C&D on LinkedIn.<https://www.linkedin.com/company/c&d-printing-company/>
+
+[cid:image002.png@01DD3168.3579D6C0]<https://cndprinting.com/>
+[A blue and white logo  AI-generated content may be incorrect.]
+A G7 compliant printer.
+
+Responsibly Produced Print and Packaging is Sustainable, Recyclable, and Powerful!
+

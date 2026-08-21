@@ -163,6 +163,8 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
+  "productKind", "finishedWidthIn", "finishedHeightIn",
+  "boxWidthIn", "boxDepthIn", "boxHeightIn",
   "partName", "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
   "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
   "cutterRatePerHr", "trimRatePerHr", "handBindRatePerHr", "packRatePerHr",
@@ -320,6 +322,17 @@ export interface ClassicForm {
   // Carton packing auto-derives at ~40 cartons/hr (clean fit from 4 to 2,735
   // cartons across 13 estimates). packHrs typed = override.
   cartonsPerHour: number;
+  // FINISHED SIZE as real numbers (Mary 8/21). E&M prints "FINAL TRIM SIZE"
+  // per part on the letter, and it was free text here. Numeric so the engine
+  // can sanity-check imposition and the letter can render it consistently.
+  productKind: "flat" | "box";
+  finishedWidthIn: number;
+  finishedHeightIn: number;
+  // Boxes are three-dimensional: W x D x H (Mary 8/21). The flat BLANK still
+  // comes from the die, not from these — see the die-inventory lookup.
+  boxWidthIn: number;
+  boxDepthIn: number;
+  boxHeightIn: number;
   // What this part IS — E&M prints "Part 1 of 5 End sheet", "Fold out",
   // "6 inserts". A five-part case-bound book is unreadable without it.
   partName: string;
@@ -559,6 +572,8 @@ export function defaultClassicForm(): ClassicForm {
     pressId: "", pressConfigId: "", pressHourlyRate: 0, helperHourlyRate: 0,
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
+    productKind: "flat", finishedWidthIn: 0, finishedHeightIn: 0,
+    boxWidthIn: 0, boxDepthIn: 0, boxHeightIn: 0,
     partName: "", paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,
     padRatePerHr: 18, padsPerHour: 500,
