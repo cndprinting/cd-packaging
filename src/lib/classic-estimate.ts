@@ -163,7 +163,7 @@ export const PART_FIELD_KEYS = [
   "bleedAllowance", "brandColorFinish",
   // Screen 7 — Press
   "pressId", "pressConfigId", "pressHourlyRate", "helperHourlyRate",
-  "productKind", "finishedWidthIn", "finishedHeightIn",
+  "productKind", "finishedWidthIn", "finishedHeightIn", "flatWidthIn", "flatHeightIn",
   "boxWidthIn", "boxDepthIn", "boxHeightIn",
   "partName", "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
   "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
@@ -328,6 +328,12 @@ export interface ClassicForm {
   productKind: "flat" | "box";
   finishedWidthIn: number;
   finishedHeightIn: number;
+  // FLAT size of the PRODUCED PIECE — e.g. an 11x17 flat that folds to
+  // 8.5x11. Mary 8/21 corrected me on this: "Size To Run" and "Size To Order"
+  // are the PAPER we buy and run, not the piece. Different thing entirely,
+  // and this is what folding, cutting and ink coverage should key off.
+  flatWidthIn: number;
+  flatHeightIn: number;
   // Boxes are three-dimensional: W x D x H (Mary 8/21). The flat BLANK still
   // comes from the die, not from these — see the die-inventory lookup.
   boxWidthIn: number;
@@ -573,6 +579,7 @@ export function defaultClassicForm(): ClassicForm {
     runColorsSide1: 0, runColorsSide2: 0,
     workAndTurn: false, plateCostEach: 0,
     productKind: "flat", finishedWidthIn: 0, finishedHeightIn: 0,
+    flatWidthIn: 0, flatHeightIn: 0,
     boxWidthIn: 0, boxDepthIn: 0, boxHeightIn: 0,
     partName: "", paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,

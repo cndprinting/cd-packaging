@@ -166,7 +166,7 @@ function ClassicEstimatorContent() {
   const [pickupValue, setPickupValue] = useState("");
   const [pickupLoaded, setPickupLoaded] = useState<string | null>(null);
   // Die inventory lookup (1,842 CuttingDie rows via /api/dies?search=)
-  const [dieOptions, setDieOptions] = useState<{ dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null }[]>([]);
+  const [dieOptions, setDieOptions] = useState<{ dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; height: number | null }[]>([]);
   // Stock picker — E&M paper history (PaperUsage: description + pricePerM + weight)
   const [stockOptions, setStockOptions] = useState<{ description: string; pricePerM: number | null; weight: string | null; size: string | null }[]>([]);
   const [presses, setPresses] = useState<PressData[]>([]);
@@ -1054,6 +1054,12 @@ function ClassicEstimatorContent() {
                 <Row label="Finished Height"><Num value={pv("finishedHeightIn")} onChange={(v) => setP("finishedHeightIn", v)} /></Row>
               </>
             )}
+            <Row label="Flat Size — Width" ><Num value={pv("flatWidthIn")} onChange={(v) => setP("flatWidthIn", v)} /></Row>
+            <Row label="Flat Size — Height"><Num value={pv("flatHeightIn")} onChange={(v) => setP("flatHeightIn", v)} /></Row>
+            <div className="col-span-2 pl-[224px] text-[11px] text-amber-400/70">
+              The produced piece flat, before folding — not the paper. Paper is
+              &ldquo;Size To Run&rdquo; and &ldquo;Size To Order&rdquo; below.
+            </div>
             <Row label="Part Name" wide>
               <Txt value={String(pv("partName") || "")} onChange={(v) => setP("partName", v)}
                 placeholder="e.g. End sheet, 128pgs, Fold out, 6 inserts" />
@@ -1140,10 +1146,33 @@ function ClassicEstimatorContent() {
         </datalist>
         {dieMatch && (
           <div className="mb-1 border border-amber-500/40 bg-amber-400/5 px-2 py-1 font-mono text-[11px] text-amber-300">
-            DIE {dieMatch.dieNumber} ON FILE — {[
-              dieMatch.customerName, dieMatch.item, dieMatch.description,
-              dieMatch.length && dieMatch.width ? `${dieMatch.length}x${dieMatch.width}` : "",
-            ].filter(Boolean).join(" · ") || "no detail"} · existing die, no die charge needed
+            <div>
+              DIE {dieMatch.dieNumber} ON FILE — {[
+                dieMatch.customerName, dieMatch.item, dieMatch.description,
+                dieMatch.length && dieMatch.width ? `${dieMatch.length}x${dieMatch.width}${dieMatch.height ? `x${dieMatch.height}` : ""}` : "",
+              ].filter(Boolean).join(" · ") || "no detail"} · existing die, no die charge needed
+            </div>
+            {/* Mary 8/21: "I'm guessing that eventually I can enter a Die # and
+                it will auto fill just by that?" — yes, for the finished box
+                size, which is what the die record actually stores. The FLAT
+                blank isn't on the die record, so she still enters that. About
+                a quarter of the 1,787 dies carry dimensions today. */}
+            {dieMatch.length && dieMatch.width ? (
+              <button type="button"
+                className="mt-1 border border-amber-600/60 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-amber-900/40"
+                onClick={() => patchP({
+                  productKind: "box",
+                  boxWidthIn: dieMatch.length || 0,
+                  boxDepthIn: dieMatch.width || 0,
+                  boxHeightIn: dieMatch.height || 0,
+                } as any)}>
+                Use this die&apos;s finished size ({dieMatch.length} × {dieMatch.width}{dieMatch.height ? ` × ${dieMatch.height}` : ""})
+              </button>
+            ) : (
+              <div className="mt-0.5 text-amber-500/70">
+                no size recorded on this die — enter the finished size by hand
+              </div>
+            )}
           </div>
         )}
         <Row label="Die Cost $"><Num value={pv("dieCost")} onChange={(v) => setP("dieCost", v)} /></Row>
