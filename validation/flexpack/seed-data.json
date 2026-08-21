@@ -1,0 +1,928 @@
+{
+ "materials": [
+  {
+   "name": "PET  |  Corona Treated",
+   "category": "PET",
+   "description": "Corona Treated",
+   "micron": 12.0,
+   "yieldIn2PerLb": 41850.0,
+   "cost": 0.03,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.03,
+   "mil": 0.4724412
+  },
+  {
+   "name": "PET  |  PVDC",
+   "category": "PET",
+   "description": "PVDC",
+   "micron": 13.25,
+   "yieldIn2PerLb": 36800.0,
+   "cost": 0.06,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.06,
+   "mil": 0.521653825
+  },
+  {
+   "name": "PET   |  Metallized",
+   "category": "PET",
+   "description": "Metallized",
+   "micron": 12.0,
+   "yieldIn2PerLb": 41850.0,
+   "cost": 0.03,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.03,
+   "mil": 0.4724412
+  },
+  {
+   "name": "PET  |  Matte",
+   "category": "PET",
+   "description": "Matte",
+   "micron": 19.0,
+   "yieldIn2PerLb": 26400.0,
+   "cost": 0.04,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.04,
+   "mil": 0.7480319
+  },
+  {
+   "name": "BOPP  |  Water Bottle Label",
+   "category": "BOPP",
+   "description": "Water Bottle Label",
+   "micron": 16.0,
+   "yieldIn2PerLb": 44000.0,
+   "cost": 0.2,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.2,
+   "mil": 0.6299216
+  },
+  {
+   "name": "BOPP  |  Heat Seal",
+   "category": "BOPP",
+   "description": "Heat Seal",
+   "micron": 30.5,
+   "yieldIn2PerLb": 25700.0,
+   "cost": 0.05,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.05,
+   "mil": 1.2007880499999999
+  },
+  {
+   "name": "BOPP  |  Metallized",
+   "category": "BOPP",
+   "description": "Metallized",
+   "micron": 17.0,
+   "yieldIn2PerLb": 45700.0,
+   "cost": 0.03,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.03,
+   "mil": 0.6692916999999999
+  },
+  {
+   "name": "BOPP  |  Matte",
+   "category": "BOPP",
+   "description": "Matte",
+   "micron": 18.0,
+   "yieldIn2PerLb": 44000.0,
+   "cost": 0.045,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.045,
+   "mil": 0.7086618
+  },
+  {
+   "name": "PE  |  Standard (Sealant)",
+   "category": "PE",
+   "description": "Standard (Sealant)",
+   "micron": 100.0,
+   "yieldIn2PerLb": 5000.0,
+   "cost": 0.018,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.018,
+   "mil": 3.93701
+  },
+  {
+   "name": "PE  |  EVOH Sealant",
+   "category": "PE",
+   "description": "EVOH Sealant",
+   "micron": 75.0,
+   "yieldIn2PerLb": 6675.0,
+   "cost": 0.018,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.018,
+   "mil": 2.9527574999999997
+  },
+  {
+   "name": "PS  |  Matte PS",
+   "category": "PS",
+   "description": "Matte PS",
+   "micron": 0.0,
+   "yieldIn2PerLb": null,
+   "cost": 0.35,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.35,
+   "mil": 0.0
+  },
+  {
+   "name": "OPV  |  Std OPV",
+   "category": "OPV",
+   "description": "Std OPV",
+   "micron": 0.0,
+   "yieldIn2PerLb": null,
+   "cost": 0.04,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.04,
+   "mil": 0.0
+  },
+  {
+   "name": "Adhesive  |  Std Adhesive",
+   "category": "Adhesive",
+   "description": "Std Adhesive",
+   "micron": 0.0,
+   "yieldIn2PerLb": null,
+   "cost": 0.015,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.015,
+   "mil": 0.0
+  },
+  {
+   "name": "Gloss OPV  |  Gloss OPV",
+   "category": "Gloss OPV",
+   "description": "Gloss OPV",
+   "micron": 0.0,
+   "yieldIn2PerLb": null,
+   "cost": 0.08,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.08,
+   "mil": 0.0
+  },
+  {
+   "name": "supplied film   |  Shannon",
+   "category": "supplied film",
+   "description": "Shannon",
+   "micron": 0.0,
+   "yieldIn2PerLb": 0.0,
+   "cost": 0,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0,
+   "mil": 0.0
+  },
+  {
+   "name": "MettPett 300   |  Mett300",
+   "category": "MettPett 300",
+   "description": "Mett300",
+   "micron": 76.2,
+   "yieldIn2PerLb": 8564.0,
+   "cost": 0.31,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.31,
+   "mil": 3.00000162
+  },
+  {
+   "name": "SelWound  |  Selfwoud",
+   "category": "SelWound",
+   "description": "Selfwoud",
+   "micron": 25.4,
+   "yieldIn2PerLb": 22000.0,
+   "cost": 0.14,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.14,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "PFP400W  |  Shannon White Foil",
+   "category": "PFP400W",
+   "description": "Shannon White Foil",
+   "micron": 101.346,
+   "yieldIn2PerLb": 6371.0,
+   "cost": 0.638,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.638,
+   "mil": 3.9900021546
+  },
+  {
+   "name": "PC200  |  Clear PET/Cast Poly Prop",
+   "category": "PC200",
+   "description": "Clear PET/Cast Poly Prop",
+   "micron": 50.8,
+   "yieldIn2PerLb": 54700.0,
+   "cost": 0.304,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.304,
+   "mil": 2.0000010799999997
+  },
+  {
+   "name": "SelfWound Matte  |  Selfwound Matte",
+   "category": "SelfWound Matte",
+   "description": "Selfwound Matte",
+   "micron": 25.4,
+   "yieldIn2PerLb": 22000.0,
+   "cost": 0.24,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.24,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "HT  |  Heat Transfer",
+   "category": "HT",
+   "description": "Heat Transfer",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.22,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.22,
+   "mil": null
+  },
+  {
+   "name": "Adhesive  |  Waterbased",
+   "category": "Adhesive",
+   "description": "Waterbased",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.04,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.04,
+   "mil": null
+  },
+  {
+   "name": "52g Soft Touch PET  |  52g Soft Touch PET",
+   "category": "52g Soft Touch PET",
+   "description": "52g Soft Touch PET",
+   "micron": null,
+   "yieldIn2PerLb": 39231.0,
+   "cost": 3.65,
+   "unitOfMeasure": "Per Pound",
+   "costPerMsi": 0.0930386683999898,
+   "mil": null
+  },
+  {
+   "name": "48g Met PET  |  48g Met PET",
+   "category": "48g Met PET",
+   "description": "48g Met PET",
+   "micron": null,
+   "yieldIn2PerLb": 42000.0,
+   "cost": 0.046,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.046,
+   "mil": null
+  },
+  {
+   "name": "3mil LDPE/EVOH  |  3mil LDPE/EVOH",
+   "category": "3mil LDPE/EVOH",
+   "description": "3mil LDPE/EVOH",
+   "micron": null,
+   "yieldIn2PerLb": 10189.9,
+   "cost": 1.57,
+   "unitOfMeasure": "Per Pound",
+   "costPerMsi": 0.15407413222897184,
+   "mil": null
+  },
+  {
+   "name": "3.5mil Clear PE  |  3.5mil LDPE",
+   "category": "3.5mil Clear PE",
+   "description": "3.5mil LDPE",
+   "micron": null,
+   "yieldIn2PerLb": 8684.5,
+   "cost": 0.205,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.205,
+   "mil": null
+  },
+  {
+   "name": "3 mil Easy Tear Stick Pack Film  |",
+   "category": "3 mil Easy Tear Stick Pack Film",
+   "description": null,
+   "micron": null,
+   "yieldIn2PerLb": 7430.0,
+   "cost": 5.05,
+   "unitOfMeasure": "Per Pound",
+   "costPerMsi": 0.6796769851951547,
+   "mil": null
+  },
+  {
+   "name": "3 mil white LDPE  |  3 mil LDPE",
+   "category": "3 mil white LDPE",
+   "description": "3 mil LDPE",
+   "micron": null,
+   "yieldIn2PerLb": 9985.0,
+   "cost": 1.65,
+   "unitOfMeasure": "Per Pound",
+   "costPerMsi": 0.16524787180771155,
+   "mil": null
+  },
+  {
+   "name": "Easy Tear White Stick Pack Film  |  &WEZ - Multi-Plastics",
+   "category": "Easy Tear White Stick Pack Film",
+   "description": "&WEZ - Multi-Plastics",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.81,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.81,
+   "mil": null
+  },
+  {
+   "name": "White Film  |  48g PET / 3 mil White LLDPE",
+   "category": "White Film",
+   "description": "48g PET / 3 mil White LLDPE",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.26,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.26,
+   "mil": null
+  },
+  {
+   "name": "Metalized  |  48g MET PET / 3 mil LLDPE",
+   "category": "Metalized",
+   "description": "48g MET PET / 3 mil LLDPE",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.39,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.39,
+   "mil": null
+  },
+  {
+   "name": "White Metalized  |  48g MET PET / 3 mil LLDPE",
+   "category": "White Metalized",
+   "description": "48g MET PET / 3 mil LLDPE",
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.49,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.49,
+   "mil": null
+  },
+  {
+   "name": "Matte Pack Ready/EVA Lamainate  |",
+   "category": "Matte Pack Ready/EVA Lamainate",
+   "description": null,
+   "micron": 25.4,
+   "yieldIn2PerLb": null,
+   "cost": 0.129,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.129,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "Gloss Pack Ready/EVA Lamainate  |",
+   "category": "Gloss Pack Ready/EVA Lamainate",
+   "description": null,
+   "micron": 25.4,
+   "yieldIn2PerLb": null,
+   "cost": 0.118,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.118,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "Matte PET/EVA Laminate  |  1.2 Mil PET",
+   "category": "Matte PET/EVA Laminate",
+   "description": "1.2 Mil PET",
+   "micron": 25.4,
+   "yieldIn2PerLb": null,
+   "cost": 0.32,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.32,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "Gloss PET/ EVA Laminate  |  1.2 Mil Pet",
+   "category": "Gloss PET/ EVA Laminate",
+   "description": "1.2 Mil Pet",
+   "micron": 25.4,
+   "yieldIn2PerLb": null,
+   "cost": 0.17,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.17,
+   "mil": 1.0000005399999998
+  },
+  {
+   "name": "PE Shrink Film  |",
+   "category": "PE Shrink Film",
+   "description": null,
+   "micron": null,
+   "yieldIn2PerLb": null,
+   "cost": 0.2,
+   "unitOfMeasure": "MSI",
+   "costPerMsi": 0.2,
+   "mil": null
+  }
+ ],
+ "structures": [
+  {
+   "name": "C&D Printing Gloss Spec Pouch Material",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "Gloss PET/ EVA Laminate  |  1.2 Mil Pet",
+    "48g Met PET  |  48g Met PET",
+    "3.5mil Clear PE  |  3.5mil LDPE"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "PET - With Varn",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "PET  |  Corona Treated",
+    "OPV  |  Slip Varnish"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "PET - No Varn",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "PET  |  Corona Treated"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Sample 1",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "BOPP  |  Heat Seal"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Supplied Film",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "supplied film   |  Shannon"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Met300",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "MettPett 300   |  Mett300",
+    "SelWound  |  Selfwoud"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "PFP400W",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "PFP400W  |  Shannon White Foil",
+    "SelWound  |  Selfwoud"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Met300 matte",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "MettPett 300   |  Mett300",
+    "SelfWound Matte  |  Selfwound Matte"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Heat Transfer",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "HT  |  Heat Transfer",
+    "Adhesive  |  Waterbased"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Coffee Pouches",
+   "primer": "DigiPrime 050",
+   "layers": [],
+   "thicknessMil": null
+  },
+  {
+   "name": "Water Bottle Label",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "BOPP  |  Water Bottle Label"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "Shrink Label",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "PE Shrink Film  |"
+   ],
+   "thicknessMil": null
+  },
+  {
+   "name": "C&D Printing Matt Spec Pouch Material",
+   "primer": "DigiPrime 050",
+   "layers": [
+    "Matte PET/EVA Laminate  |  1.2 Mil PET",
+    "48g Met PET  |  48g Met PET",
+    "3.5mil Clear PE  |  3.5mil LDPE"
+   ],
+   "thicknessMil": 0.0
+  }
+ ],
+ "formats": [
+  {
+   "format": "SUP Pouch | 8.1\" - 12\" | Zipper: Yes",
+   "style": "SUP Pouch",
+   "sizeBand": "8.1\" - 12\"",
+   "zipper": true,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 96.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 58.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 45.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 44.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 42.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 41.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 39.0
+    }
+   ]
+  },
+  {
+   "format": "Flat Pouch | <5\" | Zipper: No",
+   "style": "Flat Pouch",
+   "sizeBand": "<5\"",
+   "zipper": false,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 60.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 38.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 36.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 35.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 33.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 32.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 30.0
+    }
+   ]
+  },
+  {
+   "format": "Flat Pouch | 5.1\" - 8\" | Zipper: No",
+   "style": "Flat Pouch",
+   "sizeBand": "5.1\" - 8\"",
+   "zipper": false,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 62.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 40.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 38.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 37.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 35.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 34.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 32.0
+    }
+   ]
+  },
+  {
+   "format": "Flat Pouch | 8.1\" - 12\" | Zipper: No",
+   "style": "Flat Pouch",
+   "sizeBand": "8.1\" - 12\"",
+   "zipper": false,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 64.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 42.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 40.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 39.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 37.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 36.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 34.0
+    }
+   ]
+  },
+  {
+   "format": "Flat Pouch | 12.1 - \"15\" | Zipper: No",
+   "style": "Flat Pouch",
+   "sizeBand": "12.1 - \"15\"",
+   "zipper": false,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 66.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 44.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 42.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 41.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 39.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 38.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 36.0
+    }
+   ]
+  },
+  {
+   "format": "SUP Pouch | <5\" | Zipper: Yes",
+   "style": "SUP Pouch",
+   "sizeBand": "<5\"",
+   "zipper": true,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 90.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 52.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 40.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 39.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 37.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 36.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 34.0
+    }
+   ]
+  },
+  {
+   "format": "SUP Pouch | 5.1\" - 8\" | Zipper: Yes",
+   "style": "SUP Pouch",
+   "sizeBand": "5.1\" - 8\"",
+   "zipper": true,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 92.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 55.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 43.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 42.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 40.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 39.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 37.0
+    }
+   ]
+  },
+  {
+   "format": "SUP Pouch | 12.1 - \"15\" | Zipper: Yes",
+   "style": "SUP Pouch",
+   "sizeBand": "12.1 - \"15\"",
+   "zipper": true,
+   "breaks": [
+    {
+     "qty": 5000,
+     "costPerM": 102.0
+    },
+    {
+     "qty": 10000,
+     "costPerM": 62.0
+    },
+    {
+     "qty": 25000,
+     "costPerM": 50.0
+    },
+    {
+     "qty": 50000,
+     "costPerM": 49.0
+    },
+    {
+     "qty": 100000,
+     "costPerM": 47.0
+    },
+    {
+     "qty": 250000,
+     "costPerM": 46.0
+    },
+    {
+     "qty": 500000,
+     "costPerM": 44.0
+    }
+   ]
+  }
+ ],
+ "machines": [
+  {
+   "name": "HP Indigo 200K",
+   "role": "press",
+   "investment": 1650000.0,
+   "shiftsPerDay": 1.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.75,
+   "operatorRatePerHr": 35.0,
+   "costPerHourOverride": 351.9435606060606,
+   "mrMinutes": 15.0,
+   "mrMinutesPerSku": 0,
+   "mrLinFt": 30.0,
+   "mrLinFtPerSku": 8.0,
+   "speedFpm": 0
+  },
+  {
+   "name": "Lamination/OPV",
+   "role": "lamination",
+   "investment": 511000.0,
+   "shiftsPerDay": 1.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.9,
+   "operatorRatePerHr": 30.0,
+   "costPerHourOverride": 97.8652904040404,
+   "mrMinutes": 15.0,
+   "mrMinutesPerSku": 0,
+   "mrLinFt": 500.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 200.0
+  },
+  {
+   "name": "Slit/Rewind",
+   "role": "slitRewind",
+   "investment": 200000.0,
+   "shiftsPerDay": 3.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.9,
+   "operatorRatePerHr": 30.0,
+   "costPerHourOverride": 42.76683501683501,
+   "mrMinutes": 15.0,
+   "mrMinutesPerSku": 5.0,
+   "mrLinFt": 200.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 500.0
+  },
+  {
+   "name": "Seaming",
+   "role": "seaming",
+   "investment": 250000.0,
+   "shiftsPerDay": 2.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.7,
+   "operatorRatePerHr": 25.0,
+   "costPerHourOverride": 48.678977272727266,
+   "mrMinutes": 30.0,
+   "mrMinutesPerSku": 0.0,
+   "mrLinFt": 450.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 500.0
+  },
+  {
+   "name": "Cutting",
+   "role": "cutting",
+   "investment": 75000.0,
+   "shiftsPerDay": 2.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.7,
+   "operatorRatePerHr": 25.0,
+   "costPerHourOverride": 34.72869318181818,
+   "mrMinutes": 10.0,
+   "mrMinutesPerSku": 0.0,
+   "mrLinFt": 100.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 130.0
+  },
+  {
+   "name": "Inspection",
+   "role": "inspection",
+   "investment": 75000.0,
+   "shiftsPerDay": 2.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.7,
+   "operatorRatePerHr": 25.0,
+   "costPerHourOverride": 34.72869318181818,
+   "mrMinutes": 10.0,
+   "mrMinutesPerSku": 0.0,
+   "mrLinFt": 100.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 800.0
+  },
+  {
+   "name": "Bag Making",
+   "role": "bagMaking",
+   "investment": 290000.0,
+   "shiftsPerDay": 1.0,
+   "hoursPerShift": 8.0,
+   "workingDaysMonth": 22.0,
+   "productivity": 0.7,
+   "operatorRatePerHr": 30.0,
+   "costPerHourOverride": 80.73522727272729,
+   "mrMinutes": 90.0,
+   "mrMinutesPerSku": 20.0,
+   "mrLinFt": 300.0,
+   "mrLinFtPerSku": 0,
+   "speedFpm": 140.0
+  }
+ ]
+}

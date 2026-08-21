@@ -26,6 +26,8 @@ const internalNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
+  // Flexible packaging — its own estimator, separate from the sheetfed one
+  { label: "FlexPack", href: "/dashboard/flexpack", icon: Box },
   { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
   // { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid }, // Archived Apr 2026 — redundant with Schedule + Production for Darrin; page still accessible by URL
   { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },

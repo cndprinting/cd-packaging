@@ -10,6 +10,8 @@ const FULL_ACCESS: AppRole[] = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "S
 export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard":           [...FULL_ACCESS, "CSR"],
   "/dashboard/quotes":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
+  // FlexPack — owners drive it, Mary can use it (Benjy 8/20)
+  "/dashboard/flexpack":  [...FULL_ACCESS, "ESTIMATOR"],
   "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
   "/dashboard/job-board":  [...FULL_ACCESS, "CSR"],
   "/dashboard/orders":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],

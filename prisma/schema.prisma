@@ -1606,3 +1606,130 @@ model FoldType {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+// ─── FLEXPACK — flexible packaging estimating ────────────────────
+// Ported from HP's Indigo Wide Web Job Estimator v2.9.7.8, loaded with C&D's
+// OWN machine economics (Benjy 8/20: the press cost, lease and shift pattern
+// are actuals, not HP's model of a comparable plant). Entirely separate from
+// the sheetfed/E&M estimator — this world runs on linear feet and MSI.
+
+model FlexMaterial {
+  id             String   @id @default(cuid())
+  name           String   @unique  // "PET  |  Corona Treated"
+  category       String?           // PET, BOPP, PE, OPV, Adhesive ...
+  description    String?
+  micron         Float?
+  yieldIn2PerLb  Float?            // for per-pound stocks
+  cost           Float    @default(0)
+  unitOfMeasure  String   @default("MSI")  // MSI | Per Pound
+  costPerMsi     Float    @default(0)      // normalised
+  mil            Float?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model FlexStructure {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  primer        String?  @default("DigiPrime 050")
+  primerCostMsi Float    @default(0.015)
+  // Up to 7 film layers, stored as an ordered JSON array of material names.
+  layers        String   @default("[]")
+  thicknessMil  Float?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model FlexMachine {
+  id                String  @id @default(cuid())
+  name              String  @unique // HP Indigo 200K, Lamination/OPV, Bag Making ...
+  role              String           // press | lamination | slitRewind | seaming | cutting | inspection | bagMaking
+  // The economics C&D's real rate is derived from
+  investment        Float   @default(0)
+  leaseRateFactor   Float   @default(0.01708)
+  shiftsPerDay      Float   @default(1)
+  hoursPerShift     Float   @default(8)
+  workingDaysMonth  Float   @default(22)
+  productivity      Float   @default(0.75)
+  serviceCostMonth  Float   @default(0)
+  operatorRatePerHr Float   @default(0)
+  overheadPct       Float   @default(15)
+  costPerHourOverride Float @default(0) // 0 = use the derived rate
+  // Operating parameters
+  mrMinutes         Float   @default(0)
+  mrMinutesPerSku   Float   @default(0)
+  mrLinFt           Float   @default(0)
+  mrLinFtPerSku     Float   @default(0)
+  speedFpm          Float   @default(0)
+  isActive          Boolean @default(true)
+  sortOrder         Int     @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model FlexPouchFormat {
+  id           String  @id @default(cuid())
+  format       String  @unique  // "SUP Pouch | 8.1\" - 12\" | Zipper: Yes"
+  style        String?          // SUP Pouch | Flat Pouch
+  sizeBand     String?          // <5", 5.1" - 8" ...
+  zipper       Boolean @default(false)
+  // Volume breaks: [{qty, costPerM}] ascending
+  breaks       String  @default("[]")
+  isActive     Boolean @default(true)
+  sortOrder    Int     @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Single settings row for the click rates and outsourcing constants.
+model FlexSettings {
+  id                  String @id @default("default")
+  clickCmyovg         Float  @default(0.04414)
+  clickK              Float  @default(0.02213)
+  clickWhite          Float  @default(0.02213)
+  clickPremiumWhite   Float  @default(0.2518966137455528)
+  clickSpot           Float  @default(0.22994136196310128)
+  prepressRatePerHour Float  @default(35)
+  prepressMinsFirst   Float  @default(10)
+  prepressMinsPerSku  Float  @default(5)
+  runningWastePct     Float  @default(4)
+  substrateWidthIn    Float  @default(30)
+  outsourceMinOrder   Float  @default(300)
+  outsourceSkuCost    Float  @default(25)
+  outsourceZipperPerIn Float @default(2)   // bag width x $2 = cost / 1000
+  outsourceUpliftPct  Float  @default(0)
+  updatedAt           DateTime @updatedAt
+}
+
+// A saved FlexPack quote. Kept separate from the sheetfed Quote model so the
+// two estimators never collide; converts into the normal quote/job flow.
+model FlexQuote {
+  id            String   @id @default(cuid())
+  quoteNumber   String   @unique
+  customerName  String
+  contactName   String?
+  contactEmail  String?
+  jobTitle      String
+  quantity      Int      @default(0)
+  skus          Int      @default(1)
+  status        String   @default("DRAFT") // DRAFT | SENT | ACCEPTED | LOST
+  // The whole form, so a quote reopens exactly as it was left
+  specs         String?
+  totalCost     Float    @default(0)
+  sellingPrice  Float    @default(0)
+  pricePerM     Float    @default(0)
+  marginPct     Float    @default(0)
+  notes         String?
+  createdBy     String?
+  quoteId       String?  // linked sheetfed Quote once converted
+  jobId         String?  // linked Job once approved
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([customerName])
+  @@index([status])
+}
