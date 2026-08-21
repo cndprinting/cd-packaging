@@ -927,6 +927,9 @@ enum QuoteStatus {
 enum ProductType {
   FOLDING_CARTON
   COMMERCIAL_PRINT
+  // C&D's flexible packaging line (pouches, HP Indigo wide web) — quoted in
+  // FlexPack. Without this a pouch quote silently saved as a folding carton.
+  FLEXIBLE_PACKAGING
 }
 
 model Quote {

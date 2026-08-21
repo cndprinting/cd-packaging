@@ -146,6 +146,9 @@ export default function FlexPackPage() {
 
   const save = async () => {
     if (!form.customerName.trim() || !form.jobTitle.trim()) { setMsg("Customer and job title are required."); return; }
+    // /api/quotes rejects a quote with no quantity, so catch it here with a
+    // useful message rather than a bare 400.
+    if (!form.quantity || form.quantity <= 0) { setMsg("Enter a quantity before saving."); return; }
     setBusy(true); setMsg("");
     try {
       // Save into the MAIN quote table, the same way the classic estimator
@@ -154,7 +157,7 @@ export default function FlexPackPage() {
       // send, print, archive, convert to job — instead of living in a silo.
       const payload = {
         customerName: form.customerName,
-        productType: "Flexible Packaging",
+        productType: "FLEXIBLE_PACKAGING",
         productName: form.jobTitle,
         description: [
           form.structureName,

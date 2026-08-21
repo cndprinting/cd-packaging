@@ -116,7 +116,7 @@ export default function QuotesPage() {
       <Card className="p-4"><div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Search quotes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" /></div>
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={[{ value: "", label: "All Statuses" }, { value: "draft", label: "Draft" }, { value: "sent", label: "Sent" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }, { value: "converted", label: "Converted" }]} className="w-36" />
-        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} className="w-40" />
+        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }, { value: "FLEXIBLE_PACKAGING", label: "Flexible Packaging" }]} className="w-40" />
         <button onClick={() => setShowArchived(!showArchived)} className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${showArchived ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
           {showArchived ? "Show Active" : "Show Archived"}
         </button>
@@ -131,7 +131,7 @@ export default function QuotesPage() {
                 <TableCell className="font-mono font-medium text-brand-600 hover:underline">{q.quoteNumber}</TableCell>
                 <TableCell>{q.customerName}</TableCell>
                 <TableCell className="font-medium">{q.productName}</TableCell>
-                <TableCell><Badge className={q.productType === "FOLDING_CARTON" ? "bg-emerald-50 text-emerald-600" : "bg-sky-50 text-sky-600"}>{q.productType === "FOLDING_CARTON" ? "Carton" : "Print"}</Badge></TableCell>
+                <TableCell><Badge className={q.productType === "FOLDING_CARTON" ? "bg-emerald-50 text-emerald-600" : q.productType === "FLEXIBLE_PACKAGING" ? "bg-teal-50 text-teal-700" : "bg-sky-50 text-sky-600"}>{q.productType === "FOLDING_CARTON" ? "Carton" : q.productType === "FLEXIBLE_PACKAGING" ? "Pouch" : "Print"}</Badge></TableCell>
                 <TableCell className="text-right">{q.quantity.toLocaleString()}</TableCell>
                 <TableCell className="text-right font-medium">{formatCurrency(q.totalPrice)}</TableCell>
                 <TableCell><Badge className={statusColors[q.status] || "bg-gray-100 text-gray-600"}>{q.status}</Badge></TableCell>
