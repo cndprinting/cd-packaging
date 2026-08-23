@@ -142,6 +142,47 @@ function ClassicEstimatorContent() {
   // Plant standards (rates/speeds/difficulties) are hidden by default so the
   // quoting screens show only what Mary actually decides (Benjy/Mary 8/19).
   const [showStd, setShowStd] = useState(false);
+  // ── AI ASSIST (Benjy 8/21) ── Mary describes the job in plain English and
+  // the assistant fills the form; or she asks a question and gets an answer
+  // in the context of what's on her screen. Nothing saves without her.
+  const [aiOpen, setAiOpen] = useState(true);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState<false | "fill" | "ask">(false);
+  const [aiAnswer, setAiAnswer] = useState("");
+  const [aiNotes, setAiNotes] = useState<string[]>([]);
+  const [aiMissing, setAiMissing] = useState<string[]>([]);
+  const runAssist = async (mode: "fill" | "ask") => {
+    if (!aiText.trim() || aiBusy) return;
+    setAiBusy(mode); setAiAnswer(""); setAiNotes([]); setAiMissing([]);
+    try {
+      const res = await fetch("/api/estimator-assist", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, text: aiText, form, partIndex }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setAiAnswer(d.error || "That didn't work — try again."); return; }
+      if (mode === "ask") { setAiAnswer(d.answer || "No answer came back."); return; }
+      // Apply: job-level fields flat; part 1 also flat; parts 2..N into parts[]
+      setForm((f) => {
+        let next: ClassicForm = { ...f, ...(d.job || {}) };
+        const parts: Partial<ClassicPart>[] = d.parts || [];
+        if (parts[0]) next = { ...next, ...parts[0] };
+        if (parts.length > 1) {
+          const rest = [...(next.parts || [])];
+          parts.slice(1).forEach((p, i) => {
+            rest[i] = { ...defaultClassicPart(), ...(rest[i] || {}), ...p };
+          });
+          next = { ...next, parts: rest, numParts: Math.max(next.numParts || 1, parts.length) };
+        }
+        return next;
+      });
+      setAiNotes(d.notes || []);
+      setAiMissing(d.missing || []);
+      if (!(d.notes || []).length && !(d.missing || []).length) setAiAnswer("Nothing in that description mapped to the form — try adding sizes, quantity, colors, or the fold.");
+    } catch {
+      setAiAnswer("The assistant hit a snag — try again.");
+    } finally { setAiBusy(false); }
+  };
   // Bindery machines from plant standards — E&M picks a folder/stitcher by
   // name and takes its speed and rate from the machine (Benjy 8/19).
   const [folders, setFolders] = useState<{ name: string; rate: number; speed: number; setupHrs: number }[]>([]);
@@ -2055,6 +2096,50 @@ function ClassicEstimatorContent() {
         className="rounded-md border border-amber-700/60 bg-[#151006] p-4 shadow-lg"
       >
         {/* Numbered screen header bar */}
+                {/* ── ASSISTANT ── plain-English in, filled form out */}
+        <div className="mb-3 rounded-sm border border-amber-700/60 bg-black/40">
+          <button type="button" onClick={() => setAiOpen((o) => !o)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[12px] uppercase tracking-wide text-amber-300">
+            <span className="text-amber-400">{aiOpen ? "▾" : "▸"}</span>
+            Assistant — describe the job and I&apos;ll fill the screens, or ask me anything
+          </button>
+          {aiOpen && (
+            <div className="border-t border-amber-800/40 p-3">
+              <textarea
+                className="h-20 w-full rounded-sm border border-amber-700/60 bg-black/60 p-2 font-mono text-[13px] text-amber-200 placeholder:text-amber-200/30 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                placeholder={'e.g. "25,000 tri-fold brochures, 8.5 x 11 finished from an 11 x 17 flat, 80# uncoated text, 4/4, letter fold"  —  or a question: "where do I put the new die charge?"'}
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" disabled={!!aiBusy} onClick={() => runAssist("fill")}
+                  className="rounded-sm bg-amber-500 px-3 py-1.5 font-mono text-[12px] font-bold text-black hover:bg-amber-400 disabled:opacity-50">
+                  {aiBusy === "fill" ? "Filling…" : "Fill the screens from this"}
+                </button>
+                <button type="button" disabled={!!aiBusy} onClick={() => runAssist("ask")}
+                  className="rounded-sm border border-amber-600/70 px-3 py-1.5 font-mono text-[12px] text-amber-300 hover:bg-amber-900/40 disabled:opacity-50">
+                  {aiBusy === "ask" ? "Thinking…" : "Answer my question"}
+                </button>
+                <span className="font-mono text-[11px] text-amber-500/60">it only fills fields — you review, nothing saves by itself</span>
+              </div>
+              {aiAnswer && (
+                <div className="mt-2 whitespace-pre-wrap rounded-sm border border-amber-800/40 bg-amber-400/5 p-2 text-[13px] leading-relaxed text-amber-100">{aiAnswer}</div>
+              )}
+              {aiNotes.length > 0 && (
+                <div className="mt-2 rounded-sm border border-emerald-700/40 bg-emerald-400/5 p-2">
+                  <div className="mb-1 font-mono text-[11px] uppercase tracking-wide text-emerald-400">Set for you — check these</div>
+                  {aiNotes.map((n, i) => <div key={i} className="text-[12px] text-emerald-200/90">• {n}</div>)}
+                </div>
+              )}
+              {aiMissing.length > 0 && (
+                <div className="mt-2 rounded-sm border border-amber-600/40 bg-amber-400/5 p-2">
+                  <div className="mb-1 font-mono text-[11px] uppercase tracking-wide text-amber-400">Still needs you</div>
+                  {aiMissing.map((n, i) => <div key={i} className="text-[12px] text-amber-200/90">• {n}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-amber-700/50 pb-3">
           {SCREENS.map((name, i) => {
             const n = i + 1;
