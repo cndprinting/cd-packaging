@@ -899,13 +899,12 @@ function computePart(
     // count (qty x sheetsPerPiece / numberUp) already covers every signature,
     // so scaling by sigRuns again double-counts the run (caught on #348228,
     // the 216-page 27-run magazine). sigRuns still scales PLATES.
-    const runPasses = p.workAndTurn
-      ? ((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)
-      : 1;
+    const runPasses =
+      (((p.runColorsSide1 || 0) > 0 ? 1 : 0) + ((p.runColorsSide2 || 0) > 0 ? 1 : 0)) || 1;
     if (multiRun) {
       // Each run carries its own sheets, speed, sides and difficulty.
-      const passesFor = (wt: boolean, c1: number, c2: number) =>
-        wt ? ((c1 || 0) > 0 ? 1 : 0) + ((c2 || 0) > 0 ? 1 : 0) : 1;
+      const passesFor = (_wt: boolean, c1: number, c2: number) =>
+        (((c1 || 0) > 0 ? 1 : 0) + ((c2 || 0) > 0 ? 1 : 0)) || 1;
       runHrs = runList.reduce((t, r) => {
         const thru = Math.ceil(r.sheets || 0)
           + Math.ceil(r.makereadySheets || 0)
