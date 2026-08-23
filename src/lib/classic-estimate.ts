@@ -971,7 +971,11 @@ function computePart(
 
   // ── Bindery (Screen 8) ──
   // Lifts-driven, the way E&M did it (validated to the cent on 7 quotes).
-  const liftsAuto = (p.sheetsPerLift || 0) > 0 ? Math.ceil(orderSheets / p.sheetsPerLift) : 0;
+  // No paper bought (all-outside job, phantom carrier) -> nothing to cut.
+  // Without this the 1-lift minimum billed ~$0.79 of cutter on every fully
+  // outsourced poster (hand-key tranche 1).
+  const liftsAuto = (p.sheetsPerLift || 0) > 0 && (p.pricePerM || 0) > 0
+    ? Math.ceil(orderSheets / p.sheetsPerLift) : 0;
   const liftsUsed = (p.cutterLifts || 0) > 0 ? p.cutterLifts : liftsAuto;
   const cutterHrs = liftsUsed * (p.cutterHrsPerLift || 0) * (p.cutterDiff || 1);
   const cutterHrsUsed = (p.cutterHrsManual || 0) > 0 ? p.cutterHrsManual : cutterHrs;
@@ -1298,7 +1302,10 @@ export function computeClassic(
   // marks up only the purchase rows (verified on 10 estimates, 8/18).
   const outsideMarkable = Math.max(0,
     outsidePurchaseCost - rowGroupCost + digitalClickTotal - (f.plateDiscount || 0));
-  const outsideCost = outsideMarkable + outsideFreight;
+  // COST carries every outside dollar — including rows with their own markup
+  // %. (Hand-key tranche 1 caught rowGroupCost silently dropping out of total
+  // cost and the commission base on every digital job.)
+  const outsideCost = outsideMarkable + rowGroupCost + outsideFreight;
   const freightAndAdditional = (freightInOutside ? 0 : (f.freight || 0)) + (f.additionalCosts || 0);
 
   // ── Sellings (E&M cost sheet) ──
@@ -1317,9 +1324,17 @@ export function computeClassic(
   const materialSelling = mk(materialCost, f.markupMaterialPct);
   // Prep LABOR sells at the Labor markup (E&M #348538: all hours ride the
   // 40% labor line, not the material line).
-  const prepLaborSelling = mk(prepLabor, f.markupLaborPct);
-  const pressSelling = mk(pressCost, f.markupLaborPct);
-  const binderySelling = mk(binderyCost, f.markupLaborPct);
+  // E&M sells FOUR buckets: Paper, Material, Outside, Labor — prep, press and
+  // bindery are all one LABOR line. Selling them separately triple-charged the
+  // $1 zero-bucket minimum (+$2 flat on every all-outside poster, hand-key
+  // tranche 1). One mk() over the summed labor cost, split back pro-rata for
+  // display.
+  const laborCost = prepLabor + pressCost + binderyCost;
+  const laborSelling = mk(laborCost, f.markupLaborPct);
+  const laborShare = (part: number) => (laborCost > 0 ? laborSelling * (part / laborCost) : (part === 0 ? 0 : part));
+  const prepLaborSelling = laborCost > 0 ? laborShare(prepLabor) : laborSelling; // zero labor -> the $1 min rides prep's line
+  const pressSelling = laborShare(pressCost);
+  const binderySelling = laborShare(binderyCost);
   const outsideSelling =
     mk(outsideMarkable, f.markupOutsidePct)
     + Array.from(rowGroups.entries()).reduce((t, [pct, cost]) => t + mk(cost, pct), 0)
@@ -1336,7 +1351,7 @@ export function computeClassic(
     : f.commissionMode === "flat" ? (f.commissionFlat || 0)
     : totalCost * ((f.commissionPct || 0) / 100);
   const sellingSubtotal =
-    paperSelling + materialSelling + prepLaborSelling + pressSelling + binderySelling + outsideSelling + freightSelling;
+    paperSelling + materialSelling + laborSelling + outsideSelling + freightSelling;
   const total = sellingSubtotal + commission;
 
   return {
