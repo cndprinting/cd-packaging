@@ -72,7 +72,8 @@ const out: HandKeyResult[] = [];
   p2.runColorsSide1 = 4; p2.runColorsSide2 = 4; p2.workAndTurn = false;
   p2.signatureRuns = 27;                          // 216 plates
   p2.wasteSheetsManual = 13080; p2.runWastePct = 3; p2.bindWasteSheets = 100;
-  p2.runSpeedSph = 12500; p2.pressHourlyRate = 188.5; p2.pressSetupHrs = 0.081;
+  p2.runSpeedSph = 12500; p2.useSpeedCurve = true; // E&M's run hrs match the derated curve here
+  p2.pressHourlyRate = 188.5; p2.pressSetupHrs = 0.081;
   p2.makereadyDiff = 1; p2.baseMakereadyHrsPerPlate = 16.2 / 216; p2.washupHrsPerUnit = 0;
   p2.plateCostEach = 19; p2.plateHrsPerPlate = 0.0505; p2.plateLaborRate = 45;
   p2.inkLbsManual = 10982.21 / 10.84;

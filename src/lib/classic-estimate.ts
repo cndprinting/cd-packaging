@@ -184,6 +184,7 @@ export const PART_FIELD_KEYS = [
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   "digitalOversSheets", "digitalVendorAmount", "digitalOnPart",
   "inkLbsManual",
+  "laserProofs", "laserProofCharge", "colorProofs", "colorProofCharge",
   // Screen 8 — Bindery
   "binderyOperation", "cuttingDiff", "cutterSheetsPerHr", "trimHrs",
   "cutsToFinalSize", "sheetsPerLift", "cutSecPerCut", "cutterHrsManual", "cutterLifts", "cutterHrsPerLift", "cutterDiff",
@@ -191,7 +192,7 @@ export const PART_FIELD_KEYS = [
   "foldSetupHrs", "foldRunHrs", "folderRatePerHr", "foldCount", "folderSpeedPerHr", "foldDiff", "foldWastePct", "foldTypeName",
   "stitcherName", "stitchSetupHrs", "stitchRunHrs", "stitchHelpHrs", "stitchSpeed", "stitchRatePerHr", "stitchHelpRatePerHr",
   "handOp1", "handOp2", "cartons", "cartonCost", "skids", "skidCost",
-  "packHrs", "binderyHourlyRate",
+  "packHrs", "binderyHourlyRate", "noCartons", "noCutting",
   "bandIn", "bandHrs", "padIn", "padHrs", "wrapIn", "wrapHrs", "bundleRatePerHr",
 ] as const;
 
@@ -442,6 +443,8 @@ export interface ClassicForm {
   // E&M prints "Load Cutter (N lifts)" with its own hours; 0 = auto from
   // sheets/cutterSheetsPerHr. Added 8/18 -- no manual override existed.
   cutterHrsManual: number;
+  noCutting: boolean;  // hard "none": Mary keyed 0 and E&M's 0-means-auto trap billed anyway
+  noCartons: boolean;  // hard "none" for cartons + auto pack labor
   // E&M's Load Cutter is LIFTS-driven, not sheets-per-hour: hours = lifts x
   // 0.0146 x difficulty. Verified to the cent on 7 quotes (10 lifts -> $7.88,
   // 94 -> $74.03, 32 -> $29.40 ...). Mary enters lifts, we compute the hours.
@@ -592,7 +595,7 @@ export function defaultClassicForm(): ClassicForm {
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
     washupHrsPerUnit: 0.25, washupDiff: 1,
     runWastePct: 5, paperBuyRounding: 10,
-    runSpeedSph: 0, useSpeedCurve: true, runDiff: 1, wasteFactorPct: 0, helpers: 0,
+    runSpeedSph: 0, useSpeedCurve: false, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,
     wasteSheetsManual: 0, wastePerColorSheets: 100, wastePerEquipmentSheets: 100, equipmentPassesManual: 0,
     // Mary 8/19: standard 4-color coverage is 6% black and 12% for EACH of
@@ -610,7 +613,7 @@ export function defaultClassicForm(): ClassicForm {
     digitalOversSheets: 0, digitalVendorAmount: 0, digitalOnPart: false,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
     binderyOperation: 1, cuttingDiff: 0.5, cutterSheetsPerHr: 5000,
-    trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, cutterLifts: 0, cutterHrsPerLift: 0.0146, cutterDiff: 1.2,
+    trimHrs: 0, cutsToFinalSize: 0, cutterHrsManual: 0, noCutting: false, noCartons: false, cutterLifts: 0, cutterHrsPerLift: 0.0146, cutterDiff: 1.2,
     sheetsPerLift: 500, cutSecPerCut: 8,
     drillHoles: 0, drillDiff: 1, drillHrsPerHole: 0.1,
     folderConfig: "",
@@ -975,9 +978,9 @@ function computePart(
   // outsourced poster (hand-key tranche 1).
   const liftsAuto = (p.sheetsPerLift || 0) > 0 && (p.pricePerM || 0) > 0
     ? Math.ceil(orderSheets / p.sheetsPerLift) : 0;
-  const liftsUsed = (p.cutterLifts || 0) > 0 ? p.cutterLifts : liftsAuto;
+  const liftsUsed = p.noCutting ? 0 : (p.cutterLifts || 0) > 0 ? p.cutterLifts : liftsAuto;
   const cutterHrs = liftsUsed * (p.cutterHrsPerLift || 0) * (p.cutterDiff || 1);
-  const cutterHrsUsed = (p.cutterHrsManual || 0) > 0 ? p.cutterHrsManual : cutterHrs;
+  const cutterHrsUsed = p.noCutting ? 0 : (p.cutterHrsManual || 0) > 0 ? p.cutterHrsManual : cutterHrs;
   const drillHrs = (p.drillHoles || 0) * (p.drillHrsPerHole || 0) * (p.drillDiff || 1);
   const op1 = p.handOp1, op2 = p.handOp2;
   // A typed hours value wins over the qty/rate derivation — E&M's hand-bindery
@@ -1011,7 +1014,7 @@ function computePart(
   const trimAuto = cutsUsed > 0
     ? (Math.ceil(pressSheets / Math.max(1, p.sheetsPerLift || 500)) * cutsUsed * (p.cutSecPerCut || 8) / 3600) * (p.cuttingDiff || 1)
     : 0;
-  const trimHrsUsed = (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
+  const trimHrsUsed = p.noCutting ? 0 : (p.trimHrs || 0) > 0 ? p.trimHrs : trimAuto;
   // Folding is its own machine line at the folder rate (E&M #348538:
   // 0.6 setup + 1.4 run @ ~$48 = 30.00 + 67.25).
   // Folding: E&M prints "1 Fold Setup (Fold 10000)" then "Folding 0.8 Hrs
@@ -1052,7 +1055,7 @@ function computePart(
   // preprinted re-pass boxes nothing (the paper was already counted).
   const paperLbs = p.preprintedPass ? 0 : (orderSheets / 1000) * (p.weightPerMSheets || 0);
   const cartonsAuto = paperLbs > 0 ? Math.ceil(paperLbs / 35) : 0;
-  const cartonsUsed = (p.cartons || 0) > 0 ? p.cartons : cartonsAuto;
+  const cartonsUsed = p.noCartons ? 0 : (p.cartons || 0) > 0 ? p.cartons : cartonsAuto;
   const cartonSkidCost = cartonsUsed * (p.cartonCost || 0) + (p.skids || 0) * (p.skidCost || 0);
   // Carton PACKING labor auto-derives at ~40 cartons/hr (clean fit across 13
   // estimates, 4 to 2,735 cartons); a typed packHrs overrides.
@@ -1216,7 +1219,8 @@ export function computeClassic(
     boardCapInches: f.boardCapInches ?? DEFAULT_SPEED_RULES.boardCapInches,
     boardCapSpeed: f.boardCapSpeed ?? DEFAULT_SPEED_RULES.boardCapSpeed,
   };
-  const partCalcs = effectiveParts(f).map((p) => computePart(p, qty, isDigital, digitalStd, speedRules));
+  const partsList = effectiveParts(f);
+  const partCalcs = partsList.map((p) => computePart(p, qty, isDigital, digitalStd, speedRules));
   const sum = (get: (c: PartCalc) => number) => partCalcs.reduce((s, c) => s + get(c), 0);
   const p1 = partCalcs[0];
 
@@ -1236,14 +1240,20 @@ export function computeClassic(
   const proofByPlate = (f.proofMaterialPerPlate || 0) > 0
     ? totalPlates * f.proofMaterialPerPlate
     : 0;
+  // Proof material is PER PART in E&M (#348228 text 4,802.46, #347866 text
+  // 314.83 both had to ride the job level before this) — sum every part's own
+  // laser/color proof lines. Part 1 is the flat form, so old quotes and
+  // job-level entry price identically.
+  const partProofMaterials = partsList.reduce((t, p) =>
+    t + (p.laserProofs || 0) * (p.laserProofCharge || 0) +
+    (p.colorProofs || 0) * (p.colorProofCharge || 0), 0);
   const prepMaterials =
     proofByPlate +
     (f.scans85x11 || 0) * (f.scanCharge85x11 || 0) +
     (f.scans11x17 || 0) * (f.scanCharge11x17 || 0) +
     (f.scans20x25 || 0) * (f.scanCharge20x25 || 0) +
     (f.furnishedDisks || 0) * (f.furnishedDiskCharge || 0) +
-    (f.laserProofs || 0) * (f.laserProofCharge || 0) +
-    (f.colorProofs || 0) * (f.colorProofCharge || 0) +
+    partProofMaterials +
     ((f.dyluxProofs || 0) * (f.dyluxCharge || 0) +
       (f.matchprintProofs || 0) * (f.matchprintCharge || 0) +
       (f.separations || 0) * (f.separationCharge || 0)) *
@@ -1319,8 +1329,29 @@ export function computeClassic(
     paperCost + materialCost + prepLabor + pressCost + binderyCost + outsideCost + freightAndAdditional > 0;
   const mk = (cost: number, pct: number) =>
     anyCost ? cost + Math.max((cost * (pct || 0)) / 100, 1) : 0;
-  const paperSelling = mk(paperCost, f.markupPaperPct);
-  const materialSelling = mk(materialCost, f.markupMaterialPct);
+  // The $1 floor is PER PART, not per job — #347866's cover prints its own
+  // "Outside 0.00 -> 1.00" while the text part marks up the real outside
+  // cost. Split each bucket back to its parts (job-level items — prep,
+  // outside rows, freight — ride part 1), floor each part's markup at $1,
+  // and sum. Single-part quotes price exactly as before.
+  const prepMaterialsJobOnly = prepMaterials - partProofMaterials;
+  const perPartBuckets = partCalcs.map((c, i) => {
+    const pp = partsList[i];
+    const mat =
+      (pp.laserProofs || 0) * (pp.laserProofCharge || 0) +
+      (pp.colorProofs || 0) * (pp.colorProofCharge || 0) +
+      c.cartonSkidCost + c.inkCost + c.coatingCost + c.plateMaterialsCost +
+      (i === 0 ? prepMaterialsJobOnly : 0);
+    const labor = c.pressLaborCost + c.pressMaterialsCost + c.binderyLabor + (i === 0 ? prepLabor : 0);
+    const outside = i === 0 ? outsideMarkable : 0;
+    const active = c.paperCost + mat + labor + outside +
+      (i === 0 ? rowGroupCost + outsideFreight + freightAndAdditional : 0) > 0;
+    return { paper: c.paperCost, mat, labor, outside, active };
+  });
+  const mkPart = (cost: number, pct: number, active: boolean) =>
+    active ? cost + Math.max((cost * (pct || 0)) / 100, 1) : cost;
+  const paperSelling = perPartBuckets.reduce((t, b) => t + mkPart(b.paper, f.markupPaperPct, b.active), 0);
+  const materialSelling = perPartBuckets.reduce((t, b) => t + mkPart(b.mat, f.markupMaterialPct, b.active), 0);
   // Prep LABOR sells at the Labor markup (E&M #348538: all hours ride the
   // 40% labor line, not the material line).
   // E&M sells FOUR buckets: Paper, Material, Outside, Labor — prep, press and
@@ -1329,13 +1360,13 @@ export function computeClassic(
   // tranche 1). One mk() over the summed labor cost, split back pro-rata for
   // display.
   const laborCost = prepLabor + pressCost + binderyCost;
-  const laborSelling = mk(laborCost, f.markupLaborPct);
+  const laborSelling = perPartBuckets.reduce((t, b) => t + mkPart(b.labor, f.markupLaborPct, b.active), 0);
   const laborShare = (part: number) => (laborCost > 0 ? laborSelling * (part / laborCost) : (part === 0 ? 0 : part));
   const prepLaborSelling = laborCost > 0 ? laborShare(prepLabor) : laborSelling; // zero labor -> the $1 min rides prep's line
   const pressSelling = laborShare(pressCost);
   const binderySelling = laborShare(binderyCost);
   const outsideSelling =
-    mk(outsideMarkable, f.markupOutsidePct)
+    perPartBuckets.reduce((t, b, i) => t + (i === 0 ? mkPart(b.outside, f.markupOutsidePct, b.active) : (b.active ? 1 : 0)), 0)
     + Array.from(rowGroups.entries()).reduce((t, [pct, cost]) => t + mk(cost, pct), 0)
     + outsideFreight;
   // Freight/additional: pass-through plus E&M's $1 minimum when nonzero

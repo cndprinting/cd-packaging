@@ -970,6 +970,7 @@ function ClassicEstimatorContent() {
           <SectionTitle>Disks & Proofs</SectionTitle>
           <Row label="Furnished Disks"><Num value={form.furnishedDisks} onChange={(v) => set("furnishedDisks", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.furnishedDiskCharge} onChange={(v) => set("furnishedDiskCharge", v)} /></Row>
+          {/* These are PART 1's proofs — parts 2+ key theirs on the Press screen */}
           <Row label="Laser Proofs"><Num value={form.laserProofs} onChange={(v) => set("laserProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.laserProofCharge} onChange={(v) => set("laserProofCharge", v)} /></Row>
           <Row label="Color Proofs"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
@@ -1295,6 +1296,15 @@ function ClassicEstimatorContent() {
               </label>
             </Row>
             <Row label="Ink Lbs (0 = From Coverage)"><Num value={pv("inkLbsManual")} onChange={(v) => setP("inkLbsManual", v)} /></Row>
+            {partIndex > 0 && (
+              <>
+                {/* Proof material is per part in E&M; part 1's lives on Screen 4/5 */}
+                <Row label="Laser Proofs (this part)"><Num value={pv("laserProofs")} onChange={(v) => setP("laserProofs", v)} step={1} /></Row>
+                <Row label="  @ $ each"><Num value={pv("laserProofCharge")} onChange={(v) => setP("laserProofCharge", v)} /></Row>
+                <Row label="Color Proofs (this part)"><Num value={pv("colorProofs")} onChange={(v) => setP("colorProofs", v)} step={1} /></Row>
+                <Row label="  @ $ each"><Num value={pv("colorProofCharge")} onChange={(v) => setP("colorProofCharge", v)} /></Row>
+              </>
+            )}
 
             {digital ? (
               <>
@@ -1558,6 +1568,10 @@ function ClassicEstimatorContent() {
             <StdRow label="Sheets Per Lift" show={showStd}><Num value={pv("sheetsPerLift")} onChange={(v) => setP("sheetsPerLift", v)} step={50} /></StdRow>
             <Row label="Sec Per Cut"><Num value={pv("cutSecPerCut")} onChange={(v) => setP("cutSecPerCut", v)} /></Row>
             <Row label="Trim Hrs (0 = Auto)"><Num value={pv("trimHrs")} onChange={(v) => setP("trimHrs", v)} /></Row>
+            <label className="flex items-center gap-2 text-sm py-1">
+              <input type="checkbox" checked={!!pv("noCutting")} onChange={(e) => setP("noCutting", e.target.checked)} />
+              <span>No Cutting — charge $0 (0 in the boxes below means Auto, not none)</span>
+            </label>
             <Row label="Cutter Lifts (0 = Auto)"><Num value={pv("cutterLifts")} onChange={(v) => setP("cutterLifts", v)} step={1} /></Row>
             <Row label="Cutter Difficulty"><Num value={pv("cutterDiff")} onChange={(v) => setP("cutterDiff", v)} step={0.1} /></Row>
             <Row label="Load Cutter Hrs (0=Auto)"><Num value={pv("cutterHrsManual")} onChange={(v) => setP("cutterHrsManual", v)} /></Row>
@@ -1703,6 +1717,10 @@ function ClassicEstimatorContent() {
                 per carton; typing a count overrides the auto. */}
             <Readout label="Paper Weight (Lbs)" value={pcalc.paperLbs > 0 ? pcalc.paperLbs.toFixed(1) : "— enter Lbs/M on Pg 6"} />
             <Readout label="Cartons Auto (35 Lb Max)" value={String(pcalc.cartonsAuto)} />
+            <label className="flex items-center gap-2 text-sm py-1">
+              <input type="checkbox" checked={!!pv("noCartons")} onChange={(e) => setP("noCartons", e.target.checked)} />
+              <span>No Cartons — charge $0 (0 below means Auto, not none)</span>
+            </label>
             <Row label="Cartons (0 = Auto)"><Num value={pv("cartons")} onChange={(v) => setP("cartons", v)} step={1} /></Row>
             <Readout label="Cartons Used" value={String(pcalc.cartonsUsed)} />
             <Readout label="Carton/Skid $ (Material Line)" value={money(pcalc.cartonSkidCost)} />
