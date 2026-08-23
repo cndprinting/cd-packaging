@@ -919,6 +919,11 @@ function computePart(
     } else {
       runHrs = effectiveSph > 0 ? ((sheetsThroughPress * runPasses) / effectiveSph) * (p.runDiff || 1) : 0;
     }
+    // E&M never bills under 0.2 hr of run time once a press actually prints
+    // (#348747 prints "Run 0.2" at every tier, 50 pieces included). Only for
+    // offset runs with a keyed speed -- digital and carrier passes bill setup
+    // minutes instead and stay untouched.
+    if (runHrs > 0) runHrs = Math.max(runHrs, 0.2);
     setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
     pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb),
