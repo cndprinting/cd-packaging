@@ -166,48 +166,48 @@ function ClassicEstimatorContent() {
       const d = await res.json();
       if (!res.ok) { setAiAnswer(d.error || "That didn't work — try again."); return; }
       if (mode === "ask") { setAiAnswer(d.answer || "No answer came back."); return; }
+      // Apply: job-level fields flat; part 1 also flat; parts 2..N into
+      // parts[]. Built OUTSIDE setForm (from the current form) so the
+      // planner note is available synchronously and the updater stays pure.
+      let next: ClassicForm = { ...form, ...(d.job || {}) };
+      const patchParts: Partial<ClassicPart>[] = d.parts || [];
+      if (patchParts[0]) next = { ...next, ...patchParts[0] };
+      if (patchParts.length > 1) {
+        const rest = [...(next.parts || [])];
+        patchParts.slice(1).forEach((p, i) => {
+          rest[i] = { ...defaultClassicPart(), ...(rest[i] || {}), ...p };
+        });
+        next = { ...next, parts: rest, numParts: Math.max(next.numParts || 1, patchParts.length) };
+      }
+      // Booklet? Run the signature planner on what the AI just set and fill
+      // the press runs too -- Mary asked the system to compute the sig
+      // breakdown itself (8/24), so a fill should finish the job.
       let planNote = "";
-      // Apply: job-level fields flat; part 1 also flat; parts 2..N into parts[]
-      setForm((f) => {
-        let next: ClassicForm = { ...f, ...(d.job || {}) };
-        const parts: Partial<ClassicPart>[] = d.parts || [];
-        if (parts[0]) next = { ...next, ...parts[0] };
-        if (parts.length > 1) {
-          const rest = [...(next.parts || [])];
-          parts.slice(1).forEach((p, i) => {
-            rest[i] = { ...defaultClassicPart(), ...(rest[i] || {}), ...p };
-          });
-          next = { ...next, parts: rest, numParts: Math.max(next.numParts || 1, parts.length) };
-        }
-        // Booklet? Run the signature planner on what the AI just set and
-        // fill the press runs too -- Mary asked the system to compute the
-        // sig breakdown itself (8/24), so a fill should finish the job.
-        const plan = planBooklet(
-          Number(next.numPages) || 0,
-          Number(next.finishedWidthIn) || 0, Number(next.finishedHeightIn) || 0,
-          Number(next.sheetWidthRun) || 0, Number(next.sheetHeightRun) || 0,
-          Number(next.runColorsSide1) || 0, Number(next.runColorsSide2) || 0);
-        if (plan && !((next.runs || []).length)) {
-          const qty = Number(next.quantity) || 0;
-          next = {
-            ...next,
-            signatureRuns: 1, sheetsPerPiece: 1,
-            runs: plan.sigs.map((sig) => ({
-              ...defaultPressRun(),
-              label: `(${sig.style === "SHEETWISE" ? sig.sheetsPerPiece : 1}) ${sig.pages}pg sig ${sig.style}${sig.outs > 1 ? ` ${sig.outs} out` : ""}`,
-              sheets: Math.ceil(qty * sig.sheetsPerPiece),
-              workAndTurn: sig.style === "WORK & TURN",
-              runColorsSide1: Number(next.runColorsSide1) || 0,
-              runColorsSide2: Number(next.runColorsSide2) || 0,
-              plates: sig.plates,
-              makereadySheets: sig.plates * 100 + 100,
-              runWastePct: 3,
-            })),
-          };
-          planNote = "Signatures planned for you: " + plan.text;
-        }
-        return next;
-      });
+      const plan = planBooklet(
+        Number(next.numPages) || 0,
+        Number(next.finishedWidthIn) || 0, Number(next.finishedHeightIn) || 0,
+        Number(next.sheetWidthRun) || 0, Number(next.sheetHeightRun) || 0,
+        Number(next.runColorsSide1) || 0, Number(next.runColorsSide2) || 0);
+      if (plan && !((next.runs || []).length)) {
+        const qty = Number(next.quantity) || 0;
+        next = {
+          ...next,
+          signatureRuns: 1, sheetsPerPiece: 1,
+          runs: plan.sigs.map((sig) => ({
+            ...defaultPressRun(),
+            label: `(${sig.style === "SHEETWISE" ? sig.sheetsPerPiece : 1}) ${sig.pages}pg sig ${sig.style}${sig.outs > 1 ? ` ${sig.outs} out` : ""}`,
+            sheets: Math.ceil(qty * sig.sheetsPerPiece),
+            workAndTurn: sig.style === "WORK & TURN",
+            runColorsSide1: Number(next.runColorsSide1) || 0,
+            runColorsSide2: Number(next.runColorsSide2) || 0,
+            plates: sig.plates,
+            makereadySheets: sig.plates * 100 + 100,
+            runWastePct: 3,
+          })),
+        };
+        planNote = "Signatures planned for you: " + plan.text;
+      }
+      setForm(next);
       if (planNote) d.notes = [...(d.notes || []), planNote];
       setAiNotes(d.notes || []);
       setAiMissing(d.missing || []);
