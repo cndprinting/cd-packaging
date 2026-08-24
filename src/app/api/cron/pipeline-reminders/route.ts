@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
   // Map owner display names → real mailbox emails. Known owners are hardcoded
   // (deterministic — the User table has several duplicate-name rows); anything
   // unknown falls back to Benjy.
-  const OWNER_EMAILS: Record<string, string> = { benjy: "bwaxman@cndprinting.com", albert: "awaxman@cndprinting.com", nitay: "nlaor@cndprinting.com", shimmie: "sjacoby@cndprinting.com", kelsey: "kjacobsen@cndprinting.com", suzanne: "salvarez@cndprinting.com" };
+  const OWNER_EMAILS: Record<string, string> = { benjy: "bwaxman@cndprinting.com", albert: "awaxman@cndprinting.com", nitay: "nlaor@cndprinting.com", lee: "lzerfass@cndprinting.com", shimmie: "sjacoby@cndprinting.com", kelsey: "kjacobsen@cndprinting.com", suzanne: "salvarez@cndprinting.com" };
   const users = await prisma.user.findMany({ where: { isActive: true }, select: { name: true, email: true } });
   const emailFor = (ownerName: string | null): string => {
     if (!ownerName || ownerName.toUpperCase() === "TBD") return FALLBACK_TO;

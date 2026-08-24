@@ -127,7 +127,7 @@ const ownerKey = (l: Lead) => {
 const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k.charAt(0).toUpperCase() + k.slice(1);
 
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
-const OWNERS = ["Benjy", "Albert", "Nitay", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
+const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
 const STAGE_LEAD = ["Break in", "Touch base", "Connected", "Requested info", "Quoting", "Meeting set", "Deprioritize", "Dead"];
 const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
 // Inbound and Prospecting are both the LEAD stage, split by how the record
@@ -435,7 +435,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
               <Bell className="h-3.5 w-3.5" /> {dueCount} follow-up{dueCount > 1 ? "s" : ""} due
             </button>
           )}
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-brand-700 text-xs px-2.5 py-1.5"><Lock className="h-3.5 w-3.5" /> Private · Benjy, Nitay, Albert</span>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-brand-700 text-xs px-2.5 py-1.5"><Lock className="h-3.5 w-3.5" /> Private · Benjy, Nitay, Albert, Lee</span>
           <Button onClick={() => setShowAdd(true)} className="gap-2"><Plus className="h-4 w-4" />Add lead</Button>
         </div>
       </div>
