@@ -1064,7 +1064,17 @@ function ClassicEstimatorContent() {
               <select className={inputCls} value=""
                 onChange={(e) => {
                   const c = calipers.find((x) => x.stockName === e.target.value);
-                  if (c) setP("caliperBasisWeight", `${c.stockName} (${c.caliperMil} pt)`);
+                  if (!c) return;
+                  // Speed by stock (Darrin 8/24): top 12,000; 50# uncoated
+                  // runs 9,000; 18pt C1S 11-12,000; 24-32pt board 9-10,000.
+                  // Only adjusts a press speed already loaded (offset jobs) --
+                  // digital/carrier passes keep 0 and Mary can always retype.
+                  const mil = c.caliperMil || 0;
+                  const stockSpeed = mil >= 20 ? 9500 : mil >= 14 ? 11500 : mil <= 4 ? 9000 : 12000;
+                  patchP({
+                    caliperBasisWeight: `${c.stockName} (${c.caliperMil} pt)`,
+                    ...((pv("runSpeedSph") || 0) > 0 ? { runSpeedSph: stockSpeed } : {}),
+                  });
                 }}>
                 <option value="">pick a stock to fill the caliper…</option>
                 {calipers.map((c) => (
