@@ -228,12 +228,18 @@ function ClassicEstimatorContent() {
       .then((d) => { setFoldTypes(d.folds || []); setCalipers(d.calipers || []); })
       .catch(() => {});
   }, []);
-  // "Start from a past quote" -- the 45 validated E&M quotes as templates.
-  const [templates, setTemplates] = useState<{ est: string; label: string; form: any }[]>([]);
+  // "Start from a past quote" -- searches EVERY saved quote (each stores its
+  // full form in specs) plus the 45 validated E&M seeds. Debounced typeahead.
+  const [templates, setTemplates] = useState<{ source: string; label: string; form: any }[]>([]);
+  const [tplQuery, setTplQuery] = useState("");
   useEffect(() => {
-    fetch("/api/quote-templates").then((r) => r.json())
-      .then((d) => setTemplates(d.templates || [])).catch(() => {});
-  }, []);
+    const t = setTimeout(() => {
+      fetch("/api/quote-templates?q=" + encodeURIComponent(tplQuery))
+        .then((r) => r.json())
+        .then((d) => setTemplates(d.templates || [])).catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [tplQuery]);
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   // Resume-from-draft: once set, Save updates this quote instead of creating
   // a new one each time (mirrors the wizard's draftQuoteId flow).
@@ -2267,24 +2273,28 @@ function ClassicEstimatorContent() {
             </div>
           )}
         </div>
-        {/* ── START FROM A PAST QUOTE ── clone a validated E&M quote */}
-        {templates.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-sm border border-amber-700/60 bg-black/40 px-3 py-2">
-            <span className="font-mono text-[12px] uppercase tracking-wide text-amber-300">Start from a past quote</span>
-            <select className="min-w-[340px] flex-1 rounded-sm border border-amber-700/60 bg-black/60 p-1.5 font-mono text-[12px] text-amber-200"
-              value=""
-              onChange={(e) => {
-                const t = templates.find((x) => x.label === e.target.value);
-                if (!t) return;
-                if (!window.confirm(`Load "${t.label}" as your starting point? Anything on screen now is replaced.`)) return;
-                setForm({ ...defaultClassicForm(), ...(t.form as any), customerName: "", quoteNotes: "" });
-                setPartIndex(0); setScreen(1);
-              }}>
-              <option value="">pick one of Mary's real quotes to copy, then change what differs…</option>
-              {templates.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
-            </select>
-          </div>
-        )}
+        {/* ── START FROM A PAST QUOTE ── search all saved quotes + seeds */}
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-sm border border-amber-700/60 bg-black/40 px-3 py-2">
+          <span className="font-mono text-[12px] uppercase tracking-wide text-amber-300">Start from a past quote</span>
+          <input
+            className="w-64 rounded-sm border border-amber-700/60 bg-black/60 p-1.5 font-mono text-[12px] text-amber-200 placeholder:text-amber-200/30"
+            placeholder="search customer, job, or quote #…"
+            value={tplQuery}
+            onChange={(e) => setTplQuery(e.target.value)}
+          />
+          <select className="min-w-[300px] flex-1 rounded-sm border border-amber-700/60 bg-black/60 p-1.5 font-mono text-[12px] text-amber-200"
+            value=""
+            onChange={(e) => {
+              const t = templates.find((x) => x.label === e.target.value);
+              if (!t) return;
+              if (!window.confirm(`Copy "${t.label}" as your starting point? Anything on screen now is replaced.`)) return;
+              setForm({ ...defaultClassicForm(), ...(t.form as any), customerName: "", quoteNotes: "" });
+              setPartIndex(0); setScreen(1);
+            }}>
+            <option value="">{templates.length ? `${templates.length} matches — newest first, pick one to copy…` : "no matches — try fewer words"}</option>
+            {templates.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+          </select>
+        </div>
         <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-amber-700/50 pb-3">
           {SCREENS.map((name, i) => {
             const n = i + 1;
