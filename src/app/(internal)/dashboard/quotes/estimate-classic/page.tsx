@@ -152,6 +152,9 @@ function ClassicEstimatorContent() {
   const [aiAnswer, setAiAnswer] = useState("");
   const [aiNotes, setAiNotes] = useState<string[]>([]);
   const [aiMissing, setAiMissing] = useState<string[]>([]);
+  // Save-time sanity checker (#3): advisory flags after a manual save.
+  const [checkFlags, setCheckFlags] = useState<string[] | null>(null);
+  const [checking, setChecking] = useState(false);
   const runAssist = async (mode: "fill" | "ask") => {
     if (!aiText.trim() || aiBusy) return;
     setAiBusy(mode); setAiAnswer(""); setAiNotes([]); setAiMissing([]);
@@ -224,6 +227,12 @@ function ClassicEstimatorContent() {
     fetch("/api/paper-fold-tables").then((r) => r.json())
       .then((d) => { setFoldTypes(d.folds || []); setCalipers(d.calipers || []); })
       .catch(() => {});
+  }, []);
+  // "Start from a past quote" -- the 45 validated E&M quotes as templates.
+  const [templates, setTemplates] = useState<{ est: string; label: string; form: any }[]>([]);
+  useEffect(() => {
+    fetch("/api/quote-templates").then((r) => r.json())
+      .then((d) => setTemplates(d.templates || [])).catch(() => {});
   }, []);
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   // Resume-from-draft: once set, Save updates this quote instead of creating
@@ -826,6 +835,16 @@ function ClassicEstimatorContent() {
       }
       if (silent) { setLastAutoSavedAt(Date.now()); setAutoSaveFailed(false); return; }
       setSaved(savedQuote);
+      // Double-check AFTER the save lands -- the quote is safe either way,
+      // and any flag names the screen/field so Mary fixes instead of
+      // distrusting the system. API trouble = no flags, never an error.
+      setChecking(true); setCheckFlags(null);
+      fetch("/api/estimator-check", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ form }),
+      }).then((r) => r.json()).then((d) => setCheckFlags(d.flags || []))
+        .catch(() => setCheckFlags([]))
+        .finally(() => setChecking(false));
 
       // Started from a quote request → mark it completed so it leaves the
       // Quote Requests queue (exactly like the wizard). Autosave must NOT do
@@ -2154,6 +2173,7 @@ function ClassicEstimatorContent() {
               </span>
             )}
             {saveError && <span className="font-mono text-[13px] text-red-400">{saveError}</span>}
+            {checking && <span className="font-mono text-[13px] text-amber-400/70">Double-checking the quote…</span>}
             {/* Draft autosave status — so Mary can see her work is safe without
                 clicking Save (Mary 8/10). */}
             {!saved && (
@@ -2166,6 +2186,18 @@ function ClassicEstimatorContent() {
                     : null
             )}
           </div>
+          {/* Sanity-checker verdict — advisory, the quote is already saved. */}
+          {checkFlags !== null && !checking && (
+            checkFlags.length > 0 ? (
+              <div className="mt-3 rounded-sm border border-amber-500/60 bg-amber-400/10 p-3">
+                <div className="mb-1 font-mono text-[12px] uppercase tracking-wide text-amber-300">Double-check — worth a look before this goes out</div>
+                {checkFlags.map((f, i) => <div key={i} className="text-[13px] leading-relaxed text-amber-100">• {f}</div>)}
+                <div className="mt-1 font-mono text-[11px] text-amber-500/60">The quote saved fine — these are only things an estimator might question. Fix and Save again, or ignore.</div>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-sm border border-emerald-700/50 bg-emerald-400/5 p-2 font-mono text-[12px] text-emerald-300">Double-check passed — nothing looks off.</div>
+            )
+          )}
         </div>
       </div>
     );
@@ -2235,6 +2267,24 @@ function ClassicEstimatorContent() {
             </div>
           )}
         </div>
+        {/* ── START FROM A PAST QUOTE ── clone a validated E&M quote */}
+        {templates.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-sm border border-amber-700/60 bg-black/40 px-3 py-2">
+            <span className="font-mono text-[12px] uppercase tracking-wide text-amber-300">Start from a past quote</span>
+            <select className="min-w-[340px] flex-1 rounded-sm border border-amber-700/60 bg-black/60 p-1.5 font-mono text-[12px] text-amber-200"
+              value=""
+              onChange={(e) => {
+                const t = templates.find((x) => x.label === e.target.value);
+                if (!t) return;
+                if (!window.confirm(`Load "${t.label}" as your starting point? Anything on screen now is replaced.`)) return;
+                setForm({ ...defaultClassicForm(), ...(t.form as any), customerName: "", quoteNotes: "" });
+                setPartIndex(0); setScreen(1);
+              }}>
+              <option value="">pick one of Mary's real quotes to copy, then change what differs…</option>
+              {templates.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+            </select>
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-amber-700/50 pb-3">
           {SCREENS.map((name, i) => {
             const n = i + 1;

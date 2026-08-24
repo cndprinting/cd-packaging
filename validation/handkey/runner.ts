@@ -16,7 +16,12 @@ export interface HandKeyResult {
   est: string; desc: string; pct: number; pass: boolean; lines: string[];
 }
 
+// Template capture (Benjy 8/24 "Start from a past quote"): running a tranche
+// with CAPTURE_TEMPLATES=1 collects every keyed form for export.
+export const captured: { est: string; desc: string; form: ClassicForm; letterPrice: number }[] = [];
+
 export function runQuote(est: string, desc: string, form: ClassicForm, exp: Expected): HandKeyResult {
+  if (process.env.CAPTURE_TEMPLATES) captured.push({ est, desc, form: JSON.parse(JSON.stringify(form)), letterPrice: exp.letterPrice });
   const c: any = computeClassic(form, null);
   const lines: string[] = [];
   const row = (k: string, em: number | undefined, gz: number, tolPct = 1.5) => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getClaude } from "@/lib/agent/claude";
 import prisma from "@/lib/prisma";
+import { HOUSE_RULES } from "@/lib/estimator-house-rules";
 
 // ESTIMATOR ASSIST (Benjy 8/21: "Is there any AI we can layer into estimating
 // to help Mary?"). Two modes on the classic estimator screen:
@@ -68,44 +69,6 @@ function sanitizePatch(raw: unknown): Record<string, unknown> {
   return out;
 }
 
-// The house rules the assistant answers from — the same rules the engine runs
-// on, so its explanations match what the numbers actually do.
-const HOUSE_RULES = `
-C&D house estimating rules (all already built into the engine):
-- Makeready sheets: 100 per color and coating per side, plus 100 per machine
-  the job passes through after the press (cutter, folder, die cutter, foil,
-  emboss, gluer, stitcher/binder). Editable per job.
-- Work & Turn: same plates print both sides, so plates/washups count once.
-- Plates = sides x ink colors. SPOT coating needs a plate; flood does not.
-- Ink: 6% black coverage, 12% per process color (36% for 4c), per side, on
-  every sheet through the press including makeready.
-- Folding: pick the Fold Type; run hours = pieces x (1 + waste%) / folder
-  speed, plus setup. The Baum-26x40 runs ~6,500/hr.
-- Load cutter is lifts-driven: lifts x 0.0146 hr x difficulty at $45/hr.
-- Paper buy rounds up (usually to 10 sheets; some jobs 250).
-- Die charges for NEW dies go under One-Time Charges (they print on the letter
-  but stay out of the price). An existing die number pulls from the die
-  inventory and needs no charge.
-- Digital work is priced as clicks/outside purchase, not press hours.
-- Freight sits in the outside bucket at cost (no markup on freight).
-- Markups default Paper 33 / Material 18 / Outside 32 / Labor 40, commission
-  10% — all editable per quote.
-- Booklets: entering pages + finished size + sheet size + colors makes a
-  green "Booklet plan" panel appear on Screen 7 that computes the signature
-  breakdown itself (e.g. 12pg 8.5x11 on 19x25 = one 8pg sig sheetwise + one
-  4pg sig W&T 2-out, 12 plates) — "Apply plan" fills the press runs.
-- Press speed adjusts by stock automatically when a stock is picked from the
-  caliper lookup: 12,000 standard, 9,000 on 50# uncoated, 11,500 on 18pt
-  C1S, 9,500 on 24-32pt board (Darrin's numbers). Always editable.
-- "No Cutting" and "No Cartons" checkboxes on Screen 8 mean NONE — typing 0
-  in those boxes means AUTO, not none.
-- Proof material is per part: part 1's proofs live on Screen 4/5, parts 2+
-  each have their own proof lines on the Press screen.
-- The only two offset presses are the Komori LSX629 LED UV #0172 and
-  Conventional #0153; digital runs on the Konica Minoltas (billed as
-  clicks).
-- Screens: 1 job info, 4 prepress, 6 paper/stock, 7 press, 8 bindery,
-  9 cost summary + outside purchases + one-time charges.`;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
