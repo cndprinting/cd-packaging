@@ -24,6 +24,7 @@ import {
   defaultClassicForm,
   defaultClassicPart,
   defaultPressRun,
+  planBooklet,
 } from "@/lib/classic-estimate";
 import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
@@ -1381,6 +1382,43 @@ function ClassicEstimatorContent() {
                     block per signature group, and they can differ WITHIN one
                     part (#348472: a 3-sig SHEETWISE run + a 2-sig W&T run;
                     #348228: 27 runs). Leave empty for a single-run part. */}
+                {/* Signature planner (Mary 8/24): pages + finished size +
+                    sheet size -> the sig breakdown E&M computed itself. */}
+                {(() => {
+                  const plan = planBooklet(
+                    Number(pv("numPages")) || 0,
+                    Number(pv("finishedWidthIn")) || 0, Number(pv("finishedHeightIn")) || 0,
+                    Number(pv("sheetWidthRun")) || 0, Number(pv("sheetHeightRun")) || 0,
+                    Number(pv("runColorsSide1")) || 0, Number(pv("runColorsSide2")) || 0);
+                  if (!plan) return null;
+                  const qty = Number(form.quantity) || 0;
+                  return (
+                    <div className="mt-3 rounded border border-emerald-700/50 bg-emerald-950/30 p-2 text-[13px]">
+                      <div className="text-emerald-300">Booklet plan (auto): {plan.text}</div>
+                      <button type="button"
+                        className="mt-1 rounded bg-emerald-700 px-2 py-0.5 text-xs text-white hover:bg-emerald-600"
+                        onClick={() => {
+                          const runs = plan.sigs.map((sig) => ({
+                            ...defaultPressRun(),
+                            label: `(${sig.style === "SHEETWISE" ? sig.sheetsPerPiece : 1}) ${sig.pages}pg sig ${sig.style}${sig.outs > 1 ? ` ${sig.outs} out` : ""}`,
+                            sheets: Math.ceil(qty * sig.sheetsPerPiece),
+                            workAndTurn: sig.style === "WORK & TURN",
+                            runColorsSide1: Number(pv("runColorsSide1")) || 0,
+                            // W&T still PRINTS both sides (2 passes) -- it only shares plates
+                            runColorsSide2: Number(pv("runColorsSide2")) || 0,
+                            plates: sig.plates,
+                            // Mary's confirmed rule: 100 sheets/color/side + 100/machine
+                            makereadySheets: sig.plates * 100 + 100,
+                            runWastePct: 3,
+                          }));
+                          patchP({ runs: runs as any, signatureRuns: 1, sheetsPerPiece: 1 });
+                        }}>
+                        Apply plan to press runs
+                      </button>
+                      <span className="ml-2 text-emerald-400/70">fills the runs below -- adjust anything after</span>
+                    </div>
+                  );
+                })()}
                 <div className="mt-3 border-t border-amber-800/40 pt-2">
                   <div className="mb-1 text-[12px] uppercase tracking-wide text-amber-400/90">
                     Press Runs (leave empty for one run)

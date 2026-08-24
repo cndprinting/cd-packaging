@@ -25,3 +25,22 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background-color: #9ca3af; }
+
+/* Mary 8/24: screen prints came out unreadable light orange. Force plain
+   black-on-white for paper, hide the app chrome, keep borders so tables
+   still read. */
+@media print {
+  * {
+    color: #000 !important;
+    background: #fff !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+  nav, aside, header, [data-noprint] { display: none !important; }
+  a { text-decoration: none !important; }
+  input, select, textarea {
+    border: 1px solid #999 !important;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}

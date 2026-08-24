@@ -554,6 +554,75 @@ export const BINDERY_OPERATIONS = [
   "7 Case Bound",
 ] as const;
 
+// ── Booklet signature planner (Mary 8/24: "12pgs, finished 8.5x11, sheet
+// 19x25 -- system should automatically calculate (1) 8pg sig sheetwise +
+// (1) 4pg sig W&T 2-out, 12 plates"). E&M planned signatures itself; this
+// reproduces that plan from pages + finished size + sheet size + colors. ──
+export interface BookletSigPlan {
+  pages: number;
+  style: "SHEETWISE" | "WORK & TURN";
+  outs: number;              // copies of the sig cut from one press sheet
+  plates: number;
+  sheetsPerPiece: number;    // press sheets this sig consumes per book
+}
+export interface BookletPlan {
+  sigs: BookletSigPlan[];
+  totalPlates: number;
+  pagesPerSide: number;      // finished pages that fit on one side of the sheet
+  text: string;              // "(1) 8pg sig SHEETWISE + (1) 4pg sig W&T 2-out -- 12 plates"
+}
+export function planBooklet(
+  numPages: number, finW: number, finH: number,
+  sheetW: number, sheetH: number, c1: number, c2: number
+): BookletPlan | null {
+  if (!(numPages >= 4) || !(finW > 0) || !(finH > 0) || !(sheetW > 0) || !(sheetH > 0)) return null;
+  const fit = (sw: number, sh: number) =>
+    Math.floor(sw / finW) * Math.floor(sh / finH);
+  // Pages per SIDE of the press sheet, best orientation. (19x25 with 8.5x11
+  // finished -> 2x2 = 4 per side -> an 8-page signature per sheet.)
+  const perSide = Math.max(fit(sheetW, sheetH), fit(sheetH, sheetW));
+  if (perSide < 1) return null;
+  const sigPages = perSide * 2;                     // full sheetwise signature
+  const cf = Math.max(1, c1 || 0), cb = c2 || 0;
+  const sigs: BookletSigPlan[] = [];
+  // A book smaller than one full signature gangs multiple-out W&T as a
+  // single run (an 8pg 5x7 book on 19x25 runs one sig, several out).
+  if (numPages < sigPages) {
+    const outs = Math.max(1, Math.floor(sigPages / numPages));
+    const totalPlates = Math.max(1, c1 || 0);
+    return {
+      sigs: [{ pages: numPages, style: "WORK & TURN", outs, plates: totalPlates, sheetsPerPiece: 1 / outs }],
+      totalPlates, pagesPerSide: perSide,
+      text: `(1) ${numPages}pg sig WORK & TURN${outs > 1 ? ` ${outs} out` : ""} -- ${totalPlates} plates`,
+    };
+  }
+  let remaining = numPages;
+  const nFull = Math.floor(remaining / sigPages);
+  if (nFull > 0) {
+    sigs.push({ pages: sigPages, style: "SHEETWISE", outs: 1,
+      plates: (cf + cb) * nFull, sheetsPerPiece: nFull });
+    remaining -= nFull * sigPages;
+  }
+  // Remainder folds down as a smaller sig run WORK & TURN, ganged multiple-out
+  // on the same sheet (E&M: a 4pg sig on a 4-per-side sheet runs "2 out").
+  while (remaining >= 2) {
+    let pages = 4;                                   // prefer 4pg sigs
+    if (remaining % 4 !== 0 && remaining < 4) pages = 2;
+    if (remaining === 6) pages = remaining;          // one 6pg fold rather than 4+2
+    const outs = Math.max(1, Math.floor((perSide * 2) / pages));
+    sigs.push({ pages, style: "WORK & TURN", outs,
+      plates: cf, sheetsPerPiece: 1 / outs });
+    remaining -= pages;
+  }
+  if (remaining > 0 || sigs.length === 0) return null;
+  const totalPlates = sigs.reduce((t, x) => t + x.plates, 0);
+  const text = sigs.map((x) => {
+    const n = x.style === "SHEETWISE" ? x.sheetsPerPiece : 1;
+    return `(${n}) ${x.pages}pg sig${n > 1 ? "s" : ""} ${x.style}${x.outs > 1 ? ` ${x.outs} out` : ""}`;
+  }).join(" + ") + ` -- ${totalPlates} plates`;
+  return { sigs, totalPlates, pagesPerSide: perSide, text };
+}
+
 export function defaultClassicForm(): ClassicForm {
   return {
     customerName: "", customerNumber: "", address: "", jobTitle: "",
