@@ -163,6 +163,7 @@ function ClassicEstimatorContent() {
       const d = await res.json();
       if (!res.ok) { setAiAnswer(d.error || "That didn't work — try again."); return; }
       if (mode === "ask") { setAiAnswer(d.answer || "No answer came back."); return; }
+      let planNote = "";
       // Apply: job-level fields flat; part 1 also flat; parts 2..N into parts[]
       setForm((f) => {
         let next: ClassicForm = { ...f, ...(d.job || {}) };
@@ -175,8 +176,36 @@ function ClassicEstimatorContent() {
           });
           next = { ...next, parts: rest, numParts: Math.max(next.numParts || 1, parts.length) };
         }
+        // Booklet? Run the signature planner on what the AI just set and
+        // fill the press runs too -- Mary asked the system to compute the
+        // sig breakdown itself (8/24), so a fill should finish the job.
+        const plan = planBooklet(
+          Number(next.numPages) || 0,
+          Number(next.finishedWidthIn) || 0, Number(next.finishedHeightIn) || 0,
+          Number(next.sheetWidthRun) || 0, Number(next.sheetHeightRun) || 0,
+          Number(next.runColorsSide1) || 0, Number(next.runColorsSide2) || 0);
+        if (plan && !((next.runs || []).length)) {
+          const qty = Number(next.quantity) || 0;
+          next = {
+            ...next,
+            signatureRuns: 1, sheetsPerPiece: 1,
+            runs: plan.sigs.map((sig) => ({
+              ...defaultPressRun(),
+              label: `(${sig.style === "SHEETWISE" ? sig.sheetsPerPiece : 1}) ${sig.pages}pg sig ${sig.style}${sig.outs > 1 ? ` ${sig.outs} out` : ""}`,
+              sheets: Math.ceil(qty * sig.sheetsPerPiece),
+              workAndTurn: sig.style === "WORK & TURN",
+              runColorsSide1: Number(next.runColorsSide1) || 0,
+              runColorsSide2: Number(next.runColorsSide2) || 0,
+              plates: sig.plates,
+              makereadySheets: sig.plates * 100 + 100,
+              runWastePct: 3,
+            })),
+          };
+          planNote = "Signatures planned for you: " + plan.text;
+        }
         return next;
       });
+      if (planNote) d.notes = [...(d.notes || []), planNote];
       setAiNotes(d.notes || []);
       setAiMissing(d.missing || []);
       if (!(d.notes || []).length && !(d.missing || []).length) setAiAnswer("Nothing in that description mapped to the form — try adding sizes, quantity, colors, or the fold.");
@@ -2167,13 +2196,13 @@ function ClassicEstimatorContent() {
           <button type="button" onClick={() => setAiOpen((o) => !o)}
             className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[12px] uppercase tracking-wide text-amber-300">
             <span className="text-amber-400">{aiOpen ? "▾" : "▸"}</span>
-            Assistant — describe the job and I&apos;ll fill the screens, or ask me anything
+            START HERE — type the job in your words and the screens fill themselves (or ask any question)
           </button>
           {aiOpen && (
             <div className="border-t border-amber-800/40 p-3">
               <textarea
                 className="h-20 w-full rounded-sm border border-amber-700/60 bg-black/60 p-2 font-mono text-[13px] text-amber-200 placeholder:text-amber-200/30 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                placeholder={'e.g. "25,000 tri-fold brochures, 8.5 x 11 finished from an 11 x 17 flat, 80# uncoated text, 4/4, letter fold"  —  or a question: "where do I put the new die charge?"'}
+                placeholder={'Say it like you would to a pressman:  "5,000 12pg self-cover booklets, finished 8.5 x 11, 100# gloss text, sheet 19 x 25, 4/4, saddle stitch"  —  or ask a question: "where do I put the die charge?"'}
                 value={aiText}
                 onChange={(e) => setAiText(e.target.value)}
               />

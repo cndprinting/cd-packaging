@@ -40,7 +40,7 @@ const JOB_FIELDS = new Set([
   "binderyOperation", "foldTypeName", "folderConfig", "foldCount",
   "stitcherName", "dieNumber", "versions", "signatureRuns",
   "handOp1", "handOp2", "bandIn", "padIn", "wrapIn",
-  "deliveryHrs", "dieCutHrs", "scorePerfHrs",
+  "deliveryHrs", "dieCutHrs", "scorePerfHrs", "noCutting", "noCartons",
 ]);
 
 function sanitizePatch(raw: unknown): Record<string, unknown> {
@@ -90,6 +90,20 @@ C&D house estimating rules (all already built into the engine):
 - Freight sits in the outside bucket at cost (no markup on freight).
 - Markups default Paper 33 / Material 18 / Outside 32 / Labor 40, commission
   10% — all editable per quote.
+- Booklets: entering pages + finished size + sheet size + colors makes a
+  green "Booklet plan" panel appear on Screen 7 that computes the signature
+  breakdown itself (e.g. 12pg 8.5x11 on 19x25 = one 8pg sig sheetwise + one
+  4pg sig W&T 2-out, 12 plates) — "Apply plan" fills the press runs.
+- Press speed adjusts by stock automatically when a stock is picked from the
+  caliper lookup: 12,000 standard, 9,000 on 50# uncoated, 11,500 on 18pt
+  C1S, 9,500 on 24-32pt board (Darrin's numbers). Always editable.
+- "No Cutting" and "No Cartons" checkboxes on Screen 8 mean NONE — typing 0
+  in those boxes means AUTO, not none.
+- Proof material is per part: part 1's proofs live on Screen 4/5, parts 2+
+  each have their own proof lines on the Press screen.
+- The only two offset presses are the Komori LSX629 LED UV #0172 and
+  Conventional #0153; digital runs on the Konica Minoltas (billed as
+  clicks).
 - Screens: 1 job info, 4 prepress, 6 paper/stock, 7 press, 8 bindery,
   9 cost summary + outside purchases + one-time charges.`;
 
