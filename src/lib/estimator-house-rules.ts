@@ -32,7 +32,6 @@ C&D house estimating rules (all already built into the engine):
 - Proof material is per part: part 1's proofs live on Screen 4/5, parts 2+
   each have their own proof lines on the Press screen.
 - The only two offset presses are the Komori LSX629 LED UV #0172 and
-  Conventional #0153; digital runs on the Konica Minoltas (billed as
-  clicks).
+  Conventional #0153; digital runs on the two Konica Minolta AccurioPress 7100s (C7100-1 / C7100-2), billed as clicks.
 - Screens: 1 job info, 4 prepress, 6 paper/stock, 7 press, 8 bindery,
   9 cost summary + outside purchases + one-time charges.`;
