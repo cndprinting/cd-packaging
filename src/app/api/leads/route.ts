@@ -181,6 +181,27 @@ async function updateLead(prisma: any, body: any) {
   // the daily digest. Only the stand-down is accepted from the UI; the agent's
   // other states are its own to manage.
   if (body.agentStatus === "closed") { data.agentStatus = "closed"; data.agentNextAt = null; }
+  // Reassigning an agent-run lead to a HUMAN owner stands the agent down
+  // automatically (Benjy 8/25 — Pussers Rum: the lead moved to Shimmie but
+  // Jessica kept emailing because nothing told her to stop). Any owner other
+  // than Jessica/TBD takes the thread; the agent's live statuses end here.
+  if ("ownerName" in data) {
+    const newOwner = String(data.ownerName || "").trim().toLowerCase();
+    if (newOwner && newOwner !== "jessica" && newOwner !== "tbd") {
+      const cur = await prisma.lead.findUnique({ where: { id: body.id }, select: { agentStatus: true, ownerName: true, agentLog: true } });
+      const LIVE = ["awaiting_mary", "quote_received", "awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"];
+      if (cur && LIVE.includes(cur.agentStatus || "") && String(cur.ownerName || "").toLowerCase() !== newOwner) {
+        data.agentStatus = "owner_handling";
+        data.agentNextAt = null;
+        data.agentHold = true;
+        try {
+          const log = JSON.parse(cur.agentLog || "[]");
+          log.push({ at: new Date().toISOString(), event: `Agent stood down - lead reassigned to ${data.ownerName}` });
+          data.agentLog = JSON.stringify(log);
+        } catch { /* log stays as-is */ }
+      }
+    }
+  }
   if ("priority" in body) data.priority = body.priority ? Number(body.priority) : null;
   if ("agentHold" in body) data.agentHold = !!body.agentHold; // outbound "Don't email (agent)" toggle
   if ("lastInteraction" in body) data.lastInteraction = body.lastInteraction ? new Date(body.lastInteraction) : null;
