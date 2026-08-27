@@ -111,6 +111,34 @@ function Num({ value, onChange, step, readOnly }: {
   );
 }
 
+// Dimension input that accepts E&M-style fractions: "8 7/16", "7/16",
+// "8-7/16" or plain decimals (346318 screens -- Mary keys fractions).
+function parseDim(raw: string): number {
+  const t = raw.trim().replace(/-/g, " ").replace(/\s+/g, " ");
+  let m = t.match(/^(\d+(?:\.\d+)?) (\d+)\s*\/\s*(\d+)$/);
+  if (m) return parseFloat(m[1]) + parseInt(m[2]) / (parseInt(m[3]) || 1);
+  m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (m) return parseInt(m[1]) / (parseInt(m[2]) || 1);
+  return parseFloat(t) || 0;
+}
+function FracNum({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const commit = (raw: string) => { onChange(parseDim(raw)); setText(null); };
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className={inputCls + " text-right"}
+      value={text !== null ? text : (Number.isFinite(value) && value !== 0 ? String(value) : "")}
+      placeholder={'e.g. 8 7/16'}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") commit((e.target as HTMLInputElement).value); }}
+      onFocus={(e) => e.target.select()}
+    />
+  );
+}
+
 function Txt({ value, onChange, placeholder, list }: {
   value: string; onChange: (v: string) => void; placeholder?: string; list?: string;
 }) {
@@ -1019,17 +1047,23 @@ function ClassicEstimatorContent() {
           <Row label="Type/Output Hrs"><Num value={form.typeOutputHrs} onChange={(v) => set("typeOutputHrs", v)} /></Row>
           <StdRow label="Type/Output $/Hr" show={showStd}><Num value={form.typeOutputRate} onChange={(v) => set("typeOutputRate", v)} /></StdRow>
           <StdRow label="Proof Matl $/Plate" show={showStd}><Num value={form.proofMaterialPerPlate} onChange={(v) => set("proofMaterialPerPlate", v)} /></StdRow>
-          {/* Scans section removed per Mary 7/21 — she only uses the Hours
-              block. Fields remain in the data model (old drafts still price). */}
+          {/* Scans restored 8/27 — 346318's screens show Suzanne keying
+              "Scan 30 @ 8.5x11", so they're used after all. */}
+          <Row label="Scans 8.5 x 11"><Num value={form.scans85x11} onChange={(v) => set("scans85x11", v)} step={1} /></Row>
+          <StdRow label="  @ $ each" show={showStd}><Num value={form.scanCharge85x11} onChange={(v) => set("scanCharge85x11", v)} /></StdRow>
+          <Row label="Scans 11 x 17"><Num value={form.scans11x17} onChange={(v) => set("scans11x17", v)} step={1} /></Row>
+          <StdRow label="  @ $ each" show={showStd}><Num value={form.scanCharge11x17} onChange={(v) => set("scanCharge11x17", v)} /></StdRow>
+          <Row label="Scans 20 x 25"><Num value={form.scans20x25} onChange={(v) => set("scans20x25", v)} step={1} /></Row>
+          <StdRow label="  @ $ each" show={showStd}><Num value={form.scanCharge20x25} onChange={(v) => set("scanCharge20x25", v)} /></StdRow>
         </div>
         <div>
           <SectionTitle>Disks & Proofs</SectionTitle>
           <Row label="Furnished Disks"><Num value={form.furnishedDisks} onChange={(v) => set("furnishedDisks", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.furnishedDiskCharge} onChange={(v) => set("furnishedDiskCharge", v)} /></Row>
           {/* These are PART 1's proofs — parts 2+ key theirs on the Press screen */}
-          <Row label="Laser Proofs"><Num value={form.laserProofs} onChange={(v) => set("laserProofs", v)} step={1} /></Row>
+          <Row label="Laser Proofs (Sherpa2)"><Num value={form.laserProofs} onChange={(v) => set("laserProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.laserProofCharge} onChange={(v) => set("laserProofCharge", v)} /></Row>
-          <Row label="Color Proofs"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
+          <Row label="Color Proofs (Sherpa43)"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.colorProofCharge} onChange={(v) => set("colorProofCharge", v)} /></Row>
           <Readout label="Prepress Labor" value={money(calc.prepLabor)} />
           {/* ONLY Screen 4+5 items here — carton/skid $ shows on Screen 8's
@@ -1104,10 +1138,10 @@ function ClassicEstimatorContent() {
             <SectionTitle>Sheet</SectionTitle>
             {/* Mary 7/20: Size to Order comes FIRST, and each block is
                 height-then-width, matching her E&M entry order. */}
-            <Row label="Size To Order — Height"><Num value={pv("sheetHeightOrder")} onChange={(v) => setP("sheetHeightOrder", v)} /></Row>
-            <Row label="Size To Order — Width"><Num value={pv("sheetWidthOrder")} onChange={(v) => setP("sheetWidthOrder", v)} /></Row>
-            <Row label="Size To Run — Height"><Num value={pv("sheetHeightRun")} onChange={(v) => setP("sheetHeightRun", v)} /></Row>
-            <Row label="Size To Run — Width"><Num value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
+            <Row label="Size To Order — Height"><FracNum value={pv("sheetHeightOrder")} onChange={(v) => setP("sheetHeightOrder", v)} /></Row>
+            <Row label="Size To Order — Width"><FracNum value={pv("sheetWidthOrder")} onChange={(v) => setP("sheetWidthOrder", v)} /></Row>
+            <Row label="Size To Run — Height"><FracNum value={pv("sheetHeightRun")} onChange={(v) => setP("sheetHeightRun", v)} /></Row>
+            <Row label="Size To Run — Width"><FracNum value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
             <Row label="Number Of Pages"><Num value={pv("numPages")} onChange={(v) => setP("numPages", v)} step={1} /></Row>
             <Row label="Number Up"><Num value={pv("numberUp")} onChange={(v) => setP("numberUp", v)} step={1} /></Row>
             {/* Imposition calculator (Mary 8/26 spec): flat + sheet + bleed ->
@@ -1182,18 +1216,18 @@ function ClassicEstimatorContent() {
             </Row>
             {String(pv("productKind") || "flat") === "box" ? (
               <>
-                <Row label="Finished Box W"><Num value={pv("boxWidthIn")} onChange={(v) => setP("boxWidthIn", v)} /></Row>
-                <Row label="Finished Box D"><Num value={pv("boxDepthIn")} onChange={(v) => setP("boxDepthIn", v)} /></Row>
-                <Row label="Finished Box H"><Num value={pv("boxHeightIn")} onChange={(v) => setP("boxHeightIn", v)} /></Row>
+                <Row label="Finished Box W"><FracNum value={pv("boxWidthIn")} onChange={(v) => setP("boxWidthIn", v)} /></Row>
+                <Row label="Finished Box D"><FracNum value={pv("boxDepthIn")} onChange={(v) => setP("boxDepthIn", v)} /></Row>
+                <Row label="Finished Box H"><FracNum value={pv("boxHeightIn")} onChange={(v) => setP("boxHeightIn", v)} /></Row>
               </>
             ) : (
               <>
-                <Row label="Finished Width"><Num value={pv("finishedWidthIn")} onChange={(v) => setP("finishedWidthIn", v)} /></Row>
-                <Row label="Finished Height"><Num value={pv("finishedHeightIn")} onChange={(v) => setP("finishedHeightIn", v)} /></Row>
+                <Row label="Finished Width"><FracNum value={pv("finishedWidthIn")} onChange={(v) => setP("finishedWidthIn", v)} /></Row>
+                <Row label="Finished Height"><FracNum value={pv("finishedHeightIn")} onChange={(v) => setP("finishedHeightIn", v)} /></Row>
               </>
             )}
-            <Row label="Flat Size — Width" ><Num value={pv("flatWidthIn")} onChange={(v) => setP("flatWidthIn", v)} /></Row>
-            <Row label="Flat Size — Height"><Num value={pv("flatHeightIn")} onChange={(v) => setP("flatHeightIn", v)} /></Row>
+            <Row label="Flat Size — Width" ><FracNum value={pv("flatWidthIn")} onChange={(v) => setP("flatWidthIn", v)} /></Row>
+            <Row label="Flat Size — Height"><FracNum value={pv("flatHeightIn")} onChange={(v) => setP("flatHeightIn", v)} /></Row>
             <div className="col-span-2 pl-[224px] text-[11px] text-amber-400/70">
               The produced piece flat, before folding — not the paper. Paper is
               &ldquo;Size To Run&rdquo; and &ldquo;Size To Order&rdquo; below.
@@ -1451,6 +1485,7 @@ function ClassicEstimatorContent() {
                   </label>
                 </Row>
                 <StdRow label="Plate Cost $ Each" show={showStd}><Num value={pv("plateCostEach")} onChange={(v) => setP("plateCostEach", v)} /></StdRow>
+                <Row label="Extra Plates (E&M)"><Num value={pv("extraPlates")} onChange={(v) => setP("extraPlates", v)} step={1} /></Row>
                 <Readout label="Plates (Material)" value={`${pcalc.plates} × ${money(pv("plateCostEach"))} = ${money(pcalc.plateMaterialsCost)}`} />
                 {/* Press helper crew — near the top so Mary can't miss it (7/21) */}
                 <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>

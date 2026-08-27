@@ -166,7 +166,7 @@ export const PART_FIELD_KEYS = [
   "productKind", "finishedWidthIn", "finishedHeightIn", "flatWidthIn", "flatHeightIn",
   "boxWidthIn", "boxDepthIn", "boxHeightIn",
   "partName", "paperHandlingHrs", "paperHandlingRate", "signatureRuns", "runs",
-  "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions",
+  "plateHrsPerPlate", "plateHrsDiff", "plateLaborRate", "preprintedPass", "versions", "extraPlates",
   "cutterRatePerHr", "trimRatePerHr", "handBindRatePerHr", "packRatePerHr",
   "wrapRatePerHr", "deliveryHrs", "deliveryRatePerHr", "cartonsPerHour",
   "runColorsSide1", "runColorsSide2", "workAndTurn", "plateCostEach",
@@ -310,6 +310,7 @@ export interface ClassicForm {
   // Two versions of one product on a single layout (#348627 2x25,000;
   // #348352 2x58,000) — scales plates/proofs, not sheet math.
   versions: number;
+  extraPlates: number;   // E&M 'Extra Plates' (346318: 55 for the 34 versions) -- adds plate material + platemaking labor
   // Per-operation bindery rates — E&M runs each machine at its own rate
   // (Load Cutter $46, Trim $44, Ctn Pack $15, Wrap $35, Hand Bind $18.80,
   // Delivery $45). The engine lumped them all at binderyHourlyRate.
@@ -713,7 +714,7 @@ export function defaultClassicForm(): ClassicForm {
     partName: "", paperHandlingHrs: 0, paperHandlingRate: 22.5, signatureRuns: 1, runs: [],
     plateHrsPerPlate: 0.075, plateHrsDiff: 1, plateLaborRate: 19.73,
     padRatePerHr: 18, padsPerHour: 500,
-    preprintedPass: false, versions: 1,
+    preprintedPass: false, versions: 1, extraPlates: 0,
     cutterRatePerHr: 45, trimRatePerHr: 45, handBindRatePerHr: 18.8,
     packRatePerHr: 15, wrapRatePerHr: 35, deliveryHrs: 0, deliveryRatePerHr: 45,
     cartonsPerHour: 40,
@@ -948,7 +949,10 @@ function computePart(
       + (p.coatingType && p.coatingIsSpot ? runList.length * versionMult : 0)
     : platesForRun(p.workAndTurn, p.runColorsSide1, p.runColorsSide2) * sigRuns * versionMult
       + (p.coatingType && p.coatingIsSpot ? sigRuns * versionMult : 0);
-  const plateLaborHrs = plates * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
+  // E&M's explicit "Extra Plates" count (version changes, re-burns) --
+  // plate material + platemaking labor, NOT makeready (that rides MR Diff).
+  const platesTotal = plates + Math.max(0, Math.floor(p.extraPlates || 0));
+  const plateLaborHrs = platesTotal * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
   const plateLaborCost = plateLaborHrs * (p.plateLaborRate || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
 
@@ -1098,7 +1102,7 @@ function computePart(
       pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0);
   }
   // Plate materials (offset only): W&T-aware plate count × $/plate → MATERIAL.
-  const plateMaterialsCost = isDigital ? 0 : plates * (p.plateCostEach || 0);
+  const plateMaterialsCost = isDigital ? 0 : platesTotal * (p.plateCostEach || 0);
   const pressMaterialsCost = p.dieCost || 0;
   const pressCost = pressLaborCost + pressMaterialsCost;
 
@@ -1219,7 +1223,7 @@ function computePart(
 
   return {
     pressSheets, mrWasteSheets, runWasteSheets, orderSheets, paperCost,
-    plates, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
+    plates: platesTotal, makereadyHrs, washupHrs, runHrs, dieScoreHrs, pressCheckHrs, pressHrs,
     inkLbs, inkCost, inkLbsBlackColor, inkLbsVarnish, inkLbsBlack, inkLbsProcess, inkLbsLed, inkLbsPms, coatingLbs, coatingCost, speedFactor, effectiveSph, speedCapReason,
     plateMaterialsCost, foldHrs, foldPieces, foldRunUsed, foldLabor, stitchRunUsed, stitchHrs, stitchLabor,
     pressLaborCost, pressMaterialsCost, pressCost,

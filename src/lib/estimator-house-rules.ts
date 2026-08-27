@@ -33,6 +33,11 @@ C&D house estimating rules (all already built into the engine):
   each have their own proof lines on the Press screen.
 - The only two offset presses are the Komori LSX629 LED UV #0172 and
   Conventional #0153; digital runs on the two Konica Minolta AccurioPress 7100s (C7100-1 / C7100-2), billed as clicks.
+- Size fields accept E&M-style fractions ("8 7/16") or decimals.
+- "Extra Plates" on the press screen = E&M's field for version plate
+  changes/re-burns: adds plate material + platemaking labor, not makeready.
+- Scans (8.5x11 / 11x17 / 20x25) are on the prepress screen; proofs are
+  labeled with E&M's names (Sherpa2 = laser, Sherpa43 = color).
 - Imposition: best number-up auto-computes on Screen 6 from flat size +
   press sheet + 1/16 bleed, deducting the Komori gripper (0.75, lead edge)
   and side guide (0.125): usable = (sheetW - 0.75) x (sheetH - 0.125), test
