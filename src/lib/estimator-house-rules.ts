@@ -33,5 +33,11 @@ C&D house estimating rules (all already built into the engine):
   each have their own proof lines on the Press screen.
 - The only two offset presses are the Komori LSX629 LED UV #0172 and
   Conventional #0153; digital runs on the two Konica Minolta AccurioPress 7100s (C7100-1 / C7100-2), billed as clicks.
+- Imposition: best number-up auto-computes on Screen 6 from flat size +
+  press sheet + 1/16 bleed, deducting the Komori gripper (0.75, lead edge)
+  and side guide (0.125): usable = (sheetW - 0.75) x (sheetH - 0.125), test
+  both orientations, floor-divide, highest up wins (tie -> unrotated). W&T
+  does NOT double the up. The typed Number Up always overrides (grain,
+  folding, color bars). Sheet limits 12.5x19 min, 23.25x29.75 max.
 - Screens: 1 job info, 4 prepress, 6 paper/stock, 7 press, 8 bindery,
   9 cost summary + outside purchases + one-time charges.`;

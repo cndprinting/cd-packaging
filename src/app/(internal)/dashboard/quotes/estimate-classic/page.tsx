@@ -25,6 +25,7 @@ import {
   defaultClassicPart,
   defaultPressRun,
   planBooklet,
+  planImposition,
 } from "@/lib/classic-estimate";
 import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
@@ -1109,6 +1110,36 @@ function ClassicEstimatorContent() {
             <Row label="Size To Run — Width"><Num value={pv("sheetWidthRun")} onChange={(v) => setP("sheetWidthRun", v)} /></Row>
             <Row label="Number Of Pages"><Num value={pv("numPages")} onChange={(v) => setP("numPages", v)} step={1} /></Row>
             <Row label="Number Up"><Num value={pv("numberUp")} onChange={(v) => setP("numberUp", v)} step={1} /></Row>
+            {/* Imposition calculator (Mary 8/26 spec): flat + sheet + bleed ->
+                best up with Komori gripper/side-guide allowances. Her typed
+                Number Up above stays the override, per the spec. */}
+            {(() => {
+              const imp = planImposition(
+                Number(pv("flatWidthIn")) || Number(pv("finishedWidthIn")) || 0,
+                Number(pv("flatHeightIn")) || Number(pv("finishedHeightIn")) || 0,
+                Number(pv("sheetWidthRun")) || 0, Number(pv("sheetHeightRun")) || 0,
+                Number(form.quantity) || 0);
+              if (!imp) return null;
+              return (
+                <div className="rounded-sm border border-sky-700/50 bg-sky-950/30 p-2 text-[13px]">
+                  <div className="text-sky-300">
+                    Imposition (auto): <b>{imp.bestUp}-up</b> — {imp.across} across × {imp.around} around, orientation {imp.orientation}
+                    {imp.baseSheets > 0 ? <> — {imp.baseSheets.toLocaleString()} base sheets</> : null}
+                  </div>
+                  <div className="text-[11px] text-sky-400/70">
+                    {imp.imposeW.toFixed(4)} × {imp.imposeH.toFixed(4)} with bleed on {imp.usableLead}" × {imp.usableSide}" usable (gripper 0.75, side guide 0.125)
+                  </div>
+                  {imp.warnings.map((w, i) => <div key={i} className="text-[12px] text-red-400">⚠ {w}</div>)}
+                  {imp.bestUp > 0 && imp.bestUp !== (Number(pv("numberUp")) || 1) && (
+                    <button type="button"
+                      className="mt-1 rounded bg-sky-700 px-2 py-0.5 text-xs text-white hover:bg-sky-600"
+                      onClick={() => setP("numberUp", imp.bestUp)}>
+                      Use {imp.bestUp}-up
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             <Row label="Sheets per Piece"><Num value={pv("sheetsPerPiece")} onChange={(v) => setP("sheetsPerPiece", v)} step={1} /></Row>
             <Row label="Out of Parent"><Num value={pv("sheetsOutOfParent")} onChange={(v) => setP("sheetsOutOfParent", v)} step={1} /></Row>
             <Row label="Bind Waste Shts"><Num value={pv("bindWasteSheets")} onChange={(v) => setP("bindWasteSheets", v)} step={1} /></Row>

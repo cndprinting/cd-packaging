@@ -554,6 +554,63 @@ export const BINDERY_OPERATIONS = [
   "7 Case Bound",
 ] as const;
 
+// ── Imposition calculator (Mary 8/26 programmer spec, "RE: Godzilla need
+// imposition table"): best number-up from flat + sheet + bleed with the
+// Komori allowances. Verified against her pressroom-confirmed jobs #3-#6.
+// Deliberately SEPARATE from makeready/waste/paper-buy/press-time, and the
+// estimator's typed numberUp always overrides (grain, folding, color bars).
+export const IMPOSITION = {
+  gripperIn: 0.75,        // lead edge, first sheet dimension
+  sideGuideIn: 0.125,     // left side guide
+  bleedTotalIn: 0.0625,   // 1/16" total added per flat dimension
+  minSheet: { w: 12.5, h: 19 },
+  maxSheet: { w: 23.25, h: 29.75 },
+};
+export interface ImpositionResult {
+  bestUp: number;
+  orientation: "A" | "B";
+  across: number;
+  around: number;
+  imposeW: number;
+  imposeH: number;
+  usableLead: number;
+  usableSide: number;
+  baseSheets: number;     // CEILING(qty / bestUp); 0 when qty unknown
+  warnings: string[];
+}
+export function planImposition(
+  flatW: number, flatH: number, sheetW: number, sheetH: number,
+  qty: number, bleedTotalIn: number = IMPOSITION.bleedTotalIn
+): ImpositionResult | null {
+  if (!(flatW > 0) || !(flatH > 0) || !(sheetW > 0) || !(sheetH > 0)) return null;
+  const imposeW = flatW + bleedTotalIn;
+  const imposeH = flatH + bleedTotalIn;
+  const usableLead = sheetW - IMPOSITION.gripperIn;   // first dimension = lead/feed
+  const usableSide = sheetH - IMPOSITION.sideGuideIn;
+  const acrossA = Math.floor(usableLead / imposeW);
+  const aroundA = Math.floor(usableSide / imposeH);
+  const upA = acrossA * aroundA;
+  const acrossB = Math.floor(usableLead / imposeH);
+  const aroundB = Math.floor(usableSide / imposeW);
+  const upB = acrossB * aroundB;
+  const useA = upA >= upB;                             // tie -> A per spec
+  const bestUp = useA ? upA : upB;
+  const warnings: string[] = [];
+  if (bestUp === 0) warnings.push("Flat size will not fit on the selected press sheet.");
+  const sw = Math.min(sheetW, sheetH), sh = Math.max(sheetW, sheetH);
+  if (sw < IMPOSITION.minSheet.w || sh < IMPOSITION.minSheet.h)
+    warnings.push("Selected sheet is below the Komori minimum sheet size (12.5 x 19).");
+  if (sw > IMPOSITION.maxSheet.w || sh > IMPOSITION.maxSheet.h)
+    warnings.push("Selected sheet exceeds the Komori maximum sheet size (23.25 x 29.75).");
+  return {
+    bestUp, orientation: useA ? "A" : "B",
+    across: useA ? acrossA : acrossB, around: useA ? aroundA : aroundB,
+    imposeW, imposeH, usableLead, usableSide,
+    baseSheets: bestUp > 0 && qty > 0 ? Math.ceil(qty / bestUp) : 0,
+    warnings,
+  };
+}
+
 // ── Booklet signature planner (Mary 8/24: "12pgs, finished 8.5x11, sheet
 // 19x25 -- system should automatically calculate (1) 8pg sig sheetwise +
 // (1) 4pg sig W&T 2-out, 12 plates"). E&M planned signatures itself; this
