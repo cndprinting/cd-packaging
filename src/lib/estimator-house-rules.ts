@@ -33,6 +33,10 @@ C&D house estimating rules (all already built into the engine):
   each have their own proof lines on the Press screen.
 - The only two offset presses are the Komori LSX629 LED UV #0172 and
   Conventional #0153; digital runs on the two Konica Minolta AccurioPress 7100s (C7100-1 / C7100-2), billed as clicks.
+- Proofing calc (prepress screen): proof size = flat + 1/16 bleed; area in
+  sq ft = W x H / 144; low-res proofs 2 sides/sheet, high-res 1. Material
+  $/sq ft rates are BLANK until Mary supplies real costs -- until then key
+  the proof charge directly (reference prices: low $92.11, high $138.17).
 - Size fields accept E&M-style fractions ("8 7/16") or decimals.
 - "Extra Plates" on the press screen = E&M's field for version plate
   changes/re-burns: adds plate material + platemaking labor, not makeready.

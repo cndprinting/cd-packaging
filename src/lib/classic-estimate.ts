@@ -244,6 +244,11 @@ export interface ClassicForm {
   scanCharge20x25: number;
   furnishedDisks: number;
   furnishedDiskCharge: number;
+  // Proofing calculator rates (Mary 8/27 spec): $/sq ft material rates,
+  // deliberately 0 until she supplies real costs -- the calculator shows
+  // sheets/area regardless, and only fills a $ when a rate exists.
+  lowResProofRatePerSqFt: number;
+  highResProofRatePerSqFt: number;
   laserProofs: number;
   laserProofCharge: number;
   colorProofs: number;
@@ -555,6 +560,35 @@ export const BINDERY_OPERATIONS = [
   "7 Case Bound",
 ] as const;
 
+// ── Proofing calculator (Mary 8/27 spec): flat + bleed -> sq ft; pages +
+// printed sides -> proof sheets. Low-res proofs image 2 sides per sheet,
+// high-res 1. Material $/sq ft stays a VARIABLE (her instruction) -- no $
+// until real rates arrive; the $92.11 / $138.17 benchmarks are reference
+// only and deliberately NOT hard-coded into pricing. ──
+export interface ProofCalcResult {
+  proofW: number; proofH: number; areaSqFt: number;
+  proofSides: number; proofSheets: number;
+  materialCost: number;    // 0 until a rate is entered
+}
+export function planProofs(
+  flatW: number, flatH: number, pages: number,
+  c1: number, c2: number, type: "low" | "high",
+  bleedTotalIn: number = 0.0625, ratePerSqFt: number = 0
+): ProofCalcResult | null {
+  if (!(flatW > 0) || !(flatH > 0)) return null;
+  const proofW = flatW + bleedTotalIn;
+  const proofH = flatH + bleedTotalIn;
+  const areaSqFt = (proofW * proofH) / 144;
+  // A flat printed both sides = 2 proof sides; single-sided = 1; multi-page
+  // work proofs every 2 pages as a side (pages/2), floored at the printed
+  // side count so 4/0 vs 4/4 still differs.
+  const printedSides = ((c1 || 0) > 0 ? 1 : 0) + ((c2 || 0) > 0 ? 1 : 0) || 1;
+  const proofSides = Math.max(printedSides, Math.ceil((pages || 0) / 2) || printedSides);
+  const proofSheets = type === "low" ? Math.ceil(proofSides / 2) : proofSides;
+  const materialCost = ratePerSqFt > 0 ? areaSqFt * proofSheets * ratePerSqFt : 0;
+  return { proofW, proofH, areaSqFt, proofSides, proofSheets, materialCost };
+}
+
 // ── Imposition calculator (Mary 8/26 programmer spec, "RE: Godzilla need
 // imposition table"): best number-up from flat + sheet + bleed with the
 // Komori allowances. Verified against her pressroom-confirmed jobs #3-#6.
@@ -697,6 +731,7 @@ export function defaultClassicForm(): ClassicForm {
     scans85x11: 0, scans11x17: 0, scans20x25: 0,
     scanCharge85x11: 15, scanCharge11x17: 25, scanCharge20x25: 40,
     furnishedDisks: 0, furnishedDiskCharge: 10,
+    lowResProofRatePerSqFt: 0, highResProofRatePerSqFt: 0,
     laserProofs: 0, laserProofCharge: 12,
     colorProofs: 0, colorProofCharge: 30,
     plateDiffFactor: 1, dyluxProofs: 0, dyluxCharge: 15,

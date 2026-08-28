@@ -26,6 +26,7 @@ import {
   defaultPressRun,
   planBooklet,
   planImposition,
+  planProofs,
 } from "@/lib/classic-estimate";
 import { DigitalClickStandards, InkConfig, getDigitalSizeTier, inferInkConfig } from "@/lib/digital-clicks";
 
@@ -1065,6 +1066,51 @@ function ClassicEstimatorContent() {
           <Row label="  @ $ each"><Num value={form.laserProofCharge} onChange={(v) => set("laserProofCharge", v)} /></Row>
           <Row label="Color Proofs (Sherpa43)"><Num value={form.colorProofs} onChange={(v) => set("colorProofs", v)} step={1} /></Row>
           <Row label="  @ $ each"><Num value={form.colorProofCharge} onChange={(v) => set("colorProofCharge", v)} /></Row>
+          {/* Proofing calculator (Mary 8/27 spec): flat -> sq ft -> sheets.
+              Rates stay 0 until she supplies real material costs; until then
+              this shows the counts and she keys the charge as today. */}
+          {(() => {
+            const type = (form as any).proofCalcType as ("low" | "high" | undefined);
+            const flatW = Number(form.flatWidthIn) || Number(form.finishedWidthIn) || 0;
+            const flatH = Number(form.flatHeightIn) || Number(form.finishedHeightIn) || 0;
+            const pr = type ? planProofs(flatW, flatH, Number(form.numPages) || 0,
+              Number(form.runColorsSide1) || 0, Number(form.runColorsSide2) || 0, type, 0.0625,
+              type === "low" ? Number(form.lowResProofRatePerSqFt) || 0 : Number(form.highResProofRatePerSqFt) || 0) : null;
+            return (
+              <div className="mt-2 rounded-sm border border-violet-700/50 bg-violet-950/30 p-2 text-[13px]">
+                <div className="mb-1 flex items-center gap-3 text-violet-300">
+                  <span>Proofing calc:</span>
+                  {(["none", "low", "high"] as const).map((t) => (
+                    <label key={t} className="flex items-center gap-1">
+                      <input type="radio" name="proofCalcType" checked={(type || "none") === t}
+                        onChange={() => set("proofCalcType" as any, (t === "none" ? "" : t) as any)} />
+                      {t === "none" ? "None" : t === "low" ? "Low-Res" : "High-Res"}
+                    </label>
+                  ))}
+                </div>
+                {pr && (
+                  <>
+                    <div className="text-violet-200/90">
+                      {pr.proofW.toFixed(4)} × {pr.proofH.toFixed(4)} with bleed = {pr.areaSqFt.toFixed(4)} sq ft — {pr.proofSides} sides → <b>{pr.proofSheets} proof sheet{pr.proofSheets === 1 ? "" : "s"}</b>
+                    </div>
+                    {pr.materialCost > 0 ? (
+                      <div className="text-violet-200/90">Material: {money(pr.materialCost)}
+                        <button type="button" className="ml-2 rounded bg-violet-700 px-2 py-0.5 text-xs text-white hover:bg-violet-600"
+                          onClick={() => {
+                            if (type === "high") { set("colorProofs", pr.proofSheets); set("colorProofCharge", pr.materialCost / pr.proofSheets); }
+                            else { set("laserProofs", pr.proofSheets); set("laserProofCharge", pr.materialCost / pr.proofSheets); }
+                          }}>Apply to proof lines</button>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-violet-400/70">No material rate on file yet — key the proof charge below as usual. (Reference: current prices low $92.11 / high $138.17.)</div>
+                    )}
+                  </>
+                )}
+                <StdRow label="Low-Res $/sq ft" show={showStd}><Num value={form.lowResProofRatePerSqFt} onChange={(v) => set("lowResProofRatePerSqFt", v)} /></StdRow>
+                <StdRow label="High-Res $/sq ft" show={showStd}><Num value={form.highResProofRatePerSqFt} onChange={(v) => set("highResProofRatePerSqFt", v)} /></StdRow>
+              </div>
+            );
+          })()}
           <Readout label="Prepress Labor" value={money(calc.prepLabor)} />
           {/* ONLY Screen 4+5 items here — carton/skid $ shows on Screen 8's
               Carton Pack where it's entered (Benjy/Mary 7/21). */}
