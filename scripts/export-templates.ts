@@ -11,6 +11,7 @@ const files = fs.readdirSync("validation/handkey").filter((f) => f.startsWith("t
     est: c.est,
     label: `#${c.est} — ${(c.form as any).jobTitle || c.desc} — qty ${(c.form as any).quantity?.toLocaleString?.() || (c.form as any).quantity} — $${c.letterPrice.toLocaleString()}`,
     desc: c.desc,
+    expectedTotal: (c as any).expectedTotal,
     form: c.form,
   }));
   fs.writeFileSync("src/data/quote-templates.json", JSON.stringify(templates, null, 1));
