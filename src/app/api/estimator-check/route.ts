@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
       quantity: form.quantity, numParts: parts.length,
       jobTitle: form.jobTitle, jobType: form.jobType,
       commissionMode: form.commissionMode, commissionPct: form.commissionPct,
+      prep: { designHours: form.designHours || 0, photoshopHours: form.photoshopHours || 0, typeOutputHrs: form.typeOutputHrs || 0 },
+      sheetsOutOfParent: form.sheetsOutOfParent || 1, weightPerMSheets: form.weightPerMSheets || 0,
+      outsideRows: (form.outsidePurchases || []).length, freight: form.freight || 0,
       markups: { paper: form.markupPaperPct, material: form.markupMaterialPct, outside: form.markupOutsidePct, labor: form.markupLaborPct },
       parts: parts.map((p, i) => ({
         name: p.partName || `part ${i + 1}`,
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
       system: `You are the pre-save checker for C&D Printing's estimator. Mary (30-year estimator) keyed a quote; flag anything that looks MIS-KEYED so she fixes the field instead of distrusting the system. Judge like an estimator, not a linter.
 ${HOUSE_RULES}
 
-Return STRICT JSON: {"flags": ["...", ...]} with AT MOST 4 flags, each one short sentence naming the screen/field and why it looks off (e.g. "Makeready 100 sheets looks low for 4/4 -- the house rule says ~900 (Screen 7)"). Only flag things a print estimator would question: zero/absurd speeds on offset work, makeready far off the 100/color/side+100/machine rule, missing cartons on heavy paper without No Cartons checked, commission 0 without intent, $0 paper on a printed job, per-piece price wildly off for the product. If it all looks reasonable return {"flags": []}. NEVER invent numbers -- use only the snapshot.`,
+Return STRICT JSON: {"flags": ["...", ...]} with AT MOST 4 flags, each one short sentence naming the screen/field and why it looks off (e.g. "Makeready 100 sheets looks low for 4/4 -- the house rule says ~900 (Screen 7)"). Only flag things a print estimator would question: prep/design hours wildly out of scale for the quantity (QT-2026-084: 25 design hours on a 100-piece reprint priced $2,000 of phantom labor -- E&M had 0.3; anything over ~2 hrs on a reprint or over ~8 on new work deserves a flag), a press-sheet size smaller than a typical parent with sheetsOutOfParent still 1 (paper bills at full parent price), zero outside rows + zero freight on work that names dies/varnish/outside finishing, zero/absurd speeds on offset work, makeready far off the 100/color/side+100/machine rule, missing cartons on heavy paper without No Cartons checked, commission 0 without intent, $0 paper on a printed job, per-piece price wildly off for the product. If it all looks reasonable return {"flags": []}. NEVER invent numbers -- use only the snapshot.`,
       messages: [{ role: "user", content: JSON.stringify(snapshot) }],
     });
     const textBlock = msg.content.find((b) => b.type === "text");
