@@ -48,5 +48,17 @@ C&D house estimating rules (all already built into the engine):
   both orientations, floor-divide, highest up wins (tie -> unrotated). W&T
   does NOT double the up. The typed Number Up always overrides (grain,
   folding, color bars). Sheet limits 12.5x19 min, 23.25x29.75 max.
+- Selling Price Change: on Screen 9's Quantity Tiers table, "Price To
+  Customer" overrides the calculated letter price per quantity; Freight and
+  Add'l $ can be keyed per quantity there too (blank = the single job value).
+  The letter price is always whole dollars, rounded DOWN, unless overridden.
+- Quantities: primary + up to five additional (E&M's six columns).
+- Foil: "Foil Hrs" (press time) and "Foil Material $/M" on Screen 7.
+- Paper priced by CWT: tick "Priced By CWT" on Screen 6 and key $/cwt;
+  price per M = $/cwt x weight(lbs/M) / 100 -- Weight must be filled.
+- Hand ops accept pieces/hr, % of quantity, OR flat hours; rate 0 = the
+  hand-bindery rate. Each press run can carry its own Run Diff.
+- Screen 1 carries Sold By / CSR / Contact / Phone / Description line 2;
+  Screen 9 has Terms (prints) and Internal Notations (never printed).
 - Screens: 1 job info, 4 prepress, 6 paper/stock, 7 press, 8 bindery,
   9 cost summary + outside purchases + one-time charges.`;
