@@ -180,7 +180,7 @@ export const PART_FIELD_KEYS = [
   "wasteSheetsManual", "wastePerColorSheets", "wastePerEquipmentSheets", "equipmentPassesManual",
   "inkCoverageBlackPct", "inkCoverageColorPct", "inkCoverageLedPct", "inkCoveragePmsPct", "inkCoverageVarnishPct",
   "inkFactorMsqinPerLb", "inkBlackDollarsPerLb", "inkDollarsPerLb", "inkLedDollarsPerLb", "inkPmsDollarsPerLb", "varnishDollarsPerLb",
-  "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs",
+  "dieCutHrs", "scorePerfHrs", "dieCost", "dieNumber", "pressCheckHrs", "foilHrs", "foilMaterialPerM", "paperPricedByCwt", "pricePerCwt",
   "digitalInkConfig", "digitalMakereadySheets", "digitalVariableData", "digitalVDSetupHrs",
   "digitalOversSheets", "digitalVendorAmount", "digitalOnPart",
   "inkLbsManual",
@@ -208,6 +208,15 @@ export interface ClassicForm {
   // Up to 3 additional quantities (E&M quotes multiple quantities per
   // estimate). 0/blank entries are ignored.
   additionalQuantities: number[];
+  // E&M header fields (audit 9/3): sold-by / CSR / contact print on the letter
+  soldBy: string; csr: string; contactName: string; contactPhone: string; description2: string;
+  terms: string;            // "Terms to appear on written quote"
+  internalNotes: string;    // E&M "Outside Purchase Notations" -- never printed
+  // Per-tier money (slot index = quantity slot, 0 = primary). E&M keys freight
+  // and Add'l Cost per quantity column and lets the estimator override the
+  // selling price per quantity ("Selling Price Change").
+  freightByTier: number[]; additionalByTier: number[]; priceOverrides: number[];
+  proofCalcType: "" | "low" | "high";
   // Transient: which quantity tier this calc run represents (0 = primary).
   // Set by computeQuantityBreaks so per-tier outside prices resolve.
   activeTierIndex?: number;
@@ -421,6 +430,10 @@ export interface ClassicForm {
   dieCost: number;
   dieNumber: string; // existing die # from the die inventory (blank = new die)
   pressCheckHrs: number;
+  foilHrs: number;            // E&M press-screen Foil time (hrs at press rate)
+  foilMaterialPerM: number;   // E&M Foil Material per M press sheets ($)
+  paperPricedByCwt: boolean;  // E&M Paper is priced by CWT vs per M sheets
+  pricePerCwt: number;        // $ per hundredweight; price/M = cwt x weight/M / 100
 
   // ── Screen 7 — Digital branch (part 1) ──
   digitalInkConfig: InkConfig;
@@ -668,20 +681,24 @@ export function planBooklet(
   sheetW: number, sheetH: number, c1: number, c2: number
 ): BookletPlan | null {
   if (!(numPages >= 4) || !(finW > 0) || !(finH > 0) || !(sheetW > 0) || !(sheetH > 0)) return null;
+  // Same allowances as the imposition calculator (Mary 8/26): gripper off the
+  // lead edge, side guide off the other, 1/16 bleed on each finished dimension.
+  const iw = finW + IMPOSITION.bleedTotalIn, ih = finH + IMPOSITION.bleedTotalIn;
   const fit = (sw: number, sh: number) =>
-    Math.floor(sw / finW) * Math.floor(sh / finH);
+    Math.floor((sw - IMPOSITION.gripperIn) / iw) * Math.floor((sh - IMPOSITION.sideGuideIn) / ih);
   // Pages per SIDE of the press sheet, best orientation. (19x25 with 8.5x11
   // finished -> 2x2 = 4 per side -> an 8-page signature per sheet.)
   const perSide = Math.max(fit(sheetW, sheetH), fit(sheetH, sheetW));
   if (perSide < 1) return null;
   const sigPages = perSide * 2;                     // full sheetwise signature
   const cf = Math.max(1, c1 || 0), cb = c2 || 0;
+  const wtPlates = Math.max(1, c1 || 0, c2 || 0);   // W&T shares one set: the larger side
   const sigs: BookletSigPlan[] = [];
   // A book smaller than one full signature gangs multiple-out W&T as a
   // single run (an 8pg 5x7 book on 19x25 runs one sig, several out).
   if (numPages < sigPages) {
     const outs = Math.max(1, Math.floor(sigPages / numPages));
-    const totalPlates = Math.max(1, c1 || 0);
+    const totalPlates = wtPlates;
     return {
       sigs: [{ pages: numPages, style: "WORK & TURN", outs, plates: totalPlates, sheetsPerPiece: 1 / outs }],
       totalPlates, pagesPerSide: perSide,
@@ -701,9 +718,10 @@ export function planBooklet(
     let pages = 4;                                   // prefer 4pg sigs
     if (remaining % 4 !== 0 && remaining < 4) pages = 2;
     if (remaining === 6) pages = remaining;          // one 6pg fold rather than 4+2
+    if (remaining === 2) return null;                 // a 2-page leaf is not a bindable signature
     const outs = Math.max(1, Math.floor((perSide * 2) / pages));
     sigs.push({ pages, style: "WORK & TURN", outs,
-      plates: cf, sheetsPerPiece: 1 / outs });
+      plates: wtPlates, sheetsPerPiece: 1 / outs });
     remaining -= pages;
   }
   if (remaining > 0 || sigs.length === 0) return null;
@@ -719,6 +737,8 @@ export function defaultClassicForm(): ClassicForm {
   return {
     customerName: "", customerNumber: "", address: "", jobTitle: "",
     quantity: 0, additionalQuantities: [], numParts: 1,
+    soldBy: "", csr: "", contactName: "", contactPhone: "", description2: "", terms: "", internalNotes: "",
+    freightByTier: [], additionalByTier: [], priceOverrides: [], proofCalcType: "",
     // Markup defaults confirmed against Mary's 36-quote E&M validation batch
     // (8/18): Paper 33 / Material 18 / Outside 32 / Labor 40 / Commission 10
     // held on nearly every estimate. (Material was 16, Outside 24 before.)
@@ -770,7 +790,7 @@ export function defaultClassicForm(): ClassicForm {
     // (E&M printed 0.8 lb black + 4.1 lb colour, $53.12). Was a 425 placeholder.
     inkLbsManual: 0, inkFactorMsqinPerLb: 153, inkBlackDollarsPerLb: 10.84, inkDollarsPerLb: 10.84, inkLedDollarsPerLb: 10.84, inkPmsDollarsPerLb: 39.5, varnishDollarsPerLb: 5.5,
     coatingType: "", coatingCoveragePct: 100, coatingIsSpot: false, coatingDollarsPerLb: 0,
-    dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0,
+    dieCutHrs: 0, scorePerfHrs: 0, dieCost: 0, dieNumber: "", pressCheckHrs: 0, foilHrs: 0, foilMaterialPerM: 0, paperPricedByCwt: false, pricePerCwt: 0,
     digitalInkConfig: "4/4", digitalMakereadySheets: 25,
     digitalOversSheets: 0, digitalVendorAmount: 0, digitalOnPart: false,
     digitalVariableData: false, digitalVDSetupHrs: 0.5,
@@ -876,13 +896,27 @@ export interface PartCalc {
 /** Paper + press + bindery math for ONE part at the job quantity.
  *  Formulas identical to the original single-part computeClassic. */
 function computePart(
-  p: ClassicPart,
+  pIn: ClassicPart,
   qty: number,
   isDigital: boolean,
   digitalStd: DigitalClickStandards | null,
   speedRules: SpeedRules = DEFAULT_SPEED_RULES
 ): PartCalc {
+  let p: ClassicPart = pIn;
   const numberUp = Math.max(1, p.numberUp || 1);
+
+  // Negative numbers are never meaningful here -- a stray minus produced
+  // negative paper, hours and money (audit 9/3). Clamp numeric fields at 0.
+  {
+    const clamped: Record<string, unknown> = { ...(p as unknown as Record<string, unknown>) };
+    for (const [k, v] of Object.entries(clamped)) if (typeof v === "number" && v < 0) clamped[k] = 0;
+    p = clamped as unknown as ClassicPart;
+  }
+  // E&M "Paper is priced by CWT": price per M sheets = $/cwt x (lbs per M / 100).
+  if (p.paperPricedByCwt && (p.pricePerCwt || 0) > 0 && (p.weightPerMSheets || 0) > 0) {
+    p = { ...p, pricePerM: (p.pricePerCwt * p.weightPerMSheets) / 100 };
+  }
+  const partDigital = isDigital || !!p.digitalOnPart;
 
   // ── Paper (Screen 6, waste from Screen 7) ──
   const sheetsPerPiece = Math.max(1, p.sheetsPerPiece || 1);
@@ -908,7 +942,7 @@ function computePart(
   // the operations on the job; every knob is editable and a typed waste-sheet
   // count overrides the whole formula.
   const passesAuto =
-    ((p.trimHrs || 0) > 0 || cutsUsed > 0 ? 1 : 0) + // cutting
+    (!p.noCutting && ((p.trimHrs || 0) > 0 || cutsUsed > 0) ? 1 : 0) + // cutting
     ((p.dieCutHrs || 0) > 0 ? 1 : 0) +
     ((p.scorePerfHrs || 0) > 0 ? 1 : 0) +
     (p.folderConfig || (p.foldRunHrs || 0) > 0 || p.binderyOperation === 3 ? 1 : 0) + // folding
@@ -935,7 +969,7 @@ function computePart(
         : unitsForRun(r.workAndTurn, r.runColorsSide1, r.runColorsSide2)), 0)
     : unitsForRun(p.workAndTurn, p.runColorsSide1, p.runColorsSide2) * sigRuns;
   const wasteColors = pressUnits;
-  const mrWasteSheets = isDigital
+  const mrWasteSheets = partDigital
     ? Math.ceil(p.digitalMakereadySheets || 0)
     : multiRun
       ? runList.reduce((t, r) => t + Math.ceil(r.makereadySheets || 0), 0)
@@ -951,7 +985,9 @@ function computePart(
   // Press waste 180" on #348988 part 2).
   const runWasteSheets = multiRun
     ? runList.reduce((t, r) => t + Math.ceil((r.sheets || 0) * ((r.runWastePct ?? 5) / 100)), 0)
-    : Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
+    : partDigital
+      ? Math.ceil(pressSheets * ((p.runWastePct || 0) / 100))   // digital overs are the makeready count; no 5% default
+      : Math.ceil(pressSheets * ((p.runWastePct ?? 5) / 100));
 
   // Paper buy: press sheets + MR/overs + running spoilage + bindery spoilage,
   // converted to PARENT sheets, then rounded UP to the next 250-sheet
@@ -986,7 +1022,7 @@ function computePart(
       + (p.coatingType && p.coatingIsSpot ? sigRuns * versionMult : 0);
   // E&M's explicit "Extra Plates" count (version changes, re-burns) --
   // plate material + platemaking labor, NOT makeready (that rides MR Diff).
-  const platesTotal = plates + Math.max(0, Math.floor(p.extraPlates || 0));
+  const platesTotal = partDigital ? 0 : plates + Math.max(0, Math.floor(p.extraPlates || 0));
   const plateLaborHrs = platesTotal * (p.plateHrsPerPlate || 0) * (p.plateHrsDiff || 1);
   const plateLaborCost = plateLaborHrs * (p.plateLaborRate || 0);
   const sheetArea = (p.sheetWidthRun || 0) * (p.sheetHeightRun || 0); // sq in
@@ -1005,12 +1041,13 @@ function computePart(
   const pressCheckHrs = p.pressCheckHrs || 0;
   let pressHrs = 0;
 
-  const partDigital = isDigital || !!p.digitalOnPart;
-  if (partDigital && digitalStd) {
+  if (partDigital) {
     // Digital click engine (Mary's tier × ink-config table).
-    digitalTier = getDigitalSizeTier(p.sheetWidthRun || 0, p.sheetHeightRun || 0, digitalStd);
-    digitalClickRate = getDigitalClickRate(digitalTier, p.digitalInkConfig, digitalStd);
-    digitalVDRate = getDigitalVDRate(digitalTier, digitalStd);
+    if (digitalStd) {
+      digitalTier = getDigitalSizeTier(p.sheetWidthRun || 0, p.sheetHeightRun || 0, digitalStd);
+      digitalClickRate = getDigitalClickRate(digitalTier, p.digitalInkConfig, digitalStd);
+      digitalVDRate = getDigitalVDRate(digitalTier, digitalStd);
+    }
     const overs = (p.digitalOversSheets || 0) > 0 ? p.digitalOversSheets : (p.digitalMakereadySheets || 0);
     digitalClickSheets = pressSheets + overs;
     digitalClickCost = (p.digitalVendorAmount || 0) > 0
@@ -1018,7 +1055,7 @@ function computePart(
       : digitalClickSheets * digitalClickRate;
     if (p.digitalVariableData) {
       digitalVDCost = digitalClickSheets * digitalVDRate;
-      digitalVDSetupCost = (p.digitalVDSetupHrs || 0) * (digitalStd.digitalVDSetupRate || 0);
+      digitalVDSetupCost = (p.digitalVDSetupHrs || 0) * (digitalStd?.digitalVDSetupRate || 0);
     }
     pressHrs = dieScoreHrs + pressCheckHrs;
     // Carrier-press jobs can still carry a flat ink charge (#349100 envelopes).
@@ -1040,7 +1077,7 @@ function computePart(
     // Small-run speed curve (Mary 7/21): rated SPH derates on short runs —
     // she never hits 10,000/hr on a 500-sheet run. Factors are PLACEHOLDER
     // (see SMALL_RUN_SPEED_CURVE) pending her real speeds.
-    speedFactor = p.useSpeedCurve !== false ? smallRunSpeedFactor(pressSheets) : 1;
+    speedFactor = p.useSpeedCurve === true ? smallRunSpeedFactor(pressSheets) : 1;
     // Suggested speed (Mary 7/21): E&M derived run speed from sheets, inks and
     // paper weight. Base = rated, capped by heavy ink coverage and by board
     // thickness (caliper parsed from the stock weight text), then the
@@ -1089,8 +1126,8 @@ function computePart(
     // offset runs with a keyed speed -- digital and carrier passes bill setup
     // minutes instead and stay untouched.
     if (runHrs > 0) runHrs = Math.max(runHrs, 0.2);
-    setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff ?? 1);
-    pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs;
+    setupHrs = (p.pressSetupHrs || 0) * (p.pressSetupDiff || 1);
+    pressHrs = setupHrs + makereadyHrs + washupHrs + runHrs + dieScoreHrs + pressCheckHrs + (p.foilHrs || 0);
     // Ink: press sheets × sheet area × coverage% ÷ (thousand sq-in per lb),
     // PER TYPE like E&M ("7.3 lbs black + 56.5 lbs color") — varnish prices at
     // its own $/lb ($5.50 std), not ink money (Mary 7/21).
@@ -1099,7 +1136,11 @@ function computePart(
     // came out at exactly half E&M's printed 0.8 lb black / 4.1 lb color).
     // Every sheet that goes through the press takes ink -- makeready and
     // spoilage included, not just the good sheets (Mary 8/19).
-    const inkImpressions = (pressSheets + mrWasteSheets + runWasteSheets) * Math.max(1, runPasses);
+    const passesOf = (c1: number, c2: number) => (((c1 || 0) > 0 ? 1 : 0) + ((c2 || 0) > 0 ? 1 : 0)) || 1;
+    const inkImpressions = multiRun
+      ? runList.reduce((t, r) => t + (Math.ceil(r.sheets || 0) + Math.ceil(r.makereadySheets || 0)
+          + Math.ceil((r.sheets || 0) * ((r.runWastePct ?? 5) / 100))) * passesOf(r.runColorsSide1, r.runColorsSide2), 0)
+      : (pressSheets + mrWasteSheets + runWasteSheets) * Math.max(1, runPasses);
     const lbsFor = (pct: number) => p.inkFactorMsqinPerLb > 0
       ? (inkImpressions * sheetArea * ((pct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000)
       : 0;
@@ -1129,6 +1170,10 @@ function computePart(
       coatingLbs = (pressSheets * sheetArea * ((p.coatingCoveragePct || 0) / 100)) / (p.inkFactorMsqinPerLb * 1000);
       coatingCost = coatingLbs * (p.coatingDollarsPerLb || 0);
     }
+    // E&M Foil Material per M press sheets -- material, alongside coating.
+    if ((p.foilMaterialPerM || 0) > 0) {
+      coatingCost += (pressSheets / 1000) * p.foilMaterialPerM;
+    }
     // BUCKET RESTRUCTURE (E&M #348538): press labor is HOURS × rates only.
     // Ink and coating are MATERIALS — they ride the Material bucket at
     // Material markup in computeClassic, not the Labor line.
@@ -1137,7 +1182,7 @@ function computePart(
       pressHrs * (p.helpers || 0) * (p.helperHourlyRate || 0);
   }
   // Plate materials (offset only): W&T-aware plate count × $/plate → MATERIAL.
-  const plateMaterialsCost = isDigital ? 0 : platesTotal * (p.plateCostEach || 0);
+  const plateMaterialsCost = platesTotal * (p.plateCostEach || 0);
   const pressMaterialsCost = p.dieCost || 0;
   const pressCost = pressLaborCost + pressMaterialsCost;
 
@@ -1146,7 +1191,7 @@ function computePart(
   // No paper bought (all-outside job, phantom carrier) -> nothing to cut.
   // Without this the 1-lift minimum billed ~$0.79 of cutter on every fully
   // outsourced poster (hand-key tranche 1).
-  const liftsAuto = (p.sheetsPerLift || 0) > 0 && (p.pricePerM || 0) > 0
+  const liftsAuto = (p.sheetsPerLift || 0) > 0 && (p.pricePerM || 0) > 0 && !p.preprintedPass
     ? Math.ceil(orderSheets / p.sheetsPerLift) : 0;
   const liftsUsed = p.noCutting ? 0 : (p.cutterLifts || 0) > 0 ? p.cutterLifts : liftsAuto;
   const cutterHrs = liftsUsed * (p.cutterHrsPerLift || 0) * (p.cutterDiff || 1);
@@ -1243,8 +1288,8 @@ function computePart(
     cutterHrsUsed * opRate(p.cutterRatePerHr) +
     trimHrsUsed * opRate(p.trimRatePerHr) +
     drillHrs * (p.binderyHourlyRate || 0) +
-    handOp1Hrs * opRate(p.handOp1?.ratePerHr ?? p.handBindRatePerHr) +
-    handOp2Hrs * opRate(p.handOp2?.ratePerHr ?? p.handBindRatePerHr) +
+    handOp1Hrs * opRate((p.handOp1?.ratePerHr || 0) > 0 ? p.handOp1.ratePerHr : p.handBindRatePerHr) +
+    handOp2Hrs * opRate((p.handOp2?.ratePerHr || 0) > 0 ? p.handOp2.ratePerHr : p.handBindRatePerHr) +
     packHrsUsed * opRate(p.packRatePerHr) +
     bandHrsUsed * (p.binderyHourlyRate || 0) +
     padHrsUsed * opRate(p.padRatePerHr) +
@@ -1356,6 +1401,7 @@ export interface ClassicCalc {
   sellingSubtotal: number;
   commission: number;
   total: number;
+  letterTotal: number;   // whole-dollar letter price (round down) or the per-tier override
   costPerUnit: number;
   costPerM: number;
 }
@@ -1373,9 +1419,10 @@ export function effectiveParts(f: ClassicForm): ClassicPart[] {
 }
 
 export function computeClassic(
-  f: ClassicForm,
+  fIn: ClassicForm,
   digitalStd: DigitalClickStandards | null
 ): ClassicCalc {
+  let f: ClassicForm = fIn;
   const isDigital = f.jobType === "Digital Direct";
   // A bindery vendor's required overs get PRINTED but are not billed as extra
   // pieces (E&M #343786: "5 overs in Bindtech price"). They lift the press
@@ -1445,6 +1492,15 @@ export function computeClassic(
   const coatingCost = sum((c) => c.coatingCost);
   const plateMaterialsCost = sum((c) => c.plateMaterialsCost);
   const materialCost = prepMaterials + cartonSkidCost + inkCost + coatingCost + plateMaterialsCost;
+
+  // Per-quantity freight / Add'l Cost (E&M keys a column per quantity). A
+  // value typed for this tier's slot wins; otherwise the single job value.
+  {
+    const slot = f.activeTierIndex || 0;
+    const fT = Array.isArray(f.freightByTier) ? Number(f.freightByTier[slot]) || 0 : 0;
+    const aT = Array.isArray(f.additionalByTier) ? Number(f.additionalByTier[slot]) || 0 : 0;
+    f = { ...f, freight: Math.max(0, fT > 0 ? fT : (f.freight || 0)), additionalCosts: Math.max(0, aT > 0 ? aT : (f.additionalCosts || 0)), plateDiscount: Math.max(0, f.plateDiscount || 0) };
+  }
 
   // ── Outside / pass-through (Screen 9) ──
   const digitalClickTotal = sum((c) => c.digitalClickCost + c.digitalVDCost + c.digitalVDSetupCost);
@@ -1553,6 +1609,12 @@ export function computeClassic(
   const sellingSubtotal =
     paperSelling + materialSelling + laborSelling + outsideSelling + freightSelling;
   const total = sellingSubtotal + commission;
+  // E&M letter price = whole dollars, rounded DOWN (65,931.47 -> 65,931.00),
+  // unless the estimator typed a price for this quantity (Selling Price
+  // Change screen: 343786 was hand-set $1,500 below its parts).
+  const tierSlot = f.activeTierIndex || 0;
+  const priceOverride = Array.isArray(f.priceOverrides) ? Number(f.priceOverrides[tierSlot]) || 0 : 0;
+  const letterTotal = priceOverride > 0 ? priceOverride : Math.floor(total);
 
   return {
     isDigital,
@@ -1597,7 +1659,7 @@ export function computeClassic(
     outsideToddCost,
     outsideVendorCost: outsideVendorCost + digitalClickTotal,
     freightAndAdditional, freightSelling,
-    totalCost, sellingSubtotal, commission, total,
+    totalCost, sellingSubtotal, commission, total, letterTotal,
     costPerUnit: billQty > 0 ? total / billQty : 0,
     costPerM: billQty > 0 ? (total / billQty) * 1000 : 0,
   };
@@ -1618,12 +1680,27 @@ export function computeQuantityBreaks(
   f: ClassicForm,
   digitalStd: DigitalClickStandards | null
 ): QuantityBreak[] {
-  const qtys = [
-    f.quantity || 0,
-    ...(Array.isArray(f.additionalQuantities) ? f.additionalQuantities : []).map((q) => Number(q) || 0).filter((q) => q > 0),
-  ];
-  return qtys.map((q, i) => {
-    const c = computeClassic({ ...f, quantity: q, activeTierIndex: i }, digitalStd);
-    return { quantity: q, total: c.total, costPerUnit: c.costPerUnit, costPer1000: c.costPerM };
+  // Slot index is preserved (a blank Add'l Qty 2 with a filled Add'l Qty 3
+  // still reads amountsByTier[2] / freightByTier[2]) -- audit 9/3.
+  const tiers: { q: number; slot: number }[] = [{ q: f.quantity || 0, slot: 0 }];
+  (Array.isArray(f.additionalQuantities) ? f.additionalQuantities : []).forEach((q, i) => {
+    const n = Number(q) || 0; if (n > 0) tiers.push({ q: n, slot: i + 1 });
+  });
+  const baseQty = f.quantity || 0;
+  // Run-based parts key NET sheets per run for the primary quantity; scale
+  // them with the tier so multi-run quotes get real tier prices (audit 9/3).
+  const scaleRuns = (part: ClassicPart, ratio: number): ClassicPart =>
+    Array.isArray(part.runs) && part.runs.length > 0 && ratio !== 1
+      ? { ...part, runs: part.runs.map((r) => ({ ...r, sheets: Math.ceil((r.sheets || 0) * ratio) })) }
+      : part;
+  return tiers.map(({ q, slot }) => {
+    const ratio = baseQty > 0 ? q / baseQty : 1;
+    const scaled: ClassicForm = {
+      ...scaleRuns(f as unknown as ClassicPart, ratio) as unknown as ClassicForm,
+      quantity: q, activeTierIndex: slot,
+      parts: Array.isArray(f.parts) ? f.parts.map((pt) => scaleRuns(pt, ratio)) : f.parts,
+    };
+    const c = computeClassic(scaled, digitalStd);
+    return { quantity: q, total: c.letterTotal ?? c.total, costPerUnit: c.costPerUnit, costPer1000: c.costPerM };
   });
 }

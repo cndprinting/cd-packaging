@@ -41,7 +41,7 @@ const JOB_FIELDS = new Set([
   "binderyOperation", "foldTypeName", "folderConfig", "foldCount",
   "stitcherName", "dieNumber", "versions", "signatureRuns",
   "handOp1", "handOp2", "bandIn", "padIn", "wrapIn",
-  "deliveryHrs", "dieCutHrs", "scorePerfHrs", "noCutting", "noCartons",
+  "deliveryHrs", "dieCutHrs", "scorePerfHrs", "noCutting", "noCartons", "extraPlates", "foilHrs",
 ]);
 
 function sanitizePatch(raw: unknown): Record<string, unknown> {

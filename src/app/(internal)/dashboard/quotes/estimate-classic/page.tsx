@@ -199,9 +199,27 @@ function ClassicEstimatorContent() {
       // Apply: job-level fields flat; part 1 also flat; parts 2..N into
       // parts[]. Built OUTSIDE setForm (from the current form) so the
       // planner note is available synchronously and the updater stays pure.
-      let next: ClassicForm = { ...form, ...(d.job || {}) };
       const patchParts: Partial<ClassicPart>[] = d.parts || [];
-      if (patchParts[0]) next = { ...next, ...patchParts[0] };
+      const jobPatch: Partial<ClassicForm> = { ...(d.job || {}), ...(patchParts[0] || {}) };
+      // Offset job with no press picked -> default the Komori so speed/rate
+      // exist (audit 9/3: a fill left run speed 0 and priced zero press time).
+      let pressNote = "";
+      const wantsPress = (jobPatch.jobType || form.jobType) !== "Digital Direct" && !(jobPatch.pressId || form.pressId);
+      if (wantsPress) {
+        const kom = presses.find((x) => /komori/i.test(x.name) && /conventional/i.test(x.name)) || presses.find((x) => /komori/i.test(x.name));
+        const cfg = kom?.configurations?.[0];
+        if (kom) {
+          Object.assign(jobPatch, {
+            pressId: kom.id, pressConfigId: cfg?.id || "",
+            pressHourlyRate: kom.costPerHour + (cfg?.addToHourlyRate || 0),
+            ...(cfg ? { runSpeedSph: cfg.speedUncoated, plateCostEach: cfg.plateCost || 0 } : {}),
+          });
+          pressNote = `Press set to ${kom.name} -- change it on Screen 7 if this runs elsewhere`;
+        }
+      }
+      // Build the preview from the current form for the planner; the real
+      // apply merges onto the LATEST state so edits made during the call survive.
+      let next: ClassicForm = { ...form, ...jobPatch };
       if (patchParts.length > 1) {
         const rest = [...(next.parts || [])];
         patchParts.slice(1).forEach((p, i) => {
@@ -237,8 +255,13 @@ function ClassicEstimatorContent() {
         };
         planNote = "Signatures planned for you: " + plan.text;
       }
-      setForm(next);
+      {
+        const planFields = plan && next.runs && next.runs.length ? { runs: next.runs, signatureRuns: 1, sheetsPerPiece: 1 } : {};
+        const partsPatch = patchParts.length > 1 ? { parts: next.parts, numParts: next.numParts } : {};
+        setForm((f) => ({ ...f, ...jobPatch, ...planFields, ...partsPatch }));
+      }
       if (planNote) d.notes = [...(d.notes || []), planNote];
+      if (pressNote) d.notes = [...(d.notes || []), pressNote];
       setAiNotes(d.notes || []);
       setAiMissing(d.missing || []);
       if (!(d.notes || []).length && !(d.missing || []).length) setAiAnswer("Nothing in that description mapped to the form — try adding sizes, quantity, colors, or the fold.");
@@ -273,7 +296,11 @@ function ClassicEstimatorContent() {
   const [form, setForm] = useState<ClassicForm>(defaultClassicForm);
   // Resume-from-draft: once set, Save updates this quote instead of creating
   // a new one each time (mirrors the wizard's draftQuoteId flow).
-  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(draftIdFromUrl);
+  // Armed only once the draft actually loads (audit 9/3: pre-seeding from the
+  // URL let autosave PUT a blank form over the real draft if the fetch lagged).
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(null);
+  const inFlightSaveRef = useRef<Promise<void> | null>(null);
+  const pendingAutosaveRef = useRef(false);
   const [draftQuoteNumber, setDraftQuoteNumber] = useState<string | null>(null);
   // Multi-part: which part Screens 6-8 are editing (0 = Part 1 / flat fields)
   const [partIndex, setPartIndex] = useState(0);
@@ -298,6 +325,7 @@ function ClassicEstimatorContent() {
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<number | null>(null);
   const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const screenBodyRef = useRef<HTMLDivElement>(null);
 
   const set = useCallback(<K extends keyof ClassicForm>(key: K, value: ClassicForm[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -309,7 +337,7 @@ function ClassicEstimatorContent() {
       .then((r) => r.json())
       .then((data) => {
         if (data.presses) setPresses(data.presses);
-        if (data.standards) {
+        if (data.standards && !draftIdFromUrl) {   // a resumed draft keeps its own rates
           const s = data.standards;
           {
           setFolders([1, 2, 3].map((i) => ({
@@ -632,13 +660,14 @@ function ClassicEstimatorContent() {
 
   // ── Keyboard: Enter advances field-to-field; PgUp/PgDn change screens ──
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "PageDown") { e.preventDefault(); setScreen((s) => Math.min(9, s + 1)); return; }
-    if (e.key === "PageUp") { e.preventDefault(); setScreen((s) => Math.max(1, s - 1)); return; }
-    if (e.key !== "Enter") return;
     const t = e.target as HTMLElement;
+    const inTextarea = t.tagName === "TEXTAREA";
+    if (e.key === "PageDown") { if (inTextarea) return; e.preventDefault(); setScreen((s) => Math.min(9, s + 1)); return; }
+    if (e.key === "PageUp") { if (inTextarea) return; e.preventDefault(); setScreen((s) => Math.max(1, s - 1)); return; }
+    if (e.key !== "Enter") return;
     if (t.tagName === "TEXTAREA" || t.tagName === "BUTTON" || t.tagName === "A") return;
     e.preventDefault();
-    const root = bodyRef.current;
+    const root = screenBodyRef.current || bodyRef.current;
     if (!root) return;
     const fields = Array.from(
       root.querySelectorAll<HTMLElement>("input:not([readonly]):not([disabled]), select:not([disabled]), textarea:not([disabled])")
@@ -650,7 +679,9 @@ function ClassicEstimatorContent() {
 
   // Focus the first field whenever the screen changes.
   useEffect(() => {
-    const root = bodyRef.current;
+    // Scoped to the screen body -- not the START HERE box or template search
+    // above it (audit 9/3: every PgDn landed the cursor in the AI textarea).
+    const root = screenBodyRef.current;
     if (!root) return;
     const first = root.querySelector<HTMLElement>("input:not([readonly]), select, textarea");
     first?.focus();
@@ -668,8 +699,15 @@ function ClassicEstimatorContent() {
       return;
     }
     // A hand save must win over an in-flight autosave; never run two at once.
-    if (silent) { if (saving || autoSaving) return; setAutoSaving(true); }
-    else setSaving(true);
+    if (silent) {
+      // Never run two saves at once; remember the edit and re-save after.
+      if (saving || autoSaving) { pendingAutosaveRef.current = true; return; }
+      setAutoSaving(true);
+    } else {
+      if (inFlightSaveRef.current) { try { await inFlightSaveRef.current; } catch { /* handled there */ } }
+      setSaving(true);
+    }
+    const done = (() => { let r!: () => void; const pr = new Promise<void>((res) => { r = res; }); inFlightSaveRef.current = pr; return r; })();
     try {
       const qty = form.quantity || 1;
       const isDigital = calc.isDigital;
@@ -818,7 +856,7 @@ function ClassicEstimatorContent() {
           form.jobType,
         ].filter(Boolean).join(" — "),
         quantity: qty,
-        unitPrice: calc.total / qty,
+        unitPrice: (calc.letterTotal ?? calc.total) / Math.max(1, qty),
         // quote.notes prints VERBATIM on the customer letter (print page's
         // "Notes" block) — so it carries ONLY Mary's quote-letter notes.
         // The classic method marker lives in specs; internal instructions
@@ -902,6 +940,8 @@ function ClassicEstimatorContent() {
     } finally {
       if (silent) setAutoSaving(false);
       else setSaving(false);
+      done(); inFlightSaveRef.current = null;
+      if (pendingAutosaveRef.current) { pendingAutosaveRef.current = false; setTimeout(() => saveQuoteRef.current({ silent: true }), 300); }
     }
   }
 
@@ -937,14 +977,14 @@ function ClassicEstimatorContent() {
           <SectionTitle>Job</SectionTitle>
           <Row label="Job Title" wide><Txt value={form.jobTitle} onChange={(v) => set("jobTitle", v)} /></Row>
           <Row label="Quantity"><Num value={form.quantity} onChange={(v) => set("quantity", v)} step={1} /></Row>
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <Row key={i} label={`Add'l Quantity ${i + 2}`}>
               <Num
                 value={form.additionalQuantities[i] || 0}
                 step={1}
                 onChange={(v) => {
                   const a = [...(form.additionalQuantities || [])];
-                  while (a.length < 3) a.push(0);
+                  while (a.length < 5) a.push(0);
                   a[i] = v;
                   set("additionalQuantities", a);
                 }}
@@ -952,6 +992,12 @@ function ClassicEstimatorContent() {
             </Row>
           ))}
           <Row label="No. of Parts"><Num value={form.numParts} onChange={(v) => set("numParts", v)} step={1} /></Row>
+          <Row label="Description Line 2" wide><Txt value={form.description2} onChange={(v) => set("description2", v)} /></Row>
+          <SectionTitle>Sold By / Contact</SectionTitle>
+          <Row label="Sold By"><Txt value={form.soldBy} onChange={(v) => set("soldBy", v)} /></Row>
+          <Row label="CSR"><Txt value={form.csr} onChange={(v) => set("csr", v)} /></Row>
+          <Row label="Contact"><Txt value={form.contactName} onChange={(v) => set("contactName", v)} /></Row>
+          <Row label="Phone"><Txt value={form.contactPhone} onChange={(v) => set("contactPhone", v)} /></Row>
         </div>
         <div>
           <SectionTitle>Pickup Estimate</SectionTitle>
@@ -1315,6 +1361,13 @@ function ClassicEstimatorContent() {
             <Row label="Caliper / Basis Weight" wide><Txt value={pv("caliperBasisWeight")} onChange={(v) => setP("caliperBasisWeight", v)} /></Row>
             <Row label="Weight (Lbs / M Shts)"><Num value={pv("weightPerMSheets")} onChange={(v) => setP("weightPerMSheets", v)} /></Row>
             <Row label="Brand/Color/Finish" wide><Txt value={pv("brandColorFinish")} onChange={(v) => setP("brandColorFinish", v)} /></Row>
+            <Row label="Priced By CWT" wide>
+              <label className="flex items-center gap-2 font-mono text-[13px] text-amber-200">
+                <input type="checkbox" checked={!!pv("paperPricedByCwt")} onChange={(e) => setP("paperPricedByCwt", e.target.checked)} />
+                paper priced per hundredweight (needs Weight lbs/M)
+              </label>
+            </Row>
+            {pv("paperPricedByCwt") && <Row label="Price $ / CWT"><Num value={pv("pricePerCwt")} onChange={(v) => setP("pricePerCwt", v)} /></Row>}
             <Row label="Price Per M Sheets $"><Num value={pv("pricePerM")} onChange={(v) => setP("pricePerM", v)} /></Row>
             <SectionTitle>{numParts > 1 ? `Computed — Part ${partIndex + 1}` : "Computed"}</SectionTitle>
             <Readout label="Press Sheets" value={String(pcalc.pressSheets)} />
@@ -1532,6 +1585,8 @@ function ClassicEstimatorContent() {
                 </Row>
                 <StdRow label="Plate Cost $ Each" show={showStd}><Num value={pv("plateCostEach")} onChange={(v) => setP("plateCostEach", v)} /></StdRow>
                 <Row label="Extra Plates (E&M)"><Num value={pv("extraPlates")} onChange={(v) => setP("extraPlates", v)} step={1} /></Row>
+                <Row label="Foil Hrs"><Num value={pv("foilHrs")} onChange={(v) => setP("foilHrs", v)} /></Row>
+                <Row label="Foil Material $/M"><Num value={pv("foilMaterialPerM")} onChange={(v) => setP("foilMaterialPerM", v)} /></Row>
                 <Readout label="Plates (Material)" value={`${pcalc.plates} × ${money(pv("plateCostEach"))} = ${money(pcalc.plateMaterialsCost)}`} />
                 {/* Press helper crew — near the top so Mary can't miss it (7/21) */}
                 <Row label="Helpers"><Num value={pv("helpers")} onChange={(v) => setP("helpers", v)} step={1} /></Row>
@@ -1615,6 +1670,7 @@ function ClassicEstimatorContent() {
                           </div>
                         </Row>
                         <Row label="Speed (SPH)"><Num value={r.runSpeedSph || 0} onChange={(v) => upd({ runSpeedSph: v })} step={100} /></Row>
+                        <Row label="Run Diff"><Num value={r.runDiff || 1} onChange={(v) => upd({ runDiff: v })} /></Row>
                         <Row label="Work & Turn" wide>
                           <label className="flex items-center gap-2 text-[12px] text-amber-200/80">
                             <input type="checkbox" checked={!!r.workAndTurn} onChange={(e) => upd({ workAndTurn: e.target.checked })} />
@@ -1909,6 +1965,8 @@ function ClassicEstimatorContent() {
                   </Row>
                   <Row label="Pieces/Hr"><Num value={op.piecesPerHour} onChange={(v) => setP(key, { ...op, piecesPerHour: v })} step={1} /></Row>
                   <Row label="% Of Qty"><Num value={op.pctOfQty} onChange={(v) => setP(key, { ...op, pctOfQty: v })} /></Row>
+                  <Row label="Or Hours (flat)"><Num value={op.hours || 0} onChange={(v) => setP(key, { ...op, hours: v })} /></Row>
+                  <StdRow label="Rate $/Hr (0 = hand rate)" show={showStd}><Num value={op.ratePerHr || 0} onChange={(v) => setP(key, { ...op, ratePerHr: v })} /></StdRow>
                   <Readout label="Hours" value={hrs(opHrs)} />
                 </div>
               );
@@ -2125,6 +2183,15 @@ function ClassicEstimatorContent() {
             className="mt-1 rounded-sm border border-amber-700/60 px-2 py-1 font-mono text-[12px] text-amber-300 hover:bg-amber-400/10"
             onClick={() => set("outsidePurchases", [...form.outsidePurchases, { description: "", amount: 0, per: "job" as const, plus3: true, source: "vendor" as const }])}
           >+ Add Outside Purchase</button>
+          <SectionTitle>Terms (Prints On Letter)</SectionTitle>
+          <Row label="Terms" wide><Txt value={form.terms} onChange={(v) => set("terms", v)} placeholder="e.g. Net C.O.D. / 2% 10 Days Net 30" /></Row>
+          <SectionTitle>Internal Notations (Never Printed)</SectionTitle>
+          <textarea
+            className={inputCls + " h-16 w-full"}
+            placeholder={'e.g. "1M per ctn @ 1.90", "minus 126 ctn - minus glueing"'}
+            value={form.internalNotes}
+            onChange={(e) => set("internalNotes", e.target.value)}
+          />
           <SectionTitle>Quote Notes (Prints On Letter)</SectionTitle>
           {/* Mary's standard letter phrases (7/21) — click to append, edit inline.
               These print on the customer letter under "Notes". */}
@@ -2262,7 +2329,10 @@ function ClassicEstimatorContent() {
                 <thead>
                   <tr className="border-b border-amber-600/60 text-left text-[11px] uppercase tracking-wider text-amber-500">
                     <th className="py-1 pr-2">Quantity</th>
-                    <th className="py-1 pr-2 text-right">Total</th>
+                    <th className="py-1 pr-2 text-right">Freight</th>
+                    <th className="py-1 pr-2 text-right">Add'l $</th>
+                    <th className="py-1 pr-2 text-right">Calculated</th>
+                    <th className="py-1 pr-2 text-right">Price To Customer</th>
                     <th className="py-1 pr-2 text-right">Price / Unit</th>
                     <th className="py-1 text-right">Price / M</th>
                   </tr>
@@ -2271,7 +2341,24 @@ function ClassicEstimatorContent() {
                   {quantityBreaks.map((b, i) => (
                     <tr key={i} className={`border-b border-amber-800/40 ${i === 0 ? "text-amber-100 font-bold" : ""}`}>
                       <td className="py-1 pr-2">{b.quantity.toLocaleString()}{i === 0 ? " (primary)" : ""}</td>
-                      <td className="py-1 pr-2 text-right">{money(b.total)}</td>
+                      {/* E&M keys freight / Add'l Cost per quantity column and lets the
+                          estimator type the customer price per quantity (Selling Price
+                          Change). Slot = this tier's quantity slot. */}
+                      {(() => {
+                        const slot = (() => { if (i === 0) return 0; let n = 0; const aq = form.additionalQuantities || []; for (let k = 0; k < aq.length; k++) { if ((Number(aq[k]) || 0) > 0) { n++; if (n === i) return k + 1; } } return i; })();
+                        const setSlot = (key: "freightByTier" | "additionalByTier" | "priceOverrides", v: number) => {
+                          const a = [...((form[key] as number[]) || [])]; while (a.length <= slot) a.push(0); a[slot] = v; set(key, a as any);
+                        };
+                        const val = (key: "freightByTier" | "additionalByTier" | "priceOverrides") => Number(((form[key] as number[]) || [])[slot]) || 0;
+                        return (
+                          <>
+                            <td className="py-1 pr-2 text-right"><Num value={val("freightByTier")} onChange={(v) => setSlot("freightByTier", v)} /></td>
+                            <td className="py-1 pr-2 text-right"><Num value={val("additionalByTier")} onChange={(v) => setSlot("additionalByTier", v)} /></td>
+                            <td className="py-1 pr-2 text-right">{money(b.total)}</td>
+                            <td className="py-1 pr-2 text-right"><Num value={val("priceOverrides")} onChange={(v) => setSlot("priceOverrides", v)} /></td>
+                          </>
+                        );
+                      })()}
                       <td className="py-1 pr-2 text-right">{money(b.costPerUnit)}</td>
                       <td className="py-1 text-right">{money(b.costPer1000)}</td>
                     </tr>
@@ -2400,7 +2487,10 @@ function ClassicEstimatorContent() {
               const t = templates.find((x) => x.label === e.target.value);
               if (!t) return;
               if (!window.confirm(`Copy "${t.label}" as your starting point? Anything on screen now is replaced.`)) return;
-              setForm({ ...defaultClassicForm(), ...(t.form as any), customerName: "", quoteNotes: "" });
+              // A template is a NEW quote: drop the previous draft's identity so
+              // autosave can't overwrite it, and the old customer's details.
+              setForm({ ...defaultClassicForm(), ...(t.form as any), customerName: "", customerNumber: "", address: "", contactName: "", contactPhone: "", quoteNotes: "", internalNotes: "", priceOverrides: [] });
+              setDraftQuoteId(null); setDraftQuoteNumber(null); setSaved(null); setCheckFlags(null);
               setPartIndex(0); setScreen(1);
             }}>
             <option value="">{templates.length ? `${templates.length} matches — newest first, pick one to copy…` : "no matches — try fewer words"}</option>
@@ -2449,7 +2539,7 @@ function ClassicEstimatorContent() {
           <span className="ml-auto text-amber-300">TOTAL {money(calc.total)}</span>
         </div>
 
-        <div className="min-h-[420px]">{bodies[screen - 1]()}</div>
+        <div ref={screenBodyRef} className="min-h-[420px]">{bodies[screen - 1]()}</div>
 
         {/* Footer nav */}
         <div className="mt-4 flex items-center justify-between border-t border-amber-700/50 pt-3">
