@@ -121,6 +121,7 @@ const digital = (): ClassicForm => {
   f.runSpeedSph = 2400; f.useSpeedCurve = false;
   f.inkLbsManual = 0.843;    // E&M bills $9.14 of black — forms run heavier than the 6% standard
   f.pressHourlyRate = 188.5; f.pressSetupHrs = 0.081; f.makereadyDiff = 0.19;
+  f.washupHrsPerUnit = 0.25;   // E&M printed ~0.25 hr washup on this 1-unit run (was riding the old default)
   f.plateCostEach = 19; f.plateHrsPerPlate = 0.075; f.plateLaborRate = 45;
   f.prepressRate = 45; f.designHours = 0;
   f.colorProofs = 1; f.colorProofCharge = 1.60; f.typeOutputHrs = 0.069; f.typeOutputRate = 45;

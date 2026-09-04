@@ -755,7 +755,7 @@ export function defaultClassicForm(): ClassicForm {
     cartonsPerHour: 40,
     pressSetupHrs: 0.125, pressSetupDiff: 0.8,
     baseMakereadyHrsPerPlate: 0.25, makereadyDiff: 1,
-    washupHrsPerUnit: 0.25, washupDiff: 1,
+    washupHrsPerUnit: 0.083, washupDiff: 1,   // E&M base ~0.083 hr/unit (348952: 0.1 hr = 4 units x 0.083 x diff 0.3); 0.25 overcharged every fresh quote
     runWastePct: 5, paperBuyRounding: 10,
     runSpeedSph: 0, useSpeedCurve: false, runDiff: 1, wasteFactorPct: 0, helpers: 0,
     solidCoverageSpeed: 8500, heavyCoveragePct: 60, boardCapInches: 0.028, boardCapSpeed: 4100,

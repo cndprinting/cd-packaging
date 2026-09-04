@@ -42,10 +42,12 @@ export async function POST(req: NextRequest) {
         colors: `${p.runColorsSide1 || 0}/${p.runColorsSide2 || 0}`,
         workAndTurn: !!p.workAndTurn, signatureRuns: p.signatureRuns || 1,
         pressRuns: (p.runs || []).length,
-        makereadySheets: p.wasteSheetsManual || 0, runSpeedSph: p.runSpeedSph || 0,
+        makereadySheets: c.partCalcs?.[i]?.mrWasteSheets ?? 0,   // COMPUTED (0 in the manual field means auto -- QT-2026-086 false flag)
+        washupHrs: Math.round(((c.partCalcs?.[i]?.washupHrs) || 0) * 100) / 100,
+        runSpeedSph: p.runSpeedSph || 0,
         pricePerM: p.pricePerM || 0, numberUp: p.numberUp || 1, sheetsPerPiece: p.sheetsPerPiece || 1,
         noCutting: !!p.noCutting, noCartons: !!p.noCartons,
-        cartons: p.cartons || 0, binderyOperation: p.binderyOperation || 0,
+        cartons: c.partCalcs?.[i]?.cartonsUsed ?? 0, paperWeightPerM: p.weightPerMSheets || 0, binderyOperation: p.binderyOperation || 0,
       })),
       computed: {
         paperCost: Math.round(c.paperCost), paperLbs: Math.round(((c.orderSheets || 0) / 1000) * (form.weightPerMSheets || 0)),
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
       system: `You are the pre-save checker for C&D Printing's estimator. Mary (30-year estimator) keyed a quote; flag anything that looks MIS-KEYED so she fixes the field instead of distrusting the system. Judge like an estimator, not a linter.
 ${HOUSE_RULES}
 
-Return STRICT JSON: {"flags": ["...", ...]} with AT MOST 4 flags, each one short sentence naming the screen/field and why it looks off (e.g. "Makeready 100 sheets looks low for 4/4 -- the house rule says ~900 (Screen 7)"). Only flag things a print estimator would question: prep/design hours wildly out of scale for the quantity (QT-2026-084: 25 design hours on a 100-piece reprint priced $2,000 of phantom labor -- E&M had 0.3; anything over ~2 hrs on a reprint or over ~8 on new work deserves a flag), a press-sheet size smaller than a typical parent with sheetsOutOfParent still 1 (paper bills at full parent price), zero outside rows + zero freight on work that names dies/varnish/outside finishing, zero/absurd speeds on offset work, makeready far off the 100/color/side+100/machine rule, missing cartons on heavy paper without No Cartons checked, commission 0 without intent, $0 paper on a printed job, per-piece price wildly off for the product. If it all looks reasonable return {"flags": []}. NEVER invent numbers -- use only the snapshot.`,
+Return STRICT JSON: {"flags": ["...", ...]} with AT MOST 4 flags, each one short sentence naming the screen/field and why it looks off (e.g. "Makeready 100 sheets looks low for 4/4 -- the house rule says ~900 (Screen 7)"). Only flag things a print estimator would question: prep/design hours wildly out of scale for the quantity (QT-2026-084: 25 design hours on a 100-piece reprint priced $2,000 of phantom labor -- E&M had 0.3; anything over ~2 hrs on a reprint or over ~8 on new work deserves a flag), a press-sheet size smaller than a typical parent with sheetsOutOfParent still 1 (paper bills at full parent price), zero outside rows + zero freight on work that names dies/varnish/outside finishing, paper weight per M left at 0 on an offset job (cartons then count as zero and paper handling is wrong), washup hours far above ~0.1-0.3 for the unit count. makereadySheets in the snapshot is the COMPUTED figure -- never call it zero unless it is, zero/absurd speeds on offset work, makeready far off the 100/color/side+100/machine rule, missing cartons on heavy paper without No Cartons checked, commission 0 without intent, $0 paper on a printed job, per-piece price wildly off for the product. If it all looks reasonable return {"flags": []}. NEVER invent numbers -- use only the snapshot.`,
       messages: [{ role: "user", content: JSON.stringify(snapshot) }],
     });
     const textBlock = msg.content.find((b) => b.type === "text");
