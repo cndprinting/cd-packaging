@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -2050,10 +2051,9 @@ function ProofsCard({ jobId }: { jobId: string }) {
   const uploadFile = async (file: File) => {
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
+      // Direct-to-Blob upload (no 4.5 MB serverless cap) -- src/lib/upload-client.ts
+      const res = await uploadToBlob(file);
+      const data = res.data;
       if (res.ok && data.url) {
         setFileUrl(data.url);
         setFileName(data.fileName || file.name);

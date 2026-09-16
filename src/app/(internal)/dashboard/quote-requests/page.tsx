@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import { FileText, Plus, X, Loader2, ArrowRight, FileBarChart, Trash2, ChevronDown, ChevronRight, Info, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -622,10 +623,9 @@ export default function QuoteRequestsPage() {
                           if (!file) return;
                           setUploadingArtwork(true);
                           try {
-                            const fd = new FormData();
-                            fd.append("file", file);
-                            const res = await fetch("/api/upload", { method: "POST", body: fd });
-                            const data = await res.json();
+                            // Direct-to-Blob upload (no 4.5 MB serverless cap) -- src/lib/upload-client.ts
+                            const res = await uploadToBlob(file);
+                            const data = res.data;
                             if (data.url) {
                               update("artworkUrl", data.url);
                               update("artworkFileName", data.fileName || file.name);

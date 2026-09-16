@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -791,9 +792,9 @@ function SourcingCard({ quote, onChange }: { quote: QuoteData; onChange: () => v
     if (!file) return;
     setArtRow(id);
     try {
-      const fd = new FormData(); fd.append("file", file);
-      const up = await fetch("/api/upload", { method: "POST", body: fd });
-      const d = await up.json();
+      // Direct-to-Blob upload (no 4.5 MB serverless cap) -- src/lib/upload-client.ts
+      const up = await uploadToBlob(file);
+      const d = up.data;
       if (!up.ok) { alert(d.message || d.error || "Upload failed"); return; }
       await saveItems(items.map((it) => it.id === id ? { ...it, artworkUrl: d.url, artworkName: d.fileName } : it));
     } catch { alert("Upload failed — try again"); }

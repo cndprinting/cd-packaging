@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import { Loader2, Upload, Check, FileText, Package } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -138,10 +139,9 @@ function RequestCard({ req, onSaved }: { req: SourcingRequest; onSaved: () => vo
     if (!file) return;
     setUploadRow(id); setError("");
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const d = await res.json();
+      // Direct-to-Blob upload (no 4.5 MB serverless cap) -- src/lib/upload-client.ts
+      const res = await uploadToBlob(file);
+      const d = res.data;
       if (!res.ok) { setError(d.message || d.error || "Upload failed"); return; }
       updateLine(id, { fileUrl: d.url, fileName: d.fileName });
     } catch { setError("Upload failed — try again"); }

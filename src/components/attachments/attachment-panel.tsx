@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import { Paperclip, Trash2, Upload, ExternalLink, Loader2 } from "lucide-react";
 
 // Shared attachment panel (Benjy 8/5). Drop it on a lead, a quote request, a
@@ -84,10 +85,9 @@ export function AttachmentPanel({ scope, title = "Files", compact = false }: { s
     if (!file) return;
     setBusy(true); setErr("");
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const d = await res.json();
+      // Direct-to-Blob upload (no 4.5 MB serverless cap) -- src/lib/upload-client.ts
+      const res = await uploadToBlob(file);
+      const d = res.data;
       if (!res.ok) {
         // Blob storage not configured yet — fall back to pasting a link rather
         // than pretending the upload worked.
