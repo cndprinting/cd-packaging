@@ -478,10 +478,22 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <div className="flex items-center gap-3">
         <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <select className={selCls + " h-9"} value={industry} onChange={(e) => setIndustry(e.target.value)} title="Filter by sector">
-          <option value="">All sectors</option>
-          {INDUSTRIES.map(([name]) => <option key={name} value={name}>{name}</option>)}
-        </select>
+        {/* Sector chips (Benjy 9/17: "filter certain columns like skincare").
+            Counts are within the current stage tab; a lead can sit in more
+            than one sector (nutra CDMO = Nutra + Co-Manufacturer). */}
+        <div className="flex flex-wrap items-center gap-1.5" title="Filter by sector">
+          {[["", "All"] as [string, string], ...INDUSTRIES.map(([n]) => [n, n] as [string, string])].map(([val, label]) => {
+            const rx = INDUSTRIES.find((x) => x[0] === val)?.[1];
+            const n = val ? leads.filter((l) => rx!.test(`${l.endMarket || ""} ${l.productCategory || ""}`)).length : leads.length;
+            const on = industry === val;
+            return (
+              <button key={val || "all"} type="button" onClick={() => setIndustry(val)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${on ? "border-brand-600 bg-brand-50 text-brand-700 font-medium" : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                {label} <span className="text-[10px] text-gray-400">{n}</span>
+              </button>
+            );
+          })}
+        </div>
         {/* Visible proof an edit landed — no more guessing (Benjy 8/5). */}
         {saveState === "saving" && <span className="text-xs text-gray-500">Saving…</span>}
         {saveState === "saved" && <span className="text-xs text-green-600">✓ Saved</span>}
