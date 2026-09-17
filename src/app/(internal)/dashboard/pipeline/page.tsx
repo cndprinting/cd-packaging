@@ -478,8 +478,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <div className="flex items-center gap-3">
         <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <select className={selCls + " h-9"} value={industry} onChange={(e) => setIndustry(e.target.value)} title="Industry">
-          <option value="">All industries</option>
+        <select className={selCls + " h-9"} value={industry} onChange={(e) => setIndustry(e.target.value)} title="Filter by sector">
+          <option value="">All sectors</option>
           {INDUSTRIES.map(([name]) => <option key={name} value={name}>{name}</option>)}
         </select>
         {/* Visible proof an edit landed — no more guessing (Benjy 8/5). */}
@@ -564,7 +564,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 text-left">
                 <th className="px-2 py-2 font-medium">Company</th>
-                <th className="px-2 py-2 font-medium" title="Who's driving it, and where it actually stands — in plain English">Status</th>
+                <th className="px-2 py-2 font-medium" title="Sector: Skincare, Nutra, Pharma/OTC... Set it here; filter with the Sector dropdown above. Status moved into the expanded row.">Sector</th>
                 <th className="px-2 py-2 font-medium">Product</th>
                 <th className="px-2 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
                 <th className="px-2 py-2 font-medium">Volume</th>
@@ -595,28 +595,25 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                     </button>
                   </td>
                   <td className="px-2 py-2">
-                    <div className="flex flex-col items-start gap-1">
-                      <ModeChip l={l} />
-                      {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
-                      <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
-                      {/* Same escape hatch as the daily email: clear it from the
-                          to-do list without having to move the lead (Benjy 8/6). */}
-                      {l.mode === "needs_you" && (
-                        <button type="button" onClick={() => markHandled(l)} title="Take it off the daily reminder email. The lead stays open — only the nag stops."
-                          className="w-fit text-[11px] text-green-700 hover:underline">✓ I&apos;ve got this</button>
-                      )}
-                    <select
-                      value={l.leadType}
-                      onChange={(e) => setLeadType(l.id, e.target.value as LeadType)}
-                      title="Where this lead came from — set it yourself; auto-detected until you do"
-                      className={`mt-0.5 w-fit cursor-pointer rounded border px-1 py-0 text-[10px] ${TYPE_BADGE[l.leadType]}`}
-                    >
-                      {(Object.keys(TYPE_LABELS) as LeadType[]).map((k) => (
-                        <option key={k} value={k}>{INBOUND_TYPES.has(k) ? "↓ " : k === "cold" ? "↑ " : ""}{TYPE_LABELS[k]}</option>
-                      ))}
-                    </select>
-                      {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
-                    </div>
+                    {/* Sector (Benjy 9/17): the old Status column moved into the
+                        expanded row. The Co-Manufacturer tag rides along. */}
+                    {(() => {
+                      const em = l.endMarket || ""; const isCo = /Co-Manufacturer/.test(em); const base = em.replace(/ · Co-Manufacturer$/, "");
+                      const known = INDUSTRY_OPTIONS.includes(base);
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <select className={selCls} value={known ? base : (base ? "__other" : "")} onChange={(e) => { const v = e.target.value === "__other" ? base : e.target.value; patch(l.id, "endMarket", v + (isCo ? " · Co-Manufacturer" : "")); }}>
+                            <option value="">—</option>
+                            {INDUSTRY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                            {!known && base && <option value="__other">{base}</option>}
+                          </select>
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500" title="Makes product for other brands (CDMO / co-packer)">
+                            <input type="checkbox" checked={isCo} onChange={(e) => patch(l.id, "endMarket", base + (e.target.checked ? " · Co-Manufacturer" : ""))} /> co-mfr
+                          </label>
+                          {l.mode === "needs_you" && <ModeChip l={l} />}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-2 py-2">
                     <select className={selCls} value={l.productCategory || ""} onChange={(e) => patch(l.id, "productCategory", e.target.value)}>
@@ -727,8 +724,35 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
                     <td colSpan={11} className="px-4 py-3">
+                      {/* Status (moved out of the table, Benjy 9/17): who's driving
+                          it and where it stands, the lead-type switch, stalled flag. */}
+                      <div className="mb-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <div className="mb-1 text-xs font-medium text-gray-500">Status</div>
+                        <div className="flex flex-wrap items-center gap-3">
+                      <ModeChip l={l} />
+                      {/* Plain-English stage. Raw internal statuses live only in the tooltip. */}
+                      <span className="text-xs text-gray-700" title={`raw: agentStatus=${l.agentStatus || "—"} · outreachStatus=${l.outreachStatus || "—"} · stage=${l.stage || "—"}`}>{l.stageLabel}</span>
+                      {/* Same escape hatch as the daily email: clear it from the
+                          to-do list without having to move the lead (Benjy 8/6). */}
+                      {l.mode === "needs_you" && (
+                        <button type="button" onClick={() => markHandled(l)} title="Take it off the daily reminder email. The lead stays open — only the nag stops."
+                          className="w-fit text-[11px] text-green-700 hover:underline">✓ I&apos;ve got this</button>
+                      )}
+                    <select
+                      value={l.leadType}
+                      onChange={(e) => setLeadType(l.id, e.target.value as LeadType)}
+                      title="Where this lead came from — set it yourself; auto-detected until you do"
+                      className={`mt-0.5 w-fit cursor-pointer rounded border px-1 py-0 text-[10px] ${TYPE_BADGE[l.leadType]}`}
+                    >
+                      {(Object.keys(TYPE_LABELS) as LeadType[]).map((k) => (
+                        <option key={k} value={k}>{INBOUND_TYPES.has(k) ? "↓ " : k === "cold" ? "↑ " : ""}{TYPE_LABELS[k]}</option>
+                      ))}
+                    </select>
+                      {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
+                        </div>
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"], ["endMarket", "End market"]] as const).map(([f, label]) => {
+                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
                           // silently never emails this lead. Catch it here
                           // rather than discovering it weeks later (Shimmie 8/6).
