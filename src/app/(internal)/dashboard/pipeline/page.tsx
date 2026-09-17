@@ -128,6 +128,18 @@ const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k.charAt(0).toUpp
 
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
 const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
+// Industry filter (Benjy 9/17): search by Skincare / Nutra / Co-Manufacturer...
+// Matches the free-text End market so older rows classify too; a lead can be
+// in more than one (a nutra CDMO is Nutra AND Co-Manufacturer).
+const INDUSTRIES: [string, RegExp][] = [
+  ["Skincare / Cosmetics", /skin|cosmet|beauty|derma|hair|personal care|nail/i],
+  ["Nutra", /nutra|supplement|vitamin|probiotic|gummy|gummies/i],
+  ["Co-Manufacturer", /co-?man|cdmo|contract manuf|private label|co-?pack|store-brand|white label/i],
+  ["Healthcare / OTC", /health|otc|pharma|medical|drug|dental|diagnostic/i],
+  ["Food & Beverage", /food|bev|snack|coffee|tea|candy|confection|pet/i],
+  ["Consumer Products", /consumer|household|home|toy|electronics|apparel/i],
+];
+const INDUSTRY_OPTIONS = ["Skincare / Cosmetics", "Nutraceutical", "Healthcare / OTC", "Food & Beverage", "Consumer Products", "Industrial / Other"];
 const STAGE_LEAD = ["Break in", "Touch base", "Connected", "Requested info", "Quoting", "Meeting set", "Deprioritize", "Dead"];
 const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
 // Inbound and Prospecting are both the LEAD stage, split by how the record
@@ -163,6 +175,7 @@ export default function PipelinePage() {
   const [forbidden, setForbidden] = useState(false);
   const [active, setActive] = useState<string>("PROSPECTING");
   const [search, setSearch] = useState("");
+  const [industry, setIndustry] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [dueOnly, setDueOnly] = useState(false);
@@ -258,7 +271,8 @@ export default function PipelinePage() {
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
-    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q));
+    .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q))
+    .filter((l) => { if (!industry) return true; const rx = INDUSTRIES.find((x) => x[0] === industry)?.[1]; return rx ? rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`) : true; });
 
   // Counts shown on the chips — scoped to the active pipeline stage so the
   // numbers match what you're looking at.
@@ -464,6 +478,10 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <div className="flex items-center gap-3">
         <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+        <select className={selCls + " h-9"} value={industry} onChange={(e) => setIndustry(e.target.value)} title="Industry">
+          <option value="">All industries</option>
+          {INDUSTRIES.map(([name]) => <option key={name} value={name}>{name}</option>)}
+        </select>
         {/* Visible proof an edit landed — no more guessing (Benjy 8/5). */}
         {saveState === "saving" && <span className="text-xs text-gray-500">Saving…</span>}
         {saveState === "saved" && <span className="text-xs text-green-600">✓ Saved</span>}
@@ -906,7 +924,13 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">End market</label><Input value={form.endMarket} onChange={(e) => upd("endMarket", e.target.value)} placeholder="e.g. Food & Bev" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                <select className={selCls + " h-9 w-full"} value={form.endMarket.replace(/ · Co-Manufacturer$/, "")} onChange={(e) => upd("endMarket", e.target.value + (/Co-Manufacturer/.test(form.endMarket) ? " · Co-Manufacturer" : ""))}>
+                  <option value="">— pick —</option>
+                  {INDUSTRY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <label className="mt-1 flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={/Co-Manufacturer/.test(form.endMarket)} onChange={(e) => upd("endMarket", form.endMarket.replace(/ · Co-Manufacturer$/, "") + (e.target.checked ? " · Co-Manufacturer" : ""))} /> Co-manufacturer / CDMO (makes for other brands)</label>
+              </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
                 <select className={selCls + " h-9"} value={form.productCategory} onChange={(e) => upd("productCategory", e.target.value)}>{PRODUCTS.map((p) => <option key={p}>{p}</option>)}</select>
               </div>
