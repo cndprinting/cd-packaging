@@ -925,13 +925,16 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         </div>
       </Card>
 
-      {showAdd && <AddLeadModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
+      {showAdd && <AddLeadModal initialTab={active} onClose={() => setShowAdd(false)} onSaved={(tab) => { setShowAdd(false); setActive(tab); load(); }} />}
     </div>
   );
 }
 
-function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", city: "", state: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: "Break in" });
+function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; onClose: () => void; onSaved: (tab: string) => void }) {
+  // Benjy 9/22 ("I just added Anagen under Qualified and it doesn't show
+  // anywhere"): the form always saved into Prospecting. It now lands in the tab
+  // you're on (changeable here) and the page jumps to that tab afterwards.
+  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", city: "", state: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: initialTab === "INBOUND" || initialTab === "PROSPECTING" ? "Break in" : "", tab: STAGES.some((s) => s.key === initialTab) ? initialTab : "PROSPECTING" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dupes, setDupes] = useState<{ leads: any[]; companies: any[]; quotes: any[] } | null>(null);
@@ -955,7 +958,10 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     if (!canSave) return;
     setSaving(true); setErr(null);
     try {
-      const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const target = STAGES.find((s) => s.key === form.tab) || STAGES[1];
+      const { tab, ...rest } = form;
+      const payload = { ...rest, pipelineStage: target.stage, ...(tab === "INBOUND" ? { originOverride: "inbound" } : {}) };
+      const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setErr(d.error || "Could not save that lead.");
@@ -968,7 +974,7 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       return;
     }
     setSaving(false);
-    onSaved();
+    onSaved(form.tab);
   };
 
   const hasDupes = dupes && (dupes.leads.length + dupes.companies.length + dupes.quotes.length > 0);
@@ -1002,6 +1008,11 @@ function AddLeadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
                 <select className={selCls + " h-9"} value={form.productCategory} onChange={(e) => upd("productCategory", e.target.value)}>{PRODUCTS.map((p) => <option key={p}>{p}</option>)}</select>
+              </div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Add to</label>
+                <select className={selCls + " h-9"} value={form.tab} onChange={(e) => { const t = e.target.value; setForm((p) => ({ ...p, tab: t, stage: t === "INBOUND" || t === "PROSPECTING" ? (p.stage || "Break in") : (STAGE_LEAD.includes(p.stage) ? "" : p.stage) })); }}>
+                  {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
                 <select className={selCls + " h-9"} value={form.ownerName} onChange={(e) => upd("ownerName", e.target.value)}>{OWNERS.map((o) => <option key={o}>{o}</option>)}</select>

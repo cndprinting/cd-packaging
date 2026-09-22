@@ -114,6 +114,8 @@ export async function POST(request: NextRequest) {
       priority: body.priority ? Number(body.priority) : null,
       stage: body.stage || null,
       pipelineStage: body.pipelineStage || "LEAD",
+      // Added from the Inbound tab -> it is an inbound lead, not a prospect
+      ...(body.originOverride === "inbound" ? { originOverride: "inbound", source: "inbound" } : {}),
       ownerName: body.ownerName || null,
       volume: body.volume || null,
       commentary: body.commentary || null,
