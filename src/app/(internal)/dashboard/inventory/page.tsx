@@ -11,7 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 
 interface Vendor { id: string; name: string; }
 interface Material { id: string; name: string; sku?: string | null; category?: string | null; unit: string; onHand: number; allocated: number; reorderPoint: number; vendor?: string | null; }
-interface Die { id: string; dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null; }
+interface Die { id: string; dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null; dielineUrl?: string | null; dielineName?: string | null; }
 
 interface PaperUsageRecord { id: string; itemNumber: string | null; jobNumber: string | null; wipStatus: string | null; date: string | null; source: string | null; direction: string | null; quantityOut: number; weight: string | null; size: string | null; description: string | null; pricePerM: number | null; totalOut: number | null; }
 interface VendorPurchaseRecord { id: string; jobNumber: string | null; date: string | null; vendor: string | null; quantity: number; weight: string | null; size: string | null; description: string | null; pricePerM: number | null; total: number | null; quotedPricePerM: number | null; savings: number | null; }
@@ -213,6 +213,7 @@ export default function InventoryPage() {
                   <TableHead>Size</TableHead>
                   <TableHead>Original Job</TableHead>
                   <TableHead>Notes</TableHead>
+                  <TableHead>Dieline</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -225,10 +226,15 @@ export default function InventoryPage() {
                     <TableCell className="text-sm">{die.length && die.width ? `${die.length} x ${die.width}` : "—"}</TableCell>
                     <TableCell className="font-mono text-xs text-gray-500">{(die as any).originalJobNumber || "—"}</TableCell>
                     <TableCell className="text-xs text-gray-500 max-w-[150px] truncate">{die.notes || "—"}</TableCell>
+                    <TableCell className="text-xs">
+                      {die.dielineUrl ? (
+                        <a href={die.dielineUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" title={die.dielineName || "Dieline PDF"}>PDF</a>
+                      ) : <span className="text-gray-300">—</span>}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {dies.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center py-12 text-gray-400">
+                  <TableRow><TableCell colSpan={8} className="text-center py-12 text-gray-400">
                     <Scissors className="h-10 w-10 mx-auto mb-3 opacity-40" />
                     <p>{dieSearch ? `No dies matching "${dieSearch}"` : "No cutting dies found"}</p>
                   </TableCell></TableRow>

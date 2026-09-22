@@ -265,7 +265,7 @@ export default function CustomerDetailPage() {
 }
 
 function DieInventory({ customerName }: { customerName: string }) {
-  const [dies, setDies] = useState<{ id: string; dieNumber: string; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null }[]>([]);
+  const [dies, setDies] = useState<{ id: string; dieNumber: string; item: string | null; description: string | null; length: number | null; width: number | null; notes: string | null; dielineUrl?: string | null; dielineName?: string | null }[]>([]);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
@@ -294,6 +294,7 @@ function DieInventory({ customerName }: { customerName: string }) {
               <TableHead>Description</TableHead>
               <TableHead>Size</TableHead>
               <TableHead>Notes</TableHead>
+              <TableHead>Dieline</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -304,6 +305,11 @@ function DieInventory({ customerName }: { customerName: string }) {
                 <TableCell className="text-sm text-gray-600">{die.description || "—"}</TableCell>
                 <TableCell className="text-sm">{die.length && die.width ? `${die.length} x ${die.width}` : "—"}</TableCell>
                 <TableCell className="text-xs text-gray-500">{die.notes || "—"}</TableCell>
+                <TableCell className="text-xs">
+                  {die.dielineUrl ? (
+                    <a href={die.dielineUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" title={die.dielineName || "Dieline PDF"}>PDF</a>
+                  ) : <span className="text-gray-300">—</span>}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

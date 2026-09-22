@@ -1522,6 +1522,8 @@ model CuttingDie {
   width           Float?
   height          Float?
   notes           String?
+  dielineUrl      String?   // vector PDF of the dieline / press layout (Vercel Blob)
+  dielineName     String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
 

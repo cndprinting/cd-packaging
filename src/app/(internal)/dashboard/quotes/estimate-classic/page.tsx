@@ -309,7 +309,7 @@ function ClassicEstimatorContent() {
   const [pickupValue, setPickupValue] = useState("");
   const [pickupLoaded, setPickupLoaded] = useState<string | null>(null);
   // Die inventory lookup (1,842 CuttingDie rows via /api/dies?search=)
-  const [dieOptions, setDieOptions] = useState<{ dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; height: number | null }[]>([]);
+  const [dieOptions, setDieOptions] = useState<{ dieNumber: string; customerName: string | null; item: string | null; description: string | null; length: number | null; width: number | null; height: number | null; dielineUrl?: string | null; dielineName?: string | null }[]>([]);
   // Stock picker — E&M paper history (PaperUsage: description + pricePerM + weight)
   const [stockOptions, setStockOptions] = useState<{ description: string; pricePerM: number | null; weight: string | null; size: string | null }[]>([]);
   const [presses, setPresses] = useState<PressData[]>([]);
@@ -1422,6 +1422,9 @@ function ClassicEstimatorContent() {
                 dieMatch.customerName, dieMatch.item, dieMatch.description,
                 dieMatch.length && dieMatch.width ? `${dieMatch.length}x${dieMatch.width}${dieMatch.height ? `x${dieMatch.height}` : ""}` : "",
               ].filter(Boolean).join(" · ") || "no detail"} · existing die, no die charge needed
+              {dieMatch.dielineUrl && (
+                <> · <a href={dieMatch.dielineUrl} target="_blank" rel="noopener noreferrer" className="underline text-amber-200" title={dieMatch.dielineName || "Dieline PDF"}>open dieline PDF</a></>
+              )}
             </div>
             {/* Mary 8/21: "I'm guessing that eventually I can enter a Die # and
                 it will auto fill just by that?" — yes, for the finished box
