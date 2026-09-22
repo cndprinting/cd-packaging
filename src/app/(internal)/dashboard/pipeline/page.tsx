@@ -600,7 +600,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
               </colgroup>
             ) : (
               <colgroup>
-                <col style={{ width: 260 }} /><col style={{ width: 130 }} /><col style={{ width: 160 }} /><col style={{ width: 170 }} /><col style={{ width: 150 }} />
+                <col /><col style={{ width: 230 }} /><col style={{ width: 230 }} /><col style={{ width: 200 }} /><col style={{ width: 190 }} />
               </colgroup>
             )}
             <thead>
