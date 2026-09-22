@@ -10,6 +10,7 @@
 // customer/job data is still in E&M until go-live, so those columns can be
 // blank and C&D adds them by hand.
 import type { PrismaClient } from "@/generated/prisma";
+import { getGraphClient } from "@/lib/email/graph-client";
 
 export interface LeadLogRow {
   dateIn: string; month: string; company: string; contact: string;
@@ -30,7 +31,7 @@ export async function buildLeadsLog(prisma: PrismaClient): Promise<{ rows: LeadL
     // MailerCity flow-through is not marketing-sourced
     where: { source: "inbound", createdAt: { gte: new Date(process.env.MARKETING_REPORT_SINCE || "2026-08-01T00:00:00Z") } },
     orderBy: { createdAt: "asc" },
-    select: { companyName: true, contactName: true, pipelineStage: true, stage: true, agentStatus: true, agentQuote: true, commentary: true, companyId: true, quoteId: true, createdAt: true, intakeRaw: true },
+    select: { companyName: true, contactName: true, pipelineStage: true, stage: true, agentStatus: true, agentQuote: true, commentary: true, companyId: true, quoteId: true, createdAt: true, intakeRaw: true, agentMailbox: true, agentConvId: true },
   });
   const quotes = await prisma.quote.findMany({ where: { status: { not: "ARCHIVED" }, totalPrice: { gt: 0 } }, select: { id: true, customerName: true, companyId: true, totalPrice: true, status: true } });
   const invoices = await prisma.invoice.findMany({ where: { status: { not: "VOID" } }, select: { customerName: true, companyId: true, total: true, balancePaid: true, depositPaid: true, createdAt: true }, orderBy: { createdAt: "asc" } });
@@ -44,7 +45,9 @@ export async function buildLeadsLog(prisma: PrismaClient): Promise<{ rows: LeadL
     const sameCo = (name: string, coId: string | null) => (l.companyId && coId && l.companyId === coId) || (key.length > 3 && norm(name) === key);
 
     const q = quotes.filter((x) => (l.quoteId && x.id === l.quoteId) || sameCo(x.customerName, x.companyId));
-    const quoteValue = q.length ? Math.max(...q.map((x) => x.totalPrice)) : parseMoney(l.agentQuote);
+    // Benjy 9/22 ("quote value column fully empty WTF"): the real number is in
+    // the quote email Jessica sent the customer, so read the thread first.
+    const quoteValue = (await quoteFromThread(l.agentMailbox, l.agentConvId)) ?? (q.length ? Math.max(...q.map((x) => x.totalPrice)) : parseMoney(l.agentQuote));
     const paid = invoices.filter((x) => sameCo(x.customerName, x.companyId) && (x.balancePaid || x.depositPaid));
     const closedValue = paid.length ? paid[0].total : null;
     const repeat = paid.length > 1 ? paid.slice(1).reduce((s, x) => s + x.total, 0) : null;
@@ -54,7 +57,7 @@ export async function buildLeadsLog(prisma: PrismaClient): Promise<{ rows: LeadL
     let status: LeadLogRow["status"] = "New";
     if (closedValue) status = "Won";
     else if (l.pipelineStage === "LOST") status = "Lost";
-    else if (quoteValue || /quote received|^sent$|quote sent|followup/i.test(stageText) || ["sent", "followup_1", "followup_2", "followup_3", "quote_received"].includes(l.agentStatus || "")) status = "Quoted";
+    else if (quoteValue) status = "Quoted"; // "Quote received" from Mary is not a price to the customer until it went out
 
     const note = [l.pipelineStage === "CUSTOMER" ? "existing account" : "", l.stage && !/^sent$/i.test(l.stage) ? l.stage : "", intakeSummary(l.intakeRaw) || firstLine(l.commentary)].filter(Boolean).join(" — ").slice(0, 200);
     rows.push({
@@ -74,6 +77,32 @@ export async function buildLeadsLog(prisma: PrismaClient): Promise<{ rows: LeadL
   return { rows, months: [...byMonth.values()] };
 }
 
+// First "Total Price" figure in a quote email the agent sent on this lead's
+// customer thread (the pricing table: "Quantity Total Price Price per Unit 50 $8,927.00 $178.54").
+const threadCache = new Map<string, number | null>();
+async function quoteFromThread(mailbox: string | null, convId: string | null): Promise<number | null> {
+  if (!convId) return null;
+  const mb = mailbox || process.env.AGENT_SENDER_EMAIL || "jwaxman@cndprinting.com";
+  const key = `${mb}|${convId}`;
+  if (threadCache.has(key)) return threadCache.get(key)!;
+  let out: number | null = null;
+  try {
+    const client = getGraphClient();
+    if (client) {
+      const r = await client.api(`/users/${mb}/messages`).filter(`conversationId eq '${convId}'`).select("from,receivedDateTime,body").top(40).get();
+      const msgs = ((r?.value || []) as { from?: { emailAddress?: { address?: string } }; receivedDateTime: string; body?: { content?: string } }[])
+        .filter((m) => (m.from?.emailAddress?.address || "").toLowerCase() === mb.toLowerCase())
+        .sort((a, b) => a.receivedDateTime.localeCompare(b.receivedDateTime));
+      for (const m of msgs) {
+        const txt = (m.body?.content || "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+        const hit = txt.match(/Total Price[^$]{0,60}\$\s?([\d,]+(?:\.\d{2})?)/i);
+        if (hit) { out = parseFloat(hit[1].replace(/,/g, "")); break; }
+      }
+    }
+  } catch (e) { console.error("quoteFromThread failed", (e as Error).message); }
+  threadCache.set(key, out);
+  return out;
+}
 function parseMoney(s: string | null | undefined): number | null {
   if (!s) return null;
   const m = s.match(/\$\s?([\d,]+(?:\.\d{2})?)/);
