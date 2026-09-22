@@ -18,7 +18,7 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "/dashboard/inventory": [...FULL_ACCESS, "CSR"],
   // Dieline module (Sep 2026): reps size boxes on a call, Mary needs the flat size, prepress reviews
-  "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS"],
+  "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS_MANAGER"],
   "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
   "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
