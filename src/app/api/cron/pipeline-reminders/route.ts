@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
   // Map owner display names → real mailbox emails. Known owners are hardcoded
   // (deterministic — the User table has several duplicate-name rows); anything
   // unknown falls back to Benjy.
-  const OWNER_EMAILS: Record<string, string> = { benjy: "bwaxman@cndprinting.com", albert: "awaxman@cndprinting.com", nitay: "nlaor@cndprinting.com", lee: "lzerfass@cndprinting.com", shimmie: "sjacoby@cndprinting.com", kelsey: "kjacobsen@cndprinting.com", suzanne: "salvarez@cndprinting.com" };
+  // "house" (House account, Benjy 9/22) has no mailbox: both owners get the reminder.
+  const OWNER_EMAILS: Record<string, string> = { benjy: "bwaxman@cndprinting.com", albert: "awaxman@cndprinting.com", nitay: "nlaor@cndprinting.com", lee: "lzerfass@cndprinting.com", shimmie: "sjacoby@cndprinting.com", kelsey: "kjacobsen@cndprinting.com", suzanne: "salvarez@cndprinting.com", house: "bwaxman@cndprinting.com,nlaor@cndprinting.com" };
   const users = await prisma.user.findMany({ where: { isActive: true }, select: { name: true, email: true } });
   const emailFor = (ownerName: string | null): string => {
     if (!ownerName || ownerName.toUpperCase() === "TBD") return FALLBACK_TO;
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
     const mine = leads.filter((l) => !isUnowned(l));
     const orphans = leads.filter(isUnowned);
     const mineBlock = mine.length
-      ? `<p>You have <strong>${mine.length}</strong> pipeline follow-up${mine.length > 1 ? "s" : ""} due:</p><ul style="padding-left:18px;">${mine.map(line).join("")}</ul>`
+      ? `<p>${to.includes(",") ? "The <strong>House account</strong> (you and Nitay share it) has" : "You have"} <strong>${mine.length}</strong> pipeline follow-up${mine.length > 1 ? "s" : ""} due:</p><ul style="padding-left:18px;">${mine.map(line).join("")}</ul>`
       : "";
     const orphanBlock = orphans.length
       ? `<div style="margin-top:${mine.length ? "20px" : "0"};padding:12px 14px;background:#fff8e6;border-left:3px solid #e0a800;">
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
     const subject = mine.length
       ? `Pipeline follow-ups due (${leads.length})`
       : `Unassigned follow-up${orphans.length > 1 ? "s" : ""} due (${orphans.length}) - no owner set`;
-    const res = await sendEmail({ from: SENDER, to, subject, body });
+    const res = await sendEmail({ from: SENDER, to: to.split(","), subject, body });
     if (res.success) { sent++; sentLeadIds.push(...leads.map((l) => l.id)); }
   }
 

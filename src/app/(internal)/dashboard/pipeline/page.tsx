@@ -177,10 +177,12 @@ const ownerKey = (l: Lead) => {
   const first = (l.ownerName || "").trim().split(/\s+/)[0].toLowerCase();
   return !first || first === "tbd" ? "tbd" : first;
 };
-const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k.charAt(0).toUpperCase() + k.slice(1);
+const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k === "house" ? "House account" : k.charAt(0).toUpperCase() + k.slice(1);
 
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
-const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "TBD"];
+// "House" = house account (Benjy 9/22): no mailbox of its own, Benjy and Nitay
+// share it and both get its follow-up reminders.
+const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "House", "TBD"];
 // Industry filter (Benjy 9/17): search by Skincare / Nutra / Co-Manufacturer...
 // Matches the free-text End market so older rows classify too; a lead can be
 // in more than one (a nutra CDMO is Nutra AND Co-Manufacturer).

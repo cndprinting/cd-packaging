@@ -35,7 +35,7 @@ export type LeadViewInput = {
 
 // A real person on the sales team. "Jessica" is the AI agent's persona and
 // "TBD"/blank are unassigned — neither counts as human-owned.
-export const HUMAN_OWNERS = ["benjy", "nitay", "albert", "shimmie", "suzanne", "mary", "kelsey"];
+export const HUMAN_OWNERS = ["benjy", "nitay", "albert", "shimmie", "suzanne", "mary", "kelsey", "lee", "house"]; // house = Benjy + Nitay together
 
 // Agent statuses where a HUMAN has to do something next.
 const NEEDS_YOU_AGENT = [
