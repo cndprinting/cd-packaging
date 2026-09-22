@@ -109,6 +109,59 @@ function Chip({ on, label, count, onClick, tone = "gray" }: { on: boolean; label
   );
 }
 
+// Filter dropdown (Benjy 9/22: "clear this area and make these drop downs").
+// One button per filter group; the menu lists options with counts. Multi-select
+// unless `single`. Empty selection = the "all" choice.
+function Dropdown({ label, all, allCount, options, selected, onChange, single = false }: {
+  label: string; all: string; allCount: number;
+  options: { key: string; label: string; count: number }[];
+  selected: Set<string>; onChange: (s: Set<string>) => void; single?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const picked = options.filter((o) => selected.has(o.key));
+  const summary = picked.length === 0 ? all : picked.length <= 2 ? picked.map((o) => o.label).join(", ") : `${picked[0].label} +${picked.length - 1}`;
+  const isSet = picked.length > 0;
+  const pick = (k: string) => {
+    if (single) { onChange(selected.has(k) ? new Set() : new Set([k])); setOpen(false); return; }
+    const n = new Set(selected); if (n.has(k)) n.delete(k); else n.add(k); onChange(n);
+  };
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className={`inline-flex h-8 max-w-[240px] items-center gap-1.5 rounded-md border px-2.5 text-xs ${isSet ? "border-brand-500 bg-brand-50 text-brand-700 font-medium" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
+        <span className={isSet ? "text-brand-500" : "text-gray-400"}>{label}</span>
+        <span className="truncate">{summary}</span>
+        <svg className="h-3.5 w-3.5 shrink-0 opacity-60" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8l4 4 4-4" /></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-9 z-30 min-w-[220px] max-h-80 overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+          <button type="button" onClick={() => { onChange(new Set()); if (single) setOpen(false); }}
+            className={`flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-xs hover:bg-gray-50 ${!isSet ? "bg-gray-100 font-medium" : ""}`}>
+            <span>{all}</span><span className="text-gray-400">{allCount}</span>
+          </button>
+          {options.map((o) => {
+            const on = selected.has(o.key);
+            return (
+              <button key={o.key} type="button" onClick={() => pick(o.key)}
+                className={`flex w-full items-center justify-between gap-4 rounded px-2.5 py-1.5 text-left text-xs hover:bg-gray-50 ${on ? "bg-brand-50 text-brand-700 font-medium" : "text-gray-700"}`}>
+                <span className="flex items-center gap-1.5">{!single && <span className={`inline-block h-3 w-3 rounded-sm border ${on ? "border-brand-600 bg-brand-600" : "border-gray-300"}`} />}{o.label}</span>
+                <span className="text-gray-400">{o.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Follow-up state: "due" = date is today or past, "upcoming" = future.
 function dueState(l: Lead): "due" | "upcoming" | null {
   if (l.followUpDoneAt) return null; // completed follow-ups drop off the due list
@@ -188,6 +241,13 @@ export default function PipelinePage() {
   // book. Keyed by lowercased first name, which is how ownerName is stored.
   const [ownerF, setOwnerF] = useState<Set<string>>(new Set());
   const [me, setMe] = useState<string>("");
+  // Manual sub-status filter + Summary/Full view (Benjy 9/22: columns "very
+  // congested"; core = Company, Owner, Sub-status, Follow-up, Actions).
+  const [subF, setSubF] = useState<Set<string>>(new Set());
+  const [view, setViewState] = useState<"summary" | "full">("summary");
+  useEffect(() => { try { const v = localStorage.getItem("pipeline.view"); if (v === "full" || v === "summary") setViewState(v); } catch { /* private mode */ } }, []);
+  const setView = (v: "summary" | "full") => { setViewState(v); try { localStorage.setItem("pipeline.view", v); } catch { /* ignore */ } };
+  const full = view === "full";
   // Per-field validation messages, keyed "<leadId>:<field>".
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
   const toggle = (set: Set<string>, upd: (s: Set<string>) => void) => (k: string) => {
@@ -270,6 +330,7 @@ export default function PipelinePage() {
     .filter((l) => regionF.size === 0 || regionF.has(l.region))
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
+    .filter((l) => subF.size === 0 || subF.has(l.stage || "—"))
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q))
     .filter((l) => { if (!industry) return true; const rx = INDUSTRIES.find((x) => x[0] === industry)?.[1]; return rx ? rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`) : true; });
@@ -281,9 +342,13 @@ export default function PipelinePage() {
     const type: Record<string, number> = {};
     const region: Record<string, number> = {};
     const owner: Record<string, number> = {};
+    const sub: Record<string, number> = {};
+    const sector: Record<string, number> = {};
     const states = new Set<string>();
     inStage.forEach((l) => {
       owner[ownerKey(l)] = (owner[ownerKey(l)] || 0) + 1;
+      sub[l.stage || "—"] = (sub[l.stage || "—"] || 0) + 1;
+      for (const [n, rx] of INDUSTRIES) if (rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`)) sector[n] = (sector[n] || 0) + 1;
       mode[l.mode] = (mode[l.mode] || 0) + 1;
       if (l.stalled) mode.stalled++;
       if (isToCall(l)) mode.tocall++;
@@ -292,9 +357,9 @@ export default function PipelinePage() {
       const s = (l.state || "").trim().toUpperCase();
       if (s) states.add(s);
     });
-    return { mode, type, region, owner, states: [...states].sort() };
+    return { mode, type, region, owner, sub, sector, states: [...states].sort() };
   }, [inStage]);
-  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF;
+  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF || subF.size > 0 || !!industry || (showOriginToggle && !!originF);
 
   // Optimistic inline patch.
   // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
@@ -476,73 +541,41 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         })}
       </div>
 
-      <div className="flex items-center gap-3">
-        <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        {/* Sector chips (Benjy 9/17: "filter certain columns like skincare").
-            Counts are within the current stage tab; a lead can sit in more
-            than one sector (nutra CDMO = Nutra + Co-Manufacturer). */}
-        <div className="flex flex-wrap items-center gap-1.5" title="Filter by sector">
-          {[["", "All"] as [string, string], ...INDUSTRIES.map(([n]) => [n, n] as [string, string])].map(([val, label]) => {
-            const rx = INDUSTRIES.find((x) => x[0] === val)?.[1];
-            const n = val ? leads.filter((l) => rx!.test(`${l.endMarket || ""} ${l.productCategory || ""}`)).length : leads.length;
-            const on = industry === val;
-            return (
-              <button key={val || "all"} type="button" onClick={() => setIndustry(val)}
-                className={`rounded-full border px-2.5 py-1 text-xs ${on ? "border-brand-600 bg-brand-50 text-brand-700 font-medium" : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"}`}>
-                {label} <span className="text-[10px] text-gray-400">{n}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Filter bar as dropdowns (Benjy 9/22) — replaced five rows of chips.
+          Each group is one button; groups AND together; a set filter turns blue. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Input placeholder="Search company, market, owner, city, notes…" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 w-64 text-xs" />
+        <Dropdown label="Who" all="All" allCount={inStage.length} selected={modeF} onChange={setModeF}
+          options={MODE_FILTERS.map((m) => ({ key: m.key, label: m.label, count: f.mode[m.key] || 0 }))} />
+        {showOriginToggle && (
+          <Dropdown label="Came from" all="Both" allCount={inStage.length} single selected={originF ? new Set([originF]) : new Set()} onChange={(x) => setOriginF(([...x][0] as LeadOrigin) || "")}
+            options={[{ key: "inbound", label: "↓ Inbound", count: originCounts.inbound }, { key: "prospecting", label: "↑ Prospecting", count: originCounts.prospecting }]} />
+        )}
+        <Dropdown label="Owner" all="Everyone" allCount={inStage.length} selected={ownerF} onChange={setOwnerF}
+          options={Object.keys(f.owner).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0) || (f.owner[b] - f.owner[a]) || a.localeCompare(b)).map((k) => ({ key: k, label: k === me ? `⭐ Just mine (${ownerLabel(k)})` : ownerLabel(k), count: f.owner[k] }))} />
+        <Dropdown label="Sub-status" all="All" allCount={inStage.length} selected={subF} onChange={setSubF}
+          options={Object.keys(f.sub).sort((a, b) => (f.sub[b] - f.sub[a]) || a.localeCompare(b)).map((k) => ({ key: k, label: k === "—" ? "Not set" : k, count: f.sub[k] }))} />
+        <Dropdown label="Sector" all="All" allCount={inStage.length} single selected={industry ? new Set([industry]) : new Set()} onChange={(x) => setIndustry([...x][0] || "")}
+          options={INDUSTRIES.map(([n]) => ({ key: n, label: n, count: f.sector[n] || 0 }))} />
+        <Dropdown label="Source" all="All" allCount={inStage.length} selected={typeF} onChange={setTypeF}
+          options={TYPE_FILTERS.map((t) => ({ key: t, label: TYPE_LABELS[t], count: f.type[t] || 0 }))} />
+        <Dropdown label="Where" all="All" allCount={inStage.length} selected={regionF} onChange={setRegionF}
+          options={REGIONS.map((r) => ({ key: r, label: r, count: f.region[r] || 0 }))} />
+        {f.states.length > 0 && (
+          <Dropdown label="State" all="All" allCount={inStage.length} single selected={stateF ? new Set([stateF]) : new Set()} onChange={(x) => setStateF([...x][0] || "")}
+            options={f.states.map((st) => ({ key: st, label: st, count: inStage.filter((l) => (l.state || "").trim().toUpperCase() === st).length }))} />
+        )}
+        {anyFilter && (
+          <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); setSubF(new Set()); setIndustry(""); setOriginF(""); }}
+            className="text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear all</button>
+        )}
+        <span className="ml-auto inline-flex overflow-hidden rounded-md border border-gray-300 text-xs" title="Summary shows Company, Owner, Sub-status, Follow-up, Actions. Full shows every column.">
+          <button type="button" onClick={() => setView("summary")} className={`px-2.5 py-1.5 ${!full ? "bg-gray-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>Summary</button>
+          <button type="button" onClick={() => setView("full")} className={`px-2.5 py-1.5 ${full ? "bg-gray-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>Full</button>
+        </span>
         {/* Visible proof an edit landed — no more guessing (Benjy 8/5). */}
         {saveState === "saving" && <span className="text-xs text-gray-500">Saving…</span>}
         {saveState === "saved" && <span className="text-xs text-green-600">✓ Saved</span>}
-      </div>
-
-      {/* Filter bar (Benjy 8/2) — replaces the old Agent Desk page. Chips are
-          multi-select inside a group and AND across groups. */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Who</span>
-          <Chip on={modeF.size === 0} label="All" count={inStage.length} onClick={() => setModeF(new Set())} />
-          {MODE_FILTERS.map((m) => <Chip key={m.key} on={modeF.has(m.key)} label={m.label} count={f.mode[m.key] || 0} onClick={() => toggle(modeF, setModeF)(m.key)} />)}
-        </div>
-        {showOriginToggle && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Came from</span>
-            <Chip on={!originF} label="Both" count={inStage.length} onClick={() => setOriginF("")} />
-            <Chip on={originF === "inbound"} label="↓ Inbound" count={originCounts.inbound} onClick={() => setOriginF(originF === "inbound" ? "" : "inbound")} />
-            <Chip on={originF === "prospecting"} label="↑ Prospecting" count={originCounts.prospecting} onClick={() => setOriginF(originF === "prospecting" ? "" : "prospecting")} />
-            <span className="text-[11px] text-gray-400">The two convert very differently — a blended number describes neither.</span>
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Owner</span>
-          <Chip on={ownerF.size === 0} label="Everyone" count={inStage.length} onClick={() => setOwnerF(new Set())} />
-          {me && f.owner[me] !== undefined && (
-            <Chip on={ownerF.size === 1 && ownerF.has(me)} label="⭐ Just mine" count={f.owner[me]}
-              onClick={() => setOwnerF(ownerF.size === 1 && ownerF.has(me) ? new Set() : new Set([me]))} tone="brand" />
-          )}
-          {Object.keys(f.owner).sort((a, b) => (f.owner[b] - f.owner[a]) || a.localeCompare(b)).map((k) => (
-            <Chip key={k} on={ownerF.has(k)} label={ownerLabel(k)} count={f.owner[k]} onClick={() => toggle(ownerF, setOwnerF)(k)} />
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Source</span>
-          {TYPE_FILTERS.map((t) => <Chip key={t} on={typeF.has(t)} label={TYPE_LABELS[t]} count={f.type[t] || 0} onClick={() => toggle(typeF, setTypeF)(t)} />)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-16 shrink-0 text-xs font-medium text-gray-400">Where</span>
-          {REGIONS.map((r) => <Chip key={r} on={regionF.has(r)} label={r} count={f.region[r] || 0} onClick={() => toggle(regionF, setRegionF)(r)} tone="brand" />)}
-          <select className={`${selCls} h-7 w-auto`} value={stateF} onChange={(e) => setStateF(e.target.value)} title="Filter by state">
-            <option value="">All states</option>
-            {f.states.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          {anyFilter && (
-            <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); }}
-              className="ml-auto text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear filters</button>
-          )}
-        </div>
       </div>
 
       {isLeadTab(active) && (
@@ -559,33 +592,30 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1130px] table-fixed text-sm">
-            <colgroup>
-              <col style={{ width: 140 }} /> {/* Company */}
-              <col style={{ width: 124 }} /> {/* Status */}
-              <col style={{ width: 96 }} /> {/* Product */}
-              <col style={{ width: 100 }} /> {/* Sub-status */}
-              <col style={{ width: 64 }} /> {/* Volume */}
-              <col style={{ width: 88 }} /> {/* Owner */}
-              <col style={{ width: 44 }} /> {/* Pri */}
-              <col style={{ width: 114 }} /> {/* Outreach */}
-              <col style={{ width: 116 }} /> {/* Follow-up */}
-              <col style={{ width: 140 }} /> {/* Notes */}
-              <col style={{ width: 104 }} /> {/* Actions */}
-            </colgroup>
+          <table className={`w-full table-fixed text-sm ${full ? "min-w-[1130px]" : "min-w-[720px]"}`}>
+            {full ? (
+              <colgroup>
+                <col style={{ width: 140 }} /><col style={{ width: 124 }} /><col style={{ width: 96 }} /><col style={{ width: 100 }} /><col style={{ width: 64 }} />
+                <col style={{ width: 88 }} /><col style={{ width: 44 }} /><col style={{ width: 114 }} /><col style={{ width: 116 }} /><col style={{ width: 140 }} /><col style={{ width: 104 }} />
+              </colgroup>
+            ) : (
+              <colgroup>
+                <col style={{ width: 260 }} /><col style={{ width: 130 }} /><col style={{ width: 160 }} /><col style={{ width: 170 }} /><col style={{ width: 150 }} />
+              </colgroup>
+            )}
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 text-left">
                 <th className="px-2 py-2 font-medium">Company</th>
-                <th className="px-2 py-2 font-medium" title="Sector: Skincare, Nutra, Pharma/OTC... Set it here; filter with the Sector dropdown above. Status moved into the expanded row.">Sector</th>
-                <th className="px-2 py-2 font-medium">Product</th>
+                {full && <th className="px-2 py-2 font-medium" title="Sector: Skincare, Nutra, Pharma/OTC... Set it here; filter with the Sector dropdown above. Status moved into the expanded row.">Sector</th>}
+                {full && <th className="px-2 py-2 font-medium">Product</th>}
                 <th className="px-2 py-2 font-medium" title="Your own manual sub-status — the Status column is the derived one">Sub-status</th>
-                <th className="px-2 py-2 font-medium">Volume</th>
+                {full && <th className="px-2 py-2 font-medium">Volume</th>}
                 <th className="px-2 py-2 font-medium">Owner</th>
-                <th className="px-2 py-2 font-medium">Pri</th>
-                <th className="px-2 py-2 font-medium" title="Where the outbound agent is in its email sequence, and the switch to keep it away from this lead">Outreach</th>
+                {full && <th className="px-2 py-2 font-medium">Pri</th>}
+                {full && <th className="px-2 py-2 font-medium" title="Where the outbound agent is in its email sequence, and the switch to keep it away from this lead">Outreach</th>}
                 
                 <th className="px-2 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
-                <th className="px-2 py-2 font-medium">Notes</th>
+                {full && <th className="px-2 py-2 font-medium">Notes</th>}
                 <th className="sticky right-0 z-20 bg-gray-50 px-3 py-2 font-medium text-right shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">Actions</th>
               </tr>
             </thead>
@@ -605,8 +635,9 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           </span>; })()}
                       </span>
                     </button>
+                    {!full && l.mode === "needs_you" && <div className="mt-1"><ModeChip l={l} /></div>}
                   </td>
-                  <td className="px-2 py-2">
+                  {full && (<td className="px-2 py-2">
                     {/* Sector (Benjy 9/17): the old Status column moved into the
                         expanded row. The Co-Manufacturer tag rides along. */}
                     {(() => {
@@ -626,35 +657,35 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         </div>
                       );
                     })()}
-                  </td>
-                  <td className="px-2 py-2">
+                  </td>)}
+                  {full && (<td className="px-2 py-2">
                     <select className={selCls} value={l.productCategory || ""} onChange={(e) => patch(l.id, "productCategory", e.target.value)}>
                       <option value="">—</option>
                       {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
-                  </td>
+                  </td>)}
                     <td className="px-2 py-2">
                       <select className={selCls} value={l.stage || ""} onChange={(e) => patch(l.id, "stage", e.target.value)}>
                         <option value="">—</option>
                         {(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                    <td className="px-2 py-2">
+                    {full && (<td className="px-2 py-2">
                       <Input className="h-8 text-xs" value={l.volume || ""} placeholder="—" onChange={(e) => edit(l.id, "volume", e.target.value)} onBlur={(e) => flush(l.id, "volume", e.target.value)} />
-                    </td>
+                    </td>)}
                   <td className="px-2 py-2">
                     <select className={selCls} value={l.ownerName || ""} onChange={(e) => patch(l.id, "ownerName", e.target.value)}>
                       <option value="">—</option>
                       {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </td>
-                    <td className="px-2 py-2">
+                    {full && (<td className="px-2 py-2">
                       <select className={`${selCls} font-semibold ${priColor(l.priority)}`} value={l.priority || ""} onChange={(e) => patch(l.id, "priority", e.target.value ? Number(e.target.value) : null)}>
                         <option value="">—</option>
                         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
                       </select>
-                    </td>
-                    <td className="px-2 py-2">
+                    </td>)}
+                    {full && (<td className="px-2 py-2">
                       {l.outreachStatus && OUTREACH[l.outreachStatus]
                         ? <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>
                         : <OutreachIdle l={l} />}
@@ -666,7 +697,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
                         agent skip
                       </label>
-                    </td>
+                    </td>)}
                   {/* Follow-up scheduling, right in the row. Customers get
                       chased for reorders and reprints as much as leads do, and
                       burying the date picker in the expanded panel made it look
@@ -696,7 +727,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
                       </span>
                     </td>
-                    <td className="px-2 py-2 align-top">
+                    {full && (<td className="px-2 py-2 align-top">
                       {/* Notes are an append-only timeline now, so this is a
                           preview of the LATEST note (open the row to add one)
                           rather than the stale legacy blob. */}
@@ -708,7 +739,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       ) : (
                         <p className="text-xs text-gray-400">No notes yet</p>
                       )}
-                    </td>
+                    </td>)}
                   <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">
                     {/* One control that reaches every tab (Benjy 8/7). The old
                         per-tab buttons meant a record could only move where
@@ -735,7 +766,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={11} className="px-4 py-3">
+                    <td colSpan={full ? 11 : 5} className="px-4 py-3">
                       {/* Status (moved out of the table, Benjy 9/17): who's driving
                           it and where it stands, the lead-type switch, stalled flag. */}
                       <div className="mb-3 rounded-md border border-gray-200 bg-white px-3 py-2">
@@ -886,7 +917,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={full ? 11 : 5} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>
