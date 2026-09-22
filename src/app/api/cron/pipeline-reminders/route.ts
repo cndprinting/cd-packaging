@@ -236,9 +236,18 @@ export async function GET(request: NextRequest) {
     });
     const ACTIVE_A = ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"];
     const ACTIVE_O = ["intro_sent", "followup_1"];
+    // Benjy 9/22 ("if it's dead stop reminding me"): a lead the agent already
+    // closed out (declined, disqualified, dead) is not a to-do for anyone.
+    const DEAD = ["closed", "declined", "disqualified", "duplicate", "unsubscribed", "lost", "not_interested", "dead", "bounced"];
     const needHuman: typeof jDue = [];
     for (const l of jDue) {
       const agentOnIt = (l.agentStatus && ACTIVE_A.includes(l.agentStatus)) || (l.outreachStatus && ACTIVE_O.includes(l.outreachStatus)) || (l.pipelineStage === "LEAD" && l.outreachStatus === null);
+      const dead = (l.agentStatus && DEAD.includes(l.agentStatus)) || (l.outreachStatus && DEAD.includes(l.outreachStatus));
+      if (dead) {
+        await prisma.lead.update({ where: { id: l.id }, data: { followUpDoneAt: now, commentary: `${l.commentary || ""}
+[Agent] Cleared the follow-up date - the agent closed this lead out (${l.agentStatus || l.outreachStatus}). Set a new date if you want it back.`.slice(0, 8000) } });
+        continue;
+      }
       if (agentOnIt) {
         await prisma.lead.update({ where: { id: l.id }, data: { followUpDoneAt: now, commentary: `${l.commentary || ""}
 [Agent] Cleared a stale human follow-up date - this lead is on the agent cadence.`.slice(0, 8000) } });

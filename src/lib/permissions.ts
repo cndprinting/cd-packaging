@@ -17,6 +17,8 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard/orders":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
   "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "/dashboard/inventory": [...FULL_ACCESS, "CSR"],
+  // Dieline module (Sep 2026): reps size boxes on a call, Mary needs the flat size, prepress reviews
+  "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS"],
   "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
   "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
   "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
@@ -83,6 +85,7 @@ export function getSidebarItems(role: AppRole): { label: string; href: string }[
     { label: "Orders", href: "/dashboard/orders" },
     { label: "Schedule", href: "/dashboard/schedule" },
     { label: "Inventory", href: "/dashboard/inventory" },
+    { label: "Dielines", href: "/dashboard/dielines" },
     { label: "Production", href: "/dashboard/production" },
     { label: "Shipping", href: "/dashboard/shipping" },
     { label: "Customers", href: "/dashboard/customers" },

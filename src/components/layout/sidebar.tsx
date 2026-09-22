@@ -8,8 +8,7 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid, HelpCircle, TrendingUp, UserSearch,
-} from "lucide-react";
+  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Scissors } from "lucide-react";
 
 // Proprietary sales pipeline (Benjy 6/26) — only shown to users with the
 // pipelineAccess flag (Benjy/Nitay/Albert), regardless of role.
@@ -34,6 +33,8 @@ const internalNav = [
   { label: "Invoices", href: "/dashboard/invoices", icon: FileBarChart },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
+  // Dieline module v1 (Sep 2026): parametric tuck boxes + die-inventory check
+  { label: "Dielines", href: "/dashboard/dielines", icon: Scissors },
   // Proofing rebuilt as queue page (Apr 2026) — pre-press uploads → sales sends → customer approves → production alerted
   { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck },
   { label: "Pre-Press", href: "/dashboard/prepress", icon: FileCheck },
