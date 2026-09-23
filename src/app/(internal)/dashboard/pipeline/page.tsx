@@ -16,6 +16,7 @@ type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   contacts?: LeadContact[];
+  nextTask?: string | null; nextTaskKind?: string | null; nextTaskBasis?: string | null; nextTaskAt?: string | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
@@ -160,6 +161,46 @@ function Dropdown({ label, all, allCount, options, selected, onChange, single = 
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Next task (Shimmie 9/23): one line from the rep's own notes. Kind badge +
+// task text; hover shows the note it came from; ↻ recomputes.
+const TASK_KIND: Record<string, { label: string; cls: string }> = {
+  call: { label: "Call", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  text: { label: "Text", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  email: { label: "Email", cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  quote: { label: "Quote", cls: "bg-green-50 text-green-700 border-green-200" },
+  internal: { label: "Internal", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  wait: { label: "Wait", cls: "bg-gray-100 text-gray-600 border-gray-200" },
+};
+function NextTaskCell({ l, onUpdate }: { l: Lead; onUpdate: (p: Partial<Lead>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const refresh = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/leads/next-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: l.id }) });
+      const d = await r.json();
+      if (r.ok) onUpdate({ nextTask: d.nextTask, nextTaskKind: d.nextTaskKind, nextTaskBasis: d.nextTaskBasis, nextTaskAt: d.nextTaskAt });
+    } finally { setBusy(false); }
+  };
+  const k = l.nextTaskKind && TASK_KIND[l.nextTaskKind];
+  const hasNotes = !!l.lastNote;
+  return (
+    <div className="flex items-start gap-1.5">
+      <div className="min-w-0 flex-1">
+        {l.nextTask && k ? (
+          <div title={l.nextTaskBasis ? `From the notes: "${l.nextTaskBasis}"` : undefined}>
+            <span className={`mr-1 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${k.cls}`}>{k.label}</span>
+            <span className="text-xs text-gray-800">{l.nextTask}</span>
+            {l.nextTaskBasis && <span className="block truncate text-[10px] text-gray-400">“{l.nextTaskBasis}”</span>}
+          </div>
+        ) : (
+          <span className="text-[11px] text-gray-400">{hasNotes ? (l.nextTaskKind === "none" ? "Notes don't say — add a note with the next step" : "Not computed yet") : "No notes yet"}</span>
+        )}
+      </div>
+      <button type="button" onClick={refresh} disabled={busy || !hasNotes} title="Recompute from the notes" className="shrink-0 text-gray-400 hover:text-gray-700 disabled:opacity-40">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "↻"}</button>
     </div>
   );
 }
@@ -604,15 +645,15 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className={`w-full table-fixed text-sm ${full ? "min-w-[1130px]" : "min-w-[720px]"}`}>
+          <table className={`w-full table-fixed text-sm ${full ? "min-w-[1330px]" : "min-w-[900px]"}`}>
             {full ? (
               <colgroup>
                 <col style={{ width: 140 }} /><col style={{ width: 124 }} /><col style={{ width: 96 }} /><col style={{ width: 100 }} /><col style={{ width: 64 }} />
-                <col style={{ width: 88 }} /><col style={{ width: 44 }} /><col style={{ width: 114 }} /><col style={{ width: 116 }} /><col style={{ width: 140 }} /><col style={{ width: 104 }} />
+                <col style={{ width: 88 }} /><col style={{ width: 44 }} /><col style={{ width: 114 }} /><col style={{ width: 116 }} /><col style={{ width: 200 }} /><col style={{ width: 140 }} /><col style={{ width: 104 }} />
               </colgroup>
             ) : (
               <colgroup>
-                <col /><col style={{ width: 230 }} /><col style={{ width: 230 }} /><col style={{ width: 200 }} /><col style={{ width: 190 }} />
+                <col /><col style={{ width: 210 }} /><col style={{ width: 200 }} /><col style={{ width: 190 }} /><col style={{ width: 280 }} /><col style={{ width: 180 }} />
               </colgroup>
             )}
             <thead>
@@ -627,6 +668,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {full && <th className="px-2 py-2 font-medium" title="Where the outbound agent is in its email sequence, and the switch to keep it away from this lead">Outreach</th>}
                 
                 <th className="px-2 py-2 font-medium whitespace-nowrap" title="Set a follow-up date and Godzilla emails the owner every morning until it's marked done">Follow-up</th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap" title="Suggested next step, computed only from the rep's own notes on this lead. Refreshes when a note is saved; ↻ recomputes now.">Next task</th>
                 {full && <th className="px-2 py-2 font-medium">Notes</th>}
                 <th className="sticky right-0 z-20 bg-gray-50 px-3 py-2 font-medium text-right shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)]">Actions</th>
               </tr>
@@ -740,6 +782,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         last touch {l.lastInteraction ? fmtShort(l.lastInteraction) : "—"}
                       </span>
                     </td>
+                    <td className="px-2 py-2 align-top"><NextTaskCell l={l} onUpdate={(patchv) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, ...patchv } : x))} /></td>
                     {full && (<td className="px-2 py-2 align-top">
                       {/* Notes are an append-only timeline now, so this is a
                           preview of the LATEST note (open the row to add one)
@@ -779,7 +822,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 </tr>
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
-                    <td colSpan={full ? 11 : 5} className="px-4 py-3">
+                    <td colSpan={full ? 12 : 6} className="px-4 py-3">
                       {/* Status (moved out of the table, Benjy 9/17): who's driving
                           it and where it stands, the lead-type switch, stalled flag. */}
                       <div className="mb-3 rounded-md border border-gray-200 bg-white px-3 py-2">
@@ -947,7 +990,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 )}
                 </Fragment>
               ))}
-              {visible.length === 0 && <tr><td colSpan={full ? 11 : 5} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={full ? 12 : 6} className="px-3 py-10 text-center text-gray-400">{q ? "No matches." : "Nothing in this stage yet."}</td></tr>}
             </tbody>
           </table>
         </div>

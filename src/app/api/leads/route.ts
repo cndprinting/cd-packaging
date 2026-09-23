@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
       outreachStatus: true, outreachNextAt: true, outreachTo: true, outreachEmailed: true, outreachLog: true,
       agentStatus: true, agentNextAt: true, leadTypeOverride: true, originOverride: true,
       source: true, intakeRaw: true, updatedAt: true,
+      nextTask: true, nextTaskKind: true, nextTaskBasis: true, nextTaskAt: true,
       // Newest note rides along so the row previews the current note.
       notes: { orderBy: { createdAt: "desc" as const }, take: 1, select: { body: true, authorName: true, createdAt: true } },
       contacts: { orderBy: { sort: "asc" as const }, select: { id: true, name: true, title: true, email: true, phone: true, emailCandidates: true, phoneCandidates: true, sort: true } },

@@ -61,7 +61,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) { console.error("[notes] mention fan-out failed", e); }
 
-  return NextResponse.json({ note: { ...note, canEdit: true }, notified: mentioned.map((m) => m.name) });
+  // Next task from the rep's notes (Shimmie 9/23) -- computed here so the
+  // suggestion is fresh the moment the note lands. Failure never blocks the note.
+  let nextTask: unknown = null;
+  try { const { refreshNextTask } = await import("@/lib/agent/next-task"); nextTask = await refreshNextTask(g.prisma, lead.id); }
+  catch (e) { console.error("[notes] next-task refresh failed", e); }
+
+  return NextResponse.json({ note: { ...note, canEdit: true }, notified: mentioned.map((m) => m.name), nextTask });
 }
 
 export async function PUT(request: NextRequest) {

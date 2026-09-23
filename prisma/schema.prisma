@@ -270,6 +270,13 @@ model Lead {
   outreachContact Int       @default(0)     // deprecated (index-based); superseded by outreachEmailed/outreachTo
   outreachEmailed String?   // JSON list of emails already contacted on this lead (never re-emailed)
   contacts        LeadContact[]
+  // Next task (Shimmie 9/23): a suggestion computed ONLY from the rep's own
+  // notes on this lead -- what to do next (call / text / email / quote /
+  // internal), one line, grounded in a quoted note. Never free-roaming.
+  nextTask        String?
+  nextTaskKind    String?   // call | text | email | quote | internal | wait | none
+  nextTaskBasis   String?   // the note line it came from
+  nextTaskAt      DateTime? // when it was computed
   outreachTo      String?   // email the current in-progress sequence is aimed at
   outreachStatus  String?   // null | intro_sent | followup_1 | replied | not_interested | unsubscribed | done
   outreachNextAt  DateTime? // clock for the next outbound action
