@@ -783,6 +783,20 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <button type="button" onClick={() => markHandled(l)} title="Take it off the daily reminder email. The lead stays open — only the nag stops."
                           className="w-fit text-[11px] text-green-700 hover:underline">✓ I&apos;ve got this</button>
                       )}
+                      {/* Outreach + agent skip live here too (Benjy 9/23): the
+                          Summary view hides the Outreach column, and the skip
+                          switch must never be more than one click away. */}
+                      <span className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+                        <span className="text-[11px] text-gray-500">Outreach agent:</span>
+                        {l.outreachStatus && OUTREACH[l.outreachStatus]
+                          ? <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] ${OUTREACH[l.outreachStatus].cls}`}>{OUTREACH[l.outreachStatus].label}</span>
+                          : <OutreachIdle l={l} />}
+                        <label className={`flex items-center gap-1 text-[11px] ${l.agentHold ? "text-amber-700 font-medium" : "text-gray-600"}`} title="Don't email (agent) — check to keep the outbound agent away from this lead">
+                          <input type="checkbox" className="h-3.5 w-3.5" checked={!!l.agentHold}
+                            onChange={(e) => { const v = e.target.checked; setLeads((p) => p.map((x) => x.id === l.id ? { ...x, agentHold: v } : x)); patch(l.id, "agentHold", v); }} />
+                          agent skip
+                        </label>
+                      </span>
                     <select
                       value={l.leadType}
                       onChange={(e) => setLeadType(l.id, e.target.value as LeadType)}
