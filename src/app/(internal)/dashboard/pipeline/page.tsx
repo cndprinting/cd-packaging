@@ -166,10 +166,15 @@ function Dropdown({ label, all, allCount, options, selected, onChange, single = 
 function dueState(l: Lead): "due" | "upcoming" | null {
   if (l.followUpDoneAt) return null; // completed follow-ups drop off the due list
   if (!l.followUpAt) return null;
-  const d = new Date(l.followUpAt); const end = new Date(); end.setHours(23, 59, 59, 999);
-  return d <= end ? "due" : "upcoming";
+  // Compare calendar days, not instants (Shimmie 9/23: "due" showed a day early).
+  // followUpAt is anchored at noon UTC, so its UTC date is the date that was picked.
+  const picked = new Date(l.followUpAt).toISOString().slice(0, 10);
+  const n = new Date(); const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  return picked <= today ? "due" : "upcoming";
 }
 const fmtShort = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+// Follow-up dates are calendar days anchored at noon UTC -> show the UTC date, never shifted by local time.
+const fmtDay = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 // Owner filter key: first name, lowercased. ownerName is free text ("Benjy",
 // "Shimmie Jacoby", "", "TBD"), so everything unassigned collapses to one bucket.
@@ -632,7 +637,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
                         {(() => { const d = dueState(l); if (!d || !l.followUpAt) return l.endMarket ? <span className="block text-xs text-gray-400">{l.endMarket}</span> : null;
                           return <span className={`flex items-center gap-2 text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>
-                            <span>{d === "due" ? "● Follow up due" : `Follow-up ${fmtShort(l.followUpAt)}`}</span>
+                            <span>{d === "due" ? "● Follow up due" : `Follow-up ${fmtDay(l.followUpAt)}`}</span>
                             {d === "due" && <button onClick={(e) => { e.stopPropagation(); patch(l.id, "followUpDoneAt", new Date().toISOString()); }} className="text-green-600 hover:underline" title="Mark this follow-up done">✓ done</button>}
                           </span>; })()}
                       </span>

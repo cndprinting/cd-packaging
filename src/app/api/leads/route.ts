@@ -209,7 +209,11 @@ async function updateLead(prisma: any, body: any) {
   if ("lastInteraction" in body) data.lastInteraction = body.lastInteraction ? new Date(body.lastInteraction) : null;
   if ("followUpNote" in body) data.followUpNote = body.followUpNote || null;
   if ("followUpAt" in body) {
-    data.followUpAt = body.followUpAt ? new Date(body.followUpAt) : null;
+    // A bare date from the picker ("2026-09-24") used to become midnight UTC =
+    // 8pm the evening before in Florida, so follow-ups showed due a day early
+    // (Shimmie 9/23). Anchor date-only values at noon UTC: the same calendar
+    // day everywhere from Hawaii to Tel Aviv.
+    data.followUpAt = body.followUpAt ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(body.followUpAt)) ? `${body.followUpAt}T12:00:00.000Z` : body.followUpAt) : null;
     data.reminderSentAt = null;     // new/changed date → allow the reminder to fire again
     data.followUpDoneAt = null;     // setting/rescheduling a date reopens the follow-up
   }
