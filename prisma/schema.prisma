@@ -269,6 +269,7 @@ model Lead {
   agentHold       Boolean   @default(false) // "Don't email (agent)" — owner-set hold; outbound agent skips
   outreachContact Int       @default(0)     // deprecated (index-based); superseded by outreachEmailed/outreachTo
   outreachEmailed String?   // JSON list of emails already contacted on this lead (never re-emailed)
+  contacts        LeadContact[]
   outreachTo      String?   // email the current in-progress sequence is aimed at
   outreachStatus  String?   // null | intro_sent | followup_1 | replied | not_interested | unsubscribed | done
   outreachNextAt  DateTime? // clock for the next outbound action
@@ -301,6 +302,28 @@ model Lead {
 //
 // Locking: the author may edit for a short window after posting (typos), then
 // it is frozen for everyone. Nobody rewrites history a week later.
+// Up to three people per lead (Shimmie 9/23). `email`/`phone` are the CONFIRMED
+// primaries; the candidate lists (one per line) are the "dump" a rep collects
+// while hunting, shown behind a click and hidden once a primary is confirmed.
+// Contact #1 mirrors onto Lead.contactName/Title/Email/Phone and #2 onto
+// contactName2/Email2 so the agents keep working unchanged.
+model LeadContact {
+  id              String   @id @default(cuid())
+  leadId          String
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  name            String
+  title           String?
+  email           String?
+  phone           String?
+  emailCandidates String?
+  phoneCandidates String?
+  sort            Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([leadId, sort])
+}
+
 model LeadNote {
   id         String   @id @default(cuid())
   leadId     String

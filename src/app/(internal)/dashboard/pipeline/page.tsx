@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight, Bell } from "lucide-react";
 import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { NotesTimeline } from "@/components/leads/notes-timeline";
+import { LeadContacts, type LeadContact } from "@/components/leads/lead-contacts";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { US_STATES, REGIONS, TYPE_LABELS, ownerFirstName, type LeadMode, type Le
 type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
+  contacts?: LeadContact[];
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
@@ -820,7 +822,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["city", "City"], ["contactName", "Contact name"], ["contactTitle", "Contact title"], ["contactEmail", "Contact email"], ["contactName2", "Contact name 2 (agent tries after primary)"], ["contactEmail2", "Contact email 2"], ["contactPhone", "Primary phone"]] as const).map(([f, label]) => {
+                        {([["website", "Website"], ["city", "City"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
                           // silently never emails this lead. Catch it here
                           // rather than discovering it weeks later (Shimmie 8/6).
@@ -896,10 +898,13 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           <label className="block text-xs font-medium text-gray-500 mb-1">Reminder note</label>
                           <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => edit(l.id, "followUpNote", e.target.value)} onBlur={(e) => flush(l.id, "followUpNote", e.target.value)} />
                         </div>
-                        <div className="sm:col-span-3">
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Numbers <span className="text-gray-400 font-normal">— dump every number you collect here</span></label>
-                          <textarea rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" value={l.numbers || ""} placeholder="e.g. 305-555-0100 (cell) · 727-555-0199 (office) · 954-555-0123 (Reid)" onChange={(e) => edit(l.id, "numbers", e.target.value)} onBlur={(e) => flush(l.id, "numbers", e.target.value)} />
-                        </div>
+                        {/* Contacts (Shimmie 9/23) replace the six loose contact
+                            fields and the numbers scratchpad. Contact #1 still
+                            feeds the agents through the legacy fields (server sync). */}
+                        <LeadContacts leadId={l.id} contacts={l.contacts || []}
+                          onChange={(contacts) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, contacts,
+                            contactName: contacts[0]?.name || null, contactEmail: contacts[0]?.email || null, contactPhone: contacts[0]?.phone || null,
+                            contactName2: contacts[1]?.name || null, contactEmail2: contacts[1]?.email || null } : x))} />
                         {(l.outreachStatus || l.outreachLog) && (
                           <div className="sm:col-span-3 rounded-md border border-gray-200 bg-white p-3">
                             <div className="flex flex-wrap items-center gap-2 mb-2">

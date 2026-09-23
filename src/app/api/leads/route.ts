@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       source: true, intakeRaw: true, updatedAt: true,
       // Newest note rides along so the row previews the current note.
       notes: { orderBy: { createdAt: "desc" as const }, take: 1, select: { body: true, authorName: true, createdAt: true } },
+      contacts: { orderBy: { sort: "asc" as const }, select: { id: true, name: true, title: true, email: true, phone: true, emailCandidates: true, phoneCandidates: true, sort: true } },
     },
   });
   // Presentation layer computed SERVER-SIDE (Benjy 8/2) so the UI never has to
