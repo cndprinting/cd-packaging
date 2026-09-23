@@ -197,7 +197,7 @@ function NextTaskCell({ l, onUpdate }: { l: Lead; onUpdate: (p: Partial<Lead>) =
             {l.nextTaskBasis && <span className="block truncate text-[10px] text-gray-400">“{l.nextTaskBasis}”</span>}
           </div>
         ) : (
-          <span className="text-[11px] text-gray-400">{hasNotes ? (l.nextTaskKind === "none" ? "Notes don't say — add a note with the next step" : "Not computed yet") : "No notes yet"}</span>
+          <span className="text-[11px] text-gray-400">{l.nextTaskKind === "none" && l.nextTaskBasis ? "Notes don't say — add a note with the next step" : "No rep notes yet — add one and the next step appears here"}</span>
         )}
       </div>
       <button type="button" onClick={refresh} disabled={busy || !hasNotes} title="Recompute from the notes" className="shrink-0 text-gray-400 hover:text-gray-700 disabled:opacity-40">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "↻"}</button>
