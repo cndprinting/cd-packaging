@@ -114,8 +114,8 @@ function ContactCard({ c, onSave, onRemove }: { c: LeadContact; onSave: (p: Reco
         ) : (
           <div className="flex items-center gap-1.5">
             <Input className="h-7 text-xs" value={phoneDraft} onChange={(e) => setPhoneDraft(e.target.value)} placeholder="number that answers"
-              onKeyDown={(e) => { if (e.key === "Enter") { onSave({ phone: phoneDraft }); setEditPhone(false); setShowPhones(false); } }} />
-            <button type="button" onClick={() => { onSave({ phone: phoneDraft }); setEditPhone(false); setShowPhones(false); }} className="rounded border border-green-600 px-1.5 py-1 text-green-700 hover:bg-green-50" title="Confirm as primary (voicemail, conversation or text came back)"><Check className="h-3.5 w-3.5" /></button>
+              onKeyDown={(e) => { if (e.key === "Enter") { onSave({ phone: phoneDraft }); setEditPhone(false); setShowPhones(!phoneDraft.trim()); } }} />
+            <button type="button" onClick={() => { onSave({ phone: phoneDraft }); setEditPhone(false); setShowPhones(!phoneDraft.trim()); }} className="rounded border border-green-600 px-1.5 py-1 text-green-700 hover:bg-green-50" title="Confirm as primary (voicemail, conversation or text came back)"><Check className="h-3.5 w-3.5" /></button>
             <button type="button" onClick={() => setShowPhones((v) => !v)} className="whitespace-nowrap text-[11px] text-gray-500 hover:text-gray-800">dump ({phones.length}) {showPhones ? <ChevronUp className="inline h-3 w-3" /> : <ChevronDown className="inline h-3 w-3" />}</button>
           </div>
         )}
