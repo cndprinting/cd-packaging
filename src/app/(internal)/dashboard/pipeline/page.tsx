@@ -200,7 +200,10 @@ const INDUSTRIES: [string, RegExp][] = [
   ["Consumer Products", /consumer|household|home|toy|electronics|apparel/i],
 ];
 const INDUSTRY_OPTIONS = ["Skincare / Cosmetics", "Nutraceutical", "Healthcare / OTC", "Food & Beverage", "Consumer Products", "Industrial / Other"];
-const STAGE_LEAD = ["Break in", "Touch base", "Connected", "Requested info", "Quoting", "Meeting set", "Deprioritize", "Dead"];
+// Shimmie 9/23: four states a rep actually moves a lead through. Older values
+// (Break in, TBD, Touch base...) were migrated; the agent writes its own plain-
+// English stage on inbound leads, which the row keeps showing as-is.
+const STAGE_LEAD = ["New Lead (Not contacted)", "Actively Working (Call, Text and Email)", "Quote Needed (Specs Received)", "Quote Sent"];
 const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
 // Inbound and Prospecting are both the LEAD stage, split by how the record
 // ARRIVED (Benjy 8/7: "leave cold/organic entirely separate"). They're
@@ -675,6 +678,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       <select className={selCls} value={l.stage || ""} onChange={(e) => patch(l.id, "stage", e.target.value)}>
                         <option value="">—</option>
                         {(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).map((s) => <option key={s} value={s}>{s}</option>)}
+                        {l.stage && !(l.pipelineStage === "QUALIFIED" ? STAGE_QUAL : STAGE_LEAD).includes(l.stage) && <option value={l.stage}>{l.stage}</option>}
                       </select>
                     </td>
                     {full && (<td className="px-2 py-2">
@@ -953,7 +957,7 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
   // Benjy 9/22 ("I just added Anagen under Qualified and it doesn't show
   // anywhere"): the form always saved into Prospecting. It now lands in the tab
   // you're on (changeable here) and the page jumps to that tab afterwards.
-  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", city: "", state: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: initialTab === "INBOUND" || initialTab === "PROSPECTING" ? "Break in" : "", tab: STAGES.some((s) => s.key === initialTab) ? initialTab : "PROSPECTING" });
+  const [form, setForm] = useState({ companyName: "", endMarket: "", productCategory: "Folding Carton", website: "", city: "", state: "", contactName: "", contactEmail: "", ownerName: "Benjy", priority: "1", stage: initialTab === "INBOUND" || initialTab === "PROSPECTING" ? STAGE_LEAD[0] : "", tab: STAGES.some((s) => s.key === initialTab) ? initialTab : "PROSPECTING" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dupes, setDupes] = useState<{ leads: any[]; companies: any[]; quotes: any[] } | null>(null);
@@ -1029,7 +1033,7 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
                 <select className={selCls + " h-9"} value={form.productCategory} onChange={(e) => upd("productCategory", e.target.value)}>{PRODUCTS.map((p) => <option key={p}>{p}</option>)}</select>
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Add to</label>
-                <select className={selCls + " h-9"} value={form.tab} onChange={(e) => { const t = e.target.value; setForm((p) => ({ ...p, tab: t, stage: t === "INBOUND" || t === "PROSPECTING" ? (p.stage || "Break in") : (STAGE_LEAD.includes(p.stage) ? "" : p.stage) })); }}>
+                <select className={selCls + " h-9"} value={form.tab} onChange={(e) => { const t = e.target.value; setForm((p) => ({ ...p, tab: t, stage: t === "INBOUND" || t === "PROSPECTING" ? (STAGE_LEAD.includes(p.stage) ? p.stage : STAGE_LEAD[0]) : (STAGE_LEAD.includes(p.stage) ? "" : p.stage) })); }}>
                   {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               </div>
