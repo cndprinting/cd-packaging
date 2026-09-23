@@ -15,6 +15,7 @@ const SYSTEM = `You turn a sales rep's own notes on one lead into the single nex
 
 Hard rules:
 - Use ONLY the notes below. Do not invent facts, names, dates, products or reasons that are not in the notes.
+- Sub-status and follow-up date are context only. They are never a basis. A task must trace to a note; if only the sub-status suggests a step, answer "none".
 - If the notes do not point to a concrete next step, answer kind "none" with an empty task.
 - Prefer the most recent note. Older notes only add context.
 - One task, one line, at most 90 characters, written as an instruction ("Call Reid re: carton specs", "Send the 3-tier quote", "Email Mary for pricing").
@@ -44,8 +45,14 @@ export async function computeNextTask(input: { companyName: string; stage: strin
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return null;
     const j = JSON.parse(m[0]);
-    const kind: NextTaskKind = KINDS.includes(j.kind) ? j.kind : "none";
-    return { kind, task: kind === "none" ? "" : String(j.task || "").slice(0, 90), basis: String(j.basis || "").slice(0, 140) };
+    let kind: NextTaskKind = KINDS.includes(j.kind) ? j.kind : "none";
+    const basis = String(j.basis || "").slice(0, 140);
+    // Guardrail: the basis must actually appear in a rep note, or we drop the suggestion.
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const nb = norm(basis);
+    const grounded = nb.length >= 8 && human.some((n) => norm(n.body).includes(nb));
+    if (!grounded) kind = "none";
+    return { kind, task: kind === "none" ? "" : String(j.task || "").slice(0, 90), basis: kind === "none" ? "" : basis };
   } catch (e) {
     console.error("[next-task] failed", (e as Error).message);
     return null;
