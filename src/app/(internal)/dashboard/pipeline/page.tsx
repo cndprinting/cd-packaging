@@ -17,6 +17,7 @@ type Lead = {
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   contacts?: LeadContact[];
   nextTask?: string | null; nextTaskKind?: string | null; nextTaskBasis?: string | null; nextTaskAt?: string | null;
+  summary?: string | null; summaryAt?: string | null; summaryNotes?: number | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
   ownerName: string | null; volume: string | null; numbers: string | null; companyId: string | null; agentHold: boolean;
   followUpAt: string | null; followUpNote: string | null; followUpDoneAt: string | null;
@@ -201,6 +202,39 @@ function NextTaskCell({ l, onUpdate }: { l: Lead; onUpdate: (p: Partial<Lead>) =
         )}
       </div>
       <button type="button" onClick={refresh} disabled={busy || !hasNotes} title="Recompute from the notes" className="shrink-0 text-gray-400 hover:text-gray-700 disabled:opacity-40">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "↻"}</button>
+    </div>
+  );
+}
+
+// Account overview (Shimmie 9/24): "a brief overview ... a glimpse into the
+// full history of the account, based off the notes." Stored on the lead so
+// it opens instantly; the button (re)writes it.
+function AccountSummary({ l, onUpdate }: { l: Lead; onUpdate: (p: Partial<Lead>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/leads/summary", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: l.id }) });
+      const d = await r.json();
+      if (!r.ok) setErr(d.error || "Could not write the overview"); else onUpdate({ summary: d.summary, summaryAt: d.summaryAt, summaryNotes: d.summaryNotes });
+    } catch { setErr("Could not reach the server"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="sm:col-span-3 rounded-md border border-gray-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-medium text-gray-500">Account overview{l.summaryAt && <span className="ml-2 font-normal text-gray-400">as of {fmtShort(l.summaryAt)}{l.summaryNotes ? ` · ${l.summaryNotes} notes` : ""}</span>}</span>
+        <button type="button" onClick={run} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{busy ? "Reading the notes…" : l.summary ? "Refresh overview" : "Summarize account"}
+        </button>
+      </div>
+      {err && <div className="mt-1 text-xs text-red-600">{err}</div>}
+      {l.summary ? (
+        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-800">{l.summary}</p>
+      ) : (
+        <p className="mt-1 text-xs text-gray-400">One click writes a short history of this account from its notes: who they are, how we connected, what happened, where it stands.</p>
+      )}
     </div>
   );
 }
@@ -963,6 +997,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                             </ol>
                           </div>
                         )}
+                        {/* Account overview (Shimmie 9/24): one click, written from the notes. */}
+                        <AccountSummary l={l} onUpdate={(patchv) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, ...patchv } : x))} />
                         <div className="sm:col-span-3">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Notes <span className="font-normal text-gray-400">— each note is saved with your name and time; type @ to tag someone</span></label>
                           {/* Do NOT refetch the list here. Saving a note stamps

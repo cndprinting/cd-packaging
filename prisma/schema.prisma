@@ -277,6 +277,11 @@ model Lead {
   nextTaskKind    String?   // call | text | email | quote | internal | wait | none
   nextTaskBasis   String?   // the note line it came from
   nextTaskAt      DateTime? // when it was computed
+  // Account overview (Shimmie 9/24): a short history of the account written
+  // from its notes on demand ("Summarize account" in the lead detail).
+  summary         String?
+  summaryAt       DateTime?
+  summaryNotes    Int?      // how many notes it covered
   outreachTo      String?   // email the current in-progress sequence is aimed at
   outreachStatus  String?   // null | intro_sent | followup_1 | replied | not_interested | unsubscribed | done
   outreachNextAt  DateTime? // clock for the next outbound action
