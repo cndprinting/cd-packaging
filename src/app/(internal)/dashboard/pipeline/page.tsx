@@ -282,7 +282,8 @@ const INDUSTRY_OPTIONS = ["Skincare / Cosmetics", "Nutraceutical", "Healthcare /
 // (Break in, TBD, Touch base...) were migrated; the agent writes its own plain-
 // English stage on inbound leads, which the row keeps showing as-is.
 const STAGE_LEAD = ["New Lead (Not contacted)", "Actively Working (Call, Text and Email)", "Quote Needed (Specs Received)", "Quote Sent"];
-const STAGE_QUAL = ["With C&D", "With customer", "Quoting", "N/A"];
+// Shimmie 9/24 (asked twice): one list everywhere, Qualified included.
+const STAGE_QUAL = STAGE_LEAD;
 // Inbound and Prospecting are both the LEAD stage, split by how the record
 // ARRIVED (Benjy 8/7: "leave cold/organic entirely separate"). They're
 // top-level rather than a filter inside Leads because a filter is still one
