@@ -270,6 +270,7 @@ model Lead {
   outreachContact Int       @default(0)     // deprecated (index-based); superseded by outreachEmailed/outreachTo
   outreachEmailed String?   // JSON list of emails already contacted on this lead (never re-emailed)
   contacts        LeadContact[]
+  emails          LeadEmail[]
   // Next task (Shimmie 9/23): a suggestion computed ONLY from the rep's own
   // notes on this lead -- what to do next (call / text / email / quote /
   // internal), one line, grounded in a quoted note. Never free-roaming.
@@ -334,6 +335,33 @@ model LeadContact {
   updatedAt       DateTime @updatedAt
 
   @@index([leadId, sort])
+}
+
+// Rep email from inside Godzilla (Benjy 9/24: "send emails DIRECTLY INSIDE
+// GODZILLA LIKE YOU WOULD IN HUBSPOT"). Outbound goes through Graph FROM the
+// rep's own mailbox (so it sits in their Outlook Sent folder too); replies
+// are pulled back by conversationId from that same mailbox and land here,
+// on the lead, tagged to the rep.
+model LeadEmail {
+  id             String   @id @default(cuid())
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction      String   // out | in
+  mailbox        String   // the rep's mailbox this thread lives in
+  fromAddr       String
+  toAddr         String   // comma separated
+  cc             String?
+  subject        String
+  bodyText       String
+  graphMessageId String?  @unique
+  conversationId String?
+  userId         String?  // rep who sent (out) / owns the mailbox (in)
+  userName       String?
+  sentAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([leadId, sentAt])
+  @@index([mailbox, conversationId])
 }
 
 model LeadNote {

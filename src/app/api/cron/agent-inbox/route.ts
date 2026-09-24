@@ -26,6 +26,9 @@ export async function GET(request: NextRequest) {
     const result = await pollAgentInbox(prisma);
     let mailercity = { created: 0 };
     try { mailercity = await pollMailerCityLeads(prisma); } catch (e) { console.error("[Godzilla CRON] mailercity poll failed", e); }
+    // Reps' own threads (email sent from inside Godzilla): pull replies onto the lead.
+    try { const { pollRepInboxes } = await import("@/lib/rep-email"); const rr = await pollRepInboxes(prisma); if (rr.replies) console.log(`[Godzilla CRON] rep email replies: ${rr.replies} across ${rr.mailboxes} mailboxes`); }
+    catch (e) { console.error("[Godzilla CRON] rep inbox poll failed", e); }
     return NextResponse.json({ ok: true, ...result, mailercityCreated: mailercity.created });
   } catch (e) {
     console.error("[Godzilla CRON] agent-inbox failed", e);

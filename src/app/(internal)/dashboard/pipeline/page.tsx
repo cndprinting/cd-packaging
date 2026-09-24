@@ -6,6 +6,7 @@ import { TrendingUp, Lock, Loader2, Plus, X, AlertTriangle, Link2, ChevronRight,
 import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { NotesTimeline } from "@/components/leads/notes-timeline";
 import { LeadContacts, type LeadContact } from "@/components/leads/lead-contacts";
+import { LeadEmail } from "@/components/leads/lead-email";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -997,6 +998,9 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                             </ol>
                           </div>
                         )}
+                        {/* Email from inside the lead (Benjy 9/24): sent as the rep, replies come back here. */}
+                        <LeadEmail leadId={l.id} companyName={l.companyName} product={l.productCategory} contacts={(l.contacts || []).map((c) => ({ name: c.name, email: c.email }))}
+                          onSent={() => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, lastInteraction: new Date().toISOString(), stalled: false } : x))} />
                         {/* Account overview (Shimmie 9/24): one click, written from the notes. */}
                         <AccountSummary l={l} onUpdate={(patchv) => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, ...patchv } : x))} />
                         <div className="sm:col-span-3">
