@@ -698,7 +698,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className={`w-full table-fixed text-sm ${full ? "min-w-[1330px]" : "min-w-[900px]"}`}>
+          <table className={`w-full table-fixed text-sm ${full ? "min-w-[1330px]" : "min-w-[1180px]"}`}>
             {full ? (
               <colgroup>
                 <col style={{ width: 140 }} /><col style={{ width: 124 }} /><col style={{ width: 96 }} /><col style={{ width: 100 }} /><col style={{ width: 64 }} />
@@ -706,7 +706,10 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
               </colgroup>
             ) : (
               <colgroup>
-                <col /><col style={{ width: 210 }} /><col style={{ width: 200 }} /><col style={{ width: 190 }} /><col style={{ width: 280 }} /><col style={{ width: 180 }} />
+                {/* Shimmie 9/24: on laptop screens the fixed columns ate the Company column
+                    and Sub-status drew over the name. Company now has a real minimum and the
+                    table scrolls sideways instead of overlapping. */}
+                <col style={{ minWidth: 240 }} /><col style={{ width: 200 }} /><col style={{ width: 160 }} /><col style={{ width: 170 }} /><col style={{ width: 240 }} /><col style={{ width: 170 }} />
               </colgroup>
             )}
             <thead>
