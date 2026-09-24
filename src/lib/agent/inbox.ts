@@ -1,5 +1,5 @@
 import { getGraphClient } from "@/lib/email/graph-client";
-import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply, isWeekendET } from "@/lib/agent/agent";
+import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply, isWeekendET, firstName } from "@/lib/agent/agent";
 import { READ_MAILBOXES, leadAgentName, leadAgentFirst, BREVITY } from "@/lib/agent/identity";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
@@ -425,10 +425,18 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       const claude = getClaude();
       if (claude) {
         const sys = `You write replies to customers for C&D Printing & Packaging. Understated, warm, professional — no hype, no emoji, no exclamation points. Address their message directly, keep it short, propose a clear next step. Use the customer's FIRST name only (never the full name). Sign off with just the name "${leadAgentName(lead)}" (a company signature is appended automatically). Never use em dashes or en dashes (— –); use commas, periods, or parentheses instead, so it doesn't read as AI-written. Output ONLY the inner HTML body (<p>, <strong>, <br>). Don't invent prices or commitments beyond what's in the quote. If the customer asks about timing, our standard lead time is 2 to 3 weeks after we receive payment and final approval of the quote, and we can prioritize when they have a deadline.` + BREVITY;;
-        const u = `Customer ${lead.companyName} replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${fullText}`;
+        // Benjy 9/24 ("we say Toothily ... why not say his name Anthony"): the
+        // prompt never told the model the person's name, so it greeted the company.
+        const first = firstName(lead.contactName);
+        const u = `The person's first name is ${first || "(unknown)"}; the company is ${lead.companyName}. Open with "Hi ${first || "there"}," and never greet the company by name.\nThey replied to our quote for ${lead.productName}.\nOur quote was:\n${lead.agentQuote || "(not recorded)"}\n\nTheir message:\n${fullText}`;
         const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 1024, system: sys, messages: [{ role: "user", content: u }] });
         const t: any = (r.content || []).find((b: any) => b.type === "text");
         draft = t?.text?.trim() || null;
+        // Belt and braces: a greeting aimed at the company becomes the first name.
+        if (draft && first) {
+          const co = lead.companyName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          draft = draft.replace(new RegExp(`^(\\s*(?:<p>)?\\s*(?:Hi|Hello|Hey|Dear)\\s+)${co}(\\s*[,.!])`, "i"), `$1${first}$2`);
+        }
       }
     } catch (e) { console.error("[agent inbox] draft failed", e); }
 
