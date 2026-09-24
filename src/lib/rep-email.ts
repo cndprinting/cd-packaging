@@ -86,6 +86,7 @@ export async function sendRepEmail(prisma: any, user: { id: string; email: strin
   } });
   await prisma.leadNote.create({ data: { leadId: lead.id, kind: "system", source: "email", authorName: user.name, body: `[Email] ${user.name} → ${to.join(", ")}: "${subject}"` } });
   await prisma.lead.update({ where: { id: lead.id }, data: { lastInteraction: new Date() } });
+  try { const { refreshNextTask } = await import("@/lib/agent/next-task"); await refreshNextTask(prisma, lead.id); } catch { /* suggestion is best-effort */ }
   return { email: row };
 }
 
@@ -124,6 +125,7 @@ export async function pollRepInboxes(prisma: any): Promise<{ mailboxes: number; 
           if (t.userId) {
             await prisma.notification.create({ data: { userId: t.userId, type: "email_reply", actorName: m.from?.emailAddress?.name || from, title: `${m.from?.emailAddress?.name || from} replied — ${lead.companyName}`, body: text.slice(0, 500), url: `${PORTAL}?lead=${t.leadId}` } }).catch(() => {});
           }
+          try { const { refreshNextTask } = await import("@/lib/agent/next-task"); await refreshNextTask(prisma, t.leadId); } catch { /* best-effort */ }
           replies++;
         }
       } catch (e) { console.error("[rep-email] poll failed", mailbox, (e as Error).message.slice(0, 120)); }

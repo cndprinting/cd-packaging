@@ -13,7 +13,7 @@ Rules:
 - Use only the notes and lead facts given. Never invent names, dates, prices or outcomes.
 - 4 to 7 short lines, plain English, no headings, no bullets, no markdown. Newest developments last.
 - Cover: who the account is and what they buy or asked about; how we got connected; what has happened, in order, with dates from the notes; where it stands now; anything a rep must know before touching it (people to avoid, promises made, pricing said).
-- Reps' notes matter most. "[Agent]" or system notes only add dates and sent/replied facts.
+- Reps' notes and the email exchange (what the rep sent, what the customer replied) matter most. "[Agent]" or system notes only add dates and sent/replied facts.
 - If there are fewer than two useful notes, say in one line what little is known.`;
 
 export async function POST(request: NextRequest) {
@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     where: { id },
     select: { companyName: true, endMarket: true, productCategory: true, city: true, state: true, pipelineStage: true, stage: true, ownerName: true, volume: true, createdAt: true, followUpAt: true, followUpNote: true,
       contacts: { orderBy: { sort: "asc" }, select: { name: true, title: true } },
-      notes: { orderBy: { createdAt: "asc" }, take: 60, select: { body: true, authorName: true, kind: true, createdAt: true } } },
+      notes: { orderBy: { createdAt: "asc" }, take: 60, select: { body: true, authorName: true, kind: true, createdAt: true } },
+      emails: { orderBy: { sentAt: "asc" }, take: 30, select: { direction: true, fromAddr: true, toAddr: true, subject: true, bodyText: true, userName: true, sentAt: true } } },
   });
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   const claude = getClaude();
@@ -44,14 +45,18 @@ export async function POST(request: NextRequest) {
     "",
     `Notes, oldest first (${notes.length}):`,
     ...notes.map((n) => `[${n.createdAt.toISOString().slice(0, 10)} ${n.kind === "human" ? n.authorName : "system/agent"}] ${n.body.replace(/\s+/g, " ").slice(0, 900)}`),
+    "",
+    `Emails on this lead, oldest first (${lead.emails.length}):`,
+    ...(lead.emails.length ? lead.emails.map((e) => `[${e.sentAt.toISOString().slice(0, 10)} ${e.direction === "in" ? `REPLY from ${e.fromAddr}` : `SENT by ${e.userName || e.fromAddr} to ${e.toAddr}`}] ${e.subject} — ${e.bodyText.replace(/\s+/g, " ").slice(0, 700)}`) : ["(none)"]),
   ].filter((x) => x !== "").join("\n");
   try {
     const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 500, system: SYSTEM, messages: [{ role: "user", content: user }] });
     const text = r.content.map((c) => (c.type === "text" ? c.text : "")).join("").trim();
     if (!text) return NextResponse.json({ error: "No summary came back" }, { status: 502 });
     const summaryAt = new Date();
-    await prisma.lead.update({ where: { id }, data: { summary: text, summaryAt, summaryNotes: notes.length } });
-    return NextResponse.json({ summary: text, summaryAt: summaryAt.toISOString(), summaryNotes: notes.length });
+    const covered = notes.length + lead.emails.length;
+    await prisma.lead.update({ where: { id }, data: { summary: text, summaryAt, summaryNotes: covered } });
+    return NextResponse.json({ summary: text, summaryAt: summaryAt.toISOString(), summaryNotes: covered });
   } catch (e) {
     console.error("[summary] failed", (e as Error).message);
     return NextResponse.json({ error: "Could not write the overview right now" }, { status: 502 });
