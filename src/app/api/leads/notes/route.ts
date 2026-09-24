@@ -42,6 +42,12 @@ export async function POST(request: NextRequest) {
   const people = await roster(g.prisma);
   const mentioned = findMentions(text, people);
 
+  // Shimmie 9/24: a note on a New Lead means the rep has started working it -> sub-status first.
+  {
+    const { newLeadBlock } = await import("@/lib/lead-gate");
+    const blocked = await newLeadBlock(g.prisma, lead.id);
+    if (blocked) return NextResponse.json({ error: blocked, code: "new_lead" }, { status: 409 });
+  }
   const note = await g.prisma.leadNote.create({
     data: {
       leadId: lead.id, body: text.slice(0, 8000), kind: "human",

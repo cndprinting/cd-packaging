@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
   const leadId = String(body.leadId || "");
   const name = clean(body.name, 120);
   if (!leadId || !name) return NextResponse.json({ error: "Lead and contact name are required" }, { status: 400 });
+  { const { newLeadBlock } = await import("@/lib/lead-gate"); const blocked = await newLeadBlock(g.prisma, leadId); if (blocked) return NextResponse.json({ error: blocked, code: "new_lead" }, { status: 409 }); }
   const n = await g.prisma.leadContact.count({ where: { leadId } });
   if (n >= MAX) return NextResponse.json({ error: `A lead holds up to ${MAX} contacts` }, { status: 400 });
   await g.prisma.leadContact.create({ data: {
@@ -51,6 +52,7 @@ export async function PUT(request: NextRequest) {
   const id = String(body.id || "");
   const cur = await g.prisma.leadContact.findUnique({ where: { id } });
   if (!cur) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  { const { newLeadBlock } = await import("@/lib/lead-gate"); const blocked = await newLeadBlock(g.prisma, cur.leadId); if (blocked) return NextResponse.json({ error: blocked, code: "new_lead" }, { status: 409 }); }
   const data: Record<string, unknown> = {};
   if ("name" in body) { const nm = clean(body.name, 120); if (!nm) return NextResponse.json({ error: "Name can't be blank" }, { status: 400 }); data.name = nm; }
   if ("title" in body) data.title = clean(body.title, 120);

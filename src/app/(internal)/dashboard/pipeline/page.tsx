@@ -999,6 +999,17 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                             </ol>
                           </div>
                         )}
+                        {/* Shimmie 9/24: a New Lead can't take notes, contacts or enrichment
+                            until the rep says where it stands. Server enforces; this explains. */}
+                        {l.origin === "prospecting" && l.stage === STAGE_LEAD[0] && (
+                          <div className="sm:col-span-3 flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <span><strong>Still "New Lead (Not contacted)".</strong> Before adding notes, contacts or details, set where it stands:</span>
+                            <select className={`${selCls} h-7 w-auto`} value="" onChange={(e) => { if (e.target.value) patch(l.id, "stage", e.target.value); }}>
+                              <option value="">Choose sub-status…</option>
+                              {STAGE_LEAD.slice(1).map((s) => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                        )}
                         {/* Email from inside the lead (Benjy 9/24): sent as the rep, replies come back here. */}
                         <LeadEmail leadId={l.id} companyName={l.companyName} product={l.productCategory} contacts={(l.contacts || []).map((c) => ({ name: c.name, email: c.email }))}
                           onSent={() => setLeads((p) => p.map((x) => x.id === l.id ? { ...x, lastInteraction: new Date().toISOString(), stalled: false } : x))} />

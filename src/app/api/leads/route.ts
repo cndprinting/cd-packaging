@@ -115,7 +115,8 @@ export async function POST(request: NextRequest) {
       contactEmail: body.contactEmail || null,
       contactPhone: body.contactPhone || null,
       priority: body.priority ? Number(body.priority) : null,
-      stage: body.stage || null,
+      // Shimmie 9/24: every new prospecting lead starts as New Lead (Not contacted).
+      stage: body.stage || (body.originOverride === "inbound" ? null : "New Lead (Not contacted)"),
       pipelineStage: body.pipelineStage || "LEAD",
       // Added from the Inbound tab -> it is an inbound lead, not a prospect
       ...(body.originOverride === "inbound" ? { originOverride: "inbound", source: "inbound" } : {}),
@@ -167,6 +168,17 @@ async function updateLead(prisma: any, body: any) {
     return NextResponse.json({ lead: updated, companyId });
   }
 
+  // Shimmie 9/24: enriching a New Lead (contacts, website, volume...) means
+  // the rep is working it, so the sub-status has to move first. Stage, owner,
+  // follow-up and tab moves are always allowed.
+  {
+    const { newLeadBlock, ENRICH_FIELDS } = await import("@/lib/lead-gate");
+    const touched = ENRICH_FIELDS.filter((k) => k in body);
+    if (touched.length && !("stage" in body)) {
+      const blocked = await newLeadBlock(prisma, body.id);
+      if (blocked) return NextResponse.json({ error: blocked, field: touched[0], code: "new_lead" }, { status: 400 });
+    }
+  }
   // Inline field updates (dropdowns, text, stage move).
   const data: any = {};
   for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary", "leadTypeOverride", "originOverride"]) {
