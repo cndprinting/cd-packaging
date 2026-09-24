@@ -240,6 +240,15 @@ function AccountSummary({ l, onUpdate }: { l: Lead; onUpdate: (p: Partial<Lead>)
   );
 }
 
+// Does this lead have anything to dial or write to? Confirmed primaries or
+// the candidate dumps on any contact, plus the legacy fields.
+function contactInfo(l: Lead): { phone: boolean; email: boolean } {
+  const cs = l.contacts || [];
+  const phone = cs.some((c) => !!(c.phone || c.phoneCandidates)) || !!l.contactPhone || !!(l.numbers && /\d{7}/.test(l.numbers));
+  const email = cs.some((c) => !!(c.email || c.emailCandidates)) || !!l.contactEmail || !!l.contactEmail2;
+  return { phone, email };
+}
+
 // Follow-up state: "due" = date is today or past, "upcoming" = future.
 function dueState(l: Lead): "due" | "upcoming" | null {
   if (l.followUpDoneAt) return null; // completed follow-ups drop off the due list
@@ -333,6 +342,9 @@ export default function PipelinePage() {
   // Manual sub-status filter + Summary/Full view (Benjy 9/22: columns "very
   // congested"; core = Company, Owner, Sub-status, Follow-up, Actions).
   const [subF, setSubF] = useState<Set<string>>(new Set());
+  // Contact info filter (Shimmie 9/24): which leads actually have a phone or
+  // email to work with. Counts confirmed primaries AND the candidate dumps.
+  const [contactF, setContactF] = useState<Set<string>>(new Set());
   const [view, setViewState] = useState<"summary" | "full">("summary");
   useEffect(() => { try { const v = localStorage.getItem("pipeline.view"); if (v === "full" || v === "summary") setViewState(v); } catch { /* private mode */ } }, []);
   const setView = (v: "summary" | "full") => { setViewState(v); try { localStorage.setItem("pipeline.view", v); } catch { /* ignore */ } };
@@ -420,6 +432,7 @@ export default function PipelinePage() {
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
     .filter((l) => subF.size === 0 || subF.has(l.stage || "—"))
+    .filter((l) => { const k = [...contactF][0]; if (!k) return true; const i = contactInfo(l); return k === "phone" ? i.phone : k === "email" ? i.email : k === "any" ? (i.phone || i.email) : k === "both" ? (i.phone && i.email) : !(i.phone || i.email); })
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q))
     .filter((l) => { if (!industry) return true; const rx = INDUSTRIES.find((x) => x[0] === industry)?.[1]; return rx ? rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`) : true; });
@@ -432,11 +445,13 @@ export default function PipelinePage() {
     const region: Record<string, number> = {};
     const owner: Record<string, number> = {};
     const sub: Record<string, number> = {};
+    const contact = { phone: 0, email: 0, any: 0, both: 0, none: 0 };
     const sector: Record<string, number> = {};
     const states = new Set<string>();
     inStage.forEach((l) => {
       owner[ownerKey(l)] = (owner[ownerKey(l)] || 0) + 1;
       sub[l.stage || "—"] = (sub[l.stage || "—"] || 0) + 1;
+      { const i = contactInfo(l); if (i.phone) contact.phone++; if (i.email) contact.email++; if (i.phone || i.email) contact.any++; else contact.none++; if (i.phone && i.email) contact.both++; }
       for (const [n, rx] of INDUSTRIES) if (rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`)) sector[n] = (sector[n] || 0) + 1;
       mode[l.mode] = (mode[l.mode] || 0) + 1;
       if (l.stalled) mode.stalled++;
@@ -446,9 +461,9 @@ export default function PipelinePage() {
       const s = (l.state || "").trim().toUpperCase();
       if (s) states.add(s);
     });
-    return { mode, type, region, owner, sub, sector, states: [...states].sort() };
+    return { mode, type, region, owner, sub, sector, contact, states: [...states].sort() };
   }, [inStage]);
-  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF || subF.size > 0 || !!industry || (showOriginToggle && !!originF);
+  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF || subF.size > 0 || contactF.size > 0 || !!industry || (showOriginToggle && !!originF);
 
   // Optimistic inline patch.
   // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
@@ -642,6 +657,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         )}
         <Dropdown label="Owner" all="Everyone" allCount={inStage.length} selected={ownerF} onChange={setOwnerF}
           options={Object.keys(f.owner).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0) || (f.owner[b] - f.owner[a]) || a.localeCompare(b)).map((k) => ({ key: k, label: k === me ? `⭐ Just mine (${ownerLabel(k)})` : ownerLabel(k), count: f.owner[k] }))} />
+        <Dropdown label="Contact info" all="Any" allCount={inStage.length} single selected={contactF} onChange={setContactF}
+          options={[{ key: "phone", label: "Has a phone", count: f.contact.phone }, { key: "email", label: "Has an email", count: f.contact.email }, { key: "both", label: "Has phone and email", count: f.contact.both }, { key: "any", label: "Has phone or email", count: f.contact.any }, { key: "none", label: "No contact info", count: f.contact.none }]} />
         <Dropdown label="Sub-status" all="All" allCount={inStage.length} selected={subF} onChange={setSubF}
           options={Object.keys(f.sub).sort((a, b) => (f.sub[b] - f.sub[a]) || a.localeCompare(b)).map((k) => ({ key: k, label: k === "—" ? "Not set" : k, count: f.sub[k] }))} />
         <Dropdown label="Sector" all="All" allCount={inStage.length} single selected={industry ? new Set([industry]) : new Set()} onChange={(x) => setIndustry([...x][0] || "")}
@@ -655,7 +672,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
             options={f.states.map((st) => ({ key: st, label: st, count: inStage.filter((l) => (l.state || "").trim().toUpperCase() === st).length }))} />
         )}
         {anyFilter && (
-          <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); setSubF(new Set()); setIndustry(""); setOriginF(""); }}
+          <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); setSubF(new Set()); setContactF(new Set()); setIndustry(""); setOriginF(""); }}
             className="text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear all</button>
         )}
         <span className="ml-auto inline-flex overflow-hidden rounded-md border border-gray-300 text-xs" title="Summary shows Company, Owner, Sub-status, Follow-up, Actions. Full shows every column.">
