@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 export interface LeadContact {
   id: string; name: string; title: string | null; email: string | null; phone: string | null;
   emailCandidates: string | null; phoneCandidates: string | null; sort: number;
+  phoneConfirmedAt?: string | null; phoneConfirmedBy?: string | null;
 }
 const MAX = 3;
 const split = (s: string | null) => (s || "").split("\n").map((x) => x.trim()).filter(Boolean);
@@ -107,7 +108,9 @@ function ContactCard({ c, onSave, onRemove }: { c: LeadContact; onSave: (p: Reco
         {c.phone && !editPhone ? (
           <div className="flex items-center gap-2">
             <a href={`tel:${c.phone}`} className="font-medium text-gray-900 hover:underline">{c.phone}</a>
-            <span className="rounded-full bg-green-100 px-1.5 text-[10px] text-green-800">confirmed</span>
+            <span className="rounded-full bg-green-100 px-1.5 text-[10px] text-green-800" title={c.phoneConfirmedAt ? `Confirmed by ${c.phoneConfirmedBy || "a rep"} on ${new Date(c.phoneConfirmedAt).toLocaleDateString("en-US")}` : undefined}>
+              confirmed{c.phoneConfirmedBy ? ` · ${c.phoneConfirmedBy.split(/\s+/)[0]}` : ""}{c.phoneConfirmedAt ? ` ${new Date(c.phoneConfirmedAt).toLocaleDateString("en-US", { month: "numeric", day: "numeric" })}` : ""}
+            </span>
             <button type="button" onClick={() => { setPhoneDraft(c.phone || ""); setEditPhone(true); }} className="text-[11px] text-gray-400 hover:text-gray-700">change</button>
             {phones.length > 0 && <button type="button" onClick={() => setShowPhones((v) => !v)} className="text-[11px] text-gray-400 hover:text-gray-700">{phones.length} other{phones.length > 1 ? "s" : ""}</button>}
           </div>

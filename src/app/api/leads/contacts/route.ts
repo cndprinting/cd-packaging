@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
   if (n >= MAX) return NextResponse.json({ error: `A lead holds up to ${MAX} contacts` }, { status: 400 });
   await g.prisma.leadContact.create({ data: {
     leadId, name, title: clean(body.title, 120), email: clean(body.email, 200)?.toLowerCase() || null, phone: clean(body.phone, 60),
+    phoneConfirmedAt: clean(body.phone, 60) ? new Date() : null, phoneConfirmedBy: clean(body.phone, 60) ? (g.session.name || g.session.email) : null,
     emailCandidates: lines(body.emailCandidates).join("\n") || null, phoneCandidates: lines(body.phoneCandidates).join("\n") || null, sort: n,
   } });
   return NextResponse.json({ contacts: await syncLead(g.prisma, leadId) });
@@ -57,7 +58,12 @@ export async function PUT(request: NextRequest) {
   if ("name" in body) { const nm = clean(body.name, 120); if (!nm) return NextResponse.json({ error: "Name can't be blank" }, { status: 400 }); data.name = nm; }
   if ("title" in body) data.title = clean(body.title, 120);
   if ("email" in body) data.email = clean(body.email, 200)?.toLowerCase() || null;
-  if ("phone" in body) data.phone = clean(body.phone, 60);
+  if ("phone" in body) {
+    data.phone = clean(body.phone, 60);
+    // Shimmie 9/25: confirmed means a person clicked confirm here, nothing else.
+    data.phoneConfirmedAt = data.phone ? new Date() : null;
+    data.phoneConfirmedBy = data.phone ? (g.session.name || g.session.email) : null;
+  }
   if ("emailCandidates" in body) data.emailCandidates = lines(body.emailCandidates).join("\n") || null;
   if ("phoneCandidates" in body) data.phoneCandidates = lines(body.phoneCandidates).join("\n") || null;
   if ("sort" in body && Number.isInteger(body.sort)) data.sort = body.sort;

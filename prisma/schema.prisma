@@ -330,6 +330,10 @@ model LeadContact {
   phone           String?
   emailCandidates String?
   phoneCandidates String?
+  // Shimmie 9/25: a number is "confirmed" ONLY when someone clicked confirm in
+  // Godzilla. Imported/legacy numbers live in the candidates until then.
+  phoneConfirmedAt DateTime?
+  phoneConfirmedBy String?
   sort            Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
