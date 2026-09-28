@@ -534,7 +534,11 @@ export default function PipelinePage() {
   };
   const flush = (id: string, field: string, value: any) => {
     const k = `${id}:${field}`;
-    if (pending.current[k]) { clearTimeout(pending.current[k].timer); delete pending.current[k]; }
+    // Blur used to save unconditionally, so merely tabbing through a field
+    // fired a PUT -- and on a New Lead that tripped the sub-status gate with a
+    // red error the rep never asked for (Benjy 9/28, Life Extension).
+    if (!pending.current[k]) return;
+    clearTimeout(pending.current[k].timer); delete pending.current[k];
     commit(id, field, value);
   };
   useEffect(() => {
@@ -879,6 +883,25 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                 {expanded === l.id && (
                   <tr key={l.id + "-x"} className="bg-gray-50/70 border-t border-gray-100">
                     <td colSpan={full ? 12 : 6} className="px-4 py-3">
+                      {/* Shimmie 9/24: a New Lead can't take notes, contacts or enrichment
+                          until the rep says where it stands. Server enforces; this explains,
+                          at the TOP so it's the first thing seen (Benjy 9/28). */}
+                      {l.origin === "prospecting" && l.stage === STAGE_LEAD[0] && (
+                        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <span><strong>Still "New Lead (Not contacted)".</strong> Before adding notes, contacts or details, set where it stands:</span>
+                          <select className={`${selCls} h-7 w-auto`} value="" onChange={async (e) => {
+                            const v = e.target.value; if (!v) return;
+                            await patch(l.id, "stage", v);
+                            // Anything the rep typed while gated is still in the boxes: save it now.
+                            const gated = Object.keys(fieldErr).filter((k) => k.startsWith(`${l.id}:`) && /New Lead/.test(fieldErr[k]));
+                            for (const k of gated) { const f = k.slice(l.id.length + 1); const cur = leads.find((x) => x.id === l.id) as any; if (cur && cur[f] !== undefined) await savePut({ id: l.id, [f]: cur[f] }); }
+                            if (gated.length) setFieldErr((p) => { const n = { ...p }; for (const k of gated) delete n[k]; return n; });
+                          }}>
+                            <option value="">Choose sub-status…</option>
+                            {STAGE_LEAD.slice(1).map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      )}
                       {/* Status (moved out of the table, Benjy 9/17): who's driving
                           it and where it stands, the lead-type switch, stalled flag. */}
                       <div className="mb-3 rounded-md border border-gray-200 bg-white px-3 py-2">
@@ -1017,17 +1040,6 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                               {(() => { let a: any[] = []; try { a = l.outreachLog ? JSON.parse(l.outreachLog) : []; } catch { /* ignore */ } return a.slice().reverse().map((e: any, i: number) => (<li key={i} className="flex gap-2"><span className="text-gray-400 tabular-nums w-12 shrink-0">{fmtShort(e.at)}</span><span>{e.event}</span></li>)); })()}
                               {!l.outreachLog && <li className="text-gray-400">No agent activity yet.</li>}
                             </ol>
-                          </div>
-                        )}
-                        {/* Shimmie 9/24: a New Lead can't take notes, contacts or enrichment
-                            until the rep says where it stands. Server enforces; this explains. */}
-                        {l.origin === "prospecting" && l.stage === STAGE_LEAD[0] && (
-                          <div className="sm:col-span-3 flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                            <span><strong>Still "New Lead (Not contacted)".</strong> Before adding notes, contacts or details, set where it stands:</span>
-                            <select className={`${selCls} h-7 w-auto`} value="" onChange={(e) => { if (e.target.value) patch(l.id, "stage", e.target.value); }}>
-                              <option value="">Choose sub-status…</option>
-                              {STAGE_LEAD.slice(1).map((s) => <option key={s} value={s}>{s}</option>)}
-                            </select>
                           </div>
                         )}
                         {/* Email from inside the lead (Benjy 9/24): sent as the rep, replies come back here. */}
