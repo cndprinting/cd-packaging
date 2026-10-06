@@ -944,7 +944,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
-                        {([["website", "Website"], ["city", "City"]] as const).map(([f, label]) => {
+                        {/* Company name is editable here (Albert via Benjy 10/6): typos and renamed companies. */}
+                        {([["companyName", "Company name"], ["website", "Website"], ["city", "City"]] as const).map(([f, label]) => {
                           // A phone number in the email field means the agent
                           // silently never emails this lead. Catch it here
                           // rather than discovering it weeks later (Shimmie 8/6).
