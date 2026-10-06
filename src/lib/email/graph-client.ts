@@ -100,6 +100,67 @@ function isKeepAttachment(a: any): boolean {
   return false;                                        // inline image → skip
 }
 
+// Robust attachment copy (Benjy 10/6: "Jessica is unable to forward or carry
+// over attachments ... it never works"). What went wrong before:
+//  - the list endpoint was trusted for contentBytes, which Graph omits for
+//    larger files -> empty payload -> rejected;
+//  - one bad attachment threw and the loop aborted, dropping every file after it;
+//  - files over 3 MB need an upload session, we tried a plain POST;
+//  - the new-thread path to Mary never passed copyAttachmentsFrom at all.
+// Now: fetch each attachment by id, per-file try/catch, upload session for big
+// ones, and report what landed so callers can say "(attached)" truthfully.
+export async function fetchAttachments(from: string, messageId: string): Promise<{ name: string; contentType: string; base64Content: string; size: number }[]> {
+  const client = getGraphClient();
+  if (!client) return [];
+  const out: { name: string; contentType: string; base64Content: string; size: number }[] = [];
+  let list: any;
+  try { list = await client.api(`/users/${from}/messages/${messageId}/attachments`).select("id,name,contentType,size,isInline").get(); }
+  catch (e: any) { console.error("[attachments] list failed", e.message || e); return out; }
+  for (const a of list.value || []) {
+    try {
+      if (a["@odata.type"] && a["@odata.type"] !== "#microsoft.graph.fileAttachment") continue;
+      if (!isKeepAttachment({ ...a, "@odata.type": "#microsoft.graph.fileAttachment" })) continue;
+      // fetch individually: the collection omits contentBytes past a size
+      const full: any = await client.api(`/users/${from}/messages/${messageId}/attachments/${a.id}`).get();
+      if (!full.contentBytes) { console.error("[attachments] no bytes for", a.name, a.size); continue; }
+      out.push({ name: a.name || "attachment", contentType: a.contentType || "application/octet-stream", base64Content: full.contentBytes, size: a.size || Buffer.from(full.contentBytes, "base64").length });
+    } catch (e: any) { console.error("[attachments] fetch failed", a.name, e.message || e); }
+  }
+  return out;
+}
+
+const SMALL_ATT = 3 * 1024 * 1024;
+export async function attachToMessage(from: string, messageId: string, atts: { name: string; contentType: string; base64Content: string; size?: number }[]): Promise<string[]> {
+  const client = getGraphClient();
+  if (!client) return [];
+  const landed: string[] = [];
+  for (const att of atts) {
+    const bytes = Buffer.from(att.base64Content, "base64");
+    try {
+      if (bytes.length <= SMALL_ATT) {
+        await client.api(`/users/${from}/messages/${messageId}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: att.name, contentType: att.contentType, contentBytes: att.base64Content });
+      } else {
+        // > 3 MB: upload session in 3 MB chunks
+        const sess: any = await client.api(`/users/${from}/messages/${messageId}/attachments/createUploadSession`).post({ AttachmentItem: { attachmentType: "file", name: att.name, size: bytes.length, contentType: att.contentType } });
+        const url = sess.uploadUrl; const CH = 3 * 1024 * 1024;
+        for (let start = 0; start < bytes.length; start += CH) {
+          const end = Math.min(start + CH, bytes.length);
+          const res = await fetch(url, { method: "PUT", headers: { "Content-Length": String(end - start), "Content-Range": `bytes ${start}-${end - 1}/${bytes.length}` }, body: bytes.subarray(start, end) });
+          if (!res.ok && res.status !== 201 && res.status !== 200) throw new Error(`upload chunk ${res.status}`);
+        }
+      }
+      landed.push(att.name);
+    } catch (e: any) { console.error("[attachments] attach failed", att.name, bytes.length, e.message || e); }
+  }
+  return landed;
+}
+
+export async function copyAttachments(from: string, srcMessageId: string, dstMessageId: string): Promise<string[]> {
+  const atts = await fetchAttachments(from, srcMessageId);
+  if (!atts.length) return [];
+  return attachToMessage(from, dstMessageId, atts);
+}
+
 export async function sendEmailGetConversation(options: SendEmailOptions & { copyAttachmentsFrom?: string }): Promise<{ success: boolean; conversationId?: string; error?: string }> {
   const client = getGraphClient();
   if (!client) return { success: false, error: "Email not configured" };
@@ -112,16 +173,8 @@ export async function sendEmailGetConversation(options: SendEmailOptions & { cop
       bccRecipients: toRecips(options.bcc),
     });
     // Carry over file attachments (e.g. Mary's quote PDF) onto this first email.
-    if (options.copyAttachmentsFrom) {
-      try {
-        const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
-        for (const a of (atts.value || [])) {
-          if (isKeepAttachment(a)) {
-            await client.api(`/users/${options.from}/messages/${draft.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
-          }
-        }
-      } catch { /* attachment copy is best-effort */ }
-    }
+    if (options.copyAttachmentsFrom) await copyAttachments(options.from, options.copyAttachmentsFrom, draft.id);
+    if (options.attachments?.length) await attachToMessage(options.from, draft.id, options.attachments);
     await client.api(`/users/${options.from}/messages/${draft.id}/send`).post({});
     return { success: true, conversationId: draft.conversationId };
   } catch (error: any) {
@@ -172,17 +225,8 @@ export async function replyInConversation(options: { from: string; conversationI
     if (!src) return { success: false, error: "conversation not found" };
     const reply: any = await client.api(`/users/${options.from}/messages/${src.id}/createReply`).post({});
     await client.api(`/users/${options.from}/messages/${reply.id}`).patch({ toRecipients: toRecips(options.to), ccRecipients: toRecips(options.cc), bccRecipients: toRecips(options.bcc), body: { contentType: "HTML", content: options.body } });
-    // Carry over file attachments from a source message (e.g. customer artwork → Mary's thread).
-    if (options.copyAttachmentsFrom) {
-      try {
-        const atts: any = await client.api(`/users/${options.from}/messages/${options.copyAttachmentsFrom}/attachments`).get();
-        for (const a of (atts.value || [])) {
-          if (isKeepAttachment(a)) {
-            await client.api(`/users/${options.from}/messages/${reply.id}/attachments`).post({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: a.contentBytes });
-          }
-        }
-      } catch (e: any) { console.error("copy attachments failed:", e.message || e); }
-    }
+    // Carry over file attachments from a source message (e.g. customer artwork -> Mary's thread).
+    if (options.copyAttachmentsFrom) await copyAttachments(options.from, options.copyAttachmentsFrom, reply.id);
     await client.api(`/users/${options.from}/messages/${reply.id}/send`).post({});
     return { success: true };
   } catch (error: any) {

@@ -53,6 +53,8 @@ const reviewAll = () => process.env.AGENT_REVIEW_ALL === "true";
 // Quotes at/above this dollar amount always get owner review before sending.
 const QUOTE_REVIEW_THRESHOLD = 5000;
 // Pull the order value out of Mary's free-text quote (largest $ figure wins).
+// Quotes under this go out, then the lead parks in Lost with no chase (Benjy 10/6).
+const SMALL_QUOTE_LOST = Number(process.env.SMALL_QUOTE_LOST || 500);
 function quoteAmount(q: string): number {
   const nums = (q.match(/\$\s?[\d,]+(?:\.\d{1,2})?/g) || []).map((s) => parseFloat(s.replace(/[^0-9.]/g, ""))).filter((n) => !isNaN(n));
   return nums.length ? Math.max(...nums) : 0;
@@ -139,7 +141,7 @@ export function isAutoReply(subject?: string | null, body?: string | null): bool
   return /\bout of (the )?office\b|\bon (vacation|annual leave|holiday|leave|pto)\b|away from (the office|my email)|limited access to (my )?e-?mail|will (respond|reply|return).{0,30}(return|back in the office)|currently (out of|traveling|on leave)|i am (currently )?out\b|automated? (reply|response)|do not reply to this automated/i.test(b);
 }
 
-export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string }) {
+export async function agentSend(opts: { to: string | string[]; cc?: string | string[]; subject: string; body: string; attachments?: { name: string; contentType: string; base64Content: string }[] }) {
   const subject = noEmDash(opts.subject);
   const body = noEmDash(opts.body);
   // Simon is copied on every agent notification (owner alerts, approvals,
@@ -154,9 +156,9 @@ export async function agentSend(opts: { to: string | string[]; cc?: string | str
     // AGENT_TEST_TO may be a comma-separated list so several owners can watch a dry run.
     const testTo = test.split(",").map((s) => s.trim()).filter(Boolean);
     const realTo = toList.join(", ") + (cc.length ? `, cc ${cc.join(", ")}` : "");
-    return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${subject}`, body: body + `<p style="color:#bbb;font-size:11px;">[Test mode - in production this would go to: ${realTo}]</p>` });
+    return sendEmail({ from: SENDER, to: testTo, subject: `[TEST] ${subject}`, body: body + `<p style="color:#bbb;font-size:11px;">[Test mode - in production this would go to: ${realTo}]</p>`, attachments: opts.attachments });
   }
-  return sendEmail({ from: SENDER, to: opts.to, cc: cc.length ? cc : undefined, subject, body });
+  return sendEmail({ from: SENDER, to: opts.to, cc: cc.length ? cc : undefined, subject, body, attachments: opts.attachments });
 }
 const btn = (href: string, label: string) => `<a href="${href}" style="display:inline-block;background:#27AAE1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${label}</a>`;
 
@@ -196,7 +198,8 @@ export async function agentMarySend(prisma: any, lead: any, opts: { subject?: st
     const r = await replyInConversation({ from: mb, conversationId: lead.agentMaryConvId, to: MARY, cc: THREAD_CC, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
     if (r.success) return;
   }
-  const r = await sendEmailGetConversation({ from: mb, to: MARY, cc: THREAD_CC, subject, body });
+  // First message to Mary used to drop the files (copyAttachmentsFrom was never passed here).
+  const r = await sendEmailGetConversation({ from: mb, to: MARY, cc: THREAD_CC, subject, body, copyAttachmentsFrom: opts.copyAttachmentsFrom });
   if (r.conversationId || !lead.agentMailbox) {
     try { await prisma.lead.update({ where: { id: lead.id }, data: { ...(r.conversationId ? { agentMaryConvId: r.conversationId } : {}), agentMailbox: mb } }); } catch { /* ignore */ }
   }
@@ -398,7 +401,14 @@ export async function onMaryQuote(prisma: any, lead: any, quote: string): Promis
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${quote.replace(/</g, "&lt;")}</pre>
     <p>To: ${lead.contactName || "customer"} · ${lead.contactEmail || "(no email on file)"}</p>
     <p>${btn(link(lead.id, lead.agentToken, "approve"), "Approve &amp; send to customer")}</p>`);
-  await agentSend({to: OWNERS, subject: `${vip ? "⭐ " : ""}Approve quote: ${lead.companyName}`, body });
+  // Mary's PDF rides along so the approver sees the real quote, not just the text (Benjy 10/6).
+  let atts: { name: string; contentType: string; base64Content: string }[] = [];
+  try {
+    const fresh = await prisma.lead.findUnique({ where: { id: lead.id }, select: { agentQuoteMsgId: true } });
+    const msgId = fresh?.agentQuoteMsgId || lead.agentQuoteMsgId;
+    if (msgId) { const { fetchAttachments } = await import("@/lib/email/graph-client"); atts = (await fetchAttachments(leadMailbox(lead), msgId)).filter((a) => a.size <= 3 * 1024 * 1024); }
+  } catch { /* best-effort */ }
+  await agentSend({to: OWNERS, subject: `${vip ? "⭐ " : ""}Approve quote: ${lead.companyName}`, body, attachments: atts });
 }
 
 // ── Send the quote to the customer → start the follow-up clock ─────────────
@@ -468,6 +478,15 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
     <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
     <p>Best regards,<br>${leadAgentName(lead)}</p>`);
   await agentCustomerSend(prisma, lead, { body, copyAttachmentsFrom: lead.agentQuoteMsgId });
+  // Benjy 10/6: quotes under $500 go out, then the lead moves to Lost with no
+  // follow-up chase. Not worth the pipeline space; the customer can still reply
+  // and the inbox poller will surface it.
+  const amount = quoteAmount(lead.agentQuote || "");
+  if (amount > 0 && amount < SMALL_QUOTE_LOST) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "closed", stage: `Small quote (under $${SMALL_QUOTE_LOST}) - not chased`, pipelineStage: "LOST", agentNextAt: null, agentLog: logLine(lead.agentLog, `Quote sent ($${amount.toLocaleString()}); under $${SMALL_QUOTE_LOST}, moved to Lost, no follow-ups`) } });
+    try { await prisma.leadNote.create({ data: { leadId: lead.id, kind: "system", source: "agent", authorName: "Jessica (AI)", body: `[Agent] Quote sent ($${amount.toLocaleString()}). Under $${SMALL_QUOTE_LOST}, so moved to Lost and not chased. A reply still comes through.` } }); } catch { /* ignore */ }
+    return;
+  }
   await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote sent to customer (price in body)") } });
 }
 
