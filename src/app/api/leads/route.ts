@@ -179,6 +179,10 @@ async function updateLead(prisma: any, body: any) {
       if (blocked) return NextResponse.json({ error: blocked, field: touched[0], code: "new_lead" }, { status: 400 });
     }
   }
+  // A lead can be renamed but never un-named (the column is required).
+  if ("companyName" in body && !String(body.companyName || "").trim()) {
+    return NextResponse.json({ error: "Company name can't be blank", field: "companyName" }, { status: 400 });
+  }
   // Inline field updates (dropdowns, text, stage move).
   const data: any = {};
   for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary", "leadTypeOverride", "originOverride"]) {
