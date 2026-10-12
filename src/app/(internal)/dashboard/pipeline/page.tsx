@@ -7,6 +7,7 @@ import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { NotesTimeline } from "@/components/leads/notes-timeline";
 import { LeadContacts, type LeadContact } from "@/components/leads/lead-contacts";
 import { LeadEmail } from "@/components/leads/lead-email";
+import { DictateButton } from "@/components/leads/dictate";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1019,7 +1020,11 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         </div>
                         <div className="sm:col-span-2">
                           <label className="block text-xs font-medium text-gray-500 mb-1">Reminder note</label>
-                          <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => edit(l.id, "followUpNote", e.target.value)} onBlur={(e) => flush(l.id, "followUpNote", e.target.value)} />
+                          <div className="flex items-start gap-2">
+                            <Input className="h-8 text-xs" value={l.followUpNote || ""} placeholder="e.g. Call Reid about the carton specs" onChange={(e) => edit(l.id, "followUpNote", e.target.value)} onBlur={(e) => flush(l.id, "followUpNote", e.target.value)} />
+                            {/* Voice (Benjy 10/12): spoken reminder -> one clean line, saved straight away. */}
+                            <DictateButton mode="reminder" company={l.companyName} className="shrink-0 pt-1" onResult={(t) => { edit(l.id, "followUpNote", t); flush(l.id, "followUpNote", t); }} />
+                          </div>
                         </div>
                         {/* Contacts (Shimmie 9/23) replace the six loose contact
                             fields and the numbers scratchpad. Contact #1 still
@@ -1059,6 +1064,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                               next natural refresh. */}
                           <NotesTimeline
                             leadId={l.id}
+                            company={l.companyName}
                             onPosted={() => setLeads((p) => p.map((x) => x.id === l.id
                               ? { ...x, lastInteraction: new Date().toISOString(), stalled: false }
                               : x))}

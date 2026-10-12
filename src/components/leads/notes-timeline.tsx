@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Bot, Pencil, Check, X } from "lucide-react";
+import { DictateButton } from "@/components/leads/dictate";
 
 // Lead notes timeline (Shimmie 8/6). One entry per note with an author and a
 // timestamp, newest first — so two reps sharing a lead can see what was
@@ -40,7 +41,7 @@ function renderBody(body: string, people: Person[]) {
   return out;
 }
 
-export function NotesTimeline({ leadId, onPosted }: { leadId: string; onPosted?: () => void }) {
+export function NotesTimeline({ leadId, onPosted, company }: { leadId: string; onPosted?: () => void; company?: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +170,8 @@ export function NotesTimeline({ leadId, onPosted }: { leadId: string; onPosted?:
           className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50">
           {busy && <Loader2 className="h-3 w-3 animate-spin" />}Save note
         </button>
+        {/* Voice (Benjy 10/12): talk, stop, AI cleans it into the draft; the rep still reviews and saves. */}
+        <DictateButton mode="note" company={company} onResult={(t) => setDraft((d) => (d.trim() ? d.trimEnd() + "\n" + t : t))} />
         <span className="text-[11px] text-gray-400">Saved notes lock after 15 minutes.</span>
         {flash && <span className="text-[11px] text-green-600">{flash}</span>}
         {err && <span className="text-[11px] text-red-600">{err}</span>}
