@@ -7,9 +7,9 @@ import { getClaude } from "@/lib/agent/claude";
 // Facts only — names, numbers, dates and promises stay exactly as said.
 const SYSTEMS: Record<string, string> = {
   note: `You clean up a sales rep's spoken note about one lead so it reads well in a CRM.
-Rules: keep every fact, name, number, date, price and promise exactly as spoken; remove filler (um, like, you know), false starts and repetition; fix grammar; write in first person past tense the way the rep would type it ("Met with Angela on 8/4. Samples from Martin coming week of 8/14."); keep it to the point, usually 1 to 4 sentences, one short paragraph per topic; never add anything that wasn't said; never use em dashes. Output only the cleaned note text.`,
+Rules: keep every fact, name, number, date, price and promise exactly as spoken; remove filler (um, like, you know), false starts and repetition; fix grammar; write in first person past tense the way the rep would type it ("Met with Angela on 8/4. Samples from Martin coming week of 8/14."); keep it to the point, usually 1 to 4 sentences, one short paragraph per topic; never add anything that wasn't said; dates: if the rep says "today" or "yesterday" use the real date given below, otherwise keep partial dates exactly as spoken ("the 4th", "week of the 14th") and never guess a month or year; never use em dashes. Output only the cleaned note text.`,
   reminder: `You turn a sales rep's spoken reminder about one lead into one short reminder line for a CRM follow-up field.
-Rules: at most 120 characters; imperative ("Call Reid about the carton specs"); keep names, numbers and dates exactly as spoken; no filler; never add anything that wasn't said; never use em dashes. Output only the line.`,
+Rules: at most 120 characters; imperative ("Call Reid about the carton specs"); keep names, numbers and dates exactly as spoken (never guess a month or year; "today"/"tomorrow" may use the real date given below); no filler; never add anything that wasn't said; never use em dashes. Output only the line.`,
 };
 
 export async function POST(request: NextRequest) {
