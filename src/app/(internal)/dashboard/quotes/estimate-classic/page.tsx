@@ -181,6 +181,30 @@ function ClassicEstimatorContent() {
   const [aiBusy, setAiBusy] = useState<false | "fill" | "ask">(false);
   const [aiAnswer, setAiAnswer] = useState("");
   const [aiNotes, setAiNotes] = useState<string[]>([]);
+  // Artwork facts (Benjy 10/14): read from the customer's PDF, shown with Accept
+  // buttons; also appended to the assistant text and sent to the sanity checker.
+  const [art, setArt] = useState<{ facts: any; summary: string; classic: Record<string, number> } | null>(null);
+  const [artBusy, setArtBusy] = useState<string | null>(null);
+  const onArtwork = async (file: File | null) => {
+    if (!file) return;
+    setArtBusy("Uploading " + file.name + "…");
+    try {
+      const { uploadFile } = await import("@/lib/upload-client");
+      const up = await uploadFile(file);
+      if (!up.ok || !up.data.url) { setArtBusy(null); setAiAnswer(up.data.message || up.data.error || "Upload failed"); return; }
+      setArtBusy("Reading the file…");
+      const r = await fetch("/api/estimator-artwork", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: up.data.url, name: file.name }) });
+      const d = await r.json();
+      if (!r.ok) { setAiAnswer(d.error || "Could not read the file"); return; }
+      setArt(d);
+      setAiText((t) => (t.trim() ? t.trimEnd() + "\n" : "") + d.summary);
+    } catch { setAiAnswer("Could not upload or read that file"); }
+    finally { setArtBusy(null); }
+  };
+  const acceptArt = (fields: Record<string, number>, note: string) => {
+    setForm((f) => ({ ...f, ...fields }));
+    setAiNotes((n) => [...n, note]);
+  };
   const [aiMissing, setAiMissing] = useState<string[]>([]);
   // Save-time sanity checker (#3): advisory flags after a manual save.
   const [checkFlags, setCheckFlags] = useState<string[] | null>(null);
@@ -915,7 +939,7 @@ function ClassicEstimatorContent() {
       setChecking(true); setCheckFlags(null);
       fetch("/api/estimator-check", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form }),
+        body: JSON.stringify({ form, artwork: art?.summary }),
       }).then((r) => r.json()).then((d) => setCheckFlags(d.flags || []))
         .catch(() => setCheckFlags([]))
         .finally(() => setChecking(false));
@@ -2470,6 +2494,39 @@ function ClassicEstimatorContent() {
                 <div className="mt-2 rounded-sm border border-amber-600/40 bg-amber-400/5 p-2">
                   <div className="mb-1 font-mono text-[11px] uppercase tracking-wide text-amber-400">Still needs you</div>
                   {aiMissing.map((n, i) => <div key={i} className="text-[12px] text-amber-200/90">• {n}</div>)}
+                </div>
+              )}
+              {/* Artwork (Benjy 10/14): exact facts from the customer's PDF, nothing guessed. */}
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-800/40 pt-2">
+                <label className="cursor-pointer rounded-sm border border-amber-600/70 px-3 py-1.5 font-mono text-[12px] text-amber-300 hover:bg-amber-900/40">
+                  {artBusy || "Read the artwork file"}
+                  <input type="file" className="hidden" accept=".pdf,.ai,.png,.jpg,.jpeg" disabled={!!artBusy} onChange={(e) => { onArtwork(e.target.files?.[0] || null); e.currentTarget.value = ""; }} />
+                </label>
+                <span className="font-mono text-[11px] text-amber-500/60">PDF or AI: trim size, pages, bleed, spot inks, dieline. Quantity and stock still come from the customer.</span>
+              </div>
+              {art && art.facts && (
+                <div className="mt-2 rounded-sm border border-sky-700/40 bg-sky-400/5 p-2">
+                  <div className="mb-1 font-mono text-[11px] uppercase tracking-wide text-sky-300">From the artwork: {art.facts.fileName}</div>
+                  <div className="grid gap-1 text-[12px] text-sky-100 sm:grid-cols-2">
+                    {art.facts.kind === "pdf" && art.facts.trimWidthIn && (
+                      <div className="flex items-center justify-between gap-2 rounded-sm bg-black/30 px-2 py-1">
+                        <span>{art.facts.isDieline ? "Flat blank" : "Trim size"}: <b>{art.facts.trimWidthIn} x {art.facts.trimHeightIn} in</b>{art.facts.bleedIn ? ` · ${art.facts.bleedIn.toFixed(3)} in bleed` : " · no bleed"}</span>
+                        <button type="button" className="rounded-sm bg-sky-600 px-2 py-0.5 font-mono text-[11px] text-white hover:bg-sky-500"
+                          onClick={() => acceptArt(Object.fromEntries(Object.entries(art.classic).filter(([k]) => /Width|Height/.test(k))), `Size ${art.facts.trimWidthIn} x ${art.facts.trimHeightIn} from the artwork`)}>Accept</button>
+                      </div>
+                    )}
+                    {art.facts.kind === "pdf" && art.facts.pages > 1 && (
+                      <div className="flex items-center justify-between gap-2 rounded-sm bg-black/30 px-2 py-1">
+                        <span>Pages: <b>{art.facts.pages}</b>{art.facts.pagesSameSize ? "" : " (sizes differ)"}</span>
+                        <button type="button" className="rounded-sm bg-sky-600 px-2 py-0.5 font-mono text-[11px] text-white hover:bg-sky-500" onClick={() => acceptArt({ numPages: art.facts.pages }, `${art.facts.pages} pages from the artwork`)}>Accept</button>
+                      </div>
+                    )}
+                    {art.facts.kind === "pdf" && (
+                      <div className="rounded-sm bg-black/30 px-2 py-1">Inks: <b>{[art.facts.usesProcess ? "4-color process" : "", ...art.facts.spotInks].filter(Boolean).join(" + ") || "none found"}</b>{art.facts.finishes.length ? <span> · finishing layers: <b>{art.facts.finishes.join(", ")}</b></span> : null}</div>
+                    )}
+                    {art.facts.notes.map((n: string, i: number) => <div key={i} className="rounded-sm bg-black/30 px-2 py-1 text-sky-200/80">• {n}</div>)}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] text-sky-400/60">Also added to the box above, so "Fill the screens" uses it. Accept writes the field; you still review.</div>
                 </div>
               )}
             </div>

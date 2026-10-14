@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const claude = getClaude();
   if (!claude) return NextResponse.json({ flags: [] });
   try {
-    const { form } = (await req.json()) as { form: ClassicForm };
+    const { form, artwork } = (await req.json()) as { form: ClassicForm; artwork?: string };
     if (!form) return NextResponse.json({ flags: [] });
     const c: any = computeClassic(form, null);
     const parts = effectiveParts(form);
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
         noCutting: !!p.noCutting, noCartons: !!p.noCartons,
         cartons: c.partCalcs?.[i]?.cartonsUsed ?? 0, paperWeightPerM: p.weightPerMSheets || 0, binderyOperation: p.binderyOperation || 0,
       })),
+      // What the customer's artwork FILE says (exact, from the PDF boxes/inks) -- compare to what was keyed
+      artworkFile: artwork ? String(artwork).slice(0, 800) : undefined,
       computed: {
         paperCost: Math.round(c.paperCost), paperLbs: Math.round(((c.orderSheets || 0) / 1000) * (form.weightPerMSheets || 0)),
         materialCost: Math.round(c.materialCost), laborCost: Math.round((c.prepLabor || 0) + (c.pressCost || 0) + (c.binderyCost || 0)),
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
     const msg = await claude.messages.create({
       model: "claude-opus-4-8", max_tokens: 500,
       system: `You are the pre-save checker for C&D Printing's estimator. Mary (30-year estimator) keyed a quote; flag anything that looks MIS-KEYED so she fixes the field instead of distrusting the system. Judge like an estimator, not a linter.
+If "artworkFile" is present it is read straight from the customer's PDF (trim size, pages, bleed, spot inks, finishing layers). Flag any keyed size, page count, color count or finishing that contradicts it, e.g. "File is 8.5 x 11 but finished size keyed 8.5 x 14". Missing bleed or RGB in the file is a prepress note, one flag at most.
 ${HOUSE_RULES}
 
 Return STRICT JSON: {"flags": ["...", ...]} with AT MOST 4 flags, each one short sentence naming the screen/field and why it looks off (e.g. "Makeready 100 sheets looks low for 4/4 -- the house rule says ~900 (Screen 7)"). Only flag things a print estimator would question: prep/design hours wildly out of scale for the quantity (QT-2026-084: 25 design hours on a 100-piece reprint priced $2,000 of phantom labor -- E&M had 0.3; anything over ~2 hrs on a reprint or over ~8 on new work deserves a flag), a press-sheet size smaller than a typical parent with sheetsOutOfParent still 1 (paper bills at full parent price), zero outside rows + zero freight on work that names dies/varnish/outside finishing, paper weight per M left at 0 on an offset job (cartons then count as zero and paper handling is wrong), washup hours far above ~0.1-0.3 for the unit count. makereadySheets in the snapshot is the COMPUTED figure -- never call it zero unless it is, zero/absurd speeds on offset work, makeready far off the 100/color/side+100/machine rule, missing cartons on heavy paper without No Cartons checked, commission 0 without intent, $0 paper on a printed job, per-piece price wildly off for the product. If it all looks reasonable return {"flags": []}. NEVER invent numbers -- use only the snapshot.`,

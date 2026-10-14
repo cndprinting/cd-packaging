@@ -59,6 +59,24 @@ export default function FlexPackPage() {
   const [quoteNumber, setQuoteNumber] = useState<string>("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  // Artwork facts (Benjy 10/14): exact reads from the customer's PDF with Accept buttons.
+  const [art, setArt] = useState<{ facts: any; summary: string; flex: Record<string, number> } | null>(null);
+  const [artBusy, setArtBusy] = useState<string | null>(null);
+  const onArtwork = async (file: File | null) => {
+    if (!file) return;
+    setArtBusy("Uploading…");
+    try {
+      const { uploadFile } = await import("@/lib/upload-client");
+      const up = await uploadFile(file);
+      if (!up.ok || !up.data.url) { setMsg(up.data.message || up.data.error || "Upload failed"); return; }
+      setArtBusy("Reading the file…");
+      const r = await fetch("/api/estimator-artwork", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: up.data.url, name: file.name }) });
+      const d = await r.json();
+      if (!r.ok) { setMsg(d.error || "Could not read the file"); return; }
+      setArt(d);
+    } catch { setMsg("Could not upload or read that file"); }
+    finally { setArtBusy(null); }
+  };
   // Same customer source as the classic and wizard estimators, so FlexPack
   // ties to the real Godzilla customer list. Free-typed names still work.
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
@@ -230,6 +248,29 @@ export default function FlexPackPage() {
           <p className="mt-0.5 text-sm text-gray-500">
             HP Indigo wide web · linear feet and MSI · C&amp;D machine rates
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="cursor-pointer rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">
+              {artBusy || "Read the artwork file"}
+              <input type="file" className="hidden" accept=".pdf,.ai,.png,.jpg,.jpeg" disabled={!!artBusy} onChange={(e) => { onArtwork(e.target.files?.[0] || null); e.currentTarget.value = ""; }} />
+            </label>
+            <span className="text-[11px] text-gray-400">Reads size, inks, white and spot layers from a PDF. You still pick quantity and film.</span>
+          </div>
+          {art && art.facts && (
+            <div className="mt-2 rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+              <div className="mb-1 font-medium">From the artwork: {art.facts.fileName}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {art.facts.kind === "pdf" && art.facts.trimWidthIn && (
+                  <span className="inline-flex items-center gap-2 rounded bg-white px-2 py-1">Artwork {art.facts.trimWidthIn} x {art.facts.trimHeightIn} in
+                    <button type="button" className="rounded bg-sky-600 px-1.5 py-0.5 text-[11px] text-white hover:bg-sky-500" onClick={() => { set("bagWidthIn", art.facts.trimWidthIn); set("bagLengthIn", art.facts.trimHeightIn); }}>Use as bag W x L</button></span>
+                )}
+                {art.facts.kind === "pdf" && (
+                  <span className="inline-flex items-center gap-2 rounded bg-white px-2 py-1">Inks: {[art.facts.usesProcess ? "process" : "", ...art.facts.spotInks].filter(Boolean).join(" + ") || "none found"}{art.facts.finishes.length ? ` · layers: ${art.facts.finishes.join(", ")}` : ""}
+                    <button type="button" className="rounded bg-sky-600 px-1.5 py-0.5 text-[11px] text-white hover:bg-sky-500" onClick={() => { set("colorsCmyovg", art.flex.colorsCmyovg || 0); set("colorsWhite", art.flex.colorsWhite || 0); set("colorsSpot", art.flex.colorsSpot || 0); }}>Accept colors</button></span>
+                )}
+              </div>
+              {art.facts.notes.map((n: string, i: number) => <div key={i} className="mt-1 text-sky-800/80">• {n}</div>)}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link href="/dashboard/quotes" className="text-sm text-gray-500 hover:text-gray-800">Sheetfed quotes</Link>
