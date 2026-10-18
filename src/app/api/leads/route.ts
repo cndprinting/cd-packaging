@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       companyId: true, agentHold: true, followUpAt: true, followUpNote: true, followUpDoneAt: true,
       outreachStatus: true, outreachNextAt: true, outreachTo: true, outreachEmailed: true, outreachLog: true,
       agentStatus: true, agentNextAt: true, leadTypeOverride: true, originOverride: true,
-      source: true, intakeRaw: true, updatedAt: true,
+      source: true, intakeRaw: true, updatedAt: true, tier: true,
       nextTask: true, nextTaskKind: true, nextTaskBasis: true, nextTaskAt: true,
       summary: true, summaryAt: true, summaryNotes: true,
       // Newest note rides along so the row previews the current note.
@@ -183,11 +183,13 @@ async function updateLead(prisma: any, body: any) {
   if ("companyName" in body && !String(body.companyName || "").trim()) {
     return NextResponse.json({ error: "Company name can't be blank", field: "companyName" }, { status: 400 });
   }
+  if ("tier" in body) { const t = body.tier === null || body.tier === "" ? null : Number(body.tier); if (t !== null && ![1, 2, 3].includes(t)) return NextResponse.json({ error: "Tier is 1, 2 or 3", field: "tier" }, { status: 400 }); }
   // Inline field updates (dropdowns, text, stage move).
   const data: any = {};
   for (const k of ["companyName", "endMarket", "productCategory", "website", "city", "state", "contactName", "contactTitle", "contactEmail", "contactName2", "contactEmail2", "contactPhone", "stage", "pipelineStage", "ownerName", "volume", "numbers", "commentary", "leadTypeOverride", "originOverride"]) {
     if (k in body) data[k] = body[k] || null;
   }
+  if ("tier" in body) data.tier = body.tier === null || body.tier === "" ? null : Number(body.tier);
   // Same checks the UI runs, enforced server-side so a bad value can't arrive
   // by another path (Shimmie 8/6). Rejected outright rather than stored dirty:
   // a phone number in contactEmail silently disables outbound on that lead.

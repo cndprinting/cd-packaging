@@ -18,6 +18,7 @@ type Lead = {
   id: string; companyName: string; endMarket: string | null; productCategory: string | null;
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   contacts?: LeadContact[];
+  tier?: number | null;
   nextTask?: string | null; nextTaskKind?: string | null; nextTaskBasis?: string | null; nextTaskAt?: string | null;
   summary?: string | null; summaryAt?: string | null; summaryNotes?: number | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
@@ -272,7 +273,8 @@ const ownerKey = (l: Lead) => {
 };
 const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k === "house" ? "House account" : k.charAt(0).toUpperCase() + k.slice(1);
 
-const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Packaging", "Mailers", "MailerCity"];
+// Flexible line SKUs added 10/18 (Benjy: pouches / sachets / stick packs; several = Flexible Packaging)
+const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Pouches", "Sachets", "Stick Packs", "Labels", "Packaging", "Mailers", "MailerCity"];
 // "House" = house account (Benjy 9/22): no mailbox of its own, Benjy and Nitay
 // share it and both get its follow-up reminders.
 const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "House", "TBD"];
@@ -346,6 +348,7 @@ export default function PipelinePage() {
   // Contact info filter (Shimmie 9/24): which leads actually have a phone or
   // email to work with. Counts confirmed primaries AND the candidate dumps.
   const [contactF, setContactF] = useState<Set<string>>(new Set());
+  const [tierF, setTierF] = useState<Set<string>>(new Set());
   const [view, setViewState] = useState<"summary" | "full">("summary");
   useEffect(() => { try { const v = localStorage.getItem("pipeline.view"); if (v === "full" || v === "summary") setViewState(v); } catch { /* private mode */ } }, []);
   const setView = (v: "summary" | "full") => { setViewState(v); try { localStorage.setItem("pipeline.view", v); } catch { /* ignore */ } };
@@ -433,6 +436,7 @@ export default function PipelinePage() {
     .filter((l) => !stateF || (l.state || "").trim().toUpperCase() === stateF)
     .filter((l) => ownerF.size === 0 || ownerF.has(ownerKey(l)))
     .filter((l) => subF.size === 0 || subF.has(l.stage || "—"))
+    .filter((l) => tierF.size === 0 || tierF.has(l.tier ? String(l.tier) : "none"))
     .filter((l) => { const k = [...contactF][0]; if (!k) return true; const i = contactInfo(l); return k === "phone" ? i.phone : k === "email" ? i.email : k === "any" ? (i.phone || i.email) : k === "both" ? (i.phone && i.email) : !(i.phone || i.email); })
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q))
@@ -447,11 +451,13 @@ export default function PipelinePage() {
     const owner: Record<string, number> = {};
     const sub: Record<string, number> = {};
     const contact = { phone: 0, email: 0, any: 0, both: 0, none: 0 };
+    const tier: Record<string, number> = { "1": 0, "2": 0, "3": 0, none: 0 };
     const sector: Record<string, number> = {};
     const states = new Set<string>();
     inStage.forEach((l) => {
       owner[ownerKey(l)] = (owner[ownerKey(l)] || 0) + 1;
       sub[l.stage || "—"] = (sub[l.stage || "—"] || 0) + 1;
+      tier[l.tier ? String(l.tier) : "none"]++;
       { const i = contactInfo(l); if (i.phone) contact.phone++; if (i.email) contact.email++; if (i.phone || i.email) contact.any++; else contact.none++; if (i.phone && i.email) contact.both++; }
       for (const [n, rx] of INDUSTRIES) if (rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`)) sector[n] = (sector[n] || 0) + 1;
       mode[l.mode] = (mode[l.mode] || 0) + 1;
@@ -462,9 +468,9 @@ export default function PipelinePage() {
       const s = (l.state || "").trim().toUpperCase();
       if (s) states.add(s);
     });
-    return { mode, type, region, owner, sub, sector, contact, states: [...states].sort() };
+    return { mode, type, region, owner, sub, sector, contact, tier, states: [...states].sort() };
   }, [inStage]);
-  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF || subF.size > 0 || contactF.size > 0 || !!industry || (showOriginToggle && !!originF);
+  const anyFilter = modeF.size > 0 || typeF.size > 0 || regionF.size > 0 || ownerF.size > 0 || !!stateF || subF.size > 0 || contactF.size > 0 || tierF.size > 0 || !!industry || (showOriginToggle && !!originF);
 
   // Optimistic inline patch.
   // Saves must CONFIRM they landed (Benjy 7/20: he and Nitay both lost edits
@@ -662,6 +668,8 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
         )}
         <Dropdown label="Owner" all="Everyone" allCount={inStage.length} selected={ownerF} onChange={setOwnerF}
           options={Object.keys(f.owner).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0) || (f.owner[b] - f.owner[a]) || a.localeCompare(b)).map((k) => ({ key: k, label: k === me ? `⭐ Just mine (${ownerLabel(k)})` : ownerLabel(k), count: f.owner[k] }))} />
+        <Dropdown label="Tier" all="All" allCount={inStage.length} selected={tierF} onChange={setTierF}
+          options={[{ key: "1", label: "Tier 1", count: f.tier["1"] }, { key: "2", label: "Tier 2", count: f.tier["2"] }, { key: "3", label: "Tier 3", count: f.tier["3"] }, { key: "none", label: "No tier", count: f.tier.none }]} />
         <Dropdown label="Contact info" all="Any" allCount={inStage.length} single selected={contactF} onChange={setContactF}
           options={[{ key: "phone", label: "Has a phone", count: f.contact.phone }, { key: "email", label: "Has an email", count: f.contact.email }, { key: "both", label: "Has phone and email", count: f.contact.both }, { key: "any", label: "Has phone or email", count: f.contact.any }, { key: "none", label: "No contact info", count: f.contact.none }]} />
         <Dropdown label="Sub-status" all="All" allCount={inStage.length} selected={subF} onChange={setSubF}
@@ -677,7 +685,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
             options={f.states.map((st) => ({ key: st, label: st, count: inStage.filter((l) => (l.state || "").trim().toUpperCase() === st).length }))} />
         )}
         {anyFilter && (
-          <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); setSubF(new Set()); setContactF(new Set()); setIndustry(""); setOriginF(""); }}
+          <button type="button" onClick={() => { setModeF(new Set()); setTypeF(new Set()); setRegionF(new Set()); setOwnerF(new Set()); setStateF(""); setSubF(new Set()); setContactF(new Set()); setTierF(new Set()); setIndustry(""); setOriginF(""); }}
             className="text-xs text-gray-500 hover:text-gray-800 hover:underline">Clear all</button>
         )}
         <span className="ml-auto inline-flex overflow-hidden rounded-md border border-gray-300 text-xs" title="Summary shows Company, Owner, Sub-status, Follow-up, Actions. Full shows every column.">
@@ -743,6 +751,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expanded === l.id ? "rotate-90" : ""}`} />
                       <span>
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
+                        {l.tier && <span className={`ml-1.5 rounded px-1 text-[10px] font-semibold ${l.tier === 1 ? "bg-emerald-100 text-emerald-800" : l.tier === 2 ? "bg-sky-100 text-sky-800" : "bg-gray-100 text-gray-600"}`} title="Account tier">T{l.tier}</span>}
                         {(() => { const d = dueState(l); if (!d || !l.followUpAt) return l.endMarket ? <span className="block text-xs text-gray-400">{l.endMarket}</span> : null;
                           return <span className={`flex items-center gap-2 text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>
                             <span>{d === "due" ? "● Follow up due" : `Follow-up ${fmtDay(l.followUpAt)}`}</span>
@@ -942,6 +951,11 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       ))}
                     </select>
                       {l.stalled && <span className="text-[11px] text-red-500" title="No next action scheduled and untouched for 3+ days">⚠ Stalled</span>}
+                      <label className="inline-flex items-center gap-1 text-[11px] text-gray-500" title="Account tier (Benjy 10/18): 1 = biggest fish, 3 = small. Not urgency; that's Pri.">Tier
+                        <select className={`${selCls} h-7 w-auto`} value={l.tier ?? ""} onChange={(e) => patch(l.id, "tier", e.target.value ? Number(e.target.value) : null)}>
+                          <option value="">—</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                        </select>
+                      </label>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">

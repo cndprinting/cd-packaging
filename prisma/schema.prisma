@@ -212,7 +212,10 @@ model Lead {
   contactEmail    String?
   contactPhone    String?
   lastInteraction DateTime?
-  priority        Int?      // 1 / 2 / 3
+  priority        Int?      // 1 / 2 / 3 (urgency: how soon to act)
+  // Tier (Benjy 10/18): account value 1 / 2 / 3, on every tab. Separate from
+  // priority -- a Tier 1 account can be a priority 3 "not now".
+  tier            Int?
   stage           String?   // sub-status: Break in, Quoting, With C&D, etc.
   pipelineStage   String    @default("LEAD") // LEAD | QUALIFIED | CUSTOMER | LOST
   ownerName       String?   // display name as in the sheet (Benjy/Albert/Nitay/Kelsey/TBD)
@@ -366,6 +369,22 @@ model LeadEmail {
 
   @@index([leadId, sentAt])
   @@index([mailbox, conversationId])
+}
+
+// Social media idea generator (Benjy 10/18): ideas written by Claude from
+// newly closed accounts, 3-month plans, and web trend scans. Owners-only tab.
+model SocialIdea {
+  id          String   @id @default(cuid())
+  kind        String   // accounts | plan | trends
+  title       String
+  body        String
+  source      String?  // which account / URL / prompt it came from
+  status      String   @default("new") // new | planned | posted | dropped
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([kind, createdAt])
 }
 
 model LeadNote {
