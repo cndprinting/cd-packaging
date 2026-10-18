@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Scissors } from "lucide-react";
+  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Scissors, Megaphone } from "lucide-react";
 
 // Proprietary sales pipeline (Benjy 6/26) — only shown to users with the
 // pipelineAccess flag (Benjy/Nitay/Albert), regardless of role.
@@ -17,6 +17,9 @@ const PIPELINE_NAV = { label: "Sales Pipeline", href: "/dashboard/pipeline", ico
 // hires; same owners-only gate as the pipeline.
 const TALENT_NAV = { label: "Talent", href: "/dashboard/talent", icon: UserSearch };
 const TALENT_ROLES = ["OWNER", "ADMIN"];
+// Social media idea generator (Benjy 10/18) — Albert, Nitay, Simon, Benjy
+// (socialAccess flag from /api/auth/session).
+const SOCIAL_NAV = { label: "Social Media", href: "/dashboard/social", icon: Megaphone };
 // Agent Desk removed Aug 2026 — it duplicated the pipeline. Its job (see where
 // the AI agent stands on every lead) is now the "Who" filter chips on
 // /dashboard/pipeline (🤖 AI working / ⏸ Needs you / 👤 Mine / ⚠ Stalled).
@@ -74,9 +77,10 @@ interface SidebarProps {
   isCustomer?: boolean;
   userRole?: string;
   pipelineAccess?: boolean;
+  socialAccess?: boolean;
 }
 
-export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }: SidebarProps) {
+export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, socialAccess = false }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
 
@@ -158,17 +162,22 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false }
 
   // Inject the proprietary pipeline link for flagged internal users only.
   const nav = React.useMemo(() => {
-    if (isCustomer || !pipelineAccess) return filteredNav;
-    if (filteredNav.some((i) => i.href === PIPELINE_NAV.href)) return filteredNav;
+    if (isCustomer || (!pipelineAccess && !socialAccess)) return filteredNav;
     const next = [...filteredNav];
+    if (!pipelineAccess) {
+      if (socialAccess && !next.some((i) => i.href === SOCIAL_NAV.href)) { const q = next.findIndex((i) => i.href === "/dashboard/quotes"); next.splice(q >= 0 ? q + 1 : 1, 0, SOCIAL_NAV); }
+      return next;
+    }
+    if (next.some((i) => i.href === PIPELINE_NAV.href)) return next;
     const at = next.findIndex((i) => i.href === "/dashboard/quotes");
     next.splice(at >= 0 ? at + 1 : 1, 0, PIPELINE_NAV);
     const pi = next.findIndex((i) => i.href === PIPELINE_NAV.href);
     // Talent is the recruiting/poach list — owners+admin only, NOT everyone
     // with funnel access (Shimmie Jacoby onboarding, Benjy 8/4).
     if (TALENT_ROLES.includes(userRole || "") && !next.some((i) => i.href === TALENT_NAV.href)) next.splice(pi + 1, 0, TALENT_NAV);
+    if (socialAccess && !next.some((i) => i.href === SOCIAL_NAV.href)) next.splice(pi + 1, 0, SOCIAL_NAV);
     return next;
-  }, [filteredNav, isCustomer, pipelineAccess, userRole]);
+  }, [filteredNav, isCustomer, pipelineAccess, socialAccess, userRole]);
 
   return (
     <aside className={cn("flex flex-col bg-white border-r border-gray-200 transition-all duration-200 h-full", collapsed ? "w-16" : "w-60")}>

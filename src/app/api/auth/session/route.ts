@@ -21,7 +21,9 @@ export async function GET() {
       }
     } catch { /* default false */ }
 
-    return NextResponse.json({ user: { ...user, pipelineAccess } });
+    // Social media tab (Benjy 10/18): Albert, Nitay, Simon (Shimmie) and Benjy only.
+    const socialAccess = user.role === "OWNER" || ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com", "sjacoby@cndprinting.com"].includes((user.email || "").toLowerCase());
+    return NextResponse.json({ user: { ...user, pipelineAccess, socialAccess } });
   } catch (error) {
     console.error("Session error:", error);
     return NextResponse.json({ user: null }, { status: 500 });
