@@ -7,7 +7,7 @@ import { getClaude } from "@/lib/agent/claude";
 //   plan     - a 3-month posting plan for the four lines (cartons, pouches, print, mail)
 //   trends   - a web scan for what packaging accounts are posting that works now
 // Ideas are saved so the team can mark them planned / posted / dropped.
-export const maxDuration = 120;
+export const maxDuration = 300; // trend scan: web searches took >120s on 10/18
 
 const ALLOWED = ["bwaxman@cndprinting.com", "nlaor@cndprinting.com", "awaxman@cndprinting.com", "sjacoby@cndprinting.com"];
 const BRAND = `C&D Printing & Packaging, St. Petersburg FL, since 1973. Folding cartons (two Komori presses, LED UV), the new C&D Flex line (HP Indigo 200K: pouches, sachets, stick packs, roll labels), commercial print, direct mail. Customers: supplement, skincare, coffee, food and pet brands, mostly Florida. Voice: understated, real plant footage, no hype, no emoji in copy. Never invent customer names, numbers or claims. Never use em dashes.`;
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     user = body.notes ? `Owner notes to work in: ${String(body.notes).slice(0, 1500)}` : "No extra notes.";
   } else {
     // trends: web search over public pages (Instagram/TikTok block scraping; this reads what is public)
-    tools.push({ type: "web_search_20260209", name: "web_search", max_uses: 8 });
+    tools.push({ type: "web_search_20260209", name: "web_search", max_uses: 5 });
     system = `You research what packaging and print companies are posting that performs well right now, then turn it into ideas for ${BRAND}\nUse web search (packaging Instagram/TikTok accounts, "packaging unboxing" trends, print shop behind-the-scenes formats, satisfying die-cutting/gluer clips, pouch filling videos). Cite the page you saw each idea on. Return STRICT JSON only after researching: {"ideas":[{"title":"...","body":"...","source":"https://..."}]}. 6 to 10 ideas, each adapted to C&D's floor (Komori, die cutter, Kluge folder-gluer, HP Indigo, pouch machine).`;
     user = `Today is ${new Date().toISOString().slice(0, 10)}. Find current, specific examples, not generic advice.${body.notes ? ` Focus: ${String(body.notes).slice(0, 400)}` : ""}`;
   }
