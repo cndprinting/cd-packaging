@@ -64,12 +64,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const req: any = { model: "claude-opus-4-8", max_tokens: 3000, system, messages: [{ role: "user", content: user }] };
-    if (tools.length) req.tools = tools;
-    const r = await claude.messages.create(req);
-    const text = r.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    let text = "";
+    if (tools.length) {
+      // Two steps (10/18): web research can end on pause_turn or with prose + citations,
+      // so research first, then a plain call turns the findings into JSON.
+      const msgs: any[] = [{ role: "user", content: user }];
+      let research = "";
+      for (let i = 0; i < 4; i++) {
+        const r: any = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 4000, system, tools, messages: msgs });
+        research += r.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n") + "\n";
+        if (r.stop_reason === "pause_turn") { msgs.push({ role: "assistant", content: r.content }); continue; }
+        break;
+      }
+      console.log("[social] trends research chars", research.length);
+      const f: any = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 3000, system: `Convert research notes into STRICT JSON only: {"ideas":[{"title":"...","body":"...","source":"https://..."}]}. 6 to 10 ideas for ${BRAND} Keep every URL from the notes as the source of the idea it supports. No prose outside the JSON.`, messages: [{ role: "user", content: research.slice(0, 20000) || "No research came back; write 6 ideas from what packaging accounts typically post, source = 'general'." }] });
+      text = f.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    } else {
+      const r = await claude.messages.create({ model: "claude-opus-4-8", max_tokens: 3000, system, messages: [{ role: "user", content: user }] });
+      text = r.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    }
     const m = text.match(/\{[\s\S]*"ideas"[\s\S]*\}/);
-    if (!m) return NextResponse.json({ error: "No ideas came back, try again" }, { status: 502 });
+    if (!m) { console.error("[social] no JSON", kind, text.slice(0, 400)); return NextResponse.json({ error: "No ideas came back, try again" }, { status: 502 }); }
     const parsed = JSON.parse(m[0]);
     const ideas = (parsed.ideas || []).slice(0, 12).map((i: any) => ({ kind, title: String(i.title || "").slice(0, 120), body: String(i.body || "").slice(0, 2000), source: i.source ? String(i.source).slice(0, 300) : null, createdBy: g.session.name || g.session.email }));
     if (!ideas.length) return NextResponse.json({ error: "No ideas came back, try again" }, { status: 502 });
