@@ -47,7 +47,9 @@ export async function GET(request: NextRequest) {
   // payload down ~75%. intakeRaw is selected only because the lead-type
   // derivation needs it, then stripped from the response below.
   const rows = await prisma.lead.findMany({
-    orderBy: [{ priority: "asc" }, { lastInteraction: "desc" }],
+    // Always A-Z by company (Benjy + Simon 10/21): ordering by activity
+    // reshuffled the list every day, so cold callers lost their place.
+    orderBy: [{ companyName: "asc" }],
     select: {
       id: true, companyName: true, endMarket: true, productCategory: true, website: true,
       city: true, state: true, contactName: true, contactTitle: true, contactEmail: true,
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
       companyId: true, agentHold: true, followUpAt: true, followUpNote: true, followUpDoneAt: true,
       outreachStatus: true, outreachNextAt: true, outreachTo: true, outreachEmailed: true, outreachLog: true,
       agentStatus: true, agentNextAt: true, leadTypeOverride: true, originOverride: true,
-      source: true, intakeRaw: true, updatedAt: true, tier: true,
+      source: true, intakeRaw: true, updatedAt: true, createdAt: true, tier: true,
       nextTask: true, nextTaskKind: true, nextTaskBasis: true, nextTaskAt: true,
       summary: true, summaryAt: true, summaryNotes: true,
       // Newest note rides along so the row previews the current note.

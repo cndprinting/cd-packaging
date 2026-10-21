@@ -19,6 +19,7 @@ type Lead = {
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   contacts?: LeadContact[];
   tier?: number | null;
+  createdAt?: string;
   nextTask?: string | null; nextTaskKind?: string | null; nextTaskBasis?: string | null; nextTaskAt?: string | null;
   summary?: string | null; summaryAt?: string | null; summaryNotes?: number | null;
   lastInteraction: string | null; priority: number | null; stage: string | null; pipelineStage: string;
@@ -274,6 +275,14 @@ const ownerKey = (l: Lead) => {
 const ownerLabel = (k: string) => k === "tbd" ? "Unassigned" : k === "house" ? "House account" : k.charAt(0).toUpperCase() + k.slice(1);
 
 // Flexible line SKUs added 10/18 (Benjy: pouches / sachets / stick packs; several = Flexible Packaging)
+// A-Z by company, ignoring case and a leading "The" (Benjy + Simon 10/21).
+const sortName = (n: string) => n.trim().replace(/^the\s+/i, "");
+const byCompany = (a: { companyName: string }, b: { companyName: string }) =>
+  sortName(a.companyName).localeCompare(sortName(b.companyName), "en", { sensitivity: "base", numeric: true });
+// "New" ribbon for 7 days after a lead is added, so callers know it still needs a number.
+const NEW_DAYS = 7;
+const isNewLead = (l: { createdAt?: string }) => !!l.createdAt && Date.now() - new Date(l.createdAt).getTime() < NEW_DAYS * 86400e3;
+
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Pouches", "Sachets", "Stick Packs", "Labels", "Packaging", "Mailers", "MailerCity"];
 // "House" = house account (Benjy 9/22): no mailbox of its own, Benjy and Nitay
 // share it and both get its follow-up reminders.
@@ -440,7 +449,9 @@ export default function PipelinePage() {
     .filter((l) => { const k = [...contactF][0]; if (!k) return true; const i = contactInfo(l); return k === "phone" ? i.phone : k === "email" ? i.email : k === "any" ? (i.phone || i.email) : k === "both" ? (i.phone && i.email) : !(i.phone || i.email); })
     .filter((l) => !showOriginToggle || !originF || l.origin === originF)
     .filter((l) => !q || `${l.companyName} ${l.contactName || ""} ${l.contactEmail || ""} ${l.endMarket || ""} ${l.ownerName || ""} ${l.city || ""} ${l.state || ""} ${l.lastNote?.body || ""}`.toLowerCase().includes(q))
-    .filter((l) => { if (!industry) return true; const rx = INDUSTRIES.find((x) => x[0] === industry)?.[1]; return rx ? rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`) : true; });
+    .filter((l) => { if (!industry) return true; const rx = INDUSTRIES.find((x) => x[0] === industry)?.[1]; return rx ? rx.test(`${l.endMarket || ""} ${l.productCategory || ""}`) : true; })
+    // Always alphabetical on every tab, whatever filters are on (Benjy + Simon 10/21).
+    .sort(byCompany);
 
   // Counts shown on the chips — scoped to the active pipeline stage so the
   // numbers match what you're looking at.
@@ -752,6 +763,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       <span>
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
                         {l.tier && <span className={`ml-1.5 rounded px-1 text-[10px] font-semibold ${l.tier === 1 ? "bg-emerald-100 text-emerald-800" : l.tier === 2 ? "bg-sky-100 text-sky-800" : "bg-gray-100 text-gray-600"}`} title="Account tier">T{l.tier}</span>}
+                        {isNewLead(l) && <span className="ml-1.5 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={`Added ${fmtDay(l.createdAt!)}. New for 7 days: get a number on it.`}>New</span>}
                         {(() => { const d = dueState(l); if (!d || !l.followUpAt) return l.endMarket ? <span className="block text-xs text-gray-400">{l.endMarket}</span> : null;
                           return <span className={`flex items-center gap-2 text-xs ${d === "due" ? "text-amber-600 font-medium" : "text-gray-400"}`}>
                             <span>{d === "due" ? "● Follow up due" : `Follow-up ${fmtDay(l.followUpAt)}`}</span>
