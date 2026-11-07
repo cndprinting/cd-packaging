@@ -149,7 +149,10 @@ export async function agingReport(prisma: any, now = new Date()) {
 
 export async function agingRecipients(prisma: any): Promise<string[]> {
   const env = (process.env.AR_REPORT_TO || "").split(/[;,]/).map((s) => s.trim()).filter(Boolean);
-  const users = await prisma.user.findMany({ where: { role: { in: ["OWNER", "ACCOUNTING"] }, email: { endsWith: "@cndprinting.com" } }, select: { email: true, name: true } });
+  // Accounting users join the report once Benjy has walked them through it
+  // (11/7/26: "don't send anything yet"); flip AR_INCLUDE_ACCOUNTING=1 then.
+  const roles = process.env.AR_INCLUDE_ACCOUNTING === "1" ? ["OWNER", "ACCOUNTING"] : ["OWNER"];
+  const users = await prisma.user.findMany({ where: { role: { in: roles as any }, email: { endsWith: "@cndprinting.com" } }, select: { email: true, name: true } });
   const set = new Set<string>([...env, ...users.filter((u: any) => !/retired|duplicate/i.test(u.name)).map((u: any) => u.email)]);
   return [...set];
 }
