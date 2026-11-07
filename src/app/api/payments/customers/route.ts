@@ -26,5 +26,8 @@ export async function GET(request: NextRequest) {
     email: c.contacts.find((x) => x.email)?.email || null, contact: c.contacts[0]?.name || null,
     jobs: jobs.filter((j: any) => j.order?.companyId === c.id).slice(0, 10).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quotedPrice: j.quotedPrice, status: j.status, rep: j.salesRep?.name || null })),
   }));
-  return NextResponse.json({ customers: out });
+  // Sales reps for the manual commission pick (Benjy 11/7: Denise reads the
+  // rep off Mary's estimate until jobs live in Godzilla). Jessica is the AI agent.
+  const reps = await prisma.user.findMany({ where: { isActive: true, role: { in: ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN"] }, email: { endsWith: "@cndprinting.com", not: "jwaxman@cndprinting.com" }, NOT: { name: { contains: "retired" } } }, select: { id: true, name: true, commissionPct: true }, orderBy: { name: "asc" } });
+  return NextResponse.json({ customers: out, reps });
 }

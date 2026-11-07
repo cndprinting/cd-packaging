@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
-import { AR_FROM, CARD_SURCHARGE, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
+import { AR_FROM, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 
 // Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
 // record for invoices and payments; Sage keeps the GL. Actions:
@@ -66,7 +66,15 @@ export async function POST(request: NextRequest) {
       const count = await prisma.invoice.count();
       const invoiceNumber = `INV-${String(count + 1000).padStart(5, "0")}`;
       const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
-      const comm = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
+      // Rep + commission: from the job when there is one, else typed in by accounting from the estimate.
+      let comm: Record<string, unknown> = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
+      if (kind === "final" && body.salesRepId) {
+        const rep = await prisma.user.findUnique({ where: { id: String(body.salesRepId) }, select: { id: true, name: true, commissionPct: true } });
+        if (rep) {
+          const pct = Number.isFinite(Number(body.commissionPct)) ? Number(body.commissionPct) : (rep.commissionPct ?? DEFAULT_COMMISSION_PCT);
+          comm = { salesRepId: rep.id, salesRepName: rep.name, commissionPct: pct, commissionAmount: round2(subtotal * pct / 100), commissionStatus: pct > 0 ? "pending" : "none" };
+        }
+      }
       const invoice = await prisma.invoice.create({ data: {
         invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, subtotal, taxRate, taxAmount, total,
         depositPercent, depositAmount, jobId: jobId || null, orderId: orderId || null, notes, createdBy: session.id, kind, payToken: newPayToken(), dueDate, ...comm,
