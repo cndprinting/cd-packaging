@@ -113,6 +113,7 @@ model User {
   // owners + Albert (Benjy 6/26). A per-user flag, NOT a role, so it can't
   // drift if someone else becomes ADMIN later.
   pipelineAccess Boolean  @default(false)
+  commissionPct  Float?   // sales commission % of invoice subtotal (null = COMMISSION_DEFAULT_PCT)
   // Email me when someone @mentions me in a lead note. A human types every one
   // of these, so they're rare by construction — on by default, opt out if the
   // ping stops being useful (Benjy 8/6).
@@ -1379,12 +1380,47 @@ model Invoice {
   dueDate         DateTime?
   notes           String?
   createdBy       String?
+  // Receivables in Godzilla, GL in Sage (Benjy + Denise 11/7/26)
+  kind            String    @default("final")   // final | prebill | deposit
+  payToken        String?   @unique             // public pay page /pay/<token> (replaces PrintReach links)
+  paidAmount      Float     @default(0)         // sum of Payment rows
+  paidAt          DateTime?
+  remindedAt      DateTime?                     // last automatic reminder
+  remindCount     Int       @default(0)
+  salesRepId      String?
+  salesRepName    String?
+  commissionPct   Float?
+  commissionAmount Float?
+  commissionStatus String   @default("none")    // none | pending | payable | paid
+  commissionPaidAt DateTime?
+  sageExportedAt  DateTime?
+  payments        Payment[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([status])
   @@index([companyId])
   @@index([invoiceNumber])
+  @@index([dueDate])
+}
+
+// One row per dollar received: Stripe card/ACH (from the webhook) or a check,
+// ACH or wire that Denise records by hand. Invoice.paidAmount is the sum.
+model Payment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount      Float
+  method      String   // card | ach | check | wire | other
+  reference   String?  // check number, Stripe id, bank memo
+  receivedAt  DateTime @default(now())
+  recordedBy  String?
+  stripeId    String?  @unique
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([receivedAt])
 }
 
 // ─── QUOTE REQUESTS (Sales/CSR intake for estimating) ────

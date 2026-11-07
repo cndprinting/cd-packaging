@@ -60,13 +60,13 @@ function PaymentsContent() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handlePay = async (invoiceId: string, paymentType: "deposit" | "balance") => {
+  const handlePay = async (invoiceId: string, paymentType: "deposit" | "balance", method: "card" | "ach" = "card") => {
     setPaying(invoiceId);
     try {
       const res = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "pay", invoiceId, paymentType }),
+        body: JSON.stringify({ action: "pay", invoiceId, paymentType, method }),
       });
       const data = await res.json();
       if (data.url) {
@@ -192,9 +192,10 @@ function PaymentsContent() {
                       className="gap-2 bg-brand-600 hover:bg-brand-700 flex-1"
                     >
                       {paying === inv.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                      Pay Deposit — {formatCurrency(inv.depositAmount)}
+                      Pay Deposit by card — {formatCurrency(inv.depositAmount)}
                     </Button>
-                    <p className="text-xs text-gray-400">3% CC surcharge applies</p>
+                    <Button variant="outline" onClick={() => handlePay(inv.id, "deposit", "ach")} disabled={paying === inv.id} className="gap-2 flex-1">Bank transfer (ACH), no fee</Button>
+                    <p className="text-xs text-gray-400">3% surcharge on card</p>
                   </div>
                 )}
                 {inv.depositPaid && !inv.balancePaid && (
@@ -205,9 +206,10 @@ function PaymentsContent() {
                       className="gap-2 bg-brand-600 hover:bg-brand-700 flex-1"
                     >
                       {paying === inv.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                      Pay Balance — {formatCurrency(inv.total - inv.depositAmount)}
+                      Pay Balance by card — {formatCurrency(inv.total - inv.depositAmount)}
                     </Button>
-                    <p className="text-xs text-gray-400">3% CC surcharge applies</p>
+                    <Button variant="outline" onClick={() => handlePay(inv.id, "balance", "ach")} disabled={paying === inv.id} className="gap-2 flex-1">Bank transfer (ACH), no fee</Button>
+                    <p className="text-xs text-gray-400">3% surcharge on card</p>
                   </div>
                 )}
 

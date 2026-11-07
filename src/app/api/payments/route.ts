@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { sendEmail } from "@/lib/email/graph-client";
+import { AR_FROM, CARD_SURCHARGE, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 
-// Stripe will be initialized when keys are available
+// Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
+// record for invoices and payments; Sage keeps the GL. Actions:
+//   create_invoice, send_invoice, pay (portal Stripe checkout), record_payment
+//   (check / ACH / wire), mark_paid (legacy), convert_to_final, cancel,
+//   commission_paid, set_due
+const ADMIN = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING", "CSR"];
+const MONEY_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
+
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
@@ -9,144 +18,137 @@ function getStripe() {
   return new Stripe(key);
 }
 
-// GET: List invoices
-export async function GET(request: NextRequest) {
+// GET: list invoices (customers see their own; sales see all, read-only)
+export async function GET() {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const prismaModule = await import("@/lib/prisma");
-    const prisma = prismaModule.default;
+    const prisma = (await import("@/lib/prisma")).default;
     if (!prisma) return NextResponse.json({ invoices: [] });
-
-    // Customers only see their own invoices
     const where = session.role === "CUSTOMER" ? { companyId: session.companyId || undefined } : {};
-
-    const invoices = await prisma.invoice.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-    });
-
-    return NextResponse.json({ invoices });
+    const invoices = await prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, include: { payments: { orderBy: { receivedAt: "desc" } } } });
+    const out = invoices.map((i) => ({ ...i, remaining: remaining(i), payUrl: session.role === "CUSTOMER" ? undefined : payUrl(i) }));
+    return NextResponse.json({ invoices: out });
   } catch (error) {
     console.error("Payments GET error:", error);
     return NextResponse.json({ invoices: [] });
   }
 }
 
-// POST: Create invoice or payment session
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     const body = await request.json();
     const { action } = body;
-
-    const prismaModule = await import("@/lib/prisma");
-    const prisma = prismaModule.default;
+    const prisma = (await import("@/lib/prisma")).default;
     if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
 
-    // Create a new invoice
     if (action === "create_invoice") {
-      const adminRoles = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING", "CSR"];
-      if (!adminRoles.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-
-      const { customerName, contactEmail, companyId, description, subtotal, jobId, orderId, notes } = body;
-      const taxRate = 7;
-      const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100;
-      const total = subtotal + taxAmount;
-      const depositAmount = Math.round(total * 0.5 * 100) / 100;
-
+      if (!ADMIN.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const { customerName, contactEmail, companyId, description, jobId, orderId, notes } = body;
+      const subtotal = round2(Number(body.subtotal) || 0);
+      const kind = ["final", "prebill", "deposit"].includes(body.kind) ? body.kind : "final";
+      const taxRate = body.taxExempt ? 0 : 7;
+      const taxAmount = round2(subtotal * (taxRate / 100));
+      const total = round2(subtotal + taxAmount);
+      const depositPercent = kind === "deposit" ? 100 : Number.isFinite(Number(body.depositPercent)) ? Number(body.depositPercent) : 50;
+      const depositAmount = round2(total * depositPercent / 100);
       const count = await prisma.invoice.count();
       const invoiceNumber = `INV-${String(count + 1000).padStart(5, "0")}`;
-
-      const invoice = await prisma.invoice.create({
-        data: {
-          invoiceNumber,
-          customerName,
-          contactEmail,
-          companyId,
-          description,
-          subtotal,
-          taxRate,
-          taxAmount,
-          total,
-          depositPercent: 50,
-          depositAmount,
-          jobId,
-          orderId,
-          notes,
-          createdBy: session.id,
-        },
-      });
-
-      return NextResponse.json({ invoice });
+      const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
+      const comm = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
+      const invoice = await prisma.invoice.create({ data: {
+        invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, subtotal, taxRate, taxAmount, total,
+        depositPercent, depositAmount, jobId: jobId || null, orderId: orderId || null, notes, createdBy: session.id, kind, payToken: newPayToken(), dueDate, ...comm,
+      } });
+      return NextResponse.json({ invoice: { ...invoice, payUrl: payUrl(invoice) } });
     }
 
-    // Create Stripe checkout session for payment
+    const inv = body.invoiceId ? await prisma.invoice.findUnique({ where: { id: body.invoiceId }, include: { payments: true } }) : null;
+    if (action !== "pay" && !inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+
+    // Email the invoice (or re-send it) from the accounting mailbox, cc the rep who asked.
+    if (action === "send_invoice") {
+      const to = String(body.to || inv!.contactEmail || "").trim();
+      if (!to) return NextResponse.json({ error: "No customer email on this invoice" }, { status: 400 });
+      let cur = inv!;
+      if (!cur.payToken) cur = await prisma.invoice.update({ where: { id: cur.id }, data: { payToken: newPayToken() }, include: { payments: true } });
+      if (to !== cur.contactEmail) cur = await prisma.invoice.update({ where: { id: cur.id }, data: { contactEmail: to }, include: { payments: true } });
+      const r = await sendEmail({ from: AR_FROM, to, cc: session.email && session.email !== AR_FROM ? [session.email] : undefined, subject: `${cur.kind === "final" ? "Invoice" : "Deposit invoice"} ${cur.invoiceNumber} · ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(remaining(cur))} | C&D Printing`, body: invoiceEmailHtml(cur) });
+      if (!r.success) return NextResponse.json({ error: r.error || "Email failed" }, { status: 502 });
+      await prisma.invoice.update({ where: { id: cur.id }, data: { notes: `${cur.notes ? cur.notes + "\n" : ""}Sent to ${to} by ${session.name} on ${new Date().toLocaleDateString("en-US")}` } });
+      return NextResponse.json({ ok: true, to });
+    }
+
+    // Portal checkout (logged-in customer). Card or ACH.
     if (action === "pay") {
-      const { invoiceId, paymentType } = body; // paymentType: "deposit" or "balance"
       const stripe = getStripe();
-
-      if (!stripe) {
-        return NextResponse.json({ error: "Stripe not configured. Contact C&D Printing at 727-572-9999 to pay by phone." }, { status: 400 });
-      }
-
-      const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+      if (!stripe) return NextResponse.json({ error: "Stripe not configured. Contact C&D Printing at 727-572-9999 to pay by phone." }, { status: 400 });
+      const invoice = await prisma.invoice.findUnique({ where: { id: body.invoiceId } });
       if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-
-      const amount = paymentType === "deposit" ? invoice.depositAmount : (invoice.total - invoice.depositAmount);
-      const description = `${invoice.invoiceNumber} - ${paymentType === "deposit" ? "50% Deposit" : "Balance Due"} - ${invoice.customerName}`;
-
-      // Add 3% CC surcharge
-      const surcharge = Math.round(amount * 0.03 * 100) / 100;
-      const totalCharge = amount + surcharge;
-
+      const method = body.method === "ach" ? "ach" : "card";
+      const rem = remaining(invoice);
+      const base = body.paymentType === "deposit" && !invoice.depositPaid ? Math.min(invoice.depositAmount, rem) : rem;
+      if (base <= 0) return NextResponse.json({ error: "Nothing left to pay on this invoice" }, { status: 400 });
+      const surcharge = method === "card" ? round2(base * CARD_SURCHARGE) : 0;
       const { origin } = new URL(request.url);
       const checkoutSession = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: { name: description },
-              unit_amount: Math.round(totalCharge * 100), // Stripe uses cents
-            },
-            quantity: 1,
-          },
-        ],
+        payment_method_types: method === "ach" ? ["us_bank_account"] : ["card"],
+        line_items: [{ price_data: { currency: "usd", product_data: { name: `${invoice.invoiceNumber} - ${body.paymentType === "deposit" ? `${invoice.depositPercent}% Deposit` : "Balance Due"} - ${invoice.customerName}` }, unit_amount: Math.round((base + surcharge) * 100) }, quantity: 1 }],
         mode: "payment",
         success_url: `${origin}/portal/payments?success=true&invoice=${invoice.invoiceNumber}`,
         cancel_url: `${origin}/portal/payments?cancelled=true`,
-        metadata: {
-          invoiceId: invoice.id,
-          paymentType,
-        },
+        metadata: { invoiceId: invoice.id, paymentType: body.paymentType || "balance", method, baseAmount: String(base) },
       });
-
-      // Update invoice with Stripe session ID
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: { stripeSessionId: checkoutSession.id },
-      });
-
+      await prisma.invoice.update({ where: { id: invoice.id }, data: { stripeSessionId: checkoutSession.id } });
       return NextResponse.json({ url: checkoutSession.url });
     }
 
-    // Mark as paid manually (for checks, wire, etc.)
+    // Denise records a check / ACH / wire that came in outside Stripe.
+    if (action === "record_payment") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const amount = round2(Number(body.amount));
+      if (!(amount > 0)) return NextResponse.json({ error: "Amount required" }, { status: 400 });
+      const method = ["card", "ach", "check", "wire", "other"].includes(body.method) ? body.method : "check";
+      const updated = await recordPayment(prisma, { invoiceId: inv!.id, amount, method, reference: body.reference || null, receivedAt: body.receivedAt ? new Date(body.receivedAt) : new Date(), recordedBy: session.name || session.email, note: body.note || null });
+      return NextResponse.json({ invoice: updated });
+    }
+
+    // Legacy button: mark deposit / balance paid = record a payment of that amount.
     if (action === "mark_paid") {
-      const adminRoles = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
-      if (!adminRoles.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const rem = remaining(inv!);
+      const amount = body.paymentType === "deposit" && !inv!.depositPaid ? Math.min(inv!.depositAmount, rem) : rem;
+      if (amount <= 0) return NextResponse.json({ invoice: inv });
+      const updated = await recordPayment(prisma, { invoiceId: inv!.id, amount, method: body.method || "other", reference: body.reference || null, recordedBy: session.name || session.email, note: "Marked paid" });
+      return NextResponse.json({ invoice: updated });
+    }
 
-      const { invoiceId, paymentType } = body;
+    if (action === "convert_to_final") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const comm = await commissionFor(prisma, inv!.jobId, inv!.subtotal);
+      await prisma.invoice.update({ where: { id: inv!.id }, data: { kind: "final", dueDate: inv!.dueDate && inv!.dueDate > new Date() ? inv!.dueDate : new Date(Date.now() + NET_DAYS * 86400e3), ...comm } });
+      return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
+    }
 
-      const data = paymentType === "deposit"
-        ? { depositPaid: true, depositPaidAt: new Date(), status: "deposit_paid" }
-        : { balancePaid: true, balancePaidAt: new Date(), status: "paid" };
-
-      const invoice = await prisma.invoice.update({ where: { id: invoiceId }, data });
+    if (action === "cancel") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const invoice = await prisma.invoice.update({ where: { id: inv!.id }, data: { status: "cancelled", commissionStatus: "none" } });
       return NextResponse.json({ invoice });
+    }
+
+    if (action === "commission_paid") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      if (inv!.commissionStatus !== "payable") return NextResponse.json({ error: "Commission is not payable until the invoice is paid" }, { status: 400 });
+      const invoice = await prisma.invoice.update({ where: { id: inv!.id }, data: { commissionStatus: "paid", commissionPaidAt: new Date() } });
+      return NextResponse.json({ invoice });
+    }
+
+    if (action === "set_due") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      await prisma.invoice.update({ where: { id: inv!.id }, data: { dueDate: body.dueDate ? new Date(body.dueDate) : null } });
+      return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
