@@ -5,18 +5,19 @@
 // are recorded here; reminders go out automatically; commissions release when
 // the invoice is paid; Sage gets a monthly CSV. GL stays in Sage.
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, Search, Send, Loader2, Link2, Banknote, Download, X, ChevronDown, ChevronRight } from "lucide-react";
+import { DollarSign, Search, Send, Loader2, Link2, Banknote, Download, X, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { NewInvoice } from "@/components/invoices/new-invoice";
 
 interface Payment { id: string; amount: number; method: string; reference: string | null; receivedAt: string; recordedBy: string | null; note: string | null }
 interface Invoice {
   id: string; invoiceNumber: string; customerName: string; contactEmail: string | null; description: string | null;
   subtotal: number; taxAmount: number; total: number; depositAmount: number; depositPaid: boolean; status: string; kind: string;
-  jobId: string | null; dueDate: string | null; createdAt: string; paidAmount: number; remaining: number; payUrl?: string;
+  jobId: string | null; companyId: string | null; dueDate: string | null; createdAt: string; paidAmount: number; remaining: number; payUrl?: string;
   remindedAt: string | null; remindCount: number; salesRepName: string | null; commissionAmount: number | null; commissionPct: number | null; commissionStatus: string; notes: string | null;
   payments: Payment[];
 }
@@ -37,10 +38,12 @@ export default function InvoicesPage() {
   const [pay, setPay] = useState<{ inv: Invoice; amount: string; method: string; reference: string; receivedAt: string } | null>(null);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [msg, setMsg] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
 
   const load = () => fetch("/api/payments").then((r) => r.json()).then((d) => setInvoices(d.invoices || [])).finally(() => setLoading(false));
   useEffect(() => { load(); fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d.user?.role || "")).catch(() => {}); }, []);
   const canMoney = ["OWNER", "GM", "ADMIN", "ACCOUNTING"].includes(role);
+  const canCreate = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING", "CSR"].includes(role);
 
   const act = async (inv: Invoice, body: Record<string, unknown>, okMsg?: string) => {
     setBusy(inv.id + body.action); setMsg(null);
@@ -77,7 +80,7 @@ export default function InvoicesPage() {
   const outstanding = openInv.reduce((s, i) => s + i.remaining, 0);
   const overdue = openInv.filter((i) => i.dueDate && new Date(i.dueDate) < new Date()).reduce((s, i) => s + i.remaining, 0);
   const commPayable = invoices.filter((i) => i.commissionStatus === "payable").reduce((s, i) => s + (i.commissionAmount || 0), 0);
-  const paidThisMonth = invoices.flatMap((i) => i.payments).filter((p) => p.receivedAt.slice(0, 7) === new Date().toISOString().slice(0, 7)).reduce((s, p) => s + p.amount, 0);
+  const paidThisMonth = invoices.filter((i) => i.status !== "cancelled").flatMap((i) => i.payments).filter((p) => p.receivedAt.slice(0, 7) === new Date().toISOString().slice(0, 7)).reduce((s, p) => s + p.amount, 0);
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-brand-600" /></div>;
 
@@ -91,12 +94,15 @@ export default function InvoicesPage() {
             <p className="text-sm text-gray-500">Card and bank payments post themselves from Stripe. Record checks and wires here. Reminders go out automatically at the due date, then 7, 14 and 28 days after.</p>
           </div>
         </div>
+        <div className="flex items-center gap-2 text-sm">
+          {canCreate && <Button onClick={() => setShowNew(true)}><Plus className="mr-1 h-4 w-4" />New invoice</Button>}
         {canMoney && (
-          <div className="flex items-center gap-2 text-sm">
+          <>
             <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
             <a href={`/api/payments/export?month=${month}`} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"><Download className="h-4 w-4" />Sage export (CSV)</a>
-          </div>
+          </>
         )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -130,7 +136,7 @@ export default function InvoicesPage() {
                   <TableRow key={inv.id} className="cursor-pointer hover:bg-gray-50" onClick={() => setOpen(open === inv.id ? null : inv.id)}>
                     <TableCell>{open === inv.id ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}</TableCell>
                     <TableCell><div className="font-mono text-sm text-gray-900">{inv.invoiceNumber}</div><div className="text-[11px] text-gray-400">{kindLabels[inv.kind] || inv.kind} · {formatDate(inv.createdAt)}</div></TableCell>
-                    <TableCell><div className="text-sm text-gray-900">{inv.customerName}</div><div className="text-[11px] text-gray-400">{inv.contactEmail || "no email"}</div></TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}><div className="text-sm text-gray-900">{inv.companyId ? <a href={`/dashboard/customers/${inv.companyId}`} className="hover:text-brand-600 hover:underline">{inv.customerName}</a> : <span title="Not linked to a customer record">{inv.customerName}</span>}</div><div className="text-[11px] text-gray-400">{inv.contactEmail || "no email"}{!inv.companyId && <span className="text-amber-600"> · no customer link</span>}</div></TableCell>
                     <TableCell className="text-right text-sm">{formatCurrency(inv.total)}</TableCell>
                     <TableCell className={`text-right text-sm font-medium ${inv.remaining > 0 ? "text-gray-900" : "text-gray-400"}`}>{formatCurrency(inv.remaining)}</TableCell>
                     <TableCell><span className={`rounded px-2 py-0.5 text-xs font-medium ${statusColors[inv.status] || "bg-gray-100 text-gray-600"}`}>{statusLabels[inv.status] || inv.status}</span></TableCell>
@@ -180,6 +186,7 @@ export default function InvoicesPage() {
         </Table>
       </Card>
 
+      {showNew && <NewInvoice onClose={() => setShowNew(false)} onCreated={(inv) => { setShowNew(false); setMsg(`${inv.invoiceNumber} created for ${inv.customerName}. Use the send button when it is ready.`); setStatusFilter("open"); load(); }} />}
       {pay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPay(null)}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>

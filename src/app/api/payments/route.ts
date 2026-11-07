@@ -46,7 +46,16 @@ export async function POST(request: NextRequest) {
 
     if (action === "create_invoice") {
       if (!ADMIN.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-      const { customerName, contactEmail, companyId, description, jobId, orderId, notes } = body;
+      const { contactEmail, description, jobId, orderId, notes } = body;
+      // Every invoice hangs off a Customers record (Benjy 11/7): no retyped names.
+      const companyId = body.companyId ? String(body.companyId) : null;
+      let customerName = String(body.customerName || "").trim();
+      if (companyId) {
+        const co = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
+        if (!co) return NextResponse.json({ error: "Customer record not found" }, { status: 400 });
+        customerName = co.name;
+      } else if (!body.allowUnlinked) return NextResponse.json({ error: "Pick a customer from the Customers module" }, { status: 400 });
+      if (!customerName) return NextResponse.json({ error: "Customer required" }, { status: 400 });
       const subtotal = round2(Number(body.subtotal) || 0);
       const kind = ["final", "prebill", "deposit"].includes(body.kind) ? body.kind : "final";
       const taxRate = body.taxExempt ? 0 : 7;
