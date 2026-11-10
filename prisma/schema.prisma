@@ -1388,6 +1388,7 @@ model Invoice {
   remindedAt      DateTime?                     // last automatic reminder
   remindCount     Int       @default(0)
   sentAt          DateTime?                     // first time it was emailed to the customer; reminders never go out before this
+  shipping        Float     @default(0)         // postage / freight, stated separately, not taxed (Denise 11/10)
   salesRepId      String?
   salesRepName    String?
   commissionPct   Float?

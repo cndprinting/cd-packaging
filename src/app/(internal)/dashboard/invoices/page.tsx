@@ -16,7 +16,7 @@ import { NewInvoice } from "@/components/invoices/new-invoice";
 interface Payment { id: string; amount: number; method: string; reference: string | null; receivedAt: string; recordedBy: string | null; note: string | null }
 interface Invoice {
   id: string; invoiceNumber: string; customerName: string; contactEmail: string | null; description: string | null;
-  subtotal: number; taxAmount: number; total: number; depositAmount: number; depositPaid: boolean; status: string; kind: string;
+  subtotal: number; taxAmount: number; shipping?: number; total: number; depositAmount: number; depositPaid: boolean; status: string; kind: string;
   jobId: string | null; companyId: string | null; dueDate: string | null; createdAt: string; paidAmount: number; remaining: number; payUrl?: string;
   remindedAt: string | null; remindCount: number; salesRepName: string | null; commissionAmount: number | null; commissionPct: number | null; commissionStatus: string; notes: string | null;
   payments: Payment[];
@@ -164,7 +164,7 @@ export default function InvoicesPage() {
                         <div>
                           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Details</div>
                           <div>{inv.description || "—"}</div>
-                          <div className="text-xs text-gray-500">Subtotal {formatCurrency(inv.subtotal)} · tax {formatCurrency(inv.taxAmount)}</div>
+                          <div className="text-xs text-gray-500">Subtotal {formatCurrency(inv.subtotal)} · tax {formatCurrency(inv.taxAmount)}{(inv.shipping || 0) > 0 ? ` · postage/freight ${formatCurrency(inv.shipping || 0)}` : ""}</div>
                           {inv.payUrl && <div className="mt-1 truncate text-xs"><a href={inv.payUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">{inv.payUrl}</a></div>}
                           {inv.notes && <pre className="mt-1 whitespace-pre-wrap font-sans text-xs text-gray-500">{inv.notes}</pre>}
                         </div>

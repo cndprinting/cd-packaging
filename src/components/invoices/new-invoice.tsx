@@ -19,7 +19,8 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   const [reps, setReps] = useState<Rep[]>([]);
   const [standalone, setStandalone] = useState(true); // jobs hidden until jobs are real in Godzilla
   const [repId, setRepId] = useState("");
-  const [commissionPct, setCommissionPct] = useState("5");
+  const [commission, setCommission] = useState(""); // flat dollars (Denise 11/10)
+  const [shipping, setShipping] = useState("");
   const [searching, setSearching] = useState(false);
   const [cust, setCust] = useState<Cust | null>(null);
   const [creating, setCreating] = useState(false);
@@ -49,7 +50,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   const pickJob = (id: string) => {
     setJobId(id);
     const j = cust?.jobs.find((x) => x.id === id);
-    if (j) { if (j.quotedPrice && !subtotal) setSubtotal(String(j.quotedPrice)); if (!description) setDescription(`Job ${j.jobNumber}${j.name ? ` · ${j.name}` : ""}`); const rep = reps.find((r) => r.name === j.rep); if (rep) { setRepId(rep.id); if (rep.commissionPct != null) setCommissionPct(String(rep.commissionPct)); } }
+    if (j) { if (j.quotedPrice && !subtotal) setSubtotal(String(j.quotedPrice)); if (!description) setDescription(`Job ${j.jobNumber}${j.name ? ` · ${j.name}` : ""}`); const rep = reps.find((r) => r.name === j.rep); if (rep) setRepId(rep.id); }
   };
   const createCustomer = async () => {
     if (!newName.trim()) return;
@@ -69,14 +70,14 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (!(sub > 0)) { setErr("Amount is required"); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, salesRepId: repId || null, commissionPct: repId ? Number(commissionPct) || 0 : undefined }) });
+      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, shipping: Number(shipping) || 0, salesRepId: repId || null, commissionAmount: repId ? Number(commission) || 0 : undefined }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "Could not create the invoice"); return; }
       onCreated(d.invoice);
     } catch { setErr("Could not create the invoice"); }
     finally { setBusy(false); }
   };
-  const sub = Number(subtotal) || 0, tax = taxExempt ? 0 : Math.round(sub * 7) / 100, total = Math.round((sub + tax) * 100) / 100;
+  const sub = Number(subtotal) || 0, tax = taxExempt ? 0 : Math.round(sub * 7) / 100, ship = Number(shipping) || 0, total = Math.round((sub + tax + ship) * 100) / 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
@@ -127,17 +128,18 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <label className="block"><span className="text-gray-600">Send to (billing email)</span><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ap@customer.com" /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Description</span><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this bills for" /></label>
               <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={subtotal} onChange={(e) => setSubtotal(e.target.value)} inputMode="decimal" placeholder="0.00" /></label>
+              <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={shipping} onChange={(e) => setShipping(e.target.value)} inputMode="decimal" placeholder="0.00" /><span className="text-[11px] text-gray-400">Stated separately, not taxed.</span></label>
               <label className="block"><span className="text-gray-600">Deposit %</span><Input value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" /></label>
               <label className="block"><span className="text-gray-600">Sales rep (from the estimate)</span>
-                <select value={repId} onChange={(e) => { setRepId(e.target.value); const rep = reps.find((r) => r.id === e.target.value); if (rep?.commissionPct != null) setCommissionPct(String(rep.commissionPct)); }} className={inputCls}>
+                <select value={repId} onChange={(e) => setRepId(e.target.value)} className={inputCls}>
                   <option value="">No rep / house account</option>
                   {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select></label>
-              <label className="block"><span className="text-gray-600">Commission %</span><Input value={commissionPct} onChange={(e) => setCommissionPct(e.target.value)} inputMode="decimal" disabled={!repId} /><span className="text-[11px] text-gray-400">Of the amount before tax. Payable once the customer pays.</span></label>
+              <label className="block"><span className="text-gray-600">Commission ($)</span><Input value={commission} onChange={(e) => setCommission(e.target.value)} inputMode="decimal" placeholder="0.00" disabled={!repId} /><span className="text-[11px] text-gray-400">Flat amount. Payable once the customer pays.</span></label>
               <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /><span className="text-[11px] text-gray-400">Blank = Net 30 (7 days for deposits and prebills)</span></label>
               <label className="flex items-center gap-2 self-end pb-2"><input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} /> <span className="text-gray-600">Tax exempt (resale certificate on file)</span></label>
             </div>
-            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)} · <span className="font-medium">total ${total.toFixed(2)}</span>{Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commissionPct) > 0 ? ` · commission $${(sub * Number(commissionPct) / 100).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
+            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)} · ${ship > 0 ? `postage/freight $${ship.toFixed(2)} · ` : ""}<span className="font-medium">total ${total.toFixed(2)}</span>{Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commission) > 0 ? ` · commission $${Number(commission).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
             {err && <div className="text-sm text-red-600">{err}</div>}
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create invoice"}</Button></div>
             <div className="text-[11px] text-gray-400">Creating does not email anyone. Use the send button on the invoice when it is ready.</div>

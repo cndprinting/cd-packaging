@@ -73,7 +73,9 @@ export async function POST(request: NextRequest) {
       const kind = ["final", "prebill", "deposit"].includes(body.kind) ? body.kind : "final";
       const taxRate = body.taxExempt ? 0 : 7;
       const taxAmount = round2(subtotal * (taxRate / 100));
-      const total = round2(subtotal + taxAmount);
+      // Postage / freight is stated separately and not taxed (Denise 11/10).
+      const shipping = round2(Math.max(0, Number(body.shipping) || 0));
+      const total = round2(subtotal + taxAmount + shipping);
       const depositPercent = kind === "deposit" ? 100 : Number.isFinite(Number(body.depositPercent)) ? Number(body.depositPercent) : 50;
       const depositAmount = round2(total * depositPercent / 100);
       const invoiceNumber = await nextInvoiceNumber(prisma);
@@ -83,12 +85,18 @@ export async function POST(request: NextRequest) {
       if (kind === "final" && body.salesRepId) {
         const rep = await prisma.user.findUnique({ where: { id: String(body.salesRepId) }, select: { id: true, name: true, commissionPct: true } });
         if (rep) {
-          const pct = Number.isFinite(Number(body.commissionPct)) ? Number(body.commissionPct) : (rep.commissionPct ?? DEFAULT_COMMISSION_PCT);
-          comm = { salesRepId: rep.id, salesRepName: rep.name, commissionPct: pct, commissionAmount: round2(subtotal * pct / 100), commissionStatus: pct > 0 ? "pending" : "none" };
+          // Flat dollar commission typed by accounting (Denise 11/10); a percent is still accepted from the job path.
+          if (body.commissionAmount !== undefined && body.commissionAmount !== null && body.commissionAmount !== "") {
+            const amt = round2(Math.max(0, Number(body.commissionAmount) || 0));
+            comm = { salesRepId: rep.id, salesRepName: rep.name, commissionPct: null, commissionAmount: amt, commissionStatus: amt > 0 ? "pending" : "none" };
+          } else {
+            const pct = Number.isFinite(Number(body.commissionPct)) ? Number(body.commissionPct) : (rep.commissionPct ?? DEFAULT_COMMISSION_PCT);
+            comm = { salesRepId: rep.id, salesRepName: rep.name, commissionPct: pct, commissionAmount: round2(subtotal * pct / 100), commissionStatus: pct > 0 ? "pending" : "none" };
+          }
         }
       }
       const invoice = await prisma.invoice.create({ data: {
-        invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, subtotal, taxRate, taxAmount, total,
+        invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, subtotal, taxRate, taxAmount, shipping, total,
         depositPercent, depositAmount, jobId: jobId || null, orderId: orderId || null, notes, createdBy: session.id, kind, payToken: newPayToken(), dueDate, ...comm,
       } });
       return NextResponse.json({ invoice: { ...invoice, payUrl: payUrl(invoice) } });

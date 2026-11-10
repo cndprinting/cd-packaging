@@ -91,6 +91,7 @@ export function invoiceEmailHtml(inv: any) {
       <tr><td style="padding:8px 0;color:#888;">Description</td><td style="padding:8px 0;">${inv.description || "C&amp;D Printing services"}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">Subtotal</td><td style="padding:8px 0;">${money(inv.subtotal)}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">Tax (${inv.taxRate}%)</td><td style="padding:8px 0;">${money(inv.taxAmount)}</td></tr>
+      ${inv.shipping > 0 ? `<tr><td style="padding:8px 0;color:#888;">Postage / freight</td><td style="padding:8px 0;">${money(inv.shipping)}</td></tr>` : ""}
       <tr style="border-top:2px solid #ED1C24;"><td style="padding:12px 0;font-weight:bold;">Total</td><td style="padding:12px 0;font-size:20px;font-weight:bold;color:#ED1C24;">${money(inv.total)}</td></tr>
       ${inv.paidAmount > 0 ? `<tr><td style="padding:8px 0;color:#888;">Paid so far</td><td style="padding:8px 0;">${money(inv.paidAmount)}</td></tr><tr><td style="padding:8px 0;color:#888;">Balance</td><td style="padding:8px 0;font-weight:bold;">${money(bal)}</td></tr>` : ""}
       <tr><td style="padding:8px 0;color:#888;">Due</td><td style="padding:8px 0;">${dueLabel(inv)}</td></tr>
@@ -174,9 +175,9 @@ export async function sageExportCsv(prisma: any, month: string) {
   const pays = await prisma.payment.findMany({ where: { receivedAt: { gte: from, lt: to } }, include: { invoice: { select: { invoiceNumber: true, customerName: true } } }, orderBy: { receivedAt: "asc" } });
   const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const d = (v: any) => (v ? new Date(v).toISOString().slice(0, 10) : "");
-  const lines = ["Type,Date,Invoice,Customer,Kind,Description,Subtotal,Tax,Total,Method,Reference,Amount,SalesRep,Commission"];
-  for (const i of invs) lines.push(["INVOICE", d(i.createdAt), i.invoiceNumber, i.customerName, i.kind, i.description, i.subtotal.toFixed(2), i.taxAmount.toFixed(2), i.total.toFixed(2), "", "", "", i.salesRepName, (i.commissionAmount || 0).toFixed(2)].map(esc).join(","));
-  for (const p of pays) lines.push(["PAYMENT", d(p.receivedAt), p.invoice.invoiceNumber, p.invoice.customerName, "", p.note, "", "", "", p.method, p.reference, p.amount.toFixed(2), "", ""].map(esc).join(","));
+  const lines = ["Type,Date,Invoice,Customer,Kind,Description,Subtotal,Tax,Shipping,Total,Method,Reference,Amount,SalesRep,Commission"];
+  for (const i of invs) lines.push(["INVOICE", d(i.createdAt), i.invoiceNumber, i.customerName, i.kind, i.description, i.subtotal.toFixed(2), i.taxAmount.toFixed(2), (i.shipping || 0).toFixed(2), i.total.toFixed(2), "", "", "", i.salesRepName, (i.commissionAmount || 0).toFixed(2)].map(esc).join(","));
+  for (const p of pays) lines.push(["PAYMENT", d(p.receivedAt), p.invoice.invoiceNumber, p.invoice.customerName, "", p.note, "", "", "", "", p.method, p.reference, p.amount.toFixed(2), "", ""].map(esc).join(","));
   await prisma.invoice.updateMany({ where: { id: { in: invs.map((i: any) => i.id) }, sageExportedAt: null }, data: { sageExportedAt: new Date() } });
   return lines.join("\r\n");
 }
