@@ -6,6 +6,13 @@
 import { randomBytes } from "crypto";
 import { sendEmail } from "@/lib/email/graph-client";
 
+// Rollout gate (Benjy 11/10/26): Godzilla rolls out sales funnel -> invoicing
+// -> jobs (from FileMaker) -> Mary's estimating. While invoicing is live but
+// jobs/quotes are still test data, invoices are created ONLY from the Invoices
+// tab and never auto-created by a job or a won quote. Set AR_STANDALONE=0 to
+// reconnect once jobs are real.
+export const AR_STANDALONE = process.env.AR_STANDALONE !== "0";
+export const STANDALONE_MSG = "Invoicing runs on its own right now. Create invoices from the Invoices tab.";
 export const CARD_SURCHARGE = 0.03;
 export const NET_DAYS = 30;
 export const REMINDER_DAYS = [0, 7, 14, 28]; // days past due for reminders 1..4
@@ -108,7 +115,9 @@ export function reminderEmailHtml(inv: any, n: number) {
 
 /** Daily: send the reminder that is due on each open invoice. Returns what it sent. */
 export async function runInvoiceReminders(prisma: any, now = new Date()) {
-  const open = await prisma.invoice.findMany({ where: { status: { in: ["pending", "partial", "deposit_paid", "overdue"] }, contactEmail: { not: null }, total: { gt: 0 } } });
+  // Only invoices that were actually emailed to the customer get reminders, so
+  // invoices entered for testing or bookkeeping never ping a customer.
+  const open = await prisma.invoice.findMany({ where: { status: { in: ["pending", "partial", "deposit_paid", "overdue"] }, contactEmail: { not: null }, total: { gt: 0 }, sentAt: { not: null } } });
   const sent: string[] = [];
   for (const inv of open) {
     if (!inv.dueDate) continue;

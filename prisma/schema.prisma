@@ -1387,6 +1387,7 @@ model Invoice {
   paidAt          DateTime?
   remindedAt      DateTime?                     // last automatic reminder
   remindCount     Int       @default(0)
+  sentAt          DateTime?                     // first time it was emailed to the customer; reminders never go out before this
   salesRepId      String?
   salesRepName    String?
   commissionPct   Float?

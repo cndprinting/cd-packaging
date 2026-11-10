@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
-import { AR_FROM, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
+import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 
 // Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
 // record for invoices and payments; Sage keeps the GL. Actions:
@@ -35,6 +35,13 @@ export async function GET() {
   }
 }
 
+// Next number = highest existing + 1 (count-based numbering repeats after a delete).
+async function nextInvoiceNumber(prisma: any) {
+  const last = await prisma.invoice.findFirst({ orderBy: { invoiceNumber: "desc" }, select: { invoiceNumber: true } });
+  const n = last ? parseInt(String(last.invoiceNumber).replace(/\D/g, ""), 10) : 999;
+  return `INV-${String((Number.isFinite(n) ? n : 999) + 1).padStart(5, "0")}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
@@ -46,7 +53,13 @@ export async function POST(request: NextRequest) {
 
     if (action === "create_invoice") {
       if (!ADMIN.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-      const { contactEmail, description, jobId, orderId, notes } = body;
+      let { contactEmail, description, jobId, orderId, notes } = body;
+      // Standalone invoicing: only the Invoices tab creates invoices, and they
+      // never link to (test) jobs or orders. The job page button is refused.
+      if (AR_STANDALONE) {
+        if (body.via !== "invoices") return NextResponse.json({ error: STANDALONE_MSG }, { status: 400 });
+        jobId = null; orderId = null;
+      }
       // Every invoice hangs off a Customers record (Benjy 11/7): no retyped names.
       const companyId = body.companyId ? String(body.companyId) : null;
       let customerName = String(body.customerName || "").trim();
@@ -63,8 +76,7 @@ export async function POST(request: NextRequest) {
       const total = round2(subtotal + taxAmount);
       const depositPercent = kind === "deposit" ? 100 : Number.isFinite(Number(body.depositPercent)) ? Number(body.depositPercent) : 50;
       const depositAmount = round2(total * depositPercent / 100);
-      const count = await prisma.invoice.count();
-      const invoiceNumber = `INV-${String(count + 1000).padStart(5, "0")}`;
+      const invoiceNumber = await nextInvoiceNumber(prisma);
       const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
       // Rep + commission: from the job when there is one, else typed in by accounting from the estimate.
       let comm: Record<string, unknown> = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
@@ -94,7 +106,7 @@ export async function POST(request: NextRequest) {
       if (to !== cur.contactEmail) cur = await prisma.invoice.update({ where: { id: cur.id }, data: { contactEmail: to }, include: { payments: true } });
       const r = await sendEmail({ from: AR_FROM, to, cc: session.email && session.email !== AR_FROM ? [session.email] : undefined, subject: `${cur.kind === "final" ? "Invoice" : "Deposit invoice"} ${cur.invoiceNumber} · ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(remaining(cur))} | C&D Printing`, body: invoiceEmailHtml(cur) });
       if (!r.success) return NextResponse.json({ error: r.error || "Email failed" }, { status: 502 });
-      await prisma.invoice.update({ where: { id: cur.id }, data: { notes: `${cur.notes ? cur.notes + "\n" : ""}Sent to ${to} by ${session.name} on ${new Date().toLocaleDateString("en-US")}` } });
+      await prisma.invoice.update({ where: { id: cur.id }, data: { sentAt: cur.sentAt || new Date(), notes: `${cur.notes ? cur.notes + "\n" : ""}Sent to ${to} by ${session.name} on ${new Date().toLocaleDateString("en-US")}` } });
       return NextResponse.json({ ok: true, to });
     }
 

@@ -17,6 +17,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   const [q, setQ] = useState("");
   const [list, setList] = useState<Cust[]>([]);
   const [reps, setReps] = useState<Rep[]>([]);
+  const [standalone, setStandalone] = useState(true); // jobs hidden until jobs are real in Godzilla
   const [repId, setRepId] = useState("");
   const [commissionPct, setCommissionPct] = useState("5");
   const [searching, setSearching] = useState(false);
@@ -38,7 +39,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (cust) return;
     const t = setTimeout(async () => {
       setSearching(true);
-      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); if (d.reps) setReps(d.reps); } catch { /* ignore */ }
+      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); if (d.reps) setReps(d.reps); if (typeof d.standalone === "boolean") setStandalone(d.standalone); } catch { /* ignore */ }
       setSearching(false);
     }, 250);
     return () => clearTimeout(t);
@@ -68,7 +69,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (!(sub > 0)) { setErr("Amount is required"); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, salesRepId: repId || null, commissionPct: repId ? Number(commissionPct) || 0 : undefined }) });
+      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, salesRepId: repId || null, commissionPct: repId ? Number(commissionPct) || 0 : undefined }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "Could not create the invoice"); return; }
       onCreated(d.invoice);
@@ -114,11 +115,11 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <button type="button" onClick={() => setCust(null)} className="text-xs text-brand-600 hover:underline">Change</button>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <label className="col-span-2 block"><span className="text-gray-600">Job (optional, prefills the amount and the rep's commission)</span>
+              {!standalone && <label className="col-span-2 block"><span className="text-gray-600">Job (optional, prefills the amount and the rep's commission)</span>
                 <select value={jobId} onChange={(e) => pickJob(e.target.value)} className={inputCls}>
                   <option value="">No job</option>
                   {cust.jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber} · {j.name || "untitled"}{j.quotedPrice ? ` · $${j.quotedPrice.toLocaleString()}` : ""}{j.rep ? ` · ${j.rep}` : ""} ({j.status.toLowerCase().replace(/_/g, " ")})</option>)}
-                </select></label>
+                </select></label>}
               <label className="block"><span className="text-gray-600">Type</span>
                 <select value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === "deposit") setDepositPercent("100"); }} className={inputCls}>
                   <option value="final">Final invoice</option><option value="prebill">Prebill (job not complete)</option><option value="deposit">Deposit request</option>
