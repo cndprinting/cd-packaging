@@ -84,11 +84,35 @@ export function properCase(tok: string): string {
 // 7/14, the "Hi Info," FormuNova case). Role words from generic inboxes are
 // not names — a lead without a human name gets FLAGGED, never emailed.
 const ROLE_WORDS = new Set(["info", "sales", "hello", "hi", "admin", "office", "contact", "support", "team", "accounts", "accounting", "billing", "orders", "order", "enquiries", "inquiries", "inquiry", "marketing", "service", "services", "reception", "frontdesk", "mail", "email", "general", "requests", "request", "purchasing", "line", "customerservice", "webmaster", "noreply", "no-reply", "there"]);
+// Placeholder words that research or imports leave in the name slot ("Second
+// contact", "Primary Contact", "Decision Maker", "Owner"). Benjy 11/11 (InSpec):
+// "Second" slipped past the role-word check and the agent emailed its own
+// reasoning to the prospect. Any of these anywhere in the name = not a person.
+const PLACEHOLDER_WORDS = new Set(["second", "first", "primary", "secondary", "contact", "contacts", "owner", "founder", "ceo", "president", "manager", "director", "buyer", "purchaser", "unknown", "tbd", "tba", "na", "n/a", "none", "null", "name", "person", "decision", "maker", "main", "alt", "alternate", "backup", "other", "new", "lead", "prospect", "customer", "company", "dept", "department", "test", "sample", "placeholder", "unnamed", "various", "multiple", "staff", "manufacturing", "operations", "quality", "procurement", "sourcing", "packaging", "brand", "founders"]);
 export function hasRealName(n?: string | null): boolean {
   const first = firstName(n);
   if (!first || first === "there" || first.length < 2) return false;
   if (first.includes("@")) return false;
-  return !ROLE_WORDS.has(first.toLowerCase().replace(/[^a-z]/g, ""));
+  if (ROLE_WORDS.has(first.toLowerCase().replace(/[^a-z]/g, ""))) return false;
+  // Only judge the NAME part: "Erick (Owner)" and "Jon Morgan | Sales" are people with a title tacked on.
+  const base = String(n || "").split(/[|(,\u2013\u2014-]/)[0].trim();
+  const words = base.toLowerCase().split(/[^\p{L}/]+/u).filter(Boolean);
+  if (words.some((w) => PLACEHOLDER_WORDS.has(w) || ROLE_WORDS.has(w))) return false;
+  if (!/^\p{L}[\p{L}'.-]*$/u.test(first)) return false; // digits, symbols = not a name
+  return true;
+}
+
+// The agent's own reasoning must NEVER reach a customer (Benjy 11/11, InSpec).
+// A drafted email is only usable if it looks like an email to the contact and
+// contains none of the model's meta-language.
+const META_RE = /\b(want me to|i shouldn't|i should not|i cannot|i can't|i can draft|if you'd like|if you would like|the provided|placeholder|data error|per the rules|research notes|decision-maker|not a real|proceed with|confirm:|let me know if you want|as an ai|i am an ai|i'm an ai|the contact field|designated contact|low confidence|verify before)\b/i;
+export function looksLikeCustomerEmail(body: string, contactFirst?: string | null): boolean {
+  const text = String(body || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (text.length < 80) return false;
+  if (META_RE.test(text)) return false;
+  if (!/^(hi|hello|dear|good (morning|afternoon))\b/i.test(text)) return false;
+  if (contactFirst && !text.toLowerCase().slice(0, 40).includes(String(contactFirst).toLowerCase())) return false; // must be addressed to the person
+  return true;
 }
 // Customer-facing company name, the way a person would SAY it — no LLC/Inc/
 // Corp/Co suffixes, no parentheticals ("Valentine Enterprises (VEI)" →

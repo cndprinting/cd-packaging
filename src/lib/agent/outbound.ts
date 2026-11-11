@@ -1,4 +1,5 @@
 import { getClaude } from "@/lib/agent/claude";
+import { looksLikeCustomerEmail } from "@/lib/agent/agent";
 import { checkBlocked } from "@/lib/agent/blocklist";
 import { noEmDash, SIGNATURE, firstName, informalCompany, hasRealName, isWeekendET } from "@/lib/agent/agent";
 import { sendEmail, sendEmailGetConversation, replyInConversation } from "@/lib/email/graph-client";
@@ -146,7 +147,11 @@ export async function appendNote(prisma: any, leadId: string, line: string): Pro
 }
 
 // ── Drafting ───────────────────────────────────────────────────────────────
-async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<{ subject: string; body: string }> {
+// Returns null when the model did not produce a usable email (it refused,
+// asked a question, or wrote about the prospect instead of to them). The
+// caller must NOT send anything in that case. Benjy 11/11: the old code mailed
+// the model's raw reasoning to InSpec under the fallback subject.
+async function draftIntro(lead: any, owner: Owner, contactName: string): Promise<{ subject: string; body: string } | null> {
   const contact = firstName(contactName);
   const fallback = {
     subject: `Family-built packaging from C&D, right here in St. Pete`,
@@ -207,10 +212,13 @@ Output format: the FIRST line must be "SUBJECT: " then a short, warm, specific s
     const texts = (msg.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text || "");
     const raw = (texts[texts.length - 1] || "").trim();
     const m = raw.match(/^\s*SUBJECT:\s*(.+?)\s*\r?\n([\s\S]+)$/i);
-    if (m) return { subject: m[1].trim(), body: wrap(m[2].trim()) };
-    return raw ? { subject: fallback.subject, body: wrap(raw) } : fallback;
-  } catch { return fallback; }
+    if (!m) { console.error("[outbound] model did not return SUBJECT/body for", lead.companyName, "- NOT sending. Raw:", raw.slice(0, 300)); return null; }
+    const subject = m[1].trim(), inner = m[2].trim();
+    if (!looksLikeCustomerEmail(inner, contact) || META_RE_LOCAL.test(subject)) { console.error("[outbound] draft failed the customer-email check for", lead.companyName, "- NOT sending. Body:", inner.slice(0, 300)); return null; }
+    return { subject, body: wrap(inner) };
+  } catch (e) { console.error("[outbound] draft error for", lead.companyName, e); return null; }
 }
+const META_RE_LOCAL = /want me to|i shouldn't|placeholder|the provided|confirm|proceed/i;
 function draftFollowup(lead: any, owner: Owner, step: string, contactName: string): string {
   const contact = firstName(contactName);
   // Sequences Jessica took over from a colleague say so plainly ("picking this
@@ -375,6 +383,12 @@ export async function processOutbound(prisma: any): Promise<{ intros: number; fo
     }
     try {
       const draft = await draftIntro(l, owner, contact.name);
+      if (!draft) {
+        // Park it for a human instead of sending anything questionable.
+        await prisma.lead.update({ where: { id: l.id }, data: { outreachStatus: "needs_review", outreachNextAt: null, outreachLog: logLine(l.outreachLog, `Draft for ${contact.name || contact.email} was not a usable customer email - NOT sent, needs a human`) } });
+        await appendNote(prisma, l.id, `Outbound intro NOT sent to ${contact.name || contact.email}: the drafted email failed the safety check (model asked a question or wrote notes instead of an email). Review the contact name and notes, then clear the Outreach status to retry.`);
+        continue;
+      }
       l.outreachConvId = null; // an intro always opens a fresh thread for this person
       const sent = await outboundSend(prisma, l, owner, contact.email, contact.name, draft.subject, draft.body);
       if (sent) {
