@@ -26,6 +26,8 @@ export function taxLabel(inv: { taxRate: number; subtotal: number }): string {
   if (!inv.taxRate) return "Sales tax (exempt)";
   return inv.subtotal > SURTAX_CAP ? `Sales tax (7% to $5,000, 6% above)` : "Sales tax (7%)";
 }
+// Department codes for the invoice (Jennifer 11/12). Free text is allowed; these are the suggestions.
+export const DEPARTMENTS = ["Komori", "Digital", "ASI", "Letterpress", "Bindery", "Mailing", "Wide Format", "Packaging", "Vendor"];
 export const CARD_SURCHARGE = 0.03;
 export const NET_DAYS = 30;
 export const REMINDER_DAYS = [0, 7, 14, 28]; // days past due for reminders 1..4
@@ -101,6 +103,7 @@ export function invoiceEmailHtml(inv: any) {
     <p style="color:#666;margin:0 0 20px;">${inv.customerName}</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
       <tr><td style="padding:8px 0;color:#888;">Invoice #</td><td style="padding:8px 0;font-weight:bold;">${inv.invoiceNumber}</td></tr>
+      ${inv.poNumber ? `<tr><td style="padding:8px 0;color:#888;">Your PO #</td><td style="padding:8px 0;">${String(inv.poNumber).replace(/</g, "&lt;")}</td></tr>` : ""}
       <tr><td style="padding:8px 0;color:#888;">Description</td><td style="padding:8px 0;">${inv.description || "C&amp;D Printing services"}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">Subtotal</td><td style="padding:8px 0;">${money(inv.subtotal)}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">${taxLabel(inv)}</td><td style="padding:8px 0;">${money(inv.taxAmount)}</td></tr>
@@ -152,20 +155,24 @@ export async function runInvoiceReminders(prisma: any, now = new Date()) {
  *  before tax and freight on non-cancelled invoices dated in the year. */
 export async function salesReport(prisma: any, year: number) {
   const from = new Date(Date.UTC(year, 0, 1)), to = new Date(Date.UTC(year + 1, 0, 1));
-  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { not: "cancelled" } }, select: { customerName: true, companyId: true, salesRepName: true, subtotal: true, taxAmount: true, shipping: true, total: true, paidAmount: true, commissionAmount: true } });
-  const byC: Record<string, any> = {}, byR: Record<string, any> = {};
+  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { not: "cancelled" } }, select: { customerName: true, companyId: true, salesRepName: true, department: true, subtotal: true, taxAmount: true, shipping: true, total: true, paidAmount: true, commissionAmount: true } });
+  const byC: Record<string, any> = {}, byR: Record<string, any> = {}, byD: Record<string, any> = {};
   for (const i of invs) {
     const c = byC[i.customerName] ||= { name: i.customerName, invoices: 0, sales: 0, tax: 0, shipping: 0, billed: 0, paid: 0 };
     c.invoices++; c.sales += i.subtotal; c.tax += i.taxAmount; c.shipping += i.shipping || 0; c.billed += i.total; c.paid += i.paidAmount || 0;
     const rn = i.salesRepName || "House account";
     const r = byR[rn] ||= { name: rn, invoices: 0, sales: 0, billed: 0, paid: 0, commission: 0 };
     r.invoices++; r.sales += i.subtotal; r.billed += i.total; r.paid += i.paidAmount || 0; r.commission += i.commissionAmount || 0;
+    const dn = i.department || "Not set";
+    const dd = byD[dn] ||= { name: dn, invoices: 0, sales: 0, billed: 0, paid: 0 };
+    dd.invoices++; dd.sales += i.subtotal; dd.billed += i.total; dd.paid += i.paidAmount || 0;
   }
   const r2 = (o: any) => { for (const k of Object.keys(o)) if (typeof o[k] === "number") o[k] = round2(o[k]); return o; };
   const byCustomer = Object.values(byC).map(r2).sort((a: any, b: any) => b.sales - a.sales);
   const byRep = Object.values(byR).map(r2).sort((a: any, b: any) => b.sales - a.sales);
+  const byDepartment = Object.values(byD).map(r2).sort((a: any, b: any) => b.sales - a.sales);
   const totals = r2({ invoices: invs.length, sales: invs.reduce((s: number, i: any) => s + i.subtotal, 0), billed: invs.reduce((s: number, i: any) => s + i.total, 0), paid: invs.reduce((s: number, i: any) => s + (i.paidAmount || 0), 0), commission: invs.reduce((s: number, i: any) => s + (i.commissionAmount || 0), 0) });
-  return { year, byCustomer, byRep, totals };
+  return { year, byCustomer, byRep, byDepartment, totals };
 }
 export function salesReportCsv(rep: Awaited<ReturnType<typeof salesReport>>): string {
   const esc = (v: any) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -173,6 +180,8 @@ export function salesReportCsv(rep: Awaited<ReturnType<typeof salesReport>>): st
   for (const c of rep.byCustomer as any[]) lines.push([c.name, c.invoices, c.sales.toFixed(2), c.tax.toFixed(2), c.shipping.toFixed(2), c.billed.toFixed(2), c.paid.toFixed(2)].map(esc).join(","));
   lines.push("", `Sales by sales rep,${rep.year}`, "Sales rep,Invoices,Sales (before tax),Billed,Paid,Commission");
   for (const r of rep.byRep as any[]) lines.push([r.name, r.invoices, r.sales.toFixed(2), r.billed.toFixed(2), r.paid.toFixed(2), r.commission.toFixed(2)].map(esc).join(","));
+  lines.push("", `Sales by department,${rep.year}`, "Department,Invoices,Sales (before tax),Billed,Paid");
+  for (const d of rep.byDepartment as any[]) lines.push([d.name, d.invoices, d.sales.toFixed(2), d.billed.toFixed(2), d.paid.toFixed(2)].map(esc).join(","));
   lines.push("", `Total,${rep.totals.invoices},${rep.totals.sales.toFixed(2)},${rep.totals.billed.toFixed(2)},${rep.totals.paid.toFixed(2)},${rep.totals.commission.toFixed(2)}`);
   return lines.join("\r\n");
 }
@@ -217,9 +226,9 @@ export async function sageExportCsv(prisma: any, month: string) {
   const pays = await prisma.payment.findMany({ where: { receivedAt: { gte: from, lt: to } }, include: { invoice: { select: { invoiceNumber: true, customerName: true } } }, orderBy: { receivedAt: "asc" } });
   const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const d = (v: any) => (v ? new Date(v).toISOString().slice(0, 10) : "");
-  const lines = ["Type,Date,Invoice,Customer,Kind,Description,Subtotal,Tax,Shipping,Total,Method,Reference,Amount,SalesRep,Commission"];
-  for (const i of invs) lines.push(["INVOICE", d(i.createdAt), i.invoiceNumber, i.customerName, i.kind, i.description, i.subtotal.toFixed(2), i.taxAmount.toFixed(2), (i.shipping || 0).toFixed(2), i.total.toFixed(2), "", "", "", i.salesRepName, (i.commissionAmount || 0).toFixed(2)].map(esc).join(","));
-  for (const p of pays) lines.push(["PAYMENT", d(p.receivedAt), p.invoice.invoiceNumber, p.invoice.customerName, "", p.note, "", "", "", "", p.method, p.reference, p.amount.toFixed(2), "", ""].map(esc).join(","));
+  const lines = ["Type,Date,Invoice,Customer,PO,Department,Kind,Description,Subtotal,Tax,Shipping,Total,Method,Reference,Amount,SalesRep,Commission"];
+  for (const i of invs) lines.push(["INVOICE", d(i.createdAt), i.invoiceNumber, i.customerName, i.poNumber, i.department, i.kind, i.description, i.subtotal.toFixed(2), i.taxAmount.toFixed(2), (i.shipping || 0).toFixed(2), i.total.toFixed(2), "", "", "", i.salesRepName, (i.commissionAmount || 0).toFixed(2)].map(esc).join(","));
+  for (const p of pays) lines.push(["PAYMENT", d(p.receivedAt), p.invoice.invoiceNumber, p.invoice.customerName, "", "", "", p.note, "", "", "", "", p.method, p.reference, p.amount.toFixed(2), "", ""].map(esc).join(","));
   await prisma.invoice.updateMany({ where: { id: { in: invs.map((i: any) => i.id) }, sageExportedAt: null }, data: { sageExportedAt: new Date() } });
   return lines.join("\r\n");
 }

@@ -78,7 +78,16 @@ export async function POST(request: NextRequest) {
       const total = round2(subtotal + taxAmount + shipping);
       const depositPercent = kind === "deposit" ? 100 : Number.isFinite(Number(body.depositPercent)) ? Number(body.depositPercent) : 50;
       const depositAmount = round2(total * depositPercent / 100);
-      const invoiceNumber = await nextInvoiceNumber(prisma);
+      // Their own invoice number is allowed (Jennifer 11/12); otherwise the next in sequence.
+      let invoiceNumber = await nextInvoiceNumber(prisma);
+      if (body.invoiceNumber && String(body.invoiceNumber).trim()) {
+        const wanted = String(body.invoiceNumber).trim().toUpperCase();
+        if (!/^[A-Z0-9][A-Z0-9-]{1,24}$/.test(wanted)) return NextResponse.json({ error: "Invoice number: letters, numbers and dashes only" }, { status: 400 });
+        if (await prisma.invoice.findUnique({ where: { invoiceNumber: wanted }, select: { id: true } })) return NextResponse.json({ error: `Invoice ${wanted} already exists` }, { status: 400 });
+        invoiceNumber = wanted;
+      }
+      const poNumber = body.poNumber ? String(body.poNumber).trim().slice(0, 60) : null;
+      const department = body.department ? String(body.department).trim().slice(0, 40) : null;
       const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
       // Rep + commission: from the job when there is one, else typed in by accounting from the estimate.
       let comm: Record<string, unknown> = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
@@ -96,7 +105,7 @@ export async function POST(request: NextRequest) {
         }
       }
       const invoice = await prisma.invoice.create({ data: {
-        invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, subtotal, taxRate, taxAmount, shipping, total,
+        invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, poNumber, department, subtotal, taxRate, taxAmount, shipping, total,
         depositPercent, depositAmount, jobId: jobId || null, orderId: orderId || null, notes, createdBy: session.id, kind, payToken: newPayToken(), dueDate, ...comm,
       } });
       return NextResponse.json({ invoice: { ...invoice, payUrl: payUrl(invoice) } });
@@ -196,6 +205,14 @@ export async function POST(request: NextRequest) {
       const depositPercent = inv!.kind === "deposit" ? 100 : inv!.depositPercent;
       const data: Record<string, unknown> = { subtotal, taxRate: taxExempt ? 0 : 7, taxAmount, shipping, total, depositAmount: round2(total * depositPercent / 100) };
       if (body.description !== undefined) data.description = String(body.description || "");
+      if (body.poNumber !== undefined) data.poNumber = String(body.poNumber || "").trim().slice(0, 60) || null;
+      if (body.department !== undefined) data.department = String(body.department || "").trim().slice(0, 40) || null;
+      if (body.invoiceNumber !== undefined && String(body.invoiceNumber).trim() && String(body.invoiceNumber).trim().toUpperCase() !== inv!.invoiceNumber) {
+        const wanted = String(body.invoiceNumber).trim().toUpperCase();
+        if (!/^[A-Z0-9][A-Z0-9-]{1,24}$/.test(wanted)) return NextResponse.json({ error: "Invoice number: letters, numbers and dashes only" }, { status: 400 });
+        if (await prisma.invoice.findUnique({ where: { invoiceNumber: wanted }, select: { id: true } })) return NextResponse.json({ error: `Invoice ${wanted} already exists` }, { status: 400 });
+        data.invoiceNumber = wanted;
+      }
       if (body.contactEmail !== undefined) data.contactEmail = String(body.contactEmail || "").trim() || null;
       if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
       if (body.salesRepId !== undefined) {

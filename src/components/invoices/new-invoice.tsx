@@ -21,6 +21,10 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   const [repId, setRepId] = useState("");
   const [commission, setCommission] = useState(""); // flat dollars (Denise 11/10)
   const [shipping, setShipping] = useState("");
+  const [poNumber, setPoNumber] = useState("");
+  const [department, setDepartment] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState(""); // blank = next in sequence
+  const [departments, setDepartments] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
   const [cust, setCust] = useState<Cust | null>(null);
   const [creating, setCreating] = useState(false);
@@ -40,7 +44,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (cust) return;
     const t = setTimeout(async () => {
       setSearching(true);
-      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); if (d.reps) setReps(d.reps); if (typeof d.standalone === "boolean") setStandalone(d.standalone); } catch { /* ignore */ }
+      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); if (d.reps) setReps(d.reps); if (typeof d.standalone === "boolean") setStandalone(d.standalone); if (d.departments) setDepartments(d.departments); } catch { /* ignore */ }
       setSearching(false);
     }, 250);
     return () => clearTimeout(t);
@@ -70,7 +74,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (!(sub > 0)) { setErr("Amount is required"); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, shipping: Number(shipping) || 0, salesRepId: repId || null, commissionAmount: repId ? Number(commission) || 0 : undefined }) });
+      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", poNumber: poNumber || null, department: department || null, invoiceNumber: invoiceNumber || null, companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, shipping: Number(shipping) || 0, salesRepId: repId || null, commissionAmount: repId ? Number(commission) || 0 : undefined }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "Could not create the invoice"); return; }
       onCreated(d.invoice);
@@ -82,7 +86,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={(e) => e.preventDefault()}>
         <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">New invoice</h2><button onClick={onClose}><X className="h-4 w-4 text-gray-400" /></button></div>
 
         {/* Step 1: customer from the Customers module */}
@@ -127,7 +131,10 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
                   <option value="final">Final invoice</option><option value="prebill">Prebill (job not complete)</option><option value="deposit">Deposit request</option>
                 </select></label>
               <label className="block"><span className="text-gray-600">Send to (billing email)</span><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ap@customer.com" /></label>
-              <label className="col-span-2 block"><span className="text-gray-600">Description</span><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this bills for" /></label>
+              <label className="block"><span className="text-gray-600">Invoice #</span><Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Next in sequence" autoComplete="off" /><span className="text-[11px] text-gray-400">Leave blank for the next number.</span></label>
+              <label className="block"><span className="text-gray-600">Customer PO #</span><Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} autoComplete="off" /></label>
+              <label className="block"><span className="text-gray-600">Department</span><Input list="gz-departments" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Komori, Digital, ASI..." autoComplete="off" /><datalist id="gz-departments">{departments.map((d) => <option key={d} value={d} />)}</datalist></label>
+              <label className="block"><span className="text-gray-600">Description</span><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this bills for" autoComplete="off" /></label>
               <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={subtotal} onChange={(e) => setSubtotal(e.target.value)} inputMode="decimal" placeholder="0.00" /></label>
               <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={shipping} onChange={(e) => setShipping(e.target.value)} inputMode="decimal" placeholder="0.00" /><span className="text-[11px] text-gray-400">Stated separately, not taxed.</span></label>
               <label className="block"><span className="text-gray-600">Deposit %</span><Input value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" /></label>

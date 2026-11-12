@@ -1389,6 +1389,8 @@ model Invoice {
   remindCount     Int       @default(0)
   sentAt          DateTime?                     // first time it was emailed to the customer; reminders never go out before this
   shipping        Float     @default(0)         // postage / freight, stated separately, not taxed (Denise 11/10)
+  poNumber        String?                       // customer's purchase order (Jennifer 11/12)
+  department      String?                       // production department code: Komori, Digital, ASI, Bindery, Mailing... (Jennifer 11/12)
   salesRepId      String?
   salesRepName    String?
   commissionPct   Float?
