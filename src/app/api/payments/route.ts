@@ -37,7 +37,8 @@ export async function GET() {
 
 // Next number = highest existing + 1 (count-based numbering repeats after a delete).
 async function nextInvoiceNumber(prisma: any) {
-  const last = await prisma.invoice.findFirst({ orderBy: { invoiceNumber: "desc" }, select: { invoiceNumber: true } });
+  // Only the INV- sequence counts; custom numbers (Jennifer 11/12) must not move it.
+  const last = await prisma.invoice.findFirst({ where: { invoiceNumber: { startsWith: "INV-" } }, orderBy: { invoiceNumber: "desc" }, select: { invoiceNumber: true } });
   const n = last ? parseInt(String(last.invoiceNumber).replace(/\D/g, ""), 10) : 999;
   return `INV-${String((Number.isFinite(n) ? n : 999) + 1).padStart(5, "0")}`;
 }
