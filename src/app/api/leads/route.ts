@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       companyId: true, agentHold: true, followUpAt: true, followUpNote: true, followUpDoneAt: true,
       outreachStatus: true, outreachNextAt: true, outreachTo: true, outreachEmailed: true, outreachLog: true,
       agentStatus: true, agentNextAt: true, leadTypeOverride: true, originOverride: true,
-      source: true, intakeRaw: true, updatedAt: true, createdAt: true, tier: true,
+      source: true, intakeRaw: true, updatedAt: true, createdAt: true, tier: true, tags: true,
       nextTask: true, nextTaskKind: true, nextTaskBasis: true, nextTaskAt: true,
       summary: true, summaryAt: true, summaryNotes: true,
       // Newest note rides along so the row previews the current note.
@@ -192,6 +192,7 @@ async function updateLead(prisma: any, body: any) {
     if (k in body) data[k] = body[k] || null;
   }
   if ("tier" in body) data.tier = body.tier === null || body.tier === "" ? null : Number(body.tier);
+  if ("tags" in body) data.tags = body.tags ? String(body.tags).slice(0, 200) : null;
   // Same checks the UI runs, enforced server-side so a bad value can't arrive
   // by another path (Shimmie 8/6). Rejected outright rather than stored dirty:
   // a phone number in contactEmail silently disables outbound on that lead.

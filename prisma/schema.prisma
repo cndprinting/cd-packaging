@@ -217,6 +217,9 @@ model Lead {
   // Tier (Benjy 10/18): account value 1 / 2 / 3, on every tab. Separate from
   // priority -- a Tier 1 account can be a priority 3 "not now".
   tier            Int?
+  // Free-form tags, comma separated ("Inc 5000"). Shown as a badge and usable as a
+  // toggle in the funnel bar (Benjy 11/12: "toggle by Inc 5K leads").
+  tags            String?
   stage           String?   // sub-status: Break in, Quoting, With C&D, etc.
   pipelineStage   String    @default("LEAD") // LEAD | QUALIFIED | CUSTOMER | LOST
   ownerName       String?   // display name as in the sheet (Benjy/Albert/Nitay/Kelsey/TBD)
