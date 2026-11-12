@@ -77,7 +77,8 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     } catch { setErr("Could not create the invoice"); }
     finally { setBusy(false); }
   };
-  const sub = Number(subtotal) || 0, tax = taxExempt ? 0 : Math.round(sub * 7) / 100, ship = Number(shipping) || 0, total = Math.round((sub + tax + ship) * 100) / 100;
+  // Florida: 6% on everything + 1% Pinellas surtax on the first $5,000 only.
+  const sub = Number(subtotal) || 0, tax = taxExempt ? 0 : Math.round((sub * 6 + Math.min(sub, 5000) * 1)) / 100, ship = Number(shipping) || 0, total = Math.round((sub + tax + ship) * 100) / 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
@@ -139,7 +140,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /><span className="text-[11px] text-gray-400">Blank = Net 30 (7 days for deposits and prebills)</span></label>
               <label className="flex items-center gap-2 self-end pb-2"><input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} /> <span className="text-gray-600">Tax exempt (resale certificate on file)</span></label>
             </div>
-            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)} · ${ship > 0 ? `postage/freight $${ship.toFixed(2)} · ` : ""}<span className="font-medium">total ${total.toFixed(2)}</span>{Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commission) > 0 ? ` · commission $${Number(commission).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
+            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)}{sub > 5000 && !taxExempt ? " (7% to $5,000, 6% above)" : ""} · ${ship > 0 ? `postage/freight $${ship.toFixed(2)} · ` : ""}<span className="font-medium">total ${total.toFixed(2)}</span>{Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commission) > 0 ? ` · commission $${Number(commission).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
             {err && <div className="text-sm text-red-600">{err}</div>}
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create invoice"}</Button></div>
             <div className="text-[11px] text-gray-400">Creating does not email anyone. Use the send button on the invoice when it is ready.</div>

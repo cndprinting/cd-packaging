@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
-import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
+import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, floridaTax, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 
 // Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
 // record for invoices and payments; Sage keeps the GL. Actions:
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
       if (!customerName) return NextResponse.json({ error: "Customer required" }, { status: 400 });
       const subtotal = round2(Number(body.subtotal) || 0);
       const kind = ["final", "prebill", "deposit"].includes(body.kind) ? body.kind : "final";
-      const taxRate = body.taxExempt ? 0 : 7;
-      const taxAmount = round2(subtotal * (taxRate / 100));
+      const taxRate = body.taxExempt ? 0 : 7; // label only; the amount follows the Florida rule (7% to $5,000, 6% above)
+      const taxAmount = floridaTax(subtotal, !!body.taxExempt);
       // Postage / freight is stated separately and not taxed (Denise 11/10).
       const shipping = round2(Math.max(0, Number(body.shipping) || 0));
       const total = round2(subtotal + taxAmount + shipping);
@@ -180,6 +180,36 @@ export async function POST(request: NextRequest) {
       if (inv!.commissionStatus !== "payable") return NextResponse.json({ error: "Commission is not payable until the invoice is paid" }, { status: 400 });
       const invoice = await prisma.invoice.update({ where: { id: inv!.id }, data: { commissionStatus: "paid", commissionPaidAt: new Date() } });
       return NextResponse.json({ invoice });
+    }
+
+    // Edit the money on an invoice (Denise 11/12): amount, tax (recomputed by the
+    // Florida rule, or typed over), freight, description, email, due date, rep,
+    // commission. Payments already recorded are kept and the status re-derived.
+    if (action === "edit") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      if (inv!.status === "cancelled") return NextResponse.json({ error: "Cancelled invoices can't be edited" }, { status: 400 });
+      const subtotal = body.subtotal !== undefined ? round2(Math.max(0, Number(body.subtotal) || 0)) : inv!.subtotal;
+      const taxExempt = body.taxExempt !== undefined ? !!body.taxExempt : inv!.taxRate === 0;
+      const taxAmount = body.taxAmount !== undefined && body.taxAmount !== "" && body.taxAmount !== null ? round2(Math.max(0, Number(body.taxAmount) || 0)) : floridaTax(subtotal, taxExempt);
+      const shipping = body.shipping !== undefined ? round2(Math.max(0, Number(body.shipping) || 0)) : (inv!.shipping || 0);
+      const total = round2(subtotal + taxAmount + shipping);
+      const depositPercent = inv!.kind === "deposit" ? 100 : inv!.depositPercent;
+      const data: Record<string, unknown> = { subtotal, taxRate: taxExempt ? 0 : 7, taxAmount, shipping, total, depositAmount: round2(total * depositPercent / 100) };
+      if (body.description !== undefined) data.description = String(body.description || "");
+      if (body.contactEmail !== undefined) data.contactEmail = String(body.contactEmail || "").trim() || null;
+      if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+      if (body.salesRepId !== undefined) {
+        const rep = body.salesRepId ? await prisma.user.findUnique({ where: { id: String(body.salesRepId) }, select: { id: true, name: true } }) : null;
+        data.salesRepId = rep?.id || null; data.salesRepName = rep?.name || null;
+      }
+      if (body.commissionAmount !== undefined) {
+        const amt = round2(Math.max(0, Number(body.commissionAmount) || 0));
+        data.commissionAmount = amt; data.commissionPct = null;
+        if (inv!.commissionStatus !== "paid") data.commissionStatus = amt > 0 ? (inv!.commissionStatus === "payable" ? "payable" : "pending") : "none";
+      }
+      data.notes = `${inv!.notes ? inv!.notes + "\n" : ""}Edited by ${session.name} on ${new Date().toLocaleDateString("en-US")}: subtotal ${subtotal.toFixed(2)}, tax ${taxAmount.toFixed(2)}, freight ${shipping.toFixed(2)}, total ${total.toFixed(2)}`;
+      await prisma.invoice.update({ where: { id: inv!.id }, data });
+      return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
     }
 
     if (action === "set_due") {

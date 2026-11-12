@@ -13,6 +13,19 @@ import { sendEmail } from "@/lib/email/graph-client";
 // reconnect once jobs are real.
 export const AR_STANDALONE = process.env.AR_STANDALONE !== "0";
 export const STANDALONE_MSG = "Invoicing runs on its own right now. Create invoices from the Invoices tab.";
+// Florida sales tax (Denise 11/12): 6% state on the whole amount, plus the
+// Pinellas 1% discretionary surtax on only the first $5,000 of the sale. So 7%
+// up to $5,000 and 6% on the balance. Postage/freight is not taxed.
+export const TAX_STATE_PCT = 6, TAX_SURTAX_PCT = 1, SURTAX_CAP = 5000;
+export function floridaTax(subtotal: number, exempt = false): number {
+  if (exempt) return 0;
+  const s = Math.max(0, Number(subtotal) || 0);
+  return round2(s * TAX_STATE_PCT / 100 + Math.min(s, SURTAX_CAP) * TAX_SURTAX_PCT / 100);
+}
+export function taxLabel(inv: { taxRate: number; subtotal: number }): string {
+  if (!inv.taxRate) return "Sales tax (exempt)";
+  return inv.subtotal > SURTAX_CAP ? `Sales tax (7% to $5,000, 6% above)` : "Sales tax (7%)";
+}
 export const CARD_SURCHARGE = 0.03;
 export const NET_DAYS = 30;
 export const REMINDER_DAYS = [0, 7, 14, 28]; // days past due for reminders 1..4
@@ -90,7 +103,7 @@ export function invoiceEmailHtml(inv: any) {
       <tr><td style="padding:8px 0;color:#888;">Invoice #</td><td style="padding:8px 0;font-weight:bold;">${inv.invoiceNumber}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">Description</td><td style="padding:8px 0;">${inv.description || "C&amp;D Printing services"}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">Subtotal</td><td style="padding:8px 0;">${money(inv.subtotal)}</td></tr>
-      <tr><td style="padding:8px 0;color:#888;">Tax (${inv.taxRate}%)</td><td style="padding:8px 0;">${money(inv.taxAmount)}</td></tr>
+      <tr><td style="padding:8px 0;color:#888;">${taxLabel(inv)}</td><td style="padding:8px 0;">${money(inv.taxAmount)}</td></tr>
       ${inv.shipping > 0 ? `<tr><td style="padding:8px 0;color:#888;">Postage / freight</td><td style="padding:8px 0;">${money(inv.shipping)}</td></tr>` : ""}
       <tr style="border-top:2px solid #ED1C24;"><td style="padding:12px 0;font-weight:bold;">Total</td><td style="padding:12px 0;font-size:20px;font-weight:bold;color:#ED1C24;">${money(inv.total)}</td></tr>
       ${inv.paidAmount > 0 ? `<tr><td style="padding:8px 0;color:#888;">Paid so far</td><td style="padding:8px 0;">${money(inv.paidAmount)}</td></tr><tr><td style="padding:8px 0;color:#888;">Balance</td><td style="padding:8px 0;font-weight:bold;">${money(bal)}</td></tr>` : ""}
@@ -133,6 +146,35 @@ export async function runInvoiceReminders(prisma: any, now = new Date()) {
     }
   }
   return sent;
+}
+
+/** Yearly sales by customer and by sales rep (Denise 11/12). Sales = amount
+ *  before tax and freight on non-cancelled invoices dated in the year. */
+export async function salesReport(prisma: any, year: number) {
+  const from = new Date(Date.UTC(year, 0, 1)), to = new Date(Date.UTC(year + 1, 0, 1));
+  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { not: "cancelled" } }, select: { customerName: true, companyId: true, salesRepName: true, subtotal: true, taxAmount: true, shipping: true, total: true, paidAmount: true, commissionAmount: true } });
+  const byC: Record<string, any> = {}, byR: Record<string, any> = {};
+  for (const i of invs) {
+    const c = byC[i.customerName] ||= { name: i.customerName, invoices: 0, sales: 0, tax: 0, shipping: 0, billed: 0, paid: 0 };
+    c.invoices++; c.sales += i.subtotal; c.tax += i.taxAmount; c.shipping += i.shipping || 0; c.billed += i.total; c.paid += i.paidAmount || 0;
+    const rn = i.salesRepName || "House account";
+    const r = byR[rn] ||= { name: rn, invoices: 0, sales: 0, billed: 0, paid: 0, commission: 0 };
+    r.invoices++; r.sales += i.subtotal; r.billed += i.total; r.paid += i.paidAmount || 0; r.commission += i.commissionAmount || 0;
+  }
+  const r2 = (o: any) => { for (const k of Object.keys(o)) if (typeof o[k] === "number") o[k] = round2(o[k]); return o; };
+  const byCustomer = Object.values(byC).map(r2).sort((a: any, b: any) => b.sales - a.sales);
+  const byRep = Object.values(byR).map(r2).sort((a: any, b: any) => b.sales - a.sales);
+  const totals = r2({ invoices: invs.length, sales: invs.reduce((s: number, i: any) => s + i.subtotal, 0), billed: invs.reduce((s: number, i: any) => s + i.total, 0), paid: invs.reduce((s: number, i: any) => s + (i.paidAmount || 0), 0), commission: invs.reduce((s: number, i: any) => s + (i.commissionAmount || 0), 0) });
+  return { year, byCustomer, byRep, totals };
+}
+export function salesReportCsv(rep: Awaited<ReturnType<typeof salesReport>>): string {
+  const esc = (v: any) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lines = [`Sales by customer,${rep.year}`, "Customer,Invoices,Sales (before tax),Tax,Shipping,Billed,Paid"];
+  for (const c of rep.byCustomer as any[]) lines.push([c.name, c.invoices, c.sales.toFixed(2), c.tax.toFixed(2), c.shipping.toFixed(2), c.billed.toFixed(2), c.paid.toFixed(2)].map(esc).join(","));
+  lines.push("", `Sales by sales rep,${rep.year}`, "Sales rep,Invoices,Sales (before tax),Billed,Paid,Commission");
+  for (const r of rep.byRep as any[]) lines.push([r.name, r.invoices, r.sales.toFixed(2), r.billed.toFixed(2), r.paid.toFixed(2), r.commission.toFixed(2)].map(esc).join(","));
+  lines.push("", `Total,${rep.totals.invoices},${rep.totals.sales.toFixed(2)},${rep.totals.billed.toFixed(2)},${rep.totals.paid.toFixed(2)},${rep.totals.commission.toFixed(2)}`);
+  return lines.join("\r\n");
 }
 
 /** Weekly aging report (Denise's item 3): buckets by days past due, plus what's coming due. */

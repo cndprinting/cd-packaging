@@ -39,6 +39,17 @@ export default function InvoicesPage() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [edit, setEdit] = useState<{ inv: Invoice; subtotal: string; taxAmount: string; taxExempt: boolean; shipping: string; description: string; contactEmail: string; dueDate: string; commissionAmount: string } | null>(null);
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [report, setReport] = useState<any | null>(null);
+  const openEdit = (inv: Invoice) => setEdit({ inv, subtotal: String(inv.subtotal), taxAmount: String(inv.taxAmount), taxExempt: !(inv as any).taxRate, shipping: String(inv.shipping || 0), description: (inv as any).description || "", contactEmail: (inv as any).contactEmail || "", dueDate: inv.dueDate ? inv.dueDate.slice(0, 10) : "", commissionAmount: String(inv.commissionAmount || 0) });
+  const flTax = (sub: number, exempt: boolean) => (exempt ? 0 : Math.round(sub * 6 + Math.min(sub, 5000)) / 100);
+  const submitEdit = async () => {
+    if (!edit) return;
+    const ok = await act(edit.inv, { action: "edit", subtotal: Number(edit.subtotal) || 0, taxAmount: edit.taxAmount === "" ? undefined : Number(edit.taxAmount) || 0, taxExempt: edit.taxExempt, shipping: Number(edit.shipping) || 0, description: edit.description, contactEmail: edit.contactEmail, dueDate: edit.dueDate || null, commissionAmount: Number(edit.commissionAmount) || 0 }, `${edit.inv.invoiceNumber} updated`);
+    if (ok !== false) setEdit(null);
+  };
+  const loadReport = async () => { try { const r = await fetch(`/api/payments/report?year=${year}`); setReport(await r.json()); } catch { setMsg("Could not load the report"); } };
 
   const load = () => fetch("/api/payments").then((r) => r.json()).then((d) => setInvoices(d.invoices || [])).finally(() => setLoading(false));
   useEffect(() => { load(); fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d.user?.role || "")).catch(() => {}); }, []);
@@ -100,6 +111,9 @@ export default function InvoicesPage() {
           <>
             <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
             <a href={`/api/payments/export?month=${month}`} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"><Download className="h-4 w-4" />Sage export (CSV)</a>
+            <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="w-20 rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+            <Button variant="outline" size="sm" onClick={loadReport}>Sales report</Button>
+            <a href={`/api/payments/report?year=${year}&format=csv`} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"><Download className="h-4 w-4" />CSV</a>
           </>
         )}
         </div>
@@ -170,6 +184,7 @@ export default function InvoicesPage() {
                         </div>
                         {canMoney && (
                           <div className="flex flex-wrap content-start gap-2">
+                            {inv.status !== "cancelled" && <Button size="sm" variant="outline" onClick={() => openEdit(inv)}>Edit invoice</Button>}
                             {inv.kind !== "final" && inv.status !== "cancelled" && <Button size="sm" variant="outline" onClick={() => act(inv, { action: "convert_to_final" }, "Converted to a final invoice")}>Convert to final invoice</Button>}
                             {inv.commissionStatus === "payable" && <Button size="sm" variant="outline" onClick={() => act(inv, { action: "commission_paid" }, "Commission marked paid")}>Commission paid to {inv.salesRepName}</Button>}
                             <label className="inline-flex items-center gap-1 text-xs text-gray-600">Due <input type="date" defaultValue={inv.dueDate ? inv.dueDate.slice(0, 10) : ""} onChange={(e) => act(inv, { action: "set_due", dueDate: e.target.value })} className="rounded border border-gray-300 px-1 py-0.5" /></label>
@@ -186,6 +201,46 @@ export default function InvoicesPage() {
         </Table>
       </Card>
 
+      {report && (
+        <Card className="mt-4 p-4">
+          <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">Sales {report.year}</h2><button onClick={() => setReport(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
+          <div className="mt-1 text-xs text-gray-500">{report.totals.invoices} invoices · sales {formatCurrency(report.totals.sales)} before tax · billed {formatCurrency(report.totals.billed)} · paid {formatCurrency(report.totals.paid)} · commissions {formatCurrency(report.totals.commission)}. Cancelled invoices excluded.</div>
+          <div className="mt-3 grid gap-6 md:grid-cols-2 text-sm">
+            <div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">By customer</div>
+              <table className="w-full"><thead><tr className="text-left text-xs text-gray-500"><th>Customer</th><th className="text-right">Inv</th><th className="text-right">Sales</th><th className="text-right">Paid</th></tr></thead><tbody>
+                {report.byCustomer.map((c: any) => <tr key={c.name} className="border-t border-gray-100"><td className="py-1">{c.name}</td><td className="text-right">{c.invoices}</td><td className="text-right">{formatCurrency(c.sales)}</td><td className="text-right">{formatCurrency(c.paid)}</td></tr>)}
+                {report.byCustomer.length === 0 && <tr><td colSpan={4} className="py-2 text-gray-400">No invoices in {report.year}.</td></tr>}
+              </tbody></table>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">By sales rep</div>
+              <table className="w-full"><thead><tr className="text-left text-xs text-gray-500"><th>Rep</th><th className="text-right">Inv</th><th className="text-right">Sales</th><th className="text-right">Paid</th><th className="text-right">Commission</th></tr></thead><tbody>
+                {report.byRep.map((r: any) => <tr key={r.name} className="border-t border-gray-100"><td className="py-1">{r.name}</td><td className="text-right">{r.invoices}</td><td className="text-right">{formatCurrency(r.sales)}</td><td className="text-right">{formatCurrency(r.paid)}</td><td className="text-right">{formatCurrency(r.commission)}</td></tr>)}
+              </tbody></table>
+            </div>
+          </div>
+        </Card>
+      )}
+      {edit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEdit(null)}>
+          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">Edit {edit.inv.invoiceNumber} · {edit.inv.customerName}</h2><button onClick={() => setEdit(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <label className="col-span-2 block"><span className="text-gray-600">Description</span><Input value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></label>
+              <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={edit.subtotal} onChange={(e) => { const sub = Number(e.target.value) || 0; setEdit({ ...edit, subtotal: e.target.value, taxAmount: String(flTax(sub, edit.taxExempt)) }); }} inputMode="decimal" /></label>
+              <label className="block"><span className="text-gray-600">Tax</span><Input value={edit.taxAmount} onChange={(e) => setEdit({ ...edit, taxAmount: e.target.value })} inputMode="decimal" disabled={edit.taxExempt} /><span className="text-[11px] text-gray-400">Auto: 7% to $5,000, 6% above. Type over it if needed.</span></label>
+              <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={edit.shipping} onChange={(e) => setEdit({ ...edit, shipping: e.target.value })} inputMode="decimal" /></label>
+              <label className="block"><span className="text-gray-600">Commission ($)</span><Input value={edit.commissionAmount} onChange={(e) => setEdit({ ...edit, commissionAmount: e.target.value })} inputMode="decimal" /></label>
+              <label className="block"><span className="text-gray-600">Billing email</span><Input value={edit.contactEmail} onChange={(e) => setEdit({ ...edit, contactEmail: e.target.value })} /></label>
+              <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={edit.dueDate} onChange={(e) => setEdit({ ...edit, dueDate: e.target.value })} /></label>
+              <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={edit.taxExempt} onChange={(e) => setEdit({ ...edit, taxExempt: e.target.checked, taxAmount: String(flTax(Number(edit.subtotal) || 0, e.target.checked)) })} /> <span className="text-gray-600">Tax exempt (resale certificate on file)</span></label>
+            </div>
+            <div className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Total {formatCurrency((Number(edit.subtotal) || 0) + (Number(edit.taxAmount) || 0) + (Number(edit.shipping) || 0))}{edit.inv.paidAmount > 0 ? ` · ${formatCurrency(edit.inv.paidAmount)} already paid stays on the invoice` : ""}</div>
+            <div className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={submitEdit} disabled={!!busy}>Save changes</Button></div>
+          </div>
+        </div>
+      )}
       {showNew && <NewInvoice onClose={() => setShowNew(false)} onCreated={(inv) => { setShowNew(false); setMsg(`${inv.invoiceNumber} created for ${inv.customerName}. Use the send button when it is ready.`); setStatusFilter("open"); load(); }} />}
       {pay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPay(null)}>
