@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=db_error", request.url));
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    // Case-insensitive: an account stored as "Dblackburn@" must still match (Benjy 11/13).
+    const user = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
 
     // Strict allowlist: user must already exist in our DB, regardless of domain.
     // Admins pre-add users with the correct role; SSO just authenticates them.

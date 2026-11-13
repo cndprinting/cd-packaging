@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleLogin(body: { email: string; password: string }) {
-  const { email, password } = body;
+  const { password } = body;
+  const email = String(body.email || "").trim().toLowerCase();
 
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -46,7 +47,7 @@ async function handleLogin(body: { email: string; password: string }) {
   // Try database first
   try {
     const { prisma } = await import("@/lib/prisma");
-    const user = await (prisma as any).user.findUnique({ where: { email } });
+    const user = await (prisma as any).user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
 
     if (user) {
       const valid = await verifyPassword(password, user.passwordHash);
@@ -128,7 +129,7 @@ async function handleSignup(body: { name: string; company: string; email: string
   // Try database first
   try {
     const { prisma } = await import("@/lib/prisma");
-    const existing = await (prisma as any).user.findUnique({ where: { email } });
+    const existing = await (prisma as any).user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
 
     if (existing) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
@@ -137,7 +138,7 @@ async function handleSignup(body: { name: string; company: string; email: string
     const passwordHash = await hashPassword(password);
     const user = await (prisma as any).user.create({
       data: {
-        email,
+        email: String(email).trim().toLowerCase(),
         name,
         passwordHash,
         role: "CUSTOMER",

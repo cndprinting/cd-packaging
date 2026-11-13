@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
       const user = await (prisma as any).user.create({
         data: {
-          email: invite.email,
+          email: String(invite.email).trim().toLowerCase(),
           name,
           passwordHash,
           role: invite.role,
