@@ -154,9 +154,12 @@ export default function SchedulePage() {
             {view === "week" ? "Week view \u00b7 Next 7 days" : "Month view \u00b7 Next 30 days"}
           </p>
         </div>
+        <div className="flex items-center gap-3">
+        <a href="/dashboard/schedule/machines" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">Machine schedules</a>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
           <button onClick={() => setView("week")} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>Week</button>
           <button onClick={() => setView("month")} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>Month</button>
+        </div>
         </div>
       </div>
       <ToRouteList />

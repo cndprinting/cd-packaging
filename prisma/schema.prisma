@@ -2023,3 +2023,17 @@ model Prototype {
   @@index([leadId])
   @@index([companyId])
 }
+
+// Darrin's job order on each machine schedule (11/18/26). He sets the order;
+// jobs he hasn't placed fall in after, by due date.
+model ScheduleOrder {
+  id          String   @id @default(cuid())
+  machineCode String
+  jobId       String
+  position    Int
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([machineCode, jobId])
+  @@index([machineCode])
+}
