@@ -3,6 +3,9 @@ import { getSession } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
+    // Staff only (this listed every proof with customer names to anyone, Benjy 11/17).
+    const viewer = await getSession();
+    if (!viewer || viewer.role === "CUSTOMER" || viewer.role === "VENDOR") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get("jobId");
 

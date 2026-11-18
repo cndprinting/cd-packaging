@@ -40,8 +40,8 @@ const internalNav = [
   // Dieline module v1 (Sep 2026): parametric tuck boxes + die-inventory check
   { label: "Dielines", href: "/dashboard/dielines", icon: Scissors },
   // Proofing rebuilt as queue page (Apr 2026) — pre-press uploads → sales sends → customer approves → production alerted
-  { label: "Proofing", href: "/dashboard/proofing", icon: FileCheck },
-  { label: "Pre-Press", href: "/dashboard/prepress", icon: FileCheck },
+  // Proofing merged into Pre-Press & Proofs (Benjy 11/17/26); /dashboard/proofing redirects
+  { label: "Pre-Press & Proofs", href: "/dashboard/prepress", icon: FileCheck },
   { label: "Production", href: "/dashboard/production", icon: Factory },
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
@@ -154,6 +154,8 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
         { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
         { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
+        // CSRs run proofs (Carrie's procedure); reps watch their jobs' proofs.
+        { label: "Pre-Press & Proofs", href: "/dashboard/prepress", icon: FileCheck },
         { label: "Customers", href: "/dashboard/customers", icon: Users },
         { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
         // Compliance library visible to sales — Lee Zerfass (SALES_REP) owns it

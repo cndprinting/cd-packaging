@@ -635,6 +635,7 @@ model Job {
   paymentTerms     String?   // deposit50 | prepaid | net30 | cod
   artworkStatus    String?   // ready | coming | design | reprint
   pressOverride    String?   // who released it to press without the gate, when, why
+  artInAt          DateTime? // when print-ready art was in hand; the 24-hour proof clock starts here
   handoffId        String?   // the sales-to-CSR handoff this job came from
   repName          String?
   contactName      String?
@@ -783,6 +784,14 @@ model Proof {
   customerApprovedAt DateTime?   // when customer approved (alert fires at this moment)
   customerRejectedAt DateTime?
   productionAlertSentAt DateTime?  // when we notified production — idempotency marker
+  // Customer approval by email (Benjy 11/17): the customer gets Approve /
+  // Request changes buttons; their click is recorded here and moves the job.
+  approvalToken      String?     @unique
+  sentTo             String?     // customer email(s) it went to
+  remindedAt         DateTime?
+  respondedByName    String?     // name the customer typed when answering
+  customerComment    String?     // what they want changed (or a note with the approval)
+  respondedVia       String?     // link | phone | email | internal
 
   createdAt     DateTime    @default(now())
 

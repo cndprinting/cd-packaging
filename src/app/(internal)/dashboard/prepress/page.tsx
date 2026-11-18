@@ -1,250 +1,174 @@
 "use client";
 
-import { useState, useEffect } from "react";
+// Pre-Press & Proofs (remade 11/17/26). One board, columns by whose turn it
+// is: waiting on art (CSR) -> make proof (pre-press) -> send to customer (CSR)
+// -> with customer -> okay to print. Customer change requests come back to
+// "Make proof" with their notes. Proofs go out with Approve / Request changes
+// buttons and the customer's answer moves the card.
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Layers, Clock, AlertTriangle, CheckCircle2, Loader2, FileCheck } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { Layers, Loader2, X, Upload, Send, Mail, CheckCircle2, MessageSquareWarning, Clock, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { uploadFile } from "@/lib/upload-client";
 
-interface PrepressJob {
-  id: string;
-  jobNumber: string;
-  name: string;
-  customer: string;
-  status: string;
-  priority: string;
-  quantity: number;
-  dueDate: string | null;
-  stockDescription: string | null;
-  numPages: number | null;
-  pressAssignment: string | null;
-  enteredStageAt: string;
-  ageHours: number;
-  slaState: "ok" | "warning" | "overdue";
-}
-
-const statusLabels: Record<string, string> = {
-  ARTWORK_RECEIVED: "Artwork Received",
-  STRUCTURAL_DESIGN: "Structural Design",
-  PROOFING: "Proofing",
-  CUSTOMER_APPROVAL: "Customer Approval",
-  PREPRESS: "Pre-Press",
-  PLATING: "Plating",
+type Card = {
+  id: string; jobNumber: string; name: string; status: string; quantity: number; dueDate: string | null; priority: string; customer: string; companyId: string | null;
+  contactEmail: string | null; contactName: string | null; csr: string | null; salesRep: string | null; artworkStatus: string | null; jobType: string | null;
+  stage: "art" | "make" | "send" | "customer" | "okay"; hours: number; slaLate: boolean; test: boolean;
+  proof: { id: string; version: number; fileUrl: string | null; fileName: string | null; status: string; sentTo: string | null; sentAt: string | null; comment: string | null; respondedBy: string | null; respondedVia: string | null; notes: string | null } | null;
 };
+type Stage = { key: Card["stage"]; label: string; who: string; help: string };
 
-function formatAge(hours: number): string {
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  if (hours < 24) return `${hours.toFixed(1)}h`;
-  const days = Math.floor(hours / 24);
-  const rem = Math.round(hours - days * 24);
-  return `${days}d ${rem}h`;
-}
-
-function JobCard({ job }: { job: PrepressJob }) {
-  const slaBorder =
-    job.slaState === "overdue" ? "border-l-red-500"
-    : job.slaState === "warning" ? "border-l-amber-500"
-    : "border-l-emerald-500";
-  const slaBg =
-    job.slaState === "overdue" ? "bg-red-50 text-red-700"
-    : job.slaState === "warning" ? "bg-amber-50 text-amber-700"
-    : "bg-emerald-50 text-emerald-700";
-  const slaIcon =
-    job.slaState === "overdue" ? <AlertTriangle className="h-3.5 w-3.5" />
-    : job.slaState === "warning" ? <Clock className="h-3.5 w-3.5" />
-    : <CheckCircle2 className="h-3.5 w-3.5" />;
-
-  return (
-    <Link href={`/dashboard/jobs/${job.id}`}>
-      <Card className={`border-l-4 ${slaBorder} hover:shadow-md transition-shadow cursor-pointer`}>
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="font-mono text-xs text-gray-500">{job.jobNumber}</span>
-                {job.priority === "URGENT" && <Badge className="bg-red-100 text-red-700 text-[10px]">URGENT</Badge>}
-                {job.priority === "HIGH" && <Badge className="bg-orange-100 text-orange-700 text-[10px]">HIGH</Badge>}
-              </div>
-              <p className="text-sm font-semibold text-gray-900 truncate">{job.name}</p>
-              <p className="text-xs text-gray-500 truncate">{job.customer}</p>
-            </div>
-            <div className={`shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${slaBg}`}>
-              {slaIcon}
-              <span>{formatAge(job.ageHours)}</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
-            <span className="inline-flex items-center gap-1">
-              <Badge className="bg-gray-100 text-gray-700 text-[10px]">{statusLabels[job.status] || job.status}</Badge>
-            </span>
-            {job.quantity > 0 && <span>Qty: {job.quantity.toLocaleString()}</span>}
-            {job.numPages && <span>{job.numPages}pp</span>}
-            {job.dueDate && <span>Due: {formatDate(job.dueDate)}</span>}
-            {job.pressAssignment && <span>Press: {job.pressAssignment}</span>}
-          </div>
-          {job.stockDescription && (
-            <p className="mt-1 text-[11px] text-gray-400 truncate">Stock: {job.stockDescription}</p>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
+const age = (h: number) => (h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`);
+const COLORS: Record<string, string> = { art: "border-t-gray-400", make: "border-t-violet-500", send: "border-t-sky-500", customer: "border-t-amber-500", okay: "border-t-emerald-500" };
 
 export default function PrepressPage() {
-  const [rack, setRack] = useState<PrepressJob[]>([]);
-  const [okayToPrint, setOkayToPrint] = useState<PrepressJob[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [me, setMe] = useState<{ canAct: boolean; canMake: boolean }>({ canAct: false, canMake: false });
   const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showTest, setShowTest] = useState(false);
+  const [q, setQ] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const [send, setSend] = useState<{ c: Card; to: string; note: string; html: string; subject: string; reminder: boolean; busy: boolean } | null>(null);
+  const [record, setRecord] = useState<{ c: Card; decision: "approve" | "changes"; name: string; comment: string; busy: boolean } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const uploadFor = useRef<Card | null>(null);
 
   const load = async () => {
-    try {
-      const res = await fetch("/api/prepress");
-      const data = await res.json();
-      setRack(data.rack || []);
-      setOkayToPrint(data.okayToPrint || []);
-      setLastRefresh(new Date());
-    } catch { /* ignore */ }
+    try { const r = await fetch(`/api/prepress${showTest ? "?test=1" : ""}`); const d = await r.json(); setStages(d.stages || []); setCards(d.jobs || []); if (d.me) setMe(d.me); } catch { /* ignore */ }
     setLoading(false);
   };
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTest]);
+  const flash = (ok: boolean, t: string) => { setMsg({ ok, t }); setTimeout(() => setMsg(null), 7000); };
+  const post = async (body: Record<string, unknown>, ok?: string) => {
+    const r = await fetch("/api/prepress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { flash(false, d.error || "Could not save"); return null; }
+    if (ok) flash(true, ok);
+    await load(); return d;
+  };
 
-  useEffect(() => {
-    load();
-    // Auto-refresh every 60 seconds so SLA ticks forward
-    const id = setInterval(load, 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const shown = useMemo(() => { const n = q.trim().toLowerCase(); return n ? cards.filter((c) => [c.jobNumber, c.name, c.customer, c.csr, c.salesRep].some((v) => (v || "").toLowerCase().includes(n))) : cards; }, [cards, q]);
 
-  const overdueCount = rack.filter(j => j.slaState === "overdue").length;
-  const warningCount = rack.filter(j => j.slaState === "warning").length;
-  const healthyCount = rack.filter(j => j.slaState === "ok").length;
+  const onFile = async (f?: File) => {
+    const c = uploadFor.current; if (!f || !c) return;
+    setBusyId(c.id);
+    const up = await uploadFile(f);
+    if (!up.ok || !up.data.url) { flash(false, up.data.error || up.data.message || "Upload failed"); setBusyId(null); return; }
+    await post({ action: "upload_proof", jobId: c.id, fileUrl: up.data.url, fileName: up.data.fileName || f.name }, `Proof uploaded for ${c.jobNumber}. It's in Send to customer.`);
+    setBusyId(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+  const openSend = async (c: Card, reminder = false) => {
+    if (!c.proof) return;
+    const d = await (await fetch("/api/prepress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send_proof", proofId: c.proof.id, to: c.proof.sentTo || c.contactEmail || "", preview: true, reminder }) })).json();
+    setSend({ c, to: d.to || c.contactEmail || "", note: "", html: d.html || "", subject: d.subject || "", reminder, busy: false });
+  };
+  const refreshPreview = async (s: NonNullable<typeof send>) => {
+    const d = await (await fetch("/api/prepress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send_proof", proofId: s.c.proof!.id, to: s.to, note: s.note, preview: true, reminder: s.reminder }) })).json();
+    if (d.html) setSend({ ...s, html: d.html, subject: d.subject });
+  };
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-brand-600" /></div>;
+  const counts = useMemo(() => Object.fromEntries((stages.length ? stages : []).map((s) => [s.key, shown.filter((c) => c.stage === s.key).length])), [stages, shown]);
+  const lateProofs = shown.filter((c) => c.slaLate).length;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Layers className="h-6 w-6 text-brand-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pre-Press Queue</h1>
-            <p className="text-sm text-gray-500">
-              24-hour proof SLA · Last refresh {lastRefresh.toLocaleTimeString()}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={load}
-          className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {/* SLA summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{overdueCount}</p>
-              <p className="text-xs text-gray-500">Overdue (&gt;24h)</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-amber-600">{warningCount}</p>
-              <p className="text-xs text-gray-500">At Risk (12–24h)</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-emerald-600">{healthyCount}</p>
-              <p className="text-xs text-gray-500">On Track (&lt;12h)</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <FileCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{okayToPrint.length}</p>
-              <p className="text-xs text-gray-500">Okay to Print</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Two-rack layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pre-Press Rack */}
-        <div>
-          <Card>
-            <CardHeader className="border-b border-gray-100">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-brand-600" />
-                  Pre-Press Rack
-                </span>
-                <Badge className="bg-brand-50 text-brand-700">{rack.length}</Badge>
-              </CardTitle>
-              <p className="text-xs text-gray-500 mt-1">Artwork received → proofing → plating. 24-hour proof target.</p>
-            </CardHeader>
-            <CardContent className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-              {rack.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-400">
-                  <Layers className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  Rack is clear. Nice work.
-                </div>
-              ) : (
-                rack.map(job => <JobCard key={job.id} job={job} />)
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Okay to Print Rack */}
-        <div>
-          <Card>
-            <CardHeader className="border-b border-gray-100">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span className="flex items-center gap-2">
-                  <FileCheck className="h-4 w-4 text-emerald-600" />
-                  Okay to Print
-                </span>
-                <Badge className="bg-emerald-50 text-emerald-700">{okayToPrint.length}</Badge>
-              </CardTitle>
-              <p className="text-xs text-gray-500 mt-1">Customer approved — waiting to be scheduled on a press.</p>
-            </CardHeader>
-            <CardContent className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-              {okayToPrint.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-400">
-                  <FileCheck className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  Nothing waiting to be scheduled.
-                </div>
-              ) : (
-                okayToPrint.map(job => <JobCard key={job.id} job={job} />)
-              )}
-            </CardContent>
-          </Card>
+    <div className="space-y-4">
+      <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3"><Layers className="h-6 w-6 text-brand-600" /><div><h1 className="text-2xl font-bold text-gray-900">Pre-Press &amp; Proofs</h1><p className="text-sm text-gray-500">Each column is whose move it is. 24-hour proof target from when the art is in.</p></div></div>
+        <div className="flex items-center gap-2">
+          <div className="w-56"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Job, customer, CSR" /></div>
+          <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />Show test jobs</label>
+          <Button variant="outline" size="sm" onClick={load} className="gap-1"><RefreshCw className="h-3.5 w-3.5" />Refresh</Button>
         </div>
       </div>
+      {msg && <div className={`rounded-md px-3 py-2 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{msg.t}</div>}
+      {lateProofs > 0 && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{lateProofs} proof{lateProofs === 1 ? " is" : "s are"} past the 24-hour target.</div>}
+
+      {loading ? <div className="p-8 text-sm text-gray-400"><Loader2 className="inline h-4 w-4 animate-spin" /> Loading</div> : (
+        <div className="grid gap-3 lg:grid-cols-5">
+          {stages.map((s) => (
+            <div key={s.key} className={`rounded-lg border border-gray-200 border-t-4 bg-gray-50 ${COLORS[s.key]}`}>
+              <div className="px-3 pt-3">
+                <div className="flex items-center justify-between"><span className="font-semibold text-gray-900">{s.label}</span><span className="rounded-full bg-white px-2 text-xs text-gray-600">{counts[s.key] || 0}</span></div>
+                <div className="text-[11px] text-gray-500">{s.who}: {s.help}</div>
+              </div>
+              <div className="space-y-2 p-2">
+                {shown.filter((c) => c.stage === s.key).map((c) => (
+                  <div key={c.id} className={`rounded-md border bg-white p-2.5 text-sm shadow-sm ${c.slaLate ? "border-red-300" : "border-gray-200"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <Link href={`/dashboard/jobs/${c.id}`} className="font-mono text-[11px] text-gray-500 hover:text-brand-600">{c.jobNumber}{c.test && " · test"}</Link>
+                      <span className={`inline-flex items-center gap-0.5 text-[11px] ${c.slaLate ? "font-semibold text-red-600" : "text-gray-400"}`}><Clock className="h-3 w-3" />{age(c.hours)}</span>
+                    </div>
+                    <div className="font-medium text-gray-900">{c.name}</div>
+                    <div className="text-xs text-gray-500">{c.customer}{c.quantity ? ` · ${c.quantity.toLocaleString()}` : ""}</div>
+                    <div className="text-[11px] text-gray-400">{[c.csr && `CSR ${c.csr}`, c.salesRep && `Sales ${c.salesRep}`, c.dueDate && `due ${String(c.dueDate).slice(5, 10)}`].filter(Boolean).join(" · ")}</div>
+                    {c.proof && c.stage !== "art" && (
+                      <div className="mt-1 text-[11px]">
+                        {c.proof.fileUrl ? <a href={c.proof.fileUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">Proof v{c.proof.version}</a> : <span className="text-gray-500">v{c.proof.version} {c.proof.fileName}</span>}
+                        {c.proof.sentTo && c.stage === "customer" && <span className="text-gray-500"> · sent to {c.proof.sentTo}</span>}
+                      </div>
+                    )}
+                    {c.stage === "make" && c.proof?.comment && <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-900"><MessageSquareWarning className="mr-1 inline h-3 w-3" />{c.proof.respondedBy || "Customer"}: {c.proof.comment}</div>}
+                    {c.stage === "okay" && c.proof?.respondedBy && <div className="mt-1 text-[11px] text-emerald-700"><CheckCircle2 className="mr-0.5 inline h-3 w-3" />{c.proof.respondedBy} ({c.proof.respondedVia})</div>}
+
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {c.stage === "art" && me.canAct && <Button size="sm" variant="outline" onClick={() => post({ action: "art_in", jobId: c.id }, `Art is in for ${c.jobNumber}. The proof clock started.`)}>Art is in</Button>}
+                      {c.stage === "make" && me.canMake && <Button size="sm" disabled={busyId === c.id} onClick={() => { uploadFor.current = c; fileRef.current?.click(); }} className="gap-1">{busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}{c.proof ? `Upload v${c.proof.version + 1}` : "Upload proof"}</Button>}
+                      {c.stage === "make" && me.canMake && !c.proof && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => { const reason = prompt(`Why does ${c.jobNumber} need no proof? (e.g. exact reprint, customer waived)`); if (reason) post({ action: "no_proof", jobId: c.id, reason }, `${c.jobNumber} marked okay to print without a proof.`); }}>No proof needed</button>}
+                      {c.stage === "send" && me.canAct && <Button size="sm" onClick={() => openSend(c)} className="gap-1"><Send className="h-3.5 w-3.5" />Send proof</Button>}
+                      {c.stage === "send" && me.canAct && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => post({ action: "mark_sent", proofId: c.proof!.id, method: "physical" }, "Marked sent")}>Sent another way</button>}
+                      {c.stage === "customer" && me.canAct && <>
+                        <Button size="sm" variant="outline" onClick={() => openSend(c, true)} className="gap-1"><Mail className="h-3.5 w-3.5" />Remind</Button>
+                        <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "approve", name: c.contactName || "", comment: "", busy: false })}>They approved by phone/email</button>
+                        <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "changes", name: c.contactName || "", comment: "", busy: false })}>They want changes</button>
+                      </>}
+                    </div>
+                  </div>
+                ))}
+                {!shown.some((c) => c.stage === s.key) && <div className="px-1 py-3 text-center text-[11px] text-gray-400">Nothing here</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {send && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setSend(null)}>
+          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">{send.reminder ? "Remind" : "Send proof"} · {send.c.customer}, {send.c.jobNumber}</h2><button onClick={() => setSend(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
+            <div className="mt-3 grid gap-2 text-sm">
+              <label className="block"><span className="text-gray-600">To (customer email, separate several with commas)</span><Input value={send.to} onChange={(e) => setSend({ ...send, to: e.target.value })} /></label>
+              <label className="block"><span className="text-gray-600">Note (optional)</span><textarea value={send.note} onChange={(e) => setSend({ ...send, note: e.target.value })} onBlur={() => refreshPreview(send)} rows={2} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" /></label>
+              <div className="text-xs text-gray-500">Subject: {send.subject}</div>
+            </div>
+            <iframe title="preview" srcDoc={send.html} className="mt-2 min-h-[280px] flex-1 rounded border border-gray-200" />
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">Sends from your mailbox. Their Approve or Request changes click updates this board.</span>
+              <div className="flex gap-2"><Button variant="outline" onClick={() => setSend(null)}>Cancel</Button><Button disabled={send.busy || !send.to.trim()} onClick={async () => { setSend({ ...send, busy: true }); const d = await post({ action: "send_proof", proofId: send.c.proof!.id, to: send.to, note: send.note, reminder: send.reminder }, `Proof ${send.reminder ? "reminder" : ""} sent to ${send.to}`); if (d) setSend(null); else setSend({ ...send, busy: false }); }}>{send.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}</Button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {record && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setRecord(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">{record.decision === "approve" ? "Record customer approval" : "Record requested changes"}</h2><button onClick={() => setRecord(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
+            <p className="mt-1 text-xs text-gray-500">{record.c.customer} · {record.c.jobNumber} · proof v{record.c.proof?.version}</p>
+            <div className="mt-3 grid gap-2 text-sm">
+              <label className="block"><span className="text-gray-600">Who at the customer</span><Input value={record.name} onChange={(e) => setRecord({ ...record, name: e.target.value })} /></label>
+              <label className="block"><span className="text-gray-600">{record.decision === "approve" ? "Note (optional)" : "What do they want changed?"}</span><textarea value={record.comment} onChange={(e) => setRecord({ ...record, comment: e.target.value })} rows={3} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" /></label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setRecord(null)}>Cancel</Button><Button disabled={record.busy || !record.name.trim() || (record.decision === "changes" && !record.comment.trim())} onClick={async () => { setRecord({ ...record, busy: true }); const d = await post({ action: "record", proofId: record.c.proof!.id, decision: record.decision, name: record.name, comment: record.comment }, record.decision === "approve" ? `${record.c.jobNumber} approved. It's okay to print once the deposit is in.` : `${record.c.jobNumber} is back in Make proof with the changes.`); if (d) setRecord(null); else setRecord({ ...record, busy: false }); }}>Save</Button></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
