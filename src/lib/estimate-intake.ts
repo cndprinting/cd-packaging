@@ -24,7 +24,8 @@ export async function matchCustomers(prisma: any, name?: string | null) {
 }
 
 /** Returns true when the message was a job intake (handled or already handled), so the agent skips it. */
-export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbox: string): Promise<boolean> {
+export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbox: string, opts: { notify?: boolean; preview?: (data: any) => void } = {}): Promise<boolean> {
+  const notify = opts.notify !== false; // tests pass false so no one gets emailed
   if (!isNewJobSubject(m.subject)) return false;
   const from = String(m.from?.emailAddress?.address || "").toLowerCase();
   if (!from.endsWith("@cndprinting.com")) return false;
@@ -32,7 +33,7 @@ export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbo
   if (!sender || !SENDER_ROLES.includes(sender.role)) return false;
 
   const msgKey = m.internetMessageId || m.id;
-  if (await prisma.jobHandoff.findUnique({ where: { sourceMsgId: msgKey } })) return true; // already in the queue
+  if (!opts.preview && await prisma.jobHandoff.findUnique({ where: { sourceMsgId: msgKey } })) return true; // already in the queue
 
   // Their note (above the forward) plus the whole forwarded email, and the estimate file.
   let note = "", body = m.bodyPreview || "";
@@ -68,7 +69,7 @@ export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbo
   const deliver = read.deliveryAddress || co?.address || "";
   if (!deliver) missing.push("delivery address");
 
-  const h = await prisma.jobHandoff.create({ data: {
+  const data = {
     status: "submitted", source: "email", sourceMsgId: msgKey,
     companyId: co?.id || null, customerName: co?.name || read.customerName || "Unknown customer",
     submittedById: sender.id, submittedByName: sender.name,
@@ -83,10 +84,12 @@ export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbo
     estimateFileName: file?.name || (read.estimateNumber ? `estimate ${read.estimateNumber}` : "forwarded email"),
     estimateRead: JSON.stringify(read).slice(0, 8000),
     intakeNote: missing.length ? `Still needed: ${missing.join(", ")}.` : null,
-  } });
+  };
+  if (opts.preview) { opts.preview({ ...data, customerMatches: matches.map((x: any) => x.name), read }); return true; }
+  const h = await prisma.jobHandoff.create({ data });
 
   try { await client.api(`/users/${mailbox}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
-  try {
+  if (notify) try {
     const { sendEmail } = await import("@/lib/email/graph-client");
     const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
     const what = `${h.customerName}: ${h.jobName}${h.quantity ? `, ${h.quantity.toLocaleString()}` : ""}${h.quotedPrice ? ` at ${money(h.quotedPrice)}` : ""}${h.paymentTerms ? `, ${TERMS[h.paymentTerms]}` : ""}`;
