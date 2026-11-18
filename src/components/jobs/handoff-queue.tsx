@@ -56,9 +56,10 @@ export function HandoffQueue({ reloadKey, onEnter, onResend, flash }: { reloadKe
           <div key={h.id} className="py-2 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button type="button" onClick={() => setOpen(open === h.id ? null : h.id)} className="text-left">
-                <span className="font-medium text-gray-900">{h.customerName}</span>{h.newCustomer && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">new customer</span>}
-                <span className="text-gray-600"> · {h.jobName} · {h.quantity?.toLocaleString()} at {money(h.quotedPrice || 0)}</span>
-                <div className="text-xs text-gray-400">{h.submittedByName} · {ago(h.createdAt)} · {label(TERMS, h.paymentTerms)}{h.status === "entered" ? " · entered" : ""}</div>
+                <span className="font-medium text-gray-900">{h.customerName}</span>{h.newCustomer && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">new customer</span>}{h.source === "email" && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800">forwarded estimate</span>}
+                <span className="text-gray-600"> · {h.jobName}{h.quantity ? ` · ${h.quantity.toLocaleString()}` : ""}{h.quotedPrice ? ` at ${money(h.quotedPrice)}` : ""}</span>
+                <div className="text-xs text-gray-400">{h.submittedByName} · {ago(h.createdAt)}{h.paymentTerms ? ` · ${label(TERMS, h.paymentTerms)}` : ""}{h.status === "entered" ? " · entered" : ""}</div>
+                {h.intakeNote && h.status === "submitted" && <div className="text-xs text-amber-700">{h.intakeNote}</div>}
               </button>
               {canEnter && h.status === "submitted" && <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => sendBack(h)}>Send back</Button><Button size="sm" onClick={() => onEnter(handoffToPrefill(h))}>Enter job</Button></div>}
               {!canEnter && h.status === "returned" && <Button size="sm" variant="outline" className="gap-1" onClick={() => onResend({ ...handoffToPrefill(h), handoffId: undefined })}><Send className="h-3.5 w-3.5" />Fix and resend</Button>}

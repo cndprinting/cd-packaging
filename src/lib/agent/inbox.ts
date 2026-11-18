@@ -1,6 +1,7 @@
 import { getGraphClient } from "@/lib/email/graph-client";
 import { agentSend, agentMarySend, agentCustomerSend, OWNERS, MARY, SHAYLA, onMaryQuote, kickoffMailerCity, onMailerCityReply, isAutoReply, isWeekendET, firstName } from "@/lib/agent/agent";
-import { READ_MAILBOXES, leadAgentName, leadAgentFirst, BREVITY } from "@/lib/agent/identity";
+import { READ_MAILBOXES, leadAgentName, leadAgentFirst, BREVITY, AGENT_MAILBOX } from "@/lib/agent/identity";
+import { handleNewJobEmail, isNewJobSubject } from "@/lib/estimate-intake";
 import { getClaude } from "@/lib/agent/claude";
 import { isTestSubmission } from "@/lib/agent/blocklist";
 
@@ -116,6 +117,14 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
     const MAILBOX = m._mb; // the mailbox this message lives in
     const from = m.from?.emailAddress?.address?.toLowerCase();
     if (!from) continue;
+
+    // FORWARDED ESTIMATE -> CSR QUEUE (Benjy 11/17). A C&D salesperson or CSR
+    // forwards Mary's estimate to Jessica with "New job" in the subject; it
+    // becomes a filled-in handoff in the CSR queue. Never a customer reply.
+    if (MAILBOX.toLowerCase() === AGENT_MAILBOX.toLowerCase() && isNewJobSubject(m.subject) && from.endsWith("@cndprinting.com")) {
+      try { if (await handleNewJobEmail(prisma, client, m, MAILBOX)) { handled++; continue; } }
+      catch (e) { console.error("[agent inbox] estimate intake failed", e); }
+    }
 
     // REPLY-TO-APPROVE (Benjy 7/23): an owner replying "approved" to the
     // "Approve quote: X" email sends Mary's quote — no link click needed.

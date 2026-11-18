@@ -409,6 +409,9 @@ model JobHandoff {
   specialNotes      String?
   estimateFileName  String?
   estimateRead      String?  // JSON of what AI pulled from the estimate
+  source            String?  // form | email
+  sourceMsgId       String?  @unique // the forwarded email it came from (de-dupe)
+  intakeNote        String?  // what's still missing, for the CSR
   jobId             String?
   returnedNote      String?
   handledByName     String?
