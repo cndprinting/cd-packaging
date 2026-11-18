@@ -46,7 +46,7 @@ const internalNav = [
   // Proofing rebuilt as queue page (Apr 2026) — pre-press uploads → sales sends → customer approves → production alerted
   // Proofing merged into Pre-Press & Proofs (Benjy 11/17/26); /dashboard/proofing redirects
   { label: "Pre-Press & Proofs", href: "/dashboard/prepress", icon: FileCheck },
-  { label: "Production", href: "/dashboard/production", icon: Factory },
+  // { label: "Production", href: "/dashboard/production", icon: Factory }, // hidden 11/18/26 (Benjy): demo-data overview, covered by Jobs + Schedule; page still reachable by URL
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
   { label: "Customers", href: "/dashboard/customers", icon: Users },
