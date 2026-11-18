@@ -90,6 +90,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   let shipment: any = await prisma.shipment.update({ where: { id: s.id }, data, include: { items: true } });
   // Freight cost onto the invoice's freight line (Shayla 11/18).
   if ("freightCost" in b || "invoiceId" in b) { await syncFreight(prisma, s.id, c.session.name); shipment = await prisma.shipment.findUnique({ where: { id: s.id }, include: { items: true } }); }
+  // It just went out: tell accounting so they can bill it now (Denise 11/18).
+  if (!OUT.includes(s.status) && OUT.includes(shipment.status) && !s.billingNotifiedAt) {
+    try { await notifyBilling(prisma, shipment, c.session); } catch (e) { console.error("billing notice failed", e); }
+  }
   // Move the job with its shipment (a partial doesn't ship the whole job).
   if (b.status && shipment.jobId) {
     try {
@@ -122,6 +126,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const line = `${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}: ${kind === "tracking" ? "tracking" : "ship date"} email to ${to} by ${session.name}`;
   const shipment = await prisma.shipment.update({ where: { id: s.id }, data: { notifiedAt: new Date(), notifyLog: `${s.notifyLog ? s.notifyLog + "\n" : ""}${line}`.slice(-4000), contactEmail: s.contactEmail || to }, include: { items: true } });
   return NextResponse.json({ ok: true, to, shipment });
+}
+
+// Accounting's "it went out" notice (Denise 11/18): customer, job, what went,
+// what's left, shipping cost, and the invoice, so she can bill without the ticket.
+async function notifyBilling(prisma: any, s: any, session: any) {
+  await prisma.shipment.update({ where: { id: s.id }, data: { billingNotifiedAt: new Date() } });
+  if (/^QA-/i.test(s.jobNumber || "")) return; // test jobs
+  const qty = (s.items || []).reduce((t: number, i: any) => t + (Number(i.quantity) || 0), 0);
+  const tl = s.jobId ? (await jobTallies(prisma, [s.jobId])).get(s.jobId) : null;
+  const inv = s.invoiceId ? await prisma.invoice.findUnique({ where: { id: s.invoiceId }, select: { invoiceNumber: true, total: true, paidAmount: true, status: true } }) : null;
+  const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const how = s.status === "DELIVERED" ? "was delivered" : "shipped";
+  const rows: [string, string][] = [
+    ["Customer", esc(s.customerName || "")],
+    ["Job #", esc(s.jobNumber || "-")],
+    ["Customer PO", esc(s.poNumber || "-")],
+    ["Shipment", esc(s.shipmentNumber)],
+    ["Quantity", qty ? `${qty.toLocaleString()}${tl && tl.ordered ? ` (${tl.shipped.toLocaleString()} of ${tl.ordered.toLocaleString()} delivered${tl.remaining > 0 ? `, ${tl.remaining.toLocaleString()} still to ship` : ", job complete"})` : ""}` : "-"],
+    ["Shipping cost", s.freightCost ? `${money(s.freightCost)}${s.freightNote ? ` (${esc(s.freightNote)})` : ""}` : "None entered"],
+    ["Carrier", `${esc(s.carrier || "-")}${s.trackingNumber ? `, tracking ${esc(s.trackingNumber)}` : ""}`],
+    ["Invoice", inv ? `${esc(inv.invoiceNumber)}, ${inv.status === "paid" ? "paid" : `${money(Math.max(0, inv.total - (inv.paidAmount || 0)))} open`}` : "Not linked"],
+  ];
+  if (s.cod) rows.push(["COD", s.codReleasedBy ? `released by ${esc(s.codReleasedBy)}` : "yes"]);
+  const subject = `${s.status === "DELIVERED" ? "Delivered" : "Shipped"}: ${s.customerName || ""}${s.jobNumber ? ` job ${s.jobNumber}` : ""}${s.isPartial ? " (partial)" : ""}`;
+  const body = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${esc(s.customerName || "")}${s.jobNumber ? ` job ${esc(s.jobNumber)}` : ""} ${how}${s.isPartial ? " (partial delivery)" : ""}. Ready to bill.</p><table style="border-collapse:collapse;">${rows.map(([k, v]) => `<tr><td style="padding:3px 16px 3px 0;color:#666;">${k}</td><td>${v}</td></tr>`).join("")}</table><p><a href="https://packaging.cndprinting.com/dashboard/invoices">Open Invoices</a> &middot; <a href="https://packaging.cndprinting.com/dashboard/shipping">Open Shipping</a></p></div>`;
+  const acct = await prisma.user.findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { id: true, email: true } });
+  if (!acct.length) return;
+  const { sendEmail } = await import("@/lib/email/graph-client");
+  await sendEmail({ from: session.email, to: acct.map((u: any) => u.email), subject, body }).catch(() => {});
+  for (const u of acct) await prisma.notification.create({ data: { userId: u.id, type: "shipped", actorName: session.name, title: subject, url: "/dashboard/shipping" } }).catch(() => {});
 }
 
 // COD (Shayla 11/18): she tells Denise, the CSR and the rep it's done (with any

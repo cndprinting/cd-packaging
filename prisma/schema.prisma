@@ -975,6 +975,7 @@ model Shipment {
   codRequestedEmail String?
   codReleasedAt     DateTime?
   codReleasedBy     String?
+  billingNotifiedAt DateTime?   // accounting told it went out (Denise 11/18)
   items         ShipmentItem[]
   @@index([companyId])
   @@index([status])
