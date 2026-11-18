@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Package, ClipboardList, Calendar, Warehouse,
   FileCheck, Factory, ShieldCheck, Truck, Users, FileBarChart,
   Settings, ChevronDown, ChevronRight, Box, Shield, Calculator, Timer,
-  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Scissors, Megaphone } from "lucide-react";
+  LayoutGrid, HelpCircle, TrendingUp, UserSearch, Scissors, Megaphone, Inbox } from "lucide-react";
 
 // Proprietary sales pipeline (Benjy 6/26) — only shown to users with the
 // pipelineAccess flag (Benjy/Nitay/Albert), regardless of role.
@@ -33,6 +33,8 @@ const internalNav = [
   { label: "Quotes", href: "/dashboard/quotes", icon: Calculator },
   // FlexPack is reached from the Quotes page, alongside the Classic
   // Estimator — both are estimators, so both live in one place (Benjy 8/20).
+  // Won jobs waiting to become job tickets (Benjy 11/18/26)
+  { label: "CSR Job Queue", href: "/dashboard/csr-queue", icon: Inbox },
   { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
   // { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid }, // Archived Apr 2026 — redundant with Schedule + Production for Darrin; page still accessible by URL
   // { label: "Orders", ... } hidden 11/17/26 (Benjy): orders are plumbing behind job tickets; page still reachable by URL
@@ -86,6 +88,13 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, socialAccess = false }: SidebarProps) {
+  // How many won jobs wait in the CSR Job Queue (or sent back to this rep).
+  const [queueCount, setQueueCount] = React.useState(0);
+  React.useEffect(() => {
+    if (isCustomer) return;
+    const get = () => fetch("/api/handoffs?count=1").then((r) => r.json()).then((d) => setQueueCount(Number(d.count) || 0)).catch(() => {});
+    get(); const t = setInterval(get, 120000); return () => clearInterval(t);
+  }, [isCustomer]);
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
 
@@ -164,6 +173,7 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
       return [
         { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
+        { label: "CSR Job Queue", href: "/dashboard/csr-queue", icon: Inbox },
         { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
         // CSRs run proofs (Carrie's procedure); reps watch their jobs' proofs.
         { label: "Pre-Press & Proofs", href: "/dashboard/prepress", icon: FileCheck },
@@ -233,6 +243,7 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
             >
               <item.icon className={cn("h-5 w-5 shrink-0", active ? "text-brand-600" : "text-gray-400")} />
               {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && item.href === "/dashboard/csr-queue" && queueCount > 0 && <span className="ml-auto rounded-full bg-brand-600 px-1.5 text-[10px] font-semibold text-white">{queueCount}</span>}
             </Link>
           );
         })}

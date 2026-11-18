@@ -8,20 +8,26 @@ import { TERMS } from "@/lib/press-gate";
 // GET            -> handoffs (CSR/ops: open queue + recent; sales: their own)
 // POST           -> submit a handoff
 // PUT {id, action: "return", note} -> send back to sales for missing info
+// PUT {id, action: "gather", note} -> CSR parks it while chasing info (Benjy 11/18)
+// GET ?count=1 -> how many are waiting (menu badge)
 
 const SUBMIT_ROLES = ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM", "CSR"];
 const ENTER_ROLES = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
 const ARTWORK = ["ready", "coming", "design", "reprint"];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session || !(SUBMIT_ROLES.includes(session.role) || ENTER_ROLES.includes(session.role))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ handoffs: [] });
   const csr = ENTER_ROLES.includes(session.role);
+  if (request.nextUrl.searchParams.get("count") === "1") {
+    const n = await (prisma as any).jobHandoff.count({ where: csr ? { status: { in: ["submitted", "gathering"] } } : { submittedById: session.id, status: "returned" } });
+    return NextResponse.json({ count: n });
+  }
   const since = new Date(Date.now() - 30 * 86400e3);
   const handoffs = await (prisma as any).jobHandoff.findMany({
-    where: csr ? { OR: [{ status: "submitted" }, { updatedAt: { gte: since } }] } : { submittedById: session.id },
+    where: csr ? { OR: [{ status: { in: ["submitted", "gathering"] } }, { updatedAt: { gte: since } }] } : { submittedById: session.id },
     orderBy: { createdAt: "desc" }, take: 100,
   });
   return NextResponse.json({ handoffs, canEnter: csr });
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
     if (to.length && session.email?.endsWith("@cndprinting.com")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
       const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(h.quotedPrice);
-      await sendEmail({ from: session.email, to, subject: `New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}${h.paymentTerms ? `<br>Rep says terms: ${TERMS[h.paymentTerms]}` : ""}</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs">Open it on the Jobs page</a> to review and enter it.</p></div>` });
+      await sendEmail({ from: session.email, to, subject: `New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}${h.paymentTerms ? `<br>Rep says terms: ${TERMS[h.paymentTerms]}` : ""}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to review it and create the job ticket.</p></div>` });
     }
   } catch { /* the handoff is saved either way */ }
   return NextResponse.json({ handoff: h });
@@ -94,6 +100,13 @@ export async function PUT(request: NextRequest) {
   const b = await request.json();
   const h = await (prisma as any).jobHandoff.findUnique({ where: { id: String(b.id || "") } });
   if (!h) return NextResponse.json({ error: "Handoff not found" }, { status: 404 });
+  if (b.action === "gather") {
+    if (!ENTER_ROLES.includes(session.role)) return NextResponse.json({ error: "Only Customer Service" }, { status: 403 });
+    const gn = String(b.note || "").trim();
+    if (!gn) return NextResponse.json({ error: "Say what you're waiting on" }, { status: 400 });
+    const g = await (prisma as any).jobHandoff.update({ where: { id: h.id }, data: { status: "gathering", gatherNote: gn.slice(0, 1000), gatheringBy: session.name, gatheringAt: new Date() } });
+    return NextResponse.json({ handoff: g });
+  }
   if (b.action !== "return") return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   const note = String(b.note || "").trim();
   if (!note) return NextResponse.json({ error: "Say what's missing so sales can fix it" }, { status: 400 });
@@ -102,7 +115,7 @@ export async function PUT(request: NextRequest) {
     const rep = h.submittedById ? await prisma.user.findUnique({ where: { id: h.submittedById }, select: { email: true } }) : null;
     if (rep?.email && session.email?.endsWith("@cndprinting.com")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
-      await sendEmail({ from: session.email, to: rep.email, subject: `Need more info: ${h.customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} sent this job back before entering it:</p><p>${note.replace(/</g, "&lt;")}</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs">Open the Jobs page</a> to resend it.</p></div>` });
+      await sendEmail({ from: session.email, to: rep.email, subject: `Need more info: ${h.customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} sent this job back before entering it:</p><p>${note.replace(/</g, "&lt;")}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to fix and resend it.</p></div>` });
     }
   } catch { /* ignore */ }
   return NextResponse.json({ handoff: updated });

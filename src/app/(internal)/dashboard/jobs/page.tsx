@@ -9,7 +9,6 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Search, Plus, Loader2, ArrowUpDown } from "lucide-react";
 import { JobIntake, type IntakePrefill } from "@/components/jobs/job-intake";
-import { HandoffQueue } from "@/components/jobs/handoff-queue";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,9 +58,8 @@ export default function JobsPage() {
   useEffect(() => {
     reloadJobs();
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d.user?.role || "")).catch(() => {});
-    // Opened from a won lead in the pipeline: start the handoff pre-filled.
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get("handoff")) setIntake({ mode: "handoff", prefill: { leadId: sp.get("leadId") || undefined, companyId: sp.get("companyId") || undefined, customerName: sp.get("customer") || undefined, customerContact: sp.get("contact") || undefined, customerEmail: sp.get("email") || undefined } });
+    // Old links from the pipeline go to the CSR Job Queue now.
+    if (new URLSearchParams(window.location.search).get("handoff")) window.location.replace(`/dashboard/csr-queue${window.location.search}`);
   }, []);
 
   // Deep server-side search across all fields (debounced)
@@ -112,7 +110,7 @@ export default function JobsPage() {
         </div>
       </div>
       {note && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
-      <HandoffQueue reloadKey={queueKey} flash={flash} onEnter={(p) => setIntake({ mode: "job", prefill: p })} onResend={(p) => setIntake({ mode: "handoff", prefill: p })} />
+      {/* Won jobs waiting to become tickets live in the CSR Job Queue (Benjy 11/18). */}
 
       {/* Tabs: Darrin's statuses */}
       <div className="flex flex-wrap gap-1 border-b border-gray-200" role="tablist">

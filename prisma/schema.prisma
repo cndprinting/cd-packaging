@@ -389,7 +389,10 @@ model LeadEmail {
 // estimate can't say. A CSR reviews it and enters the job in one click.
 model JobHandoff {
   id                String   @id @default(cuid())
-  status            String   @default("submitted") // submitted | entered | returned
+  status            String   @default("submitted") // submitted | gathering | entered | returned
+  gatherNote        String?  // CSR is chasing something (e.g. billing info), what and who
+  gatheringBy       String?
+  gatheringAt       DateTime?
   leadId            String?
   companyId         String?
   customerName      String

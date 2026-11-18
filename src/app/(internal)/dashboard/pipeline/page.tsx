@@ -971,7 +971,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                           className="w-fit rounded-md border border-brand-300 px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50">Ask Todd for a prototype</a>
                       )}
                       {(l.pipelineStage === "QUALIFIED" || l.pipelineStage === "CUSTOMER") && (
-                        <a href={`/dashboard/jobs?handoff=1&leadId=${encodeURIComponent(l.id)}${(l as any).companyId ? `&companyId=${encodeURIComponent((l as any).companyId)}` : ""}&customer=${encodeURIComponent(l.companyName || "")}&contact=${encodeURIComponent(l.contactName || "")}&email=${encodeURIComponent(l.contactEmail || "")}`}
+                        <a href={`/dashboard/csr-queue?handoff=1&leadId=${encodeURIComponent(l.id)}${(l as any).companyId ? `&companyId=${encodeURIComponent((l as any).companyId)}` : ""}&customer=${encodeURIComponent(l.companyName || "")}&contact=${encodeURIComponent(l.contactName || "")}&email=${encodeURIComponent(l.contactEmail || "")}`}
                           className="w-fit rounded-md bg-brand-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-brand-700">Won it? Send to CSR</a>
                       )}
                       {/* Outreach + agent skip live here too (Benjy 9/23): the
