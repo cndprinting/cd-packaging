@@ -52,7 +52,7 @@ const internalNav = [
   { label: "Customers", href: "/dashboard/customers", icon: Users },
   { label: "Vendors", href: "/dashboard/vendors", icon: Warehouse },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart },
-  { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer },
+  // { label: "Plant Floor", href: "/dashboard/plant-floor", icon: Timer }, // hidden 11/18/26 (Benjy): no operators on it; Schedule + Jobs cover it; page still reachable by URL
   { label: "Help Desk", href: "/dashboard/help-desk", icon: HelpCircle },
   // SQF compliance library (Lee's SQF/IT/privacy doc viewer + checklist, Jul 2026)
   { label: "Compliance", href: "/dashboard/compliance", icon: ShieldCheck },
