@@ -54,7 +54,6 @@ export default function JobsPage() {
   const [queueKey, setQueueKey] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
-  const SALES = ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM", "CSR"];
   const ENTER = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
   const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => setJobs(d.jobs || [])).catch(() => setJobs([]));
   useEffect(() => {
@@ -108,7 +107,7 @@ export default function JobsPage() {
           <p className="text-sm text-gray-500">{rows.length} of {visible.length} jobs</p>
         </div>
         <div className="flex gap-2">
-          {SALES.includes(role) && <Button variant="outline" onClick={() => setIntake({ mode: "handoff", prefill: {} })}>Send won job to CSR</Button>}
+          {/* Send won job to CSR lives on the sales side (Benjy 11/18): this page is the job ticket board. */}
           {(ENTER.includes(role) || !role) && <Button onClick={() => setIntake({ mode: "job", prefill: {} })} className="gap-2"><Plus className="h-4 w-4" /> New Job</Button>}
         </div>
       </div>
