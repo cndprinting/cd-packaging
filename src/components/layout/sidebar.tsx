@@ -33,7 +33,7 @@ const internalNav = [
   // Estimator — both are estimators, so both live in one place (Benjy 8/20).
   { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
   // { label: "Job Board", href: "/dashboard/job-board", icon: LayoutGrid }, // Archived Apr 2026 — redundant with Schedule + Production for Darrin; page still accessible by URL
-  { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
+  // { label: "Orders", ... } hidden 11/17/26 (Benjy): orders are plumbing behind job tickets; page still reachable by URL
   { label: "Invoices", href: "/dashboard/invoices", icon: FileBarChart },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
@@ -154,7 +154,6 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
         { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },
         { label: "Jobs & Job Tickets", href: "/dashboard/jobs", icon: Package },
-        { label: "Orders", href: "/dashboard/orders", icon: ClipboardList },
         { label: "Customers", href: "/dashboard/customers", icon: Users },
         { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
         // Compliance library visible to sales — Lee Zerfass (SALES_REP) owns it
