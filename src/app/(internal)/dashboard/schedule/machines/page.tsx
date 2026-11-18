@@ -66,7 +66,7 @@ export default function MachineSchedulesPage() {
           ))}
         </div>
       )}
-      <p className="text-xs text-gray-400">Plating, Digital, Bindery, Folder and Stitcher schedules are coming once Darrin confirms how jobs land on them.</p>
+      <p className="text-xs text-gray-400">Plating, Digital and Bindery are coming once Darrin confirms which jobs go on them. Hand Bindery stays on his own sheet.</p>
     </div>
   );
 }
