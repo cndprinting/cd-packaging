@@ -965,6 +965,16 @@ model Shipment {
   pallets       Int?
   weight        Float?
   isPartial     Boolean        @default(false)
+  // Shayla 11/18: freight cost goes onto Denise's invoice; COD waits for Denise's OK.
+  freightCost       Float?
+  freightBilled     Float?      // amount already added to an invoice's freight line
+  freightInvoiceId  String?     // which invoice it went on
+  freightNote       String?     // e.g. "invoice already sent, Denise notified"
+  codRequestedAt    DateTime?
+  codRequestedBy    String?     // name
+  codRequestedEmail String?
+  codReleasedAt     DateTime?
+  codReleasedBy     String?
   items         ShipmentItem[]
   @@index([companyId])
   @@index([status])
@@ -981,6 +991,7 @@ model ShipmentItem {
   shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   description String
   quantity    Int
+  boxes       String?  // "8 bxs @ 250", prints on the packing slip
   createdAt   DateTime @default(now())
 }
 

@@ -6,13 +6,14 @@
 // until the linked invoice is paid.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Truck, Plus, X, Loader2, ExternalLink, Package, Mail, Search, AlertTriangle, Trash2, Pencil } from "lucide-react";
+import { Truck, Plus, X, Loader2, ExternalLink, Package, Mail, Search, AlertTriangle, Trash2, Pencil, Printer, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CARRIERS, trackingUrl } from "@/lib/shipping";
 
-type Item = { description: string; quantity: number };
+type Item = { description: string; quantity: number; boxes?: string | null };
+type Tally = { ordered: number; shipped: number; remaining: number; shipments: number } | null;
 type Shipment = {
   id: string; shipmentNumber: string; status: string; companyId: string | null; customerName: string | null;
   jobId: string | null; jobNumber: string | null; invoiceId: string | null; invoiceNumber: string | null; poNumber: string | null;
@@ -21,8 +22,9 @@ type Shipment = {
   estimatedDelivery: string | null; actualDelivery: string | null; cartons: number | null; pallets: number | null; weight: number | null;
   isPartial: boolean; cod: boolean; notes: string | null; notifiedAt: string | null; notifyLog: string | null;
   items: Item[]; invoicePaid: boolean | null; invoiceBalance: number | null; createdAt: string;
+  freightCost: number | null; freightNote: string | null; codRequestedAt: string | null; codRequestedBy: string | null; codReleasedAt: string | null; codReleasedBy: string | null; codReleased: boolean; tally: Tally;
 };
-type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null };
+type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally };
 type Cust = { id: string; name: string; where: string; email: string | null; contact: string | null; address?: string | null };
 type Inv = { id: string; invoiceNumber: string; status: string; total: number; remaining: number; description: string | null };
 
@@ -45,7 +47,9 @@ const fmt = (v?: string | null) => (v ? new Date(v).toLocaleDateString("en-US", 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
-const blank = { companyId: "", customerName: "", jobId: "", jobNumber: "", poNumber: "", invoiceId: "", contactName: "", contactEmail: "", shipTo: "", targetShipDate: "", carrier: "FedEx", trackingNumber: "", estimatedDelivery: "", cartons: "", pallets: "", weight: "", isPartial: false, cod: false, notes: "", items: [{ description: "", quantity: "" }] as { description: string; quantity: string }[] };
+const blank = { companyId: "", customerName: "", jobId: "", jobNumber: "", poNumber: "", invoiceId: "", contactName: "", contactEmail: "", shipTo: "", targetShipDate: "", carrier: "FedEx", trackingNumber: "", estimatedDelivery: "", cartons: "", pallets: "", weight: "", freightCost: "", isPartial: false, cod: false, notes: "", items: [{ description: "", quantity: "", boxes: "" }] as { description: string; quantity: string; boxes: string }[] };
+const RELEASE_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
+const tallyText = (t: Tally) => (t && t.ordered ? `${t.shipped.toLocaleString()} of ${t.ordered.toLocaleString()} delivered${t.remaining > 0 ? `, ${t.remaining.toLocaleString()} left` : ", complete"}` : "");
 
 export default function ShippingPage() {
   const [rows, setRows] = useState<Shipment[]>([]);
@@ -57,6 +61,15 @@ export default function ShippingPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [form, setForm] = useState<typeof blank | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [role, setRole] = useState("");
+  useEffect(() => { fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d?.user?.role || "")).catch(() => {}); }, []);
+  const cod = async (s: Shipment, action: "cod_request" | "cod_release") => {
+    const r = await fetch(`/api/shipments/${s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    const d = await r.json();
+    if (!r.ok) { flash(false, d.error || "Could not save"); return; }
+    flash(true, action === "cod_request" ? `Asked accounting to release ${s.shipmentNumber}${d.emailed?.length ? ` (emailed ${d.emailed.length})` : ""}` : `${s.shipmentNumber} is OK to release`);
+    load();
+  };
   const [notify, setNotify] = useState<{ s: Shipment; kind: "shipdate" | "tracking"; to: string; note: string; html: string; subject: string; busy: boolean } | null>(null);
 
   const load = async () => {
@@ -84,7 +97,8 @@ export default function ShippingPage() {
     const r = await fetch(`/api/shipments/${s.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json();
     if (r.status === 409 && d.cod) {
-      if (confirm(`${d.error}\n\nRelease it anyway? Only do this if you confirmed payment another way.`)) return put(s, { ...body, override: true }, okText);
+      if (RELEASE_ROLES.includes(role) && confirm(`${d.error}\n\nRelease it anyway?`)) return put(s, { ...body, override: true }, okText);
+      flash(false, d.error);
       return false;
     }
     if (!r.ok) { flash(false, d.error || "Could not save"); return false; }
@@ -92,10 +106,10 @@ export default function ShippingPage() {
     await load(); return true;
   };
 
-  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", items: [{ description: r.name || "", quantity: String(r.quantity || "") }] } : {}) }); };
+  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "", boxes: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", items: [{ description: r.name || "", quantity: String(r.tally?.remaining ?? r.quantity ?? ""), boxes: "" }] } : {}) }); };
   const startEdit = (s: Shipment) => {
     setEditId(s.id);
-    setForm({ ...blank, companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity) })) : [{ description: "", quantity: "" }] });
+    setForm({ ...blank, companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", freightCost: s.freightCost?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity), boxes: i.boxes || "" })) : [{ description: "", quantity: "", boxes: "" }] });
   };
 
   const openNotify = async (s: Shipment, kind: "shipdate" | "tracking") => {
@@ -142,7 +156,7 @@ export default function ShippingPage() {
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ready.map((r) => (
               <div key={r.id} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
-                <div><div className="font-mono font-medium">{r.jobNumber}</div><div className="text-xs text-gray-600">{r.customerName || "No customer"} · {r.name}</div></div>
+                <div><div className="font-mono font-medium">{r.jobNumber}</div><div className="text-xs text-gray-600">{r.customerName || "No customer"} · {r.name}</div>{r.tally && r.tally.shipped > 0 && <div className="text-[11px] font-medium text-amber-800">Partial: {tallyText(r.tally)}</div>}</div>
                 <Button size="sm" onClick={() => startNew(r)}>Ship</Button>
               </div>
             ))}
@@ -172,13 +186,13 @@ export default function ShippingPage() {
                   return (
                     <Fragment key={s.id}>
                       <tr onClick={() => setOpen(open === s.id ? null : s.id)} className="cursor-pointer border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}</td>
+                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
                         <td className="px-2 py-2">{s.companyId ? <Link onClick={(e) => e.stopPropagation()} href={`/dashboard/customers/${s.companyId}`} className="text-brand-600 hover:underline">{s.customerName}</Link> : <span className="text-amber-700">{s.customerName || "No customer"}</span>}</td>
                         <td className="px-2 py-2 text-xs"><div className="font-mono">{s.jobNumber || "-"}</div>{s.poNumber && <div className="text-gray-500">PO {s.poNumber}</div>}</td>
                         <td className="px-2 py-2 text-xs">
                           {s.invoiceNumber ? <div className="font-mono">{s.invoiceNumber}</div> : <span className="text-gray-400">not linked</span>}
                           {s.invoiceNumber && s.invoicePaid !== null && <span className={`rounded px-1 text-[10px] font-semibold ${s.invoicePaid ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{s.invoicePaid ? "paid" : `${money(s.invoiceBalance || 0)} open`}</span>}
-                          {s.cod && <span className={`ml-1 rounded px-1 text-[10px] font-semibold ${s.invoicePaid ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}`}>COD</span>}
+                          {s.cod && <span title={s.codReleasedAt ? `Released by ${s.codReleasedBy}` : s.codRequestedAt ? `Asked by ${s.codRequestedBy}` : "Not asked yet"} className={`ml-1 rounded px-1 text-[10px] font-semibold ${s.codReleased ? "bg-emerald-100 text-emerald-800" : s.codRequestedAt ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>{s.codReleased ? "COD: OK to release" : s.codRequestedAt ? "COD: waiting on accounting" : "COD: hold"}</span>}
                         </td>
                         <td className={`px-2 py-2 text-xs ${late ? "font-semibold text-red-600" : ""}`}>{fmt(s.targetShipDate) || "-"}{late && <AlertTriangle className="ml-1 inline h-3 w-3" />}</td>
                         <td className="px-2 py-2 text-xs" onClick={(e) => e.stopPropagation()}>
@@ -200,16 +214,21 @@ export default function ShippingPage() {
                               <div className="whitespace-pre-line">{s.shipTo || s.destination || "-"}</div>
                               <div className="mt-1 text-xs text-gray-500">Contact: {s.contactName || "-"}{s.contactEmail ? ` · ${s.contactEmail}` : " · no email"}</div>
                               <div className="text-xs text-gray-500">{[s.cartons && `${s.cartons} cartons`, s.pallets && `${s.pallets} pallets`, s.weight && `${s.weight} lb`].filter(Boolean).join(" · ") || ""}</div>
+                              {(s.freightCost || s.freightNote) && <div className={`text-xs ${s.freightNote?.includes("already went") ? "text-amber-700" : "text-gray-600"}`}>Freight {s.freightCost ? money(s.freightCost) : "-"}{s.freightNote ? `. ${s.freightNote}` : ""}</div>}
+                              {s.tally && <div className="text-xs text-gray-600">Job: {tallyText(s.tally)}</div>}
                               {s.estimatedDelivery && <div className="text-xs text-gray-500">Expected delivery {fmt(s.estimatedDelivery)}</div>}
                               {s.shipDate && <div className="text-xs text-gray-500">Shipped {fmt(s.shipDate)}</div>}
                             </div>
                             <div>
                               <div className="text-xs font-medium uppercase text-gray-500">In this shipment</div>
-                              {s.items.length ? <ul className="list-disc pl-4">{s.items.map((i, k) => <li key={k}>{i.quantity} x {i.description}</li>)}</ul> : <div className="text-gray-400">-</div>}
+                              {s.items.length ? <ul className="list-disc pl-4">{s.items.map((i, k) => <li key={k}>{i.quantity.toLocaleString()} x {i.description}{i.boxes ? ` (${i.boxes})` : ""}</li>)}</ul> : <div className="text-gray-400">-</div>}
                               {s.notes && <div className="mt-1 text-xs text-gray-600">{s.notes}</div>}
                               {s.notifyLog && <pre className="mt-2 whitespace-pre-wrap font-sans text-[11px] text-gray-500">{s.notifyLog}</pre>}
                             </div>
                             <div className="flex flex-wrap content-start gap-2">
+                              <a href={`/print/packing-slip/${s.id}`} target="_blank" rel="noreferrer"><Button size="sm" className="gap-1"><Printer className="h-3.5 w-3.5" />Packing slip</Button></a>
+                              {s.cod && !s.codReleased && <Button size="sm" variant="outline" className="gap-1 border-amber-400 text-amber-800" onClick={() => cod(s, "cod_request")}><Mail className="h-3.5 w-3.5" />{s.codRequestedAt ? "Ask accounting again" : "Ask Denise to release"}</Button>}
+                              {s.cod && !s.codReleased && RELEASE_ROLES.includes(role) && <Button size="sm" className="gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => cod(s, "cod_release")}><CheckCircle2 className="h-3.5 w-3.5" />OK to release</Button>}
                               <Button size="sm" variant="outline" className="gap-1" onClick={() => openNotify(s, "shipdate")}><Mail className="h-3.5 w-3.5" />Email ship date</Button>
                               <Button size="sm" variant="outline" className="gap-1" onClick={() => openNotify(s, "tracking")}><Mail className="h-3.5 w-3.5" />Email tracking</Button>
                               <Button size="sm" variant="outline" className="gap-1" onClick={() => startEdit(s)}><Pencil className="h-3.5 w-3.5" />Edit</Button>
@@ -272,7 +291,7 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
   const save = async () => {
     if (!form.companyId) { onError("Pick the customer first"); return; }
     setBusy(true);
-    const body = { ...form, items: form.items.filter((i) => i.description.trim()).map((i) => ({ description: i.description, quantity: Number(i.quantity) || 0 })) };
+    const body = { ...form, items: form.items.filter((i) => i.description.trim()).map((i) => ({ description: i.description, quantity: Number(String(i.quantity).replace(/,/g, "")) || 0, boxes: i.boxes || null })) };
     const r = editId ? await fetch(`/api/shipments/${editId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) : await fetch("/api/shipments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json(); setBusy(false);
     if (!r.ok) { onError(d.error || "Could not save"); return; }
@@ -316,9 +335,10 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
               <label className="block"><span className="text-gray-600">Cartons</span><Input value={form.cartons} onChange={(e) => set("cartons", e.target.value)} inputMode="numeric" /></label>
               <label className="block"><span className="text-gray-600">Pallets</span><Input value={form.pallets} onChange={(e) => set("pallets", e.target.value)} inputMode="numeric" /></label>
               <label className="block"><span className="text-gray-600">Weight (lb)</span><Input value={form.weight} onChange={(e) => set("weight", e.target.value)} inputMode="decimal" /></label>
+              <label className="block"><span className="text-gray-600">Shipping cost ($)</span><Input value={form.freightCost} onChange={(e) => set("freightCost", e.target.value)} inputMode="decimal" placeholder="UPS / freight charge" /><span className="text-[11px] text-gray-400">Goes on the invoice's freight line</span></label>
               <div className="flex flex-col justify-end gap-1 pb-1">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={form.isPartial} onChange={(e) => set("isPartial", e.target.checked)} /> Partial shipment</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={form.cod} onChange={(e) => set("cod", e.target.checked)} /> COD, don't release until paid</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={form.isPartial} onChange={(e) => set("isPartial", e.target.checked)} /> Partial shipment <span className="text-[11px] text-gray-400">(set for you when the quantity is short)</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={form.cod} onChange={(e) => set("cod", e.target.checked)} /> COD, hold for accounting's OK</label>
               </div>
             </div>
             <div>
@@ -326,12 +346,13 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
               {form.items.map((it, k) => (
                 <div key={k} className="mt-1 flex gap-2">
                   <Input value={it.quantity} onChange={(e) => { const items = [...form.items]; items[k] = { ...it, quantity: e.target.value }; set("items", items); }} placeholder="Qty" className="w-24" inputMode="numeric" />
-                  <Input value={it.description} onChange={(e) => { const items = [...form.items]; items[k] = { ...it, description: e.target.value }; set("items", items); }} placeholder="What's in it" />
+                  <Input value={it.description} onChange={(e) => { const items = [...form.items]; items[k] = { ...it, description: e.target.value }; set("items", items); }} placeholder="Description" />
+                  <Input value={it.boxes} onChange={(e) => { const items = [...form.items]; items[k] = { ...it, boxes: e.target.value }; set("items", items); }} placeholder="Boxes, e.g. 8 bxs @ 250" className="w-48" />
                 </div>
               ))}
-              <button type="button" onClick={() => set("items", [...form.items, { description: "", quantity: "" }])} className="mt-1 text-xs text-brand-600 hover:underline">+ Add line</button>
+              <button type="button" onClick={() => set("items", [...form.items, { description: "", quantity: "", boxes: "" }])} className="mt-1 text-xs text-brand-600 hover:underline">+ Add line</button>
             </div>
-            <label className="block"><span className="text-gray-600">Notes</span><Input value={form.notes} onChange={(e) => set("notes", e.target.value)} /></label>
+            <label className="block"><span className="text-gray-600">Special shipping instructions <span className="text-gray-400">(print on the packing slip)</span></span><textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Must deliver COC with each version. Deliver before 3:00." /></label>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : editId ? "Save" : "Create shipment"}</Button></div>
           </div>
         )}

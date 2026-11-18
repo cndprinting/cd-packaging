@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { jobTallies, syncFreight } from "@/lib/shipping-server";
 
 // Shipping queue (rebuilt 11/17/26). Every shipment is tied to a Customers
 // record, and to the job and invoice when there is one.
@@ -36,12 +37,6 @@ export async function GET(request: NextRequest) {
   const invIds = [...new Set(shipments.map((s: any) => s.invoiceId).filter(Boolean))] as string[];
   const invs = invIds.length ? await prisma.invoice.findMany({ where: { id: { in: invIds } }, select: { id: true, status: true, total: true, paidAmount: true } }) : [];
   const invMap = new Map(invs.map((i: any) => [i.id, i]));
-  const out = shipments.map((s: any) => {
-    const inv: any = s.invoiceId ? invMap.get(s.invoiceId) : null;
-    return { ...s, invoicePaid: inv ? inv.status === "paid" || remaining(inv) <= 0 : null, invoiceBalance: inv ? remaining(inv) : null };
-  });
-
-  const shippedJobIds = new Set(shipments.map((s: any) => s.jobId).filter(Boolean));
   const ready = await prisma.job.findMany({
     where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE } },
     select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true } } } } },
@@ -51,9 +46,16 @@ export async function GET(request: NextRequest) {
   const readyIds = ready.map((j: any) => j.id);
   const jobInvs = readyIds.length ? await prisma.invoice.findMany({ where: { jobId: { in: readyIds }, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "desc" }, select: { id: true, jobId: true } }) : [];
   const invFor = (jobId: string) => jobInvs.find((i: any) => i.jobId === jobId)?.id || null;
+  // Ordered / delivered / balance per job (Shayla 11/18: partials).
+  const tally = await jobTallies(prisma, [...shipments.map((s: any) => s.jobId), ...readyIds]);
+  const out = shipments.map((s: any) => {
+    const inv: any = s.invoiceId ? invMap.get(s.invoiceId) : null;
+    return { ...s, invoicePaid: inv ? inv.status === "paid" || remaining(inv) <= 0 : null, invoiceBalance: inv ? remaining(inv) : null, codReleased: !!s.codReleasedAt || (inv ? inv.status === "paid" || remaining(inv) <= 0 : false), tally: s.jobId ? tally.get(s.jobId) || null : null };
+  });
   return NextResponse.json({
     shipments: out,
-    ready: ready.filter((j: any) => !shippedJobIds.has(j.id)).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.order?.poNumber || null, invoiceId: invFor(j.id) })),
+    // A packed job stays on the list until its full quantity has shipped.
+    ready: ready.filter((j: any) => (tally.get(j.id)?.remaining ?? j.quantity) > 0).map((j: any) => ({ tally: tally.get(j.id) || null, id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.order?.poNumber || null, invoiceId: invFor(j.id) })),
   });
 }
 
@@ -96,10 +98,21 @@ export async function POST(request: NextRequest) {
       targetShipDate: b.targetShipDate ? new Date(b.targetShipDate) : null,
       estimatedDelivery: b.estimatedDelivery ? new Date(b.estimatedDelivery) : null,
       cartons: num(b.cartons) as any, pallets: num(b.pallets) as any, weight: num(b.weight),
-      isPartial: !!b.isPartial, cod: !!b.cod, notes: b.notes || null, status: "PREPARING", createdBy: session.name,
-      items: Array.isArray(b.items) && b.items.length ? { create: b.items.filter((i: any) => i?.description).map((i: any) => ({ description: String(i.description).slice(0, 200), quantity: Number(i.quantity) || 0 })) } : undefined,
+      isPartial: !!b.isPartial || (await isShort(prisma, jobId, b.items)), cod: !!b.cod, notes: b.notes || null, status: "PREPARING", createdBy: session.name,
+      freightCost: num(b.freightCost),
+      items: Array.isArray(b.items) && b.items.length ? { create: b.items.filter((i: any) => i?.description).map((i: any) => ({ description: String(i.description).slice(0, 200), quantity: Number(i.quantity) || 0, boxes: i.boxes ? String(i.boxes).slice(0, 80) : null })) } : undefined,
     },
     include: { items: true },
   });
+  if (shipment.freightCost) await syncFreight(prisma, shipment.id, session.name);
   return NextResponse.json({ shipment });
+}
+
+/** True when this shipment is less than what's left on the job (a partial). */
+async function isShort(prisma: any, jobId: string | null, items: any) {
+  if (!jobId || !Array.isArray(items)) return false;
+  const qty = items.reduce((t: number, i: any) => t + (Number(i?.quantity) || 0), 0);
+  if (!qty) return false;
+  const left = (await jobTallies(prisma, [jobId])).get(jobId)?.remaining;
+  return left !== undefined && qty < left;
 }
