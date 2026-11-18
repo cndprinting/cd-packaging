@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type J = { id: string; jobNumber: string; name: string; quantity: number; dueDate: string | null; customer: string; inks: string | null; foils: string | null; dieNumber: string | null; routeStatus: string | null; notes: string | null; priority: string };
-type M = { code: string; name: string; kind: string; jobs: J[] };
+type M = { code: string; name: string; kind: string; plateDate?: string; jobs: J[] };
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-US", { timeZone: "UTC", month: "numeric", day: "numeric" }) : "");
 
 function Sheets() {
@@ -14,8 +14,9 @@ function Sheets() {
   const [ms, setMs] = useState<M[] | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
-    const m = sp.get("m");
-    fetch(`/api/schedule/machines${m ? `?m=${encodeURIComponent(m)}` : ""}`).then(async (r) => { const d = await r.json(); if (!r.ok) setErr(d.error || "Could not load"); else setMs(d.machines || []); }).catch(() => setErr("Could not load"));
+    const m = sp.get("m"), pd = sp.get("plateDate");
+    const q = [m && `m=${encodeURIComponent(m)}`, pd && `plateDate=${encodeURIComponent(pd)}`].filter(Boolean).join("&");
+    fetch(`/api/schedule/machines${q ? `?${q}` : ""}`).then(async (r) => { const d = await r.json(); if (!r.ok) setErr(d.error || "Could not load"); else setMs(d.machines || []); }).catch(() => setErr("Could not load"));
   }, [sp]);
   if (err) return <div style={{ padding: 40, fontFamily: "Arial" }}>{err}. Sign in to Godzilla and try again.</div>;
   if (!ms) return <div style={{ padding: 40, fontFamily: "Arial" }}>Loading...</div>;
@@ -38,7 +39,7 @@ function Sheets() {
       {ms.map((m) => (
         <div key={m.code} className="sheet">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "3px solid #111", paddingBottom: 4, marginBottom: 8 }}>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{m.name}</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{m.name}{m.kind === "plating" && m.plateDate ? <span style={{ fontSize: 15, fontWeight: 400 }}> · printing {new Date(`${m.plateDate}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span> : null}</div>
             <div style={{ fontSize: 13 }}>{today} · C&amp;D Printing &amp; Packaging</div>
           </div>
           {m.jobs.length === 0 ? <div style={{ padding: "20px 0", fontSize: 14 }}>Nothing scheduled.</div> : (

@@ -2037,3 +2037,15 @@ model ScheduleOrder {
   @@unique([machineCode, jobId])
   @@index([machineCode])
 }
+
+// Darrin's nightly plating pick (11/18/26): the jobs printing tomorrow.
+model PlatePick {
+  id        String   @id @default(cuid())
+  jobId     String
+  plateDate DateTime @db.Date
+  pickedBy  String?
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, plateDate])
+  @@index([plateDate])
+}
