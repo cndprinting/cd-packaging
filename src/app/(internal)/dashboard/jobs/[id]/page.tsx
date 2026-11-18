@@ -1,5 +1,6 @@
 "use client";
 
+import { RoutingPanel } from "@/components/jobs/routing-panel";
 import { useParams, useRouter } from "next/navigation";
 import { JobPaymentPanel } from "@/components/jobs/job-payment-panel";
 import { uploadFile as uploadToBlob } from "@/lib/upload-client";
@@ -813,6 +814,9 @@ export default function JobDetailPage() {
 
       {/* Payment terms + press gate (Benjy 11/17) */}
       <JobPaymentPanel jobId={job.id} />
+
+      {/* Darrin's routing review (11/18/26) */}
+      <RoutingPanel jobId={job.id} />
 
       {/* Edit Form */}
       {editing && (

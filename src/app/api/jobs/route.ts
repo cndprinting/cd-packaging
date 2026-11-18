@@ -166,6 +166,8 @@ export async function POST(request: NextRequest) {
 
     // Carrie's step 5 without anyone forwarding anything: draft the deposit invoice for accounting.
     let depositInvoice: string | null = null;
+    // Darrin gets every new ticket to route (11/18/26).
+    try { const { notifyPlantNewJob } = await import("@/lib/routing"); await notifyPlantNewJob(prisma, job.id, { name: session.name, email: session.email }); } catch (e) { console.error("plant notice failed", e); }
     try { const inv = await draftDepositInvoice(prisma, job.id, { byName: session.name, byEmail: session.email, taxExempt: !!b.taxExempt, contactEmail: t(b.billingEmail, 200).toLowerCase() || null }); depositInvoice = inv?.invoiceNumber || null; } catch (e) { console.error("deposit draft failed", e); }
 
     return NextResponse.json({

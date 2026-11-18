@@ -646,6 +646,16 @@ model Job {
   pressOverride    String?   // who released it to press without the gate, when, why
   artInAt          DateTime? // when print-ready art was in hand; the 24-hour proof clock starts here
   clearedNotifiedAt DateTime? // "cleared for press" email sent (once)
+  // Darrin's routing (11/18/26): he reviews every new ticket and decides where it
+  // goes. Unrouted live jobs sit on his "To route" list.
+  routedAt         DateTime?
+  routedBy         String?
+  routeStatus      String?   // PRE | DIG | BND | OUT
+  routeTasks       String?   // JSON: ["letterpress","folding","stitching","inserter","secap","handBindery"]
+  foils            String?   // foil(s) needed
+  dieCutterCode    String?   // Machine.code for letterpress jobs (Yoco 85e/85t, Kluge, Heidelberg)
+  gluerCode        String?   // Machine.code (Vega, Omni)
+  plantNotifiedAt  DateTime? // new-job notice sent to the plant
   handoffId        String?   // the sales-to-CSR handoff this job came from
   repName          String?
   contactName      String?

@@ -1,5 +1,6 @@
 "use client";
 
+import { ToRouteList } from "@/components/jobs/routing-panel";
 import { useState, useEffect } from "react";
 import {
   Package,
@@ -156,6 +157,9 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">Plant overview and production status</p>
       </div>
+
+      {/* Darrin's new jobs to route (shows only when there are some) */}
+      <ToRouteList />
 
       {/* Proofing queue snapshot (shows only when items pending) */}
       <ProofQueueWidget />

@@ -1,5 +1,6 @@
 "use client";
 
+import { ToRouteList } from "@/components/jobs/routing-panel";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Calendar, Clock, Gauge, Loader2 } from "lucide-react";
@@ -158,6 +159,7 @@ export default function SchedulePage() {
           <button onClick={() => setView("month")} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>Month</button>
         </div>
       </div>
+      <ToRouteList />
 
       {/* Week View */}
       <div className={`grid gap-3 ${view === "week" ? "grid-cols-7" : "grid-cols-7"}`}>
