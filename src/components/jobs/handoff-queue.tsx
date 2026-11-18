@@ -22,7 +22,7 @@ export function handoffToPrefill(h: Handoff): IntakePrefill {
     estimateNumber: h.estimateNumber || "", estimateFileName: h.estimateFileName || "", jobName: h.jobName, specs: h.specs || "",
     quantity: h.quantity ? String(h.quantity) : "", quotedPrice: h.quotedPrice ? String(h.quotedPrice) : "", productType: h.productType || "FOLDING_CARTON",
     customerPO: h.customerPO || "", dueDate: h.dueDate ? String(h.dueDate).slice(0, 10) : "", salesRepId: h.salesRepId || "",
-    artworkStatus: h.artworkStatus, artworkNotes: h.artworkNotes || "", paymentTerms: h.paymentTerms, deliveryAddress: h.deliveryAddress,
+    artworkStatus: h.artworkStatus, artworkNotes: h.artworkNotes || "", paymentTerms: h.paymentTerms || "", deliveryAddress: h.deliveryAddress,
     shippingNotes: h.shippingNotes || "", specialNotes: h.specialNotes || "",
   };
 }

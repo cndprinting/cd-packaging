@@ -65,7 +65,6 @@ export async function handleNewJobEmail(prisma: any, client: any, m: any, mailbo
   if (!tier) missing.push(read.quantities.length > 1 ? `which quantity was accepted (${read.quantities.map((q) => q.quantity.toLocaleString()).join(" / ")})` : "quantity");
   if (!tier?.price) missing.push("accepted price");
   if (!read.artworkStatus) missing.push("artwork status");
-  if (!read.paymentTerms) missing.push("payment terms");
   const deliver = read.deliveryAddress || co?.address || "";
   if (!deliver) missing.push("delivery address");
 

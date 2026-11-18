@@ -407,7 +407,7 @@ model JobHandoff {
   billingPhone      String?
   billingAddress    String?
   taxExempt         Boolean  @default(false)
-  paymentTerms      String   // deposit50 | prepaid | net30 | cod
+  paymentTerms      String?  // deposit50 | prepaid | net30 | cod (rep's suggestion; CSR/accounting confirm)
   deliveryAddress   String
   shippingNotes     String?
   specialNotes      String?
