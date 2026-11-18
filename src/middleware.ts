@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { canSeeEstimating, isEstimatingPath } from "@/lib/estimating-lab";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/invite", "/api"];
 const SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production");
@@ -11,7 +12,12 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get("cd-pkg-session")?.value;
   if (!token) return NextResponse.redirect(new URL("/login", request.url));
   try {
-    await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, SECRET);
+    // Estimating lab (Benjy 11/17): quoting pages are closed to everyone but
+    // owners and estimating, even by typed-in URL.
+    if (isEstimatingPath(pathname) && !canSeeEstimating(String(payload.role || ""))) {
+      return NextResponse.redirect(new URL("/dashboard/jobs", request.url));
+    }
     return NextResponse.next();
   } catch {
     const response = NextResponse.redirect(new URL("/login", request.url));

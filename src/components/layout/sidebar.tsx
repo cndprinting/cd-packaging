@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { canSeeEstimating, isEstimatingPath } from "@/lib/estimating-lab";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -84,8 +85,15 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
 
-  // Filter nav items by role
+  // Filter nav items by role, then drop estimating while the lab switch is on.
   const filteredNav = React.useMemo(() => {
+    const byRole = navForRole();
+    if (isCustomer || canSeeEstimating(userRole)) return byRole;
+    return byRole.filter((item) => !isEstimatingPath(item.href));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCustomer, userRole]);
+
+  function navForRole() {
     if (isCustomer) return userRole === "VENDOR" ? vendorNav : customerNav;
     if (!userRole) return internalNav;
 
@@ -158,7 +166,7 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
 
     // Default: show everything (safety fallback)
     return internalNav;
-  }, [isCustomer, userRole]);
+  }
 
   // Inject the proprietary pipeline link for flagged internal users only.
   const nav = React.useMemo(() => {
