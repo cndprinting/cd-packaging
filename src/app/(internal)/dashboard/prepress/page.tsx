@@ -122,10 +122,10 @@ export default function PrepressPage() {
                       {c.stage === "make" && me.canMake && <Button size="sm" disabled={busyId === c.id} onClick={() => { uploadFor.current = c; fileRef.current?.click(); }} className="gap-1">{busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}{c.proof ? `Upload v${c.proof.version + 1}` : "Upload proof"}</Button>}
                       {c.stage === "make" && me.canMake && !c.proof && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => { const reason = prompt(`Why does ${c.jobNumber} need no proof? (e.g. exact reprint, customer waived)`); if (reason) post({ action: "no_proof", jobId: c.id, reason }, `${c.jobNumber} marked okay to print without a proof.`); }}>No proof needed</button>}
                       {c.stage === "send" && me.canAct && <Button size="sm" onClick={() => openSend(c)} className="gap-1"><Send className="h-3.5 w-3.5" />Send proof</Button>}
-                      {c.stage === "send" && me.canAct && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => post({ action: "mark_sent", proofId: c.proof!.id, method: "physical" }, "Marked sent")}>Sent another way</button>}
+                      {c.stage === "send" && me.canAct && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => post({ action: "mark_sent", proofId: c.proof!.id, method: "physical" }, "Marked sent")}>Sent a physical proof / another way</button>}
                       {c.stage === "customer" && me.canAct && <>
                         <Button size="sm" variant="outline" onClick={() => openSend(c, true)} className="gap-1"><Mail className="h-3.5 w-3.5" />Remind</Button>
-                        <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "approve", name: c.contactName || "", comment: "", busy: false })}>They approved by phone/email</button>
+                        <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "approve", name: c.contactName || "", comment: "", busy: false })}>They approved (signed proof, phone or email)</button>
                         <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "changes", name: c.contactName || "", comment: "", busy: false })}>They want changes</button>
                       </>}
                     </div>
