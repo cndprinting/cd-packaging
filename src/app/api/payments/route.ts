@@ -3,6 +3,9 @@ import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, floridaTax, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
+// A picked due date ("2026-12-18") is stored at noon UTC so it reads as the
+// same day in Florida and everywhere else (midnight UTC showed a day early).
+const dayDate = (v: string) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? `${v}T12:00:00.000Z` : v);
 
 // Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
 // record for invoices and payments; Sage keeps the GL. Actions:
@@ -94,7 +97,7 @@ export async function POST(request: NextRequest) {
       }
       const poNumber = body.poNumber ? String(body.poNumber).trim().slice(0, 60) : null;
       const department = body.department ? String(body.department).trim().slice(0, 40) : null;
-      const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
+      const dueDate = body.dueDate ? dayDate(body.dueDate) : new Date(Date.now() + (kind === "final" ? NET_DAYS : 7) * 86400e3);
       // Rep + commission: from the job when there is one, else typed in by accounting from the estimate.
       let comm: Record<string, unknown> = kind === "final" ? await commissionFor(prisma, jobId, subtotal) : {};
       if (kind === "final" && body.salesRepId) {
@@ -222,7 +225,7 @@ export async function POST(request: NextRequest) {
         data.invoiceNumber = wanted;
       }
       if (body.contactEmail !== undefined) data.contactEmail = String(body.contactEmail || "").trim() || null;
-      if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+      if (body.dueDate !== undefined) data.dueDate = body.dueDate ? dayDate(body.dueDate) : null;
       if (body.salesRepId !== undefined) {
         const rep = body.salesRepId ? await prisma.user.findUnique({ where: { id: String(body.salesRepId) }, select: { id: true, name: true } }) : null;
         data.salesRepId = rep?.id || null; data.salesRepName = rep?.name || null;
@@ -247,7 +250,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "set_due") {
       if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-      await prisma.invoice.update({ where: { id: inv!.id }, data: { dueDate: body.dueDate ? new Date(body.dueDate) : null } });
+      await prisma.invoice.update({ where: { id: inv!.id }, data: { dueDate: body.dueDate ? dayDate(body.dueDate) : null } });
       return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
     }
 
