@@ -51,7 +51,10 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     return () => clearTimeout(t);
   }, [q, cust]);
 
-  const pick = (c: Cust) => { setCust(c); setEmail(c.email || ""); setJobId(""); };
+  // The customer's payment terms set the deposit (Benjy 11/18): net 30 / COD = none.
+  const TERM_DEPOSIT: Record<string, string> = { deposit50: "50", prepaid: "100", net30: "0", cod: "0" };
+  const TERM_LABEL: Record<string, string> = { deposit50: "50% down", prepaid: "Prepaid", net30: "Net 30", cod: "COD" };
+  const pick = (c: Cust) => { setCust(c); setEmail(c.email || ""); setJobId(""); const t = (c as any).terms; if (t && TERM_DEPOSIT[t] !== undefined) setDepositPercent(TERM_DEPOSIT[t]); };
   const pickJob = (id: string) => {
     setJobId(id);
     const j = cust?.jobs.find((x) => x.id === id);
@@ -139,7 +142,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <label className="block"><span className="text-gray-600">Description</span><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this bills for" autoComplete="off" /></label>
               <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={subtotal} onChange={(e) => setSubtotal(e.target.value)} inputMode="decimal" placeholder="0.00" /></label>
               <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={shipping} onChange={(e) => setShipping(e.target.value)} inputMode="decimal" placeholder="0.00" /><span className="text-[11px] text-gray-400">Stated separately, not taxed.</span></label>
-              <label className="block"><span className="text-gray-600">Deposit %</span><Input value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" /></label>
+              <label className="block"><span className="text-gray-600">Deposit %</span><Input value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" /><span className="text-[11px] text-gray-400">{(cust as any)?.terms ? `Customer terms: ${TERM_LABEL[(cust as any).terms]}` : "No terms on file for this customer"}</span></label>
               <label className="block"><span className="text-gray-600">Sales rep (from the estimate)</span>
                 <select value={repId} onChange={(e) => setRepId(e.target.value)} className={inputCls}>
                   <option value="">No rep / house account</option>
