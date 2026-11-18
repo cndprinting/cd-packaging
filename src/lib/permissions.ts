@@ -21,7 +21,6 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS_MANAGER", "FINISHING_MANAGER"],
   "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS", "FINISHING_MANAGER"],
   "/dashboard/prototypes": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "FINISHING_MANAGER"],
-  "/dashboard/finishing":  [...FULL_ACCESS, "CSR", "FINISHING_MANAGER", "PREPRESS_MANAGER", "DIGITAL_PRESS"],
   "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
   "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
   "/dashboard/vendors":   [...FULL_ACCESS, "CSR"],

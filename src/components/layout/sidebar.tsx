@@ -39,13 +39,12 @@ const internalNav = [
   { label: "Inventory", href: "/dashboard/inventory", icon: Warehouse },
   // Dieline module v1 (Sep 2026): parametric tuck boxes + die-inventory check
   { label: "Dielines", href: "/dashboard/dielines", icon: Scissors },
-  // Todd (Benjy 11/18/26): prototypes while quoting, then the finishing department.
+  // Todd (Benjy 11/18/26): prototypes while quoting.
   { label: "Prototypes", href: "/dashboard/prototypes", icon: Box },
   // Proofing rebuilt as queue page (Apr 2026) — pre-press uploads → sales sends → customer approves → production alerted
   // Proofing merged into Pre-Press & Proofs (Benjy 11/17/26); /dashboard/proofing redirects
   { label: "Pre-Press & Proofs", href: "/dashboard/prepress", icon: FileCheck },
   { label: "Production", href: "/dashboard/production", icon: Factory },
-  { label: "Finishing", href: "/dashboard/finishing", icon: Scissors },
   // { label: "QA", href: "/dashboard/qa", icon: ShieldCheck }, // Archived — no QA process currently
   { label: "Shipping", href: "/dashboard/shipping", icon: Truck },
   { label: "Customers", href: "/dashboard/customers", icon: Users },
@@ -117,10 +116,10 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
     // Shipping only sees Shipping + Settings + Security
     if (role === "SHIPPING") return internalNav.filter(item => item.href === "/dashboard/shipping" || item.href === "/dashboard/settings" || item.href === "/dashboard/security");
 
-    // Finishing Manager (Todd Pemberton, Benjy 11/18): prototypes + finishing,
-    // plus the die tools and the plant views he works alongside.
+    // Finishing Manager (Todd Pemberton, Benjy 11/18): prototypes, plus the die
+    // tools and the plant views he works alongside.
     if (role === "FINISHING_MANAGER") {
-      const allowed = ["/dashboard/prototypes", "/dashboard/finishing", "/dashboard/dielines", "/dashboard/production", "/dashboard/schedule", "/dashboard/plant-floor", "/dashboard/security", "/dashboard/settings"];
+      const allowed = ["/dashboard/prototypes", "/dashboard/dielines", "/dashboard/production", "/dashboard/schedule", "/dashboard/plant-floor", "/dashboard/security", "/dashboard/settings"];
       return allowed.map((h) => internalNav.find((i) => i.href === h)).filter(Boolean) as typeof internalNav;
     }
 
