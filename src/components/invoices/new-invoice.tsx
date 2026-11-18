@@ -16,7 +16,7 @@ const inputCls = "mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-s
 export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: any) => void }) {
   const [q, setQ] = useState("");
   const [list, setList] = useState<Cust[]>([]);
-  const [total, setTotal] = useState(0);
+  const [custTotal, setCustTotal] = useState(0);
   const [reps, setReps] = useState<Rep[]>([]);
   const [standalone, setStandalone] = useState(true); // jobs hidden until jobs are real in Godzilla
   const [repId, setRepId] = useState("");
@@ -45,7 +45,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     if (cust) return;
     const t = setTimeout(async () => {
       setSearching(true);
-      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); setTotal(d.total || 0); if (d.reps) setReps(d.reps); if (typeof d.standalone === "boolean") setStandalone(d.standalone); if (d.departments) setDepartments(d.departments); } catch { /* ignore */ }
+      try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); setCustTotal(d.total || 0); if (d.reps) setReps(d.reps); if (typeof d.standalone === "boolean") setStandalone(d.standalone); if (d.departments) setDepartments(d.departments); } catch { /* ignore */ }
       setSearching(false);
     }, 250);
     return () => clearTimeout(t);
@@ -96,7 +96,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
             <label className="text-sm text-gray-600">Customer <span className="text-gray-400">(from Customers; one record for CRM, jobs, portal and invoices)</span></label>
             {!creating ? (<>
               <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing the customer name" />
-              <div className="mt-1 text-[11px] text-gray-400">{total > list.length ? `Showing ${list.length} of ${total.toLocaleString()} customers. Keep typing to narrow it down.` : `${total.toLocaleString()} match${total === 1 ? "" : "es"}`}</div>
+              <div className="mt-1 text-[11px] text-gray-400">{custTotal > list.length ? `Showing ${list.length} of ${custTotal.toLocaleString()} customers. Keep typing to narrow it down.` : `${custTotal.toLocaleString()} match${custTotal === 1 ? "" : "es"}`}</div>
               <div className="mt-2 max-h-56 overflow-auto rounded-md border border-gray-200">
                 {searching && <div className="p-2 text-xs text-gray-400"><Loader2 className="inline h-3 w-3 animate-spin" /> Searching…</div>}
                 {list.map((c) => (
