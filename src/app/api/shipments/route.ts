@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
   const invMap = new Map(invs.map((i: any) => [i.id, i]));
   const ready = await prisma.job.findMany({
     where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE } },
-    select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true } } } } },
+    // What Shayla reads off the job ticket (11/18): deliver-to, shipping instructions, contact, PO.
+    select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
     orderBy: { dueDate: "asc" }, take: 100,
   }).catch(() => []);
   // The invoice for each ready job, so Shayla's shipment links to it automatically.
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     shipments: out,
     // A packed job stays on the list until its full quantity has shipped.
-    ready: ready.filter((j: any) => (tally.get(j.id)?.remaining ?? j.quantity) > 0).map((j: any) => ({ tally: tally.get(j.id) || null, id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.order?.poNumber || null, invoiceId: invFor(j.id) })),
+    ready: ready.filter((j: any) => (tally.get(j.id)?.remaining ?? j.quantity) > 0).map((j: any) => ({ tally: tally.get(j.id) || null, id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.customerPO || j.order?.poNumber || null, invoiceId: invFor(j.id), ...fromTicket(j) })),
   });
 }
 
@@ -106,6 +107,24 @@ export async function POST(request: NextRequest) {
   });
   if (shipment.freightCost) await syncFreight(prisma, shipment.id, session.name);
   return NextResponse.json({ shipment });
+}
+
+/** Ship-to, instructions and contact as the CSR entered them on the job ticket,
+ *  falling back to the customer record. */
+function fromTicket(j: any) {
+  const lines = String(j.deliveryTo || "").split("\n");
+  const shipLine = lines.find((l) => /^Shipping:/i.test(l));
+  const address = lines.filter((l) => l !== shipLine).join("\n").trim();
+  const co = j.order?.company;
+  const coAddr = co ? [co.address, [co.city, [co.state, co.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join("\n") : "";
+  const special = String(j.generalNotes || "").split("\n").filter((l) => /^Special instructions:/i.test(l)).map((l) => l.replace(/^Special instructions:\s*/i, ""));
+  const instructions = [shipLine ? shipLine.replace(/^Shipping:\s*/i, "") : "", ...special].filter(Boolean).join("\n");
+  return {
+    shipTo: address || (co?.name ? `${co.name}\n${coAddr}` : coAddr) || null,
+    instructions: instructions || null,
+    contactName: j.contactName || co?.contacts?.[0]?.name || null,
+    contactEmail: co?.contacts?.find((c: any) => c.email)?.email || null,
+  };
 }
 
 /** True when this shipment is less than what's left on the job (a partial). */

@@ -24,7 +24,7 @@ type Shipment = {
   items: Item[]; invoicePaid: boolean | null; invoiceBalance: number | null; createdAt: string;
   freightCost: number | null; freightNote: string | null; codRequestedAt: string | null; codRequestedBy: string | null; codReleasedAt: string | null; codReleasedBy: string | null; codReleased: boolean; tally: Tally;
 };
-type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally };
+type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally; shipTo: string | null; instructions: string | null; contactName: string | null; contactEmail: string | null };
 type Cust = { id: string; name: string; where: string; email: string | null; contact: string | null; address?: string | null };
 type Inv = { id: string; invoiceNumber: string; status: string; total: number; remaining: number; description: string | null };
 
@@ -106,7 +106,7 @@ export default function ShippingPage() {
     await load(); return true;
   };
 
-  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "", boxes: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", items: [{ description: r.name || "", quantity: String(r.tally?.remaining ?? r.quantity ?? ""), boxes: "" }] } : {}) }); };
+  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "", boxes: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", shipTo: r.shipTo || "", notes: r.instructions || "", contactName: r.contactName || "", contactEmail: r.contactEmail || "", items: [{ description: r.name || "", quantity: String(r.tally?.remaining ?? r.quantity ?? ""), boxes: "" }] } : {}) }); };
   const startEdit = (s: Shipment) => {
     setEditId(s.id);
     setForm({ ...blank, companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", freightCost: s.freightCost?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity), boxes: i.boxes || "" })) : [{ description: "", quantity: "", boxes: "" }] });
