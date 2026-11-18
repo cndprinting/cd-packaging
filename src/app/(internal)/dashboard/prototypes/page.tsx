@@ -7,12 +7,13 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Plus, X, Box, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MyPrototypes, ProtoSteps, protoWhere } from "@/components/prototypes/my-prototypes";
 import { Input } from "@/components/ui/input";
 
 type P = {
   id: string; number: string; status: string; round: number; leadId: string | null; companyId: string | null; customerName: string;
   requestedByName: string; request: string; style: string | null; length: number | null; width: number | null; depth: number | null;
-  stock: string | null; samples: number | null; neededBy: string | null; files: { name: string; url: string }[];
+  stock: string | null; samples: number | null; neededBy: string | null; promisedAt: string | null; readyAt: string | null; sentAt: string | null; approvedAt: string | null; queuePos: number | null; queueLen: number; files: { name: string; url: string }[];
   dieMatches: { exact: any[]; near: any[] } | null; dieNumber: string | null; makerNotes: string | null; feedback: string | null;
   log: { at: string; by: string; event: string }[]; jobId: string | null; createdAt: string; updatedAt: string;
 };
@@ -74,6 +75,7 @@ function Board() {
         </div>
       </div>
       {flash && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{flash}</div>}
+      {!canMake && !loading && <MyPrototypes title="Where my prototypes are" />}
       {loading ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> : (
         <div className="grid gap-3 lg:grid-cols-5">
           {COLS.map((c) => {
@@ -90,7 +92,8 @@ function Board() {
                         <div className="mt-0.5 line-clamp-2 text-xs text-gray-600">{p.request}</div>
                         <div className="mt-1 text-[11px] text-gray-500">{[size(p), p.stock].filter(Boolean).join(" · ")}</div>
                         {p.status === "requested" && p.round > 1 && p.feedback && <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-900">Change: {p.feedback}</div>}
-                        <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400"><span>{p.number} · {p.requestedByName}</span>{p.neededBy && <span className={late ? "font-medium text-red-600" : ""}><Clock className="mr-0.5 inline h-3 w-3" />{day(p.neededBy)}</span>}</div>
+                        <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400"><span>{p.number} · {p.requestedByName}</span>{p.status === "making" && p.promisedAt ? <span className="text-brand-700">ready by {day(p.promisedAt)}</span> : p.neededBy && <span className={late ? "font-medium text-red-600" : ""}><Clock className="mr-0.5 inline h-3 w-3" />{day(p.neededBy)}</span>}</div>
+                        {p.status === "requested" && p.queuePos && <div className="text-[11px] text-gray-400">#{p.queuePos} in line</div>}
                         {p.dieMatches?.exact?.length ? <div className="mt-1 text-[11px] text-emerald-700">Die {p.dieMatches.exact[0].dieNumber} fits this size</div> : null}
                       </button>
                     );
@@ -112,6 +115,7 @@ function Detail({ p, canMake, canRequest, onClose, act }: { p: P; canMake: boole
   const [notes, setNotes] = useState(p.makerNotes || "");
   const [die, setDie] = useState(p.dieNumber || "");
   const [feedback, setFeedback] = useState("");
+  const [readyBy, setReadyBy] = useState(p.promisedAt ? p.promisedAt.slice(0, 10) : p.neededBy ? p.neededBy.slice(0, 10) : "");
   const [busy, setBusy] = useState(false);
   const run = async (b: any) => { setBusy(true); await act(p.id, b); setBusy(false); setFeedback(""); };
   const any = canMake || canRequest;
@@ -123,6 +127,7 @@ function Detail({ p, canMake, canRequest, onClose, act }: { p: P; canMake: boole
           <button onClick={onClose} aria-label="Close"><X className="h-5 w-5 text-gray-400" /></button>
         </div>
         {p.leadId && <div className="text-xs text-gray-400">From the sales pipeline. Each step is noted on the lead.</div>}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 px-3 py-2"><span className="text-sm text-gray-700">{protoWhere(p)}</span><ProtoSteps status={p.status} /></div>
         <div className="mt-3 whitespace-pre-wrap rounded-md bg-gray-50 p-3 text-sm text-gray-800">{p.request}</div>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div><dt className="text-xs text-gray-500">Style / size (inside)</dt><dd>{size(p) || "Not given"}</dd></div>
@@ -144,7 +149,18 @@ function Detail({ p, canMake, canRequest, onClose, act }: { p: P; canMake: boole
         <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
           {canMake && ["requested", "making"].includes(p.status) && (
             <div className="space-y-2">
-              {p.status === "requested" && <Button disabled={busy} onClick={() => run({ action: "start" })} className="w-full">Start round {p.round}</Button>}
+              {p.status === "requested" && (
+                <div className="flex items-end gap-2">
+                  <label className="block flex-1 text-sm"><span className="text-gray-600">Ready by (sales sees this)</span><Input type="date" value={readyBy} onChange={(e) => setReadyBy(e.target.value)} /></label>
+                  <Button disabled={busy} onClick={() => run({ action: "start", promisedAt: readyBy || null })}>Start round {p.round}</Button>
+                </div>
+              )}
+              {p.status === "making" && (
+                <div className="flex items-end gap-2">
+                  <label className="block flex-1 text-sm"><span className="text-gray-600">Ready by</span><Input type="date" value={readyBy} onChange={(e) => setReadyBy(e.target.value)} /></label>
+                  <Button variant="outline" disabled={busy || !readyBy} onClick={() => run({ action: "edit", promisedAt: readyBy })}>Update date</Button>
+                </div>
+              )}
               <label className="block text-sm"><span className="text-gray-600">What you made (for sales)</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} placeholder="e.g. STE on 18pt SBS, used die 2231, window moved to the front" /></label>
               <label className="block text-sm"><span className="text-gray-600">Die used or to use</span><Input value={die} onChange={(e) => setDie(e.target.value)} placeholder="Die # (blank if a new die)" /></label>
               <Button disabled={busy} onClick={() => run({ action: "ready", makerNotes: notes, dieNumber: die })} className="w-full" variant={p.status === "requested" ? "outline" : "default"}>It's ready, tell {p.requestedByName.split(" ")[0]}</Button>

@@ -7,6 +7,7 @@ import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { NotesTimeline } from "@/components/leads/notes-timeline";
 import { LeadContacts, type LeadContact } from "@/components/leads/lead-contacts";
 import { LeadEmail } from "@/components/leads/lead-email";
+import { MyPrototypes, protoWhere, type ProtoLite } from "@/components/prototypes/my-prototypes";
 import { DictateButton } from "@/components/leads/dictate";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
 import { Card } from "@/components/ui/card";
@@ -333,7 +334,21 @@ const inTab = (l: Lead, key: string) => {
 const selCls = "h-8 w-full rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-800 focus:border-brand-500 focus:outline-none";
 const priColor = (p: number | null) => p === 1 ? "text-red-600" : p === 2 ? "text-amber-600" : "text-gray-400";
 
+// Latest prototype per lead, for the status line on each lead (Benjy 11/18).
+function useLeadPrototypes() {
+  const [byLead, setByLead] = useState<Record<string, ProtoLite>>({});
+  useEffect(() => {
+    fetch("/api/prototypes").then((r) => r.json()).then((d) => {
+      const m: Record<string, ProtoLite> = {};
+      for (const p of (d.prototypes || []) as ProtoLite[]) if (p.leadId && p.status !== "dropped") m[p.leadId] = p;
+      setByLead(m);
+    }).catch(() => {});
+  }, []);
+  return byLead;
+}
+
 export default function PipelinePage() {
+  const protoByLead = useLeadPrototypes();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -648,6 +663,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
           <Button onClick={() => setShowAdd(true)} className="gap-2"><Plus className="h-4 w-4" />Add lead</Button>
         </div>
       </div>
+      <MyPrototypes />
 
       {/* Stage cards. Inbound goes amber whenever an inquiry is sitting
           unanswered, so it's visible from whichever tab you're on. */}
@@ -945,6 +961,11 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       )}
                       {/* Won it? Hand it to Customer Service with Mary's estimate (Benjy 11/17). */}
                       {/* Prototypes happen while quoting (Benjy 11/18): ask Todd from the lead. */}
+                      {protoByLead[l.id] && (
+                        <a href={`/dashboard/prototypes?open=${protoByLead[l.id].id}`} className={`w-fit max-w-[16rem] rounded-md px-2 py-1 text-[11px] ${protoByLead[l.id].status === "ready" ? "bg-emerald-100 font-medium text-emerald-800" : "bg-gray-100 text-gray-700"}`}>
+                          Prototype {protoByLead[l.id].number}: {protoWhere(protoByLead[l.id])}
+                        </a>
+                      )}
                       {l.pipelineStage !== "LOST" && (
                         <a href={`/dashboard/prototypes?new=1&leadId=${encodeURIComponent(l.id)}&customer=${encodeURIComponent(l.companyName || "")}`}
                           className="w-fit rounded-md border border-brand-300 px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50">Ask Todd for a prototype</a>

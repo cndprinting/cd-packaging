@@ -1982,6 +1982,7 @@ model Prototype {
   stock            String?
   samples          Int?
   neededBy         DateTime?
+  promisedAt       DateTime?                       // Todd's "ready by" for the current round (sales sees it)
   files            String?                         // JSON [{name,url}]
   dieMatches       String?                         // JSON from the die inventory size check
   dieNumber        String?                         // die used / to use

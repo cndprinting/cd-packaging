@@ -26,10 +26,15 @@ export async function GET(request: NextRequest) {
   if (sp.get("leadId")) where.leadId = sp.get("leadId");
   if (sp.get("companyId")) where.companyId = sp.get("companyId");
   if (sp.get("status")) where.status = sp.get("status");
+  if (sp.get("mine") === "1") where.requestedById = session.id;
   // The board: everything open, plus what was approved or dropped in the last 30 days.
   if (!sp.get("leadId") && !sp.get("companyId") && !sp.get("status")) where.OR = [{ status: { in: ["requested", "making", "ready", "with_customer"] } }, { updatedAt: { gte: new Date(Date.now() - 30 * 86400e3) } }];
   const rows = await (prisma as any).prototype.findMany({ where, orderBy: [{ neededBy: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }], take: 300 });
-  return NextResponse.json({ prototypes: rows.map(shape), canMake: MAKER_ROLES.includes(session.role), canRequest: REQUEST_ROLES.includes(session.role), me: session.name });
+  // Todd's line (Benjy 11/18): what he's making first, then requests by needed-by date, then oldest.
+  const line = await (prisma as any).prototype.findMany({ where: { status: { in: ["making", "requested"] } }, select: { id: true, status: true }, orderBy: [{ neededBy: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }] });
+  const ordered = [...line.filter((x: any) => x.status === "making"), ...line.filter((x: any) => x.status === "requested")];
+  const pos = new Map<string, number>(ordered.map((x: any, i: number) => [x.id, i + 1]));
+  return NextResponse.json({ prototypes: rows.map((r: any) => ({ ...shape(r), queuePos: pos.get(r.id) || null, queueLen: ordered.length })), canMake: MAKER_ROLES.includes(session.role), canRequest: REQUEST_ROLES.includes(session.role), me: session.name });
 }
 
 export async function POST(request: NextRequest) {
@@ -91,7 +96,10 @@ export async function PUT(request: NextRequest) {
   switch (b.action) {
     case "start":
       if (!maker) return NextResponse.json({ error: "Todd starts prototypes" }, { status: 403 });
-      data.status = "making"; event = `Round ${p.round} started`; break;
+      data.status = "making"; data.promisedAt = dayDate(b.promisedAt) || p.promisedAt || null;
+      event = `Round ${p.round} started${data.promisedAt ? `, ready by ${data.promisedAt.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" })}` : ""}`;
+      if (data.promisedAt) leadNote = `Prototype ${p.number}: Todd started round ${p.round}, ready by ${data.promisedAt.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" })}.`;
+      break;
     case "ready": {
       if (!maker) return NextResponse.json({ error: "Todd marks prototypes ready" }, { status: 403 });
       data.status = "ready"; data.readyAt = new Date();
@@ -111,7 +119,7 @@ export async function PUT(request: NextRequest) {
       if (!asker && !maker) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
       const fb = t(b.feedback, 3000);
       if (!fb) return NextResponse.json({ error: "What does the customer want changed?" }, { status: 400 });
-      data.status = "requested"; data.round = p.round + 1; data.feedback = fb; data.readyAt = null; data.sentAt = null;
+      data.status = "requested"; data.round = p.round + 1; data.feedback = fb; data.readyAt = null; data.sentAt = null; data.promisedAt = null;
       event = `Customer wants changes, round ${p.round + 1}: ${fb}`;
       leadNote = `Prototype ${p.number}: customer wants changes (round ${p.round + 1}): ${fb}`;
       emailTo = (await makers(prisma)).map((u: any) => u.email); subject = `Prototype changes, round ${p.round + 1}: ${p.number} ${p.customerName}`;
@@ -138,6 +146,7 @@ export async function PUT(request: NextRequest) {
       if ("dieNumber" in b) data.dieNumber = t(b.dieNumber, 40).toUpperCase() || null;
       if ("dielineUrl" in b) data.dielineUrl = t(b.dielineUrl, 1000) || null;
       if ("neededBy" in b) data.neededBy = dayDate(b.neededBy);
+      if ("promisedAt" in b) data.promisedAt = dayDate(b.promisedAt);
       if ("samples" in b) data.samples = parseInt(b.samples) > 0 ? Math.min(parseInt(b.samples), 500) : null;
       if (["length", "width", "depth"].some((k) => k in b)) { const d = await dieCheck(data.length ?? p.length, data.width ?? p.width, data.depth ?? p.depth); data.dieMatches = d ? JSON.stringify(d) : null; }
       event = "Details updated"; break;
@@ -148,5 +157,7 @@ export async function PUT(request: NextRequest) {
   const updated = await prisma.prototype.update({ where: { id: p.id }, data });
   if (leadNote) await noteOnLead(prisma, p.leadId, leadNote);
   if (emailTo.length && subject) await mail(emailTo, subject, html, session.email);
+  // The rep also gets it in Godzilla's bell when it's ready (Benjy 11/18: sales has to know).
+  if (b.action === "ready" && p.requestedById) await prisma.notification.create({ data: { userId: p.requestedById, type: "prototype", actorName: session.name, title: `Prototype ready: ${p.customerName} (${p.number})`, body: data.makerNotes || null, url: `/dashboard/prototypes?open=${p.id}` } }).catch(() => {});
   return NextResponse.json({ prototype: shape(updated) });
 }
