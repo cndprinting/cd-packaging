@@ -636,6 +636,7 @@ model Job {
   artworkStatus    String?   // ready | coming | design | reprint
   pressOverride    String?   // who released it to press without the gate, when, why
   artInAt          DateTime? // when print-ready art was in hand; the 24-hour proof clock starts here
+  clearedNotifiedAt DateTime? // "cleared for press" email sent (once)
   handoffId        String?   // the sales-to-CSR handoff this job came from
   repName          String?
   contactName      String?

@@ -47,9 +47,13 @@ export async function GET(request: NextRequest) {
     select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true } } } } },
     orderBy: { dueDate: "asc" }, take: 100,
   }).catch(() => []);
+  // The invoice for each ready job, so Shayla's shipment links to it automatically.
+  const readyIds = ready.map((j: any) => j.id);
+  const jobInvs = readyIds.length ? await prisma.invoice.findMany({ where: { jobId: { in: readyIds }, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "desc" }, select: { id: true, jobId: true } }) : [];
+  const invFor = (jobId: string) => jobInvs.find((i: any) => i.jobId === jobId)?.id || null;
   return NextResponse.json({
     shipments: out,
-    ready: ready.filter((j: any) => !shippedJobIds.has(j.id)).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.order?.poNumber || null })),
+    ready: ready.filter((j: any) => !shippedJobIds.has(j.id)).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.order?.poNumber || null, invoiceId: invFor(j.id) })),
   });
 }
 
@@ -69,6 +73,8 @@ export async function POST(request: NextRequest) {
   if (jobId && !jobNumber) { const j = await prisma.job.findUnique({ where: { id: jobId }, select: { jobNumber: true } }); jobNumber = j?.jobNumber || null; }
 
   let invoiceId: string | null = b.invoiceId || null, invoiceNumber: string | null = null;
+  // Shipping a Godzilla job with no invoice picked: use the job's own invoice.
+  if (!invoiceId && jobId) invoiceId = (await prisma.invoice.findFirst({ where: { jobId, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "desc" }, select: { id: true } }))?.id || null;
   if (invoiceId) {
     const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { invoiceNumber: true, companyId: true } });
     if (!inv) return NextResponse.json({ error: "Invoice not found" }, { status: 400 });

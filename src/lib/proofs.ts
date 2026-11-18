@@ -91,6 +91,7 @@ export async function onProofApproved(prisma: any, proofId: string, by: { name: 
       await prisma.proof.update({ where: { id: proofId }, data: { productionAlertSentAt: new Date() } });
     } catch (e) { console.error("proof approved alert failed", e); }
   }
+  try { const { notifyIfCleared } = await import("@/lib/press-gate"); await notifyIfCleared(prisma, job.id); } catch (e) { console.error("cleared notice failed", e); }
   return proof;
 }
 

@@ -44,6 +44,8 @@ export async function applyPayments(prisma: any, invoiceId: string) {
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { payments: true } });
   if (!inv) return null;
   if (inv.status === "cancelled") return inv;
+  // A draft stays a draft until accounting approves it, even when edited (Benjy 11/17).
+  if (inv.status === "draft" && inv.payments.length === 0) return inv;
   const paid = round2(inv.payments.reduce((s: number, p: any) => s + p.amount, 0));
   const last = inv.payments.slice().sort((a: any, b: any) => +new Date(b.receivedAt) - +new Date(a.receivedAt))[0];
   const fullyPaid = paid >= inv.total - 0.01;
@@ -58,7 +60,12 @@ export async function applyPayments(prisma: any, invoiceId: string) {
   };
   // Commission is earned when the customer pays (Denise's rule), never before.
   if (inv.commissionAmount && inv.commissionStatus !== "paid") data.commissionStatus = fullyPaid ? "payable" : "pending";
-  return prisma.invoice.update({ where: { id: invoiceId }, data });
+  const updated = await prisma.invoice.update({ where: { id: invoiceId }, data });
+  // Deposit just landed on a job's invoice: tell the team if the job is now cleared for press.
+  if (inv.jobId && (data.depositPaid || fullyPaid) && !inv.depositPaid) {
+    try { const { notifyIfCleared } = await import("@/lib/press-gate"); await notifyIfCleared(prisma, inv.jobId); } catch (e) { console.error("cleared notice failed", e); }
+  }
+  return updated;
 }
 
 export async function recordPayment(prisma: any, args: { invoiceId: string; amount: number; method: string; reference?: string | null; receivedAt?: Date; recordedBy?: string | null; stripeId?: string | null; note?: string | null }) {

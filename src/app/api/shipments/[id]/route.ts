@@ -61,6 +61,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (b.status === "DELIVERED" && !s.actualDelivery && !("actualDelivery" in b)) data.actualDelivery = new Date();
   }
   const shipment = await prisma.shipment.update({ where: { id: s.id }, data, include: { items: true } });
+  // Move the job with its shipment (a partial doesn't ship the whole job).
+  if (b.status && shipment.jobId) {
+    try {
+      const job = await prisma.job.findUnique({ where: { id: shipment.jobId }, select: { status: true } });
+      const order = ["PACKED", "SHIPPED", "DELIVERED", "INVOICED"];
+      const target = b.status === "DELIVERED" ? "DELIVERED" : OUT.includes(b.status) ? "SHIPPED" : null;
+      if (job && target && !shipment.isPartial && order.indexOf(job.status) < order.indexOf(target)) await prisma.job.update({ where: { id: shipment.jobId }, data: { status: target as any } });
+    } catch (e) { console.error("job status from shipment failed", e); }
+  }
   return NextResponse.json({ shipment });
 }
 

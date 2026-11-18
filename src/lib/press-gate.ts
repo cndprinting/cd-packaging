@@ -67,6 +67,26 @@ export async function checkPressGate(prisma: any, jobId: string, nextStatus: str
   return `Not cleared for press yet. Waiting on: ${st.waitingOn.join(" and ")}.`;
 }
 
+/** Once a job clears the gate (proof approved AND deposit in, whichever came
+ *  last), email the CSR, the sales rep and the plant one time. */
+export async function notifyIfCleared(prisma: any, jobId: string) {
+  const st = await paymentState(prisma, jobId);
+  if (!st || !st.live || st.waitingOn.length > 0) return false;
+  const job = await prisma.job.findUnique({ where: { id: jobId }, include: { order: { include: { company: true } }, csr: { select: { email: true } }, salesRep: { select: { email: true } } } });
+  if (!job || job.clearedNotifiedAt) return false;
+  await prisma.job.update({ where: { id: jobId }, data: { clearedNotifiedAt: new Date() } });
+  try {
+    const plant = await prisma.user.findMany({ where: { isActive: true, role: { in: ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER"] } }, select: { email: true } });
+    const to = [...new Set([...plant.map((u: any) => u.email), job.csr?.email, job.salesRep?.email].filter(Boolean))] as string[];
+    // QA- jobs are test runs: record the notice, email no one.
+    if (to.length && !String(job.jobNumber).startsWith("QA-")) {
+      const { sendEmail } = await import("@/lib/email/graph-client");
+      await sendEmail({ from: AR_FROM, to, subject: `Cleared for press: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${job.order?.company?.name || ""}</b> job ${job.jobNumber}, ${job.name}, is cleared for press: the proof is approved${st.depositRequired ? " and the deposit is paid" : ""}.</p><p>Quantity ${job.quantity?.toLocaleString() || "-"}${job.dueDate ? `, due ${new Date(job.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })}` : ""}.</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs/${job.id}">Open the job</a> to schedule it.</p></div>` });
+    }
+  } catch (e) { console.error("cleared email failed", e); }
+  return true;
+}
+
 async function nextInvoiceNumber(prisma: any) {
   const last = await prisma.invoice.findFirst({ where: { invoiceNumber: { startsWith: "INV-" } }, orderBy: { invoiceNumber: "desc" }, select: { invoiceNumber: true } });
   const n = last ? parseInt(String(last.invoiceNumber).replace(/\D/g, ""), 10) : 999;

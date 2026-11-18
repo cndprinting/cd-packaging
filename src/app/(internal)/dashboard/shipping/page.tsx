@@ -22,7 +22,7 @@ type Shipment = {
   isPartial: boolean; cod: boolean; notes: string | null; notifiedAt: string | null; notifyLog: string | null;
   items: Item[]; invoicePaid: boolean | null; invoiceBalance: number | null; createdAt: string;
 };
-type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null };
+type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null };
 type Cust = { id: string; name: string; where: string; email: string | null; contact: string | null; address?: string | null };
 type Inv = { id: string; invoiceNumber: string; status: string; total: number; remaining: number; description: string | null };
 
@@ -92,7 +92,7 @@ export default function ShippingPage() {
     await load(); return true;
   };
 
-  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", companyId: r.companyId || "", customerName: r.customerName || "", items: [{ description: r.name || "", quantity: String(r.quantity || "") }] } : {}) }); };
+  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", items: [{ description: r.name || "", quantity: String(r.quantity || "") }] } : {}) }); };
   const startEdit = (s: Shipment) => {
     setEditId(s.id);
     setForm({ ...blank, companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity) })) : [{ description: "", quantity: "" }] });
