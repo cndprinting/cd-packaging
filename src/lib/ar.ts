@@ -93,7 +93,8 @@ export function dueLabel(inv: { dueDate: Date | string | null }) { return inv.du
 const shell = (inner: string) => `
 <div style="font-family:Arial,sans-serif;max-width:600px;">
   <div style="background:linear-gradient(135deg,#ED1C24,#27AAE1);padding:3px;"></div>
-  <div style="padding:24px;">${inner}
+  <div style="padding:20px 24px 0;"><img src="${BASE_URL}/cd-logo.png" alt="C&amp;D Printing and Packaging" width="160" height="60" style="display:block;border:0;width:160px;height:auto;" /></div>
+  <div style="padding:16px 24px 24px;">${inner}
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee;" />
     <p style="color:#999;font-size:12px;">C&amp;D Printing Co. | 727-572-9999 | 12150 28th St N., St. Petersburg, FL 33716. Pay online by card or bank transfer, or mail a check.</p>
   </div>

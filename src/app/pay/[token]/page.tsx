@@ -40,7 +40,8 @@ export default function PayPage() {
       <div className="h-1 bg-gradient-to-r from-[#ED1C24] to-[#27AAE1]" />
       <div className="mx-auto max-w-lg px-4 py-10">
         <div className="mb-6">
-          <div className="text-lg font-bold text-gray-900">C&amp;D Printing &amp; Packaging</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/cd-logo.png" alt="C&D Printing and Packaging" width={160} height={60} className="mb-2 h-auto w-40" />
           <div className="text-xs text-gray-500">12150 28th St N., St. Petersburg, FL 33716 · 727-572-9999</div>
         </div>
         {err && !inv && <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>}
