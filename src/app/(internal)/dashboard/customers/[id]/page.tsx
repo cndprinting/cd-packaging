@@ -8,6 +8,7 @@ import {
   DollarSign, Package, FileText, User, Clock, Paperclip,
 } from "lucide-react";
 import { AttachmentPanel } from "@/components/attachments/attachment-panel";
+import { CustomerTerms } from "@/components/customers/customer-terms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,7 @@ export default function CustomerDetailPage() {
               {company.industry && <Badge className="bg-gray-100 text-gray-600">{company.industry}</Badge>}
               {company.phone && <span className="text-sm text-gray-500">{company.phone}</span>}
             </div>
+            <div className="mt-2"><CustomerTerms companyId={String(params.id)} /></div>
           </div>
         </div>
         <Link href={`/dashboard/quotes/estimate`}>

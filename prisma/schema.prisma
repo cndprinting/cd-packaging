@@ -179,6 +179,10 @@ model Company {
   updatedAt   DateTime  @updatedAt
 
   @@index([slug])
+  // Payment terms for every job (Benjy 11/18): set by accounting or the CSR, not sales.
+  paymentTerms   String?   // deposit50 | prepaid | net30 | cod
+  paymentTermsBy String?
+  paymentTermsAt DateTime?
 }
 
 model Contact {

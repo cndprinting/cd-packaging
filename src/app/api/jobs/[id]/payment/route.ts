@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { OVERRIDE_ROLES, TERMS, draftDepositInvoice, paymentState } from "@/lib/press-gate";
+import { OVERRIDE_ROLES, TERMS, TERMS_SET_ROLES, draftDepositInvoice, paymentState } from "@/lib/press-gate";
 
 // Job payment + press gate (Benjy 11/17).
 // GET  -> payment state: terms, linked invoices, deposit paid, proof approved, cleared for press
@@ -32,7 +32,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (b.action === "terms") {
     if (!TERMS[b.terms]) return NextResponse.json({ error: "Unknown payment terms" }, { status: 400 });
+    if (!TERMS_SET_ROLES.includes(session.role)) return NextResponse.json({ error: "Payment terms are set by accounting or Customer Service" }, { status: 403 });
     await prisma.job.update({ where: { id }, data: { paymentTerms: b.terms } as any });
+    // A deposit draft nobody sent yet is wrong once the job is on credit terms.
+    if (b.terms === "net30" || b.terms === "cod") {
+      const n = await prisma.invoice.updateMany({ where: { jobId: id, status: "draft", kind: "prebill" }, data: { status: "cancelled", notes: `Cancelled: job terms changed to ${TERMS[b.terms]} by ${session.name}` } as any });
+      if (n.count) await log(`${job.jobNumber}: unsent deposit draft cancelled (terms now ${TERMS[b.terms]})`);
+    }
     await log(`${job.jobNumber} terms set to ${TERMS[b.terms]} by ${session.name}`);
   } else if (b.action === "draft_deposit") {
     const inv = await draftDepositInvoice(prisma, id, { byName: session.name, byEmail: session.email });

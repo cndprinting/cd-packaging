@@ -1136,6 +1136,7 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dupes, setDupes] = useState<{ leads: any[]; companies: any[]; quotes: any[] } | null>(null);
+  const [dupBlock, setDupBlock] = useState(false);
   const upd = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   // Triangulation — check for existing records as they type the company name.
@@ -1152,17 +1153,18 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
   const geoMissing = !form.city.trim() || !form.state;
   const canSave = !!form.companyName.trim() && !geoMissing;
 
-  const save = async () => {
+  const save = async (allowDuplicate = false) => {
     if (!canSave) return;
-    setSaving(true); setErr(null);
+    setSaving(true); setErr(null); setDupBlock(false);
     try {
       const target = STAGES.find((s) => s.key === form.tab) || STAGES[1];
       const { tab, ...rest } = form;
-      const payload = { ...rest, pipelineStage: target.stage, ...(tab === "INBOUND" ? { originOverride: "inbound" } : {}) };
+      const payload = { ...rest, pipelineStage: target.stage, ...(tab === "INBOUND" ? { originOverride: "inbound" } : {}), ...(allowDuplicate ? { allowDuplicate: true } : {}) };
       const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setErr(d.error || "Could not save that lead.");
+        setDupBlock(d.code === "duplicate");
         setSaving(false);
         return;
       }
@@ -1237,8 +1239,8 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Website</label><Input value={form.website} onChange={(e) => upd("website", e.target.value)} /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Contact</label><Input value={form.contactName} onChange={(e) => upd("contactName", e.target.value)} /></div>
             </div>
-            {err && <p className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{err}</p>}
-            <div className="flex gap-2 pt-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" onClick={save} disabled={saving || !canSave}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add lead"}</Button></div>
+            {err && <p className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{err}{dupBlock && <> Open that lead instead, or <button type="button" className="underline font-medium" onClick={() => save(true)}>add it anyway</button>.</>}</p>}
+            <div className="flex gap-2 pt-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" onClick={() => save()} disabled={saving || !canSave}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add lead"}</Button></div>
           </div>
         </div>
       </div>

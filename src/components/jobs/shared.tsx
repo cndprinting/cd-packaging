@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export type Cust = { id: string; name: string; where?: string; email: string | null; contact: string | null; address?: string | null };
+export type Cust = { id: string; name: string; where?: string; email: string | null; contact: string | null; address?: string | null; terms?: string | null; termsBy?: string | null; termsAt?: string | null };
 export type Rep = { id: string; name: string };
 export type EstimateRead = {
   customerName: string | null; contactName: string | null; estimateNumber: string | null; estimateDate: string | null; salesRep: string | null;

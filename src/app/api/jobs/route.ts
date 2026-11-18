@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, draftDepositInvoice } from "@/lib/press-gate";
+import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 
 export async function GET() {
   try {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const name = t(b.name, 200), quantity = parseInt(b.quantity);
     if (!name || !(quantity > 0)) return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
-    const terms = TERMS[b.paymentTerms] ? b.paymentTerms : DEFAULT_TERMS;
+    let terms: string = TERMS[b.paymentTerms] ? b.paymentTerms : "";
 
     // Customer: picked from the list, or a new one set up now.
     let companyId: string | null = b.companyId ? String(b.companyId) : null;
@@ -93,6 +93,13 @@ export async function POST(request: NextRequest) {
       } });
       companyId = co.id;
     } else return NextResponse.json({ error: "Pick the customer from the Customers list" }, { status: 400 });
+
+    // Terms (Benjy 11/18): the customer's terms on file unless the CSR set them
+    // for this job. Nothing on file and nothing picked: 50% down.
+    const onFile = (await prisma.company.findUnique({ where: { id: companyId }, select: { paymentTerms: true, name: true } }) as any);
+    const canSetTerms = TERMS_SET_ROLES.includes(session.role);
+    if (!canSetTerms) terms = "";
+    if (!terms) terms = onFile?.paymentTerms || DEFAULT_TERMS;
 
     // Job number: the FileMaker number if the CSR typed one (side-by-side test), else the next one.
     let jobNumber = t(b.jobNumber, 40).toUpperCase();
@@ -132,6 +139,13 @@ export async function POST(request: NextRequest) {
     ];
     if (b.productType !== "COMMERCIAL_PRINT") autoFlags.push({ jobId: job.id, category: "cutting_die", description: `Cutting die for ${name}`, status: "needed" });
     await prisma.purchaseFlag.createMany({ data: autoFlags }).catch(() => {});
+
+    // Save the terms to the customer when asked (or when none were on file).
+    if (canSetTerms && TERMS[b.paymentTerms] && (b.saveTerms || !onFile?.paymentTerms)) {
+      try { await setCustomerTerms(prisma, companyId, terms, { name: session.name, role: session.role, email: session.email }, `while entering job ${jobNumber}`); } catch (e) { console.error("save terms failed", e); }
+    } else if (onFile?.paymentTerms && terms !== onFile.paymentTerms && (terms === "net30" || terms === "cod") && !["OWNER", "GM", "ADMIN", "ACCOUNTING"].includes(session.role)) {
+      await tellAccounting(prisma, `Job ${jobNumber} entered on ${TERMS[terms]}`, `<p>${session.name} entered job ${jobNumber} for <b>${onFile.name}</b> on <b>${TERMS[terms]}</b>, just for this job. The customer's terms on file are ${TERMS[onFile.paymentTerms]}.</p>`, session.email);
+    }
 
     // Close the sales handoff it came from.
     if (b.handoffId) await (prisma as any).jobHandoff.update({ where: { id: String(b.handoffId) }, data: { status: "entered", jobId: job.id, handledByName: session.name, companyId } }).catch(() => {});

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (!prisma) return NextResponse.json({ customers: [] });
   const companies = await prisma.company.findMany({
     where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
-    select: { id: true, name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
+    select: { id: true, name: true, address: true, city: true, state: true, zip: true, paymentTerms: true, paymentTermsBy: true, paymentTermsAt: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
     orderBy: { name: "asc" }, take: 25,
   });
   // How many match, so the picker can say "showing 25 of 2,462, keep typing" (Benjy 11/17).
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     // Full mailing address for the shipping form (Benjy 11/17).
     address: [c.address, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join("\n") || null,
     email: c.contacts.find((x) => x.email)?.email || null, contact: c.contacts[0]?.name || null,
+    terms: (c as any).paymentTerms || null, termsBy: (c as any).paymentTermsBy || null, termsAt: (c as any).paymentTermsAt || null,
     jobs: jobs.filter((j: any) => j.order?.companyId === c.id).slice(0, 10).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quotedPrice: j.quotedPrice, status: j.status, rep: j.salesRep?.name || null })),
   }));
   // Sales reps for the manual commission pick (Benjy 11/7: Denise reads the

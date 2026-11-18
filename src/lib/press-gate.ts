@@ -22,6 +22,32 @@ export const PRESS_STAGES = new Set(["PRINTING", "COATING_FINISHING", "DIE_CUTTI
 export const OVERRIDE_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
 // Who can enter jobs (and act on sales handoffs).
 export const ENTER_ROLES = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
+// Who sets a customer's payment terms (Benjy 11/18): accounting and the CSRs,
+// since Mary's estimates are often closed outside Godzilla. Not sales.
+export const TERMS_SET_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING", "CSR"];
+const ACCOUNTING_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
+
+/** Save terms on the customer record. When someone outside accounting gives a
+ *  customer credit terms (net 30 / COD), accounting gets a heads-up email. */
+export async function setCustomerTerms(prisma: any, companyId: string, terms: string, by: { name: string; role: string; email?: string | null }, context = "") {
+  if (!TERMS[terms]) throw new Error("Unknown payment terms");
+  const co = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, paymentTerms: true } });
+  if (!co) throw new Error("Customer not found");
+  if (co.paymentTerms === terms) return co;
+  const updated = await prisma.company.update({ where: { id: companyId }, data: { paymentTerms: terms, paymentTermsBy: by.name, paymentTermsAt: new Date() } });
+  if (!ACCOUNTING_ROLES.includes(by.role) && (terms === "net30" || terms === "cod")) await tellAccounting(prisma, `${co.name} set to ${TERMS[terms]}`, `<p>${by.name} set <b>${co.name}</b> to <b>${TERMS[terms]}</b>${co.paymentTerms ? ` (was ${TERMS[co.paymentTerms]})` : " (nothing was on file)"}${context ? ` ${context}` : ""}.</p><p>Jobs on these terms don't wait on a deposit. If that's not right, change it on the customer's page in Godzilla.</p>`, by.email);
+  return updated;
+}
+
+export async function tellAccounting(prisma: any, subject: string, html: string, fromEmail?: string | null) {
+  try {
+    const acct = await prisma.user.findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } });
+    const to = acct.map((u: any) => u.email).filter(Boolean);
+    if (!to.length) return;
+    const { sendEmail } = await import("@/lib/email/graph-client");
+    await sendEmail({ from: fromEmail && fromEmail.endsWith("@cndprinting.com") ? fromEmail : AR_FROM, to, subject, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">${html}</div>` });
+  } catch (e) { console.error("accounting email failed", e); }
+}
 
 const rem = (i: { total: number; paidAmount: number | null }) => Math.max(0, round2(i.total - (i.paidAmount || 0)));
 

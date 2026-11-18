@@ -49,7 +49,6 @@ export async function POST(request: NextRequest) {
   if (!(Number(b.quantity) > 0)) missing.push("quantity");
   if (!(Number(b.quotedPrice) > 0)) missing.push("accepted price");
   if (!ARTWORK.includes(b.artworkStatus)) missing.push("artwork status");
-  if (!TERMS[b.paymentTerms]) missing.push("payment terms");
   if (!t(b.deliveryAddress)) missing.push("delivery address");
   if (b.newCustomer) {
     if (!t(b.billingContact)) missing.push("billing contact");
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
     artworkStatus: b.artworkStatus, artworkNotes: t(b.artworkNotes, 2000) || null,
     newCustomer: !!b.newCustomer, billingContact: t(b.billingContact, 120) || null, billingEmail: t(b.billingEmail, 200).toLowerCase() || null,
     billingPhone: t(b.billingPhone, 40) || null, billingAddress: t(b.billingAddress, 500) || null, taxExempt: !!b.taxExempt,
-    paymentTerms: b.paymentTerms, deliveryAddress: t(b.deliveryAddress, 500), shippingNotes: t(b.shippingNotes, 1000) || null,
+    paymentTerms: TERMS[b.paymentTerms] ? b.paymentTerms : null, deliveryAddress: t(b.deliveryAddress, 500), shippingNotes: t(b.shippingNotes, 1000) || null,
     specialNotes: t(b.specialNotes, 2000) || null, estimateFileName: t(b.estimateFileName, 200) || null,
     estimateRead: b.estimateRead ? JSON.stringify(b.estimateRead).slice(0, 8000) : null,
   } });
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
     if (to.length && session.email?.endsWith("@cndprinting.com")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
       const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(h.quotedPrice);
-      await sendEmail({ from: session.email, to, subject: `New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}<br>${TERMS[h.paymentTerms]}</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs">Open it on the Jobs page</a> to review and enter it.</p></div>` });
+      await sendEmail({ from: session.email, to, subject: `New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}${h.paymentTerms ? `<br>Rep says terms: ${TERMS[h.paymentTerms]}` : ""}</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs">Open it on the Jobs page</a> to review and enter it.</p></div>` });
     }
   } catch { /* the handoff is saved either way */ }
   return NextResponse.json({ handoff: h });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { leadMode, leadStage, leadType, leadRegion, leadOrigin, isStalled } from "@/lib/lead-view";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
+import { linkLeadToCompany, similarRecords, normCompany, keyWord } from "@/lib/lead-company";
 
 // Sales pipeline API (Benjy 6/26) — proprietary CRM, gated by the per-user
 // pipelineAccess flag (not a role). Managers (Benjy/Nitay/Albert) see all.
@@ -17,7 +18,6 @@ async function gate() {
   return { session, prisma };
 }
 
-const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "lead";
 
 export async function GET(request: NextRequest) {
   const g = await gate();
@@ -30,12 +30,8 @@ export async function GET(request: NextRequest) {
   if (check) {
     const q = check.trim();
     if (q.length < 2) return NextResponse.json({ leads: [], companies: [], quotes: [] });
-    const [leads, companies, quotes] = await Promise.all([
-      prisma.lead.findMany({ where: { companyName: { contains: q, mode: "insensitive" } }, select: { id: true, companyName: true, pipelineStage: true }, take: 5 }),
-      prisma.company.findMany({ where: { name: { contains: q, mode: "insensitive" } }, select: { id: true, name: true }, take: 5 }),
-      prisma.quote.findMany({ where: { customerName: { contains: q, mode: "insensitive" } }, select: { id: true, quoteNumber: true, customerName: true }, take: 5 }),
-    ]);
-    return NextResponse.json({ leads, companies, quotes });
+    // Loose match (Benjy 11/18): ignores punctuation and Inc/LLC/Corp.
+    return NextResponse.json(await similarRecords(prisma, q));
   }
 
   // Explicit column list to cut Neon egress (Benjy 8/11 — the free-tier 5 GB
@@ -104,6 +100,16 @@ export async function POST(request: NextRequest) {
   if (!city || !state) {
     return NextResponse.json({ error: "City and state are required on a new lead — we filter and route the pipeline by geography." }, { status: 400 });
   }
+  // Same company already in the funnel? Stop and say so, unless they confirm (Benjy 11/18).
+  if (!body.allowDuplicate) {
+    const target = normCompany(body.companyName);
+    const twins = (await prisma.lead.findMany({ where: { companyName: { contains: keyWord(body.companyName), mode: "insensitive" } }, select: { companyName: true, pipelineStage: true, ownerName: true }, take: 100 }))
+      .filter((l: any) => normCompany(l.companyName) === target);
+    if (twins.length) {
+      const t = twins[0];
+      return NextResponse.json({ error: `${t.companyName} is already in the funnel (${String(t.pipelineStage).toLowerCase()}${t.ownerName ? `, ${t.ownerName}` : ""}).`, code: "duplicate" }, { status: 409 });
+    }
+  }
   const lead = await prisma.lead.create({
     data: {
       companyName: body.companyName,
@@ -129,6 +135,9 @@ export async function POST(request: NextRequest) {
       createdBy: session.id,
     },
   });
+  if (lead.pipelineStage === "CUSTOMER") {
+    try { await linkLeadToCompany(prisma, lead); } catch (e) { console.error("link customer failed", e); }
+  }
   return NextResponse.json({ lead });
 }
 
@@ -148,25 +157,9 @@ async function updateLead(prisma: any, body: any) {
   if (body.convert) {
     const lead = await prisma.lead.findUnique({ where: { id: body.id } });
     if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
-    let companyId = lead.companyId;
-    if (!companyId) {
-      const existing = await prisma.company.findFirst({ where: { name: { equals: lead.companyName, mode: "insensitive" } } });
-      if (existing) {
-        companyId = existing.id;
-      } else {
-        let slug = slugify(lead.companyName);
-        if (await prisma.company.findUnique({ where: { slug } })) slug = `${slug}-${Date.now().toString().slice(-4)}`;
-        const company = await prisma.company.create({
-          data: { name: lead.companyName, slug, type: "customer", website: lead.website || null, industry: lead.endMarket || null },
-        });
-        companyId = company.id;
-      }
-    }
+    // Link (or create) the customer record; files carry over (Benjy 8/5, 11/18).
+    const companyId = await linkLeadToCompany(prisma, lead);
     const updated = await prisma.lead.update({ where: { id: body.id }, data: { pipelineStage: "CUSTOMER", companyId } });
-    // Carry the lead's files onto the customer record. Artwork a rep collected
-    // during the chase is exactly what estimating and pre-press need, and this
-    // is the moment the account it belongs to finally exists (Benjy 8/5).
-    await prisma.attachment.updateMany({ where: { leadId: body.id, companyId: null }, data: { companyId } });
     return NextResponse.json({ lead: updated, companyId });
   }
 
@@ -265,7 +258,12 @@ async function updateLead(prisma: any, body: any) {
     if (cur?.outreachStatus && !["unsubscribed", "bounced"].includes(cur.outreachStatus)) data.outreachStatus = "done";
   }
 
-  const updated = await prisma.lead.update({ where: { id: body.id }, data });
+  let updated = await prisma.lead.update({ where: { id: body.id }, data });
+  // Moving a lead to Customers links it to the customer record jobs and
+  // invoices use, so the company is one record everywhere (Benjy 11/18).
+  if (data.pipelineStage === "CUSTOMER" && !updated.companyId) {
+    try { const companyId = await linkLeadToCompany(prisma, updated); updated = { ...updated, companyId }; } catch (e) { console.error("link customer failed", e); }
+  }
   return NextResponse.json({ lead: updated });
 }
 

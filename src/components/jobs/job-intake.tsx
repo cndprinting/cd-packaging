@@ -28,7 +28,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
     estimateNumber: prefill.estimateNumber || "", estimateFileName: prefill.estimateFileName || "", jobName: prefill.jobName || "", specs: prefill.specs || "",
     quantity: prefill.quantity || "", quotedPrice: prefill.quotedPrice || "", productType: prefill.productType || "FOLDING_CARTON", customerPO: prefill.customerPO || "",
     dueDate: prefill.dueDate || "", salesRepId: prefill.salesRepId || "", artworkStatus: prefill.artworkStatus || "", artworkNotes: prefill.artworkNotes || "",
-    paymentTerms: prefill.paymentTerms || "deposit50", deliveryAddress: prefill.deliveryAddress || prefill.customerAddress || "", shippingNotes: prefill.shippingNotes || "", specialNotes: prefill.specialNotes || "",
+    paymentTerms: prefill.paymentTerms || "", saveTerms: false, deliveryAddress: prefill.deliveryAddress || prefill.customerAddress || "", shippingNotes: prefill.shippingNotes || "", specialNotes: prefill.specialNotes || "",
     jobNumber: "", priority: "NORMAL", estimatedHours: "",
   });
   const [reps, setReps] = useState<Rep[]>([]);
@@ -36,11 +36,24 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
   const [matches, setMatches] = useState<Cust[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // The customer's terms on file (Benjy 11/18): they fill in the job; sales can't change them.
+  const [onFile, setOnFile] = useState<{ terms: string | null; by: string | null; at: string | null } | null>(null);
   const set = (k: keyof typeof f, v: unknown) => setF((p) => ({ ...p, [k]: v }));
   // Reps for the dropdown, even when the customer is already filled in.
   useEffect(() => { fetch("/api/payments/customers?q=%23%23none%23%23").then((r) => r.json()).then((d) => { if (d.reps) setReps(d.reps); }).catch(() => {}); }, []);
 
-  const pickCustomer = (c: Cust) => setF((p) => ({ ...p, companyId: c.id, customerName: c.name, newCustomer: false, billingEmail: p.billingEmail || c.email || "", billingContact: p.billingContact || c.contact || "", deliveryAddress: p.deliveryAddress || c.address || "" }));
+  const pickCustomer = (c: Cust) => { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); setF((p) => ({ ...p, paymentTerms: c.terms || p.paymentTerms, saveTerms: false, companyId: c.id, customerName: c.name, newCustomer: false, billingEmail: p.billingEmail || c.email || "", billingContact: p.billingContact || c.contact || "", deliveryAddress: p.deliveryAddress || c.address || "" })); };
+  // Coming from a handoff the customer is already set: look up its terms.
+  useEffect(() => {
+    if (!prefill.companyId || !prefill.customerName) return;
+    fetch(`/api/payments/customers?q=${encodeURIComponent(prefill.customerName)}`).then((r) => r.json()).then((d) => {
+      const c = (d.customers || []).find((x: Cust) => x.id === prefill.companyId);
+      if (c) { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); if (c.terms && mode === "job") setF((p) => ({ ...p, paymentTerms: c.terms })); }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const termsLabel = (k: string | null | undefined) => TERMS.find(([x]) => x === k)?.[1] || "";
+  const termsDiffer = !!onFile?.terms && !!f.paymentTerms && f.paymentTerms !== onFile.terms;
 
   const onRead = (r: EstimateRead, m: Cust[], fileName: string) => {
     setRead(r); setMatches(m);
@@ -64,7 +77,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
       ["Accepted estimate", !!f.estimateNumber.trim() || !!f.estimateFileName],
       ["Job name, quantity and price", !!f.jobName.trim() && Number(f.quantity) > 0 && Number(f.quotedPrice) > 0],
       ["Artwork status", !!f.artworkStatus],
-      ["Payment terms", !!f.paymentTerms],
+      ...(mode === "job" ? [["Payment terms", !!f.paymentTerms] as [string, boolean]] : []),
       ["Delivery address", !!f.deliveryAddress.trim()],
     ];
     if (f.newCustomer) list.push(["New customer billing info", !!f.billingContact.trim() && email && !!f.billingAddress.trim()]);
@@ -83,7 +96,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
         r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           name: f.jobName, description: f.specs, quantity: f.quantity, dueDate: f.dueDate || null, priority: f.priority, productType: f.productType,
           estimatedHours: f.estimatedHours || null, jobNumber: f.jobNumber || null, estimateNumber: f.estimateNumber, customerPO: f.customerPO,
-          quotedPrice: f.quotedPrice, salesRepId: f.salesRepId || null, paymentTerms: f.paymentTerms, artworkStatus: f.artworkStatus || null,
+          quotedPrice: f.quotedPrice, salesRepId: f.salesRepId || null, paymentTerms: f.paymentTerms || null, saveTerms: f.saveTerms || !onFile?.terms, artworkStatus: f.artworkStatus || null,
           deliveryTo: [f.deliveryAddress, f.shippingNotes && `Shipping: ${f.shippingNotes}`].filter(Boolean).join("\n"), generalNotes: notes,
           contactName: f.billingContact, taxExempt: f.taxExempt, billingEmail: f.billingEmail, handoffId: prefill.handoffId || null,
           companyId: f.newCustomer ? null : f.companyId, newCustomer: f.newCustomer ? { name: f.customerName, contact: f.billingContact, email: f.billingEmail, phone: f.billingPhone, address: f.billingAddress } : null,
@@ -152,7 +165,14 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
               <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={f.dueDate} onChange={(e) => set("dueDate", e.target.value)} /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Specs</span><textarea value={f.specs} onChange={(e) => set("specs", e.target.value)} rows={4} className={areaCls} placeholder="Size, stock, inks, coating, die, finishing" /></label>
               <label className="block"><span className="text-gray-600">Artwork</span><select value={f.artworkStatus} onChange={(e) => set("artworkStatus", e.target.value)} className={inputCls}><option value="">Choose...</option>{ARTWORK.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-              <label className="block"><span className="text-gray-600">Payment terms</span><select value={f.paymentTerms} onChange={(e) => set("paymentTerms", e.target.value)} className={inputCls}>{TERMS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+              {mode === "handoff" && onFile?.terms ? (
+                <div className="block"><span className="text-gray-600">Payment terms</span><div className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">{termsLabel(onFile.terms)}<div className="text-gray-400">On file for this customer. Accounting sets these.</div></div></div>
+              ) : (
+                <label className="block"><span className="text-gray-600">Payment terms{mode === "handoff" && <span className="text-gray-400"> (if you know)</span>}</span><select value={f.paymentTerms} onChange={(e) => set("paymentTerms", e.target.value)} className={inputCls}><option value="">{mode === "handoff" ? "Not sure, CSR will confirm" : "Choose..."}</option>{TERMS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                  {mode === "job" && <span className="mt-1 block text-[11px] text-gray-500">{onFile?.terms ? <>On file: {termsLabel(onFile.terms)}{onFile.by ? ` (set by ${onFile.by})` : ""}.</> : f.companyId || f.newCustomer ? "No terms on file for this customer yet. What you pick here is saved to the customer." : ""}</span>}
+                  {mode === "job" && termsDiffer && <label className="mt-1 flex items-center gap-1.5 text-[11px] text-amber-800"><input type="checkbox" checked={f.saveTerms} onChange={(e) => set("saveTerms", e.target.checked)} />Make this the customer's terms from now on (otherwise just this job)</label>}
+                </label>
+              )}
               <label className="col-span-2 block"><span className="text-gray-600">Artwork notes</span><Input value={f.artworkNotes} onChange={(e) => set("artworkNotes", e.target.value)} placeholder="Where the files are, or what's coming" /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Deliver to</span><textarea value={f.deliveryAddress} onChange={(e) => set("deliveryAddress", e.target.value)} rows={2} className={areaCls} /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Shipping instructions</span><Input value={f.shippingNotes} onChange={(e) => set("shippingNotes", e.target.value)} placeholder="Dock hours, liftgate, split shipments" /></label>
