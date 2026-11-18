@@ -16,7 +16,10 @@ export function trackingUrl(carrier?: string | null, tracking?: string | null): 
 }
 
 const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const day = (d?: Date | string | null) => (d ? new Date(d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }) : null);
+// Date-only fields (target ship, expected delivery) are stored as UTC midnight,
+// so print them in UTC or Florida time shows the day before. Real timestamps
+// (the moment it shipped) print in Eastern time.
+const day = (d?: Date | string | null, tz = "UTC") => (d ? new Date(d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: tz }) : null);
 
 export type NotifyKind = "shipdate" | "tracking";
 
@@ -31,7 +34,7 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
     row("Target ship date", esc(day(s.targetShipDate)));
     row("Ship via", esc(s.carrier));
   } else {
-    row("Shipped", esc(day(s.shipDate || new Date())));
+    row("Shipped", esc(day(s.shipDate || new Date(), "America/New_York")));
     row("Carrier", esc(s.carrier));
     row("Tracking", url ? `<a href="${url}">${esc(s.trackingNumber)}</a>` : esc(s.trackingNumber));
     row("Expected delivery", esc(day(s.estimatedDelivery)));
@@ -44,7 +47,7 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
     ? `Your order${ref ? ` (${esc(ref)})` : ""} is scheduled to ship on <strong>${esc(day(s.targetShipDate))}</strong>.`
     : `Your order${ref ? ` (${esc(ref)})` : ""} has shipped${s.isPartial ? " (this is a partial shipment, the rest will follow)" : ""}.`;
   const subject = kind === "shipdate"
-    ? `Your order ships ${new Date(s.targetShipDate).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}${ref ? ` (${ref})` : ""} | C&D Printing`
+    ? `Your order ships ${new Date(s.targetShipDate).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}${ref ? ` (${ref})` : ""} | C&D Printing`
     : `Your order has shipped${s.trackingNumber ? `: tracking ${s.trackingNumber}` : ""}${ref ? ` (${ref})` : ""} | C&D Printing`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;max-width:600px;">
 <p>Hi${first ? ` ${esc(first)}` : ""},</p>
