@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const b = await request.json().catch(() => ({}));
   const t = (v: unknown, max = 200) => (v === null || v === undefined ? null : String(v).trim().slice(0, max) || null);
   const status = ROUTE_STATUSES.some(([k]) => k === b.routeStatus) ? b.routeStatus : null;
-  if (!status) return NextResponse.json({ error: "Pick the status (PRE, DIG, BND or OUT)" }, { status: 400 });
+  if (!status) return NextResponse.json({ error: "Pick the status (PRE, DIG, BND, OUT or ASI)" }, { status: 400 });
   const tasks = Array.isArray(b.routeTasks) ? b.routeTasks.filter((x: string) => ROUTE_TASKS.some(([k]) => k === x)) : [];
   const m = await routingMachines(prisma);
   const okCode = (code: unknown, list: { code: string }[]) => (code && list.some((x) => x.code === code) ? String(code) : null);

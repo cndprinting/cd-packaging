@@ -22,7 +22,7 @@ const WORK_CENTERS = [
     type: "press",
     capacity: 5,
     machines: [
-      { name: "Komori 29 0127", code: "KOM-0127" },
+      { name: "Komori 29 0172", code: "KOM-0172" },
       { name: "Komori 29 0153", code: "KOM-0153" },
     ],
   },

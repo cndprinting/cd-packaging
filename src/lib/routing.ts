@@ -6,7 +6,8 @@
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 
 export const ROUTE_ROLES = ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER", "OWNER", "GM", "ADMIN"];
-export const ROUTE_STATUSES: [string, string][] = [["PRE", "PRE"], ["DIG", "DIG"], ["BND", "BND"], ["OUT", "OUT"]];
+// One status per job; it changes as the job moves (Darrin 11/18).
+export const ROUTE_STATUSES: [string, string][] = [["PRE", "PRE · Prepress"], ["DIG", "DIG · Digital"], ["BND", "BND · Bindery"], ["OUT", "OUT · Outside vendor"], ["ASI", "ASI"]];
 export const ROUTE_TASKS: [string, string][] = [
   ["letterpress", "Letterpress"], ["folding", "Folding"], ["stitching", "Stitching"],
   ["inserter", "Inserter"], ["secap", "SeCap (inkjet)"], ["handBindery", "Hand Bindery"],

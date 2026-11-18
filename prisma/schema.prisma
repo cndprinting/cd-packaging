@@ -650,7 +650,7 @@ model Job {
   // goes. Unrouted live jobs sit on his "To route" list.
   routedAt         DateTime?
   routedBy         String?
-  routeStatus      String?   // PRE | DIG | BND | OUT
+  routeStatus      String?   // PRE | DIG | BND | OUT | ASI (one at a time, changes as it moves)
   routeTasks       String?   // JSON: ["letterpress","folding","stitching","inserter","secap","handBindery"]
   foils            String?   // foil(s) needed
   dieCutterCode    String?   // Machine.code for letterpress jobs (Yoco 85e/85t, Kluge, Heidelberg)
