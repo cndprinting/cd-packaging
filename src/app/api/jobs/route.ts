@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 
+// Jobs page tabs use Darrin's FileMaker statuses (Benjy 11/18): New until he
+// routes it, then PRE / DIG / BND / OUT / ASI as he sets them, then shipping.
+const DONE = ["SHIPPED", "DELIVERED", "INVOICED"];
+const PRESS_ON = ["SCHEDULED", "PRINTING", "COATING_FINISHING", "DIE_CUTTING", "GLUING_FOLDING", "QA"];
+const STEP_LABEL: Record<string, string> = { SCHEDULED: "Scheduled for press", PRINTING: "Printing", COATING_FINISHING: "Coating / finishing", DIE_CUTTING: "Die cutting", GLUING_FOLDING: "Gluing / folding", QA: "QA" };
+function tabFor(j: any) {
+  if (DONE.includes(j.status)) return "done";
+  if (j.status === "PACKED") return "ready";
+  if (!j.routedAt || !j.routeStatus) return "new";
+  return j.routeStatus;
+}
+/** One plain line: what this job is waiting on right now. */
+function waitingFor(j: any, press: { cleared: boolean; waitingOn: string[] } | null, proof: any) {
+  if (DONE.includes(j.status)) return j.status === "INVOICED" ? "Invoiced" : j.status === "DELIVERED" ? "Delivered" : "Shipped";
+  if (j.status === "PACKED") return "Shipping";
+  if (PRESS_ON.includes(j.status)) return STEP_LABEL[j.status];
+  if (j.createdAt < JOBS_LIVE_SINCE) return "";
+  if (j.artworkStatus === "coming" && !j.artInAt) return "Artwork from customer";
+  if (!proof) return "Proof from pre-press";
+  if (proof.status === "REVISION_REQUESTED" || proof.status === "REJECTED") return "Proof changes (pre-press)";
+  if (proof.status !== "APPROVED" && !proof.sentToCustomerAt) return "CSR to send proof";
+  if (proof.status !== "APPROVED") return "Customer proof approval";
+  if (press && !press.cleared) return press.waitingOn.filter((w) => w !== "proof").map((w) => w[0].toUpperCase() + w.slice(1)).join(" + ") || "Press";
+  if (!j.routedAt) return "Darrin to route";
+  return "Ready for press";
+}
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -21,6 +48,9 @@ export async function GET() {
       prisma.proof.groupBy({ by: ["jobId"], where: { jobId: { in: liveIds }, status: "APPROVED" }, _count: true }),
     ]) : [[], []];
     const approved = new Set((proofs as any[]).map((p) => p.jobId));
+    // Latest proof per live job, for the "Waiting on" column (Benjy 11/18).
+    const latestProofs = liveIds.length ? await prisma.proof.findMany({ where: { jobId: { in: liveIds } }, orderBy: { version: "desc" }, select: { jobId: true, status: true, sentToCustomerAt: true } }) : [];
+    const proofOf = (id: string) => (latestProofs as any[]).find((p) => p.jobId === id) || null;
 
     const formatted = jobs.map((j: any) => {
       let press: { cleared: boolean; waitingOn: string[] } | null = null;
@@ -39,6 +69,8 @@ export async function GET() {
         productionOwnerName: "", updatedAt: j.updatedAt?.toISOString() ?? "",
         isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
         isBlocked: false, paymentTerms: j.paymentTerms || null, press,
+        productType: j.productType, routeStatus: j.routeStatus || null, routed: !!j.routedAt,
+        test: j.createdAt < JOBS_LIVE_SINCE, tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id)),
       };
     });
     return NextResponse.json({ jobs: formatted, source: "database" });
