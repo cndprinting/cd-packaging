@@ -943,6 +943,11 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                         <button type="button" onClick={() => markHandled(l)} title="Take it off the daily reminder email. The lead stays open — only the nag stops."
                           className="w-fit text-[11px] text-green-700 hover:underline">✓ I&apos;ve got this</button>
                       )}
+                      {/* Won it? Hand it to Customer Service with Mary's estimate (Benjy 11/17). */}
+                      {(l.pipelineStage === "QUALIFIED" || l.pipelineStage === "CUSTOMER") && (
+                        <a href={`/dashboard/jobs?handoff=1&leadId=${encodeURIComponent(l.id)}${(l as any).companyId ? `&companyId=${encodeURIComponent((l as any).companyId)}` : ""}&customer=${encodeURIComponent(l.companyName || "")}&contact=${encodeURIComponent(l.contactName || "")}&email=${encodeURIComponent(l.contactEmail || "")}`}
+                          className="w-fit rounded-md bg-brand-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-brand-700">Won it? Send to CSR</a>
+                      )}
                       {/* Outreach + agent skip live here too (Benjy 9/23): the
                           Summary view hides the Outreach column, and the skip
                           switch must never be more than one click away. */}

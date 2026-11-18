@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { JobPaymentPanel } from "@/components/jobs/job-payment-panel";
 import { uploadFile as uploadToBlob } from "@/lib/upload-client";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
@@ -809,6 +810,9 @@ export default function JobDetailPage() {
           </div>
         );
       })()}
+
+      {/* Payment terms + press gate (Benjy 11/17) */}
+      <JobPaymentPanel jobId={job.id} />
 
       {/* Edit Form */}
       {editing && (

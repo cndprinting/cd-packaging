@@ -1,162 +1,153 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, draftDepositInvoice } from "@/lib/press-gate";
 
 export async function GET() {
   try {
-    const prismaModule = await import("@/lib/prisma");
-    const prisma = prismaModule.default;
-    if (!prisma) {
-      // Demo mode - return demo jobs
-      const { demoJobs } = await import("@/lib/demo-data");
-      return NextResponse.json({ jobs: [], source: "empty" });
-    }
+    const session = await getSession();
+    if (!session || session.role === "CUSTOMER" || session.role === "VENDOR") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const prisma = (await import("@/lib/prisma")).default;
+    if (!prisma) return NextResponse.json({ jobs: [], source: "empty" });
 
     const jobs = await prisma.job.findMany({
-      include: { order: { include: { company: true } }, csr: true },
+      include: { order: { include: { company: true } }, csr: true, salesRep: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     });
 
-    const formatted = jobs.map((j) => ({
-      id: j.id,
-      jobNumber: j.jobNumber,
-      orderId: j.orderId,
-      orderNumber: j.order.orderNumber,
-      name: j.name,
-      description: j.description,
-      companyId: j.order.companyId,
-      companyName: j.order.company.name,
-      status: j.status,
-      priority: j.priority,
-      quantity: j.quantity,
-      dueDate: j.dueDate?.toISOString().split("T")[0] || "",
-      csrName: j.csr?.name ?? "",
-      salesRepName: "",
-      productionOwnerName: "",
-      updatedAt: j.updatedAt?.toISOString() ?? "",
-      isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
-      isBlocked: false,
-    }));
+    // Press gate at a glance for live jobs (Benjy 11/17): proof approved + deposit in.
+    const liveIds = jobs.filter((j) => j.createdAt >= JOBS_LIVE_SINCE).map((j) => j.id);
+    const [invs, proofs] = liveIds.length ? await Promise.all([
+      prisma.invoice.findMany({ where: { jobId: { in: liveIds }, status: { notIn: ["cancelled"] } }, select: { jobId: true, status: true, depositPaid: true, total: true, paidAmount: true } }),
+      prisma.proof.groupBy({ by: ["jobId"], where: { jobId: { in: liveIds }, status: "APPROVED" }, _count: true }),
+    ]) : [[], []];
+    const approved = new Set((proofs as any[]).map((p) => p.jobId));
 
+    const formatted = jobs.map((j: any) => {
+      let press: { cleared: boolean; waitingOn: string[] } | null = null;
+      if (j.createdAt >= JOBS_LIVE_SINCE) {
+        const terms = j.paymentTerms || DEFAULT_TERMS;
+        const mine = (invs as any[]).filter((i) => i.jobId === j.id && i.status !== "draft");
+        const needs = terms === "deposit50" || terms === "prepaid";
+        const paid = !needs ? true : terms === "prepaid" ? mine.length > 0 && mine.every((i) => i.status === "paid" || i.total - (i.paidAmount || 0) <= 0.01) : mine.some((i) => i.depositPaid || i.status === "paid" || i.status === "deposit_paid");
+        const waitingOn = [...(approved.has(j.id) ? [] : ["proof"]), ...(paid ? [] : [terms === "prepaid" ? "payment" : "deposit"])];
+        press = { cleared: !!j.pressOverride || waitingOn.length === 0, waitingOn };
+      }
+      return {
+        id: j.id, jobNumber: j.jobNumber, orderId: j.orderId, orderNumber: j.order.orderNumber, name: j.name, description: j.description,
+        companyId: j.order.companyId, companyName: j.order.company.name, status: j.status, priority: j.priority, quantity: j.quantity,
+        dueDate: j.dueDate?.toISOString().split("T")[0] || "", csrName: j.csr?.name ?? "", salesRepName: j.salesRep?.name || j.repName || "",
+        productionOwnerName: "", updatedAt: j.updatedAt?.toISOString() ?? "",
+        isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
+        isBlocked: false, paymentTerms: j.paymentTerms || null, press,
+      };
+    });
     return NextResponse.json({ jobs: formatted, source: "database" });
   } catch (error) {
     console.error("Jobs GET error:", error);
-    const { demoJobs } = await import("@/lib/demo-data");
     return NextResponse.json({ jobs: [], source: "empty" });
   }
 }
 
+async function nextJobNumber(prisma: any) {
+  const prefix = `PKG-${new Date().getFullYear()}-`;
+  const rows = await prisma.job.findMany({ where: { jobNumber: { startsWith: prefix } }, select: { jobNumber: true } });
+  const max = rows.reduce((m: number, r: any) => { const n = Number(String(r.jobNumber).slice(prefix.length)); return Number.isInteger(n) && n > m && n < 100000 ? n : m; }, 99);
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+// Create a job (Benjy 11/17). The customer comes from the Customers list (no
+// retyped names), or a new customer is set up from the billing info. The CSR may
+// keep the FileMaker job # while both systems run side by side. Entering the job
+// drafts its deposit invoice for accounting automatically.
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (session.role === "CUSTOMER") {
-      return NextResponse.json({ error: "Customers cannot create jobs" }, { status: 403 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session.role === "CUSTOMER" || session.role === "VENDOR") return NextResponse.json({ error: "Customers cannot create jobs" }, { status: 403 });
+    const prisma = (await import("@/lib/prisma")).default;
+    if (!prisma) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+    const b = await request.json();
+    const t = (v: unknown, max = 500) => (v === null || v === undefined ? "" : String(v).trim().slice(0, max));
 
-    const body = await request.json();
-    const { name, description, quantity, dueDate, priority, companyId, customerName, productType, estimatedHours } = body;
+    const name = t(b.name, 200), quantity = parseInt(b.quantity);
+    if (!name || !(quantity > 0)) return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
+    const terms = TERMS[b.paymentTerms] ? b.paymentTerms : DEFAULT_TERMS;
 
-    if (!name || !quantity) {
-      return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
-    }
+    // Customer: picked from the list, or a new one set up now.
+    let companyId: string | null = b.companyId ? String(b.companyId) : null;
+    if (companyId) {
+      if (!(await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } }))) return NextResponse.json({ error: "Customer record not found" }, { status: 400 });
+    } else if (b.newCustomer?.name) {
+      const nc = b.newCustomer;
+      const cname = t(nc.name, 200);
+      const slug = cname.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const dupe = await prisma.company.findFirst({ where: { OR: [{ slug }, { name: { equals: cname, mode: "insensitive" } }] }, select: { id: true, name: true } });
+      if (dupe) return NextResponse.json({ error: `"${dupe.name}" is already in Customers. Pick it from the list instead.`, existingId: dupe.id }, { status: 409 });
+      const lines = t(nc.address, 500).split(/\n/).map((s) => s.trim()).filter(Boolean);
+      const last = lines.length > 1 ? lines[lines.length - 1] : "";
+      const m = last.match(/^(.*?),\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+      const co = await prisma.company.create({ data: {
+        name: cname, slug, type: "customer", phone: t(nc.phone, 40) || null,
+        address: m ? lines.slice(0, -1).join(", ") : lines.join(", ") || null, city: m ? m[1] : null, state: m ? m[2].toUpperCase() : null, zip: m ? m[3] : null,
+        contacts: nc.contact ? { create: [{ name: t(nc.contact, 120), email: t(nc.email, 200).toLowerCase() || null, phone: t(nc.phone, 40) || null, title: "Billing", isPrimary: true }] } : undefined,
+      } });
+      companyId = co.id;
+    } else return NextResponse.json({ error: "Pick the customer from the Customers list" }, { status: 400 });
 
-    const prismaModule = await import("@/lib/prisma");
-    const prisma = prismaModule.default;
-    if (!prisma) {
-      return NextResponse.json({ error: "Database not configured" }, { status: 500 });
-    }
+    // Job number: the FileMaker number if the CSR typed one (side-by-side test), else the next one.
+    let jobNumber = t(b.jobNumber, 40).toUpperCase();
+    if (jobNumber) {
+      if (await prisma.job.findUnique({ where: { jobNumber }, select: { id: true } })) return NextResponse.json({ error: `Job ${jobNumber} already exists` }, { status: 409 });
+    } else jobNumber = await nextJobNumber(prisma);
 
-    // Find or create company
-    let resolvedCompanyId = companyId;
-    if (!resolvedCompanyId && customerName) {
-      const slug = customerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
-      let company = await prisma.company.findUnique({ where: { slug } });
-      if (!company) {
-        company = await prisma.company.create({ data: { name: customerName, slug } });
-      }
-      resolvedCompanyId = company.id;
-    }
-
-    if (!resolvedCompanyId) {
-      // Use first customer company as default
-      const defaultCompany = await prisma.company.findFirst({ where: { type: "customer" } });
-      resolvedCompanyId = defaultCompany?.id;
-      if (!resolvedCompanyId) {
-        return NextResponse.json({ error: "No customer company found. Create one first." }, { status: 400 });
-      }
-    }
-
-    // Generate job number
-    const jobCount = await prisma.job.count();
-    const jobNumber = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
-
-    // Generate order number and create order
     const orderCount = await prisma.order.count();
-    const orderNumber = `ORD-${String(orderCount + 20000).padStart(5, "0")}`;
-
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        companyId: resolvedCompanyId,
-        status: "ARTWORK_RECEIVED",
-        priority: priority || "NORMAL",
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-      },
-    });
-
+    const order = await prisma.order.create({ data: {
+      orderNumber: `ORD-${String(orderCount + 20000).padStart(5, "0")}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
+      companyId, status: "ARTWORK_RECEIVED", priority: b.priority || "NORMAL", poNumber: t(b.customerPO, 60) || null,
+      dueDate: b.dueDate ? new Date(b.dueDate) : undefined,
+    } });
+    const salesRep = b.salesRepId ? await prisma.user.findUnique({ where: { id: String(b.salesRepId) }, select: { id: true, name: true } }) : null;
     const job = await prisma.job.create({
       data: {
-        jobNumber,
-        orderId: order.id,
-        name,
-        description: description || null,
-        status: "ARTWORK_RECEIVED",
-        priority: priority || "NORMAL",
-        quantity: parseInt(quantity),
-        dueDate: dueDate ? new Date(dueDate) : null,
-        productType: productType === "COMMERCIAL_PRINT" ? "COMMERCIAL_PRINT" : "FOLDING_CARTON",
-        estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
-      },
+        jobNumber, orderId: order.id, name, description: t(b.description, 2000) || null,
+        status: "ARTWORK_RECEIVED", priority: b.priority || "NORMAL", quantity,
+        dueDate: b.dueDate ? new Date(b.dueDate) : null,
+        productType: b.productType === "COMMERCIAL_PRINT" ? "COMMERCIAL_PRINT" : "FOLDING_CARTON",
+        estimatedHours: b.estimatedHours ? parseFloat(b.estimatedHours) || null : null,
+        estimateNumber: t(b.estimateNumber, 60) || null, customerPO: t(b.customerPO, 60) || null,
+        quotedPrice: Number(b.quotedPrice) > 0 ? Math.round(Number(b.quotedPrice) * 100) / 100 : null,
+        salesRepId: salesRep?.id || null, repName: salesRep?.name || null, csrId: session.role === "CSR" ? session.id : null,
+        contactName: t(b.contactName, 120) || null, deliveryTo: t(b.deliveryTo, 500) || null,
+        generalNotes: t(b.generalNotes, 4000) || null, enteredDate: new Date(),
+        paymentTerms: terms, artworkStatus: ["ready", "coming", "design", "reprint"].includes(b.artworkStatus) ? b.artworkStatus : null,
+        jobType: b.artworkStatus === "reprint" ? "EXACT_REPRINT" : "NEW_ORDER", handoffId: b.handoffId || null,
+      } as any,
       include: { order: { include: { company: true } } },
     });
 
-    // Activity log
-    await prisma.activityLog.create({
-      data: { orderId: order.id, userId: session.id, action: "JOB_CREATED", details: `Created job ${jobNumber}: ${name}` },
-    }).catch(() => {});
+    await prisma.activityLog.create({ data: { orderId: order.id, userId: session.id, action: "JOB_CREATED", details: `Created job ${jobNumber}: ${name}` } }).catch(() => {});
+    const autoFlags: any[] = [
+      { jobId: job.id, category: "paper", description: `Substrate for ${name} - ${quantity} units`, status: "needed" },
+      { jobId: job.id, category: "ink", description: `Process inks for ${name}`, status: "needed" },
+    ];
+    if (b.productType !== "COMMERCIAL_PRINT") autoFlags.push({ jobId: job.id, category: "cutting_die", description: `Cutting die for ${name}`, status: "needed" });
+    await prisma.purchaseFlag.createMany({ data: autoFlags }).catch(() => {});
 
-    // Auto-flag outside purchases based on job type
-    const autoFlags = [];
-    // Every job needs paper/substrate
-    autoFlags.push({ jobId: job.id, category: "paper", description: `Substrate for ${name} - ${quantity} units`, status: "needed" });
-    // Every job needs ink
-    autoFlags.push({ jobId: job.id, category: "ink", description: `Process inks for ${name}`, status: "needed" });
-    // Folding cartons need cutting dies
-    if (productType !== "COMMERCIAL_PRINT") {
-      autoFlags.push({ jobId: job.id, category: "cutting_die", description: `Cutting die for ${name}`, status: "needed" });
-    }
-    // Create all purchase flags
-    if (autoFlags.length > 0) await prisma.purchaseFlag.createMany({ data: autoFlags }).catch(() => {});
+    // Close the sales handoff it came from.
+    if (b.handoffId) await (prisma as any).jobHandoff.update({ where: { id: String(b.handoffId) }, data: { status: "entered", jobId: job.id, handledByName: session.name, companyId } }).catch(() => {});
+
+    // Carrie's step 5 without anyone forwarding anything: draft the deposit invoice for accounting.
+    let depositInvoice: string | null = null;
+    try { const inv = await draftDepositInvoice(prisma, job.id, { byName: session.name, byEmail: session.email, taxExempt: !!b.taxExempt, contactEmail: t(b.billingEmail, 200).toLowerCase() || null }); depositInvoice = inv?.invoiceNumber || null; } catch (e) { console.error("deposit draft failed", e); }
 
     return NextResponse.json({
       job: {
-        id: job.id,
-        jobNumber: job.jobNumber,
-        orderId: job.orderId,
-        orderNumber: order.orderNumber,
-        name: job.name,
-        description: job.description,
-        companyId: resolvedCompanyId,
-        companyName: job.order.company.name,
-        status: job.status,
-        priority: job.priority,
-        quantity: job.quantity,
-        dueDate: job.dueDate?.toISOString().split("T")[0] || "",
-        isLate: false,
-        isBlocked: false,
+        id: job.id, jobNumber: job.jobNumber, orderId: job.orderId, orderNumber: order.orderNumber, name: job.name, description: job.description,
+        companyId, companyName: job.order.company.name, status: job.status, priority: job.priority, quantity: job.quantity,
+        dueDate: job.dueDate?.toISOString().split("T")[0] || "", isLate: false, isBlocked: false, paymentTerms: terms,
+        press: { cleared: false, waitingOn: ["proof", ...(terms === "deposit50" || terms === "prepaid" ? [terms === "prepaid" ? "payment" : "deposit"] : [])] },
       },
+      depositInvoice,
     });
   } catch (error) {
     console.error("Jobs POST error:", error);

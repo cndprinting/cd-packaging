@@ -155,7 +155,7 @@ export async function runInvoiceReminders(prisma: any, now = new Date()) {
  *  before tax and freight on non-cancelled invoices dated in the year. */
 export async function salesReport(prisma: any, year: number) {
   const from = new Date(Date.UTC(year, 0, 1)), to = new Date(Date.UTC(year + 1, 0, 1));
-  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { not: "cancelled" } }, select: { customerName: true, companyId: true, salesRepName: true, department: true, subtotal: true, taxAmount: true, shipping: true, total: true, paidAmount: true, commissionAmount: true } });
+  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { notIn: ["cancelled", "draft"] } }, select: { customerName: true, companyId: true, salesRepName: true, department: true, subtotal: true, taxAmount: true, shipping: true, total: true, paidAmount: true, commissionAmount: true } });
   const byC: Record<string, any> = {}, byR: Record<string, any> = {}, byD: Record<string, any> = {};
   for (const i of invs) {
     const c = byC[i.customerName] ||= { name: i.customerName, invoices: 0, sales: 0, tax: 0, shipping: 0, billed: 0, paid: 0 };
@@ -222,7 +222,7 @@ export async function agingRecipients(prisma: any): Promise<string[]> {
 export async function sageExportCsv(prisma: any, month: string) {
   const [y, m] = month.split("-").map(Number);
   const from = new Date(Date.UTC(y, m - 1, 1)), to = new Date(Date.UTC(y, m, 1));
-  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { not: "cancelled" } }, orderBy: { createdAt: "asc" } });
+  const invs = await prisma.invoice.findMany({ where: { createdAt: { gte: from, lt: to }, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "asc" } });
   const pays = await prisma.payment.findMany({ where: { receivedAt: { gte: from, lt: to } }, include: { invoice: { select: { invoiceNumber: true, customerName: true } } }, orderBy: { receivedAt: "asc" } });
   const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const d = (v: any) => (v ? new Date(v).toISOString().slice(0, 10) : "");

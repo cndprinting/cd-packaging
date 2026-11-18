@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const inv = await prisma.invoice.findUnique({ where: { payToken: token } });
-  if (!inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (!inv || inv.status === "draft") return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   return NextResponse.json({ invoice: pick(inv), ach: !!process.env.STRIPE_ACH_ENABLED });
 }
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const inv = await prisma.invoice.findUnique({ where: { payToken: token } });
-  if (!inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (!inv || inv.status === "draft") return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   const rem = remaining(inv);
   if (rem <= 0) return NextResponse.json({ error: "This invoice is already paid" }, { status: 400 });
   const base = part === "deposit" && !inv.depositPaid && inv.depositAmount > 0 ? Math.min(inv.depositAmount, rem) : rem;

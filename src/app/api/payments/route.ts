@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
+import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, floridaTax, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 
 // Receivables API (rebuilt 11/7/26, Benjy + Denise): Godzilla is the system of
@@ -25,7 +26,8 @@ export async function GET() {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const prisma = (await import("@/lib/prisma")).default;
     if (!prisma) return NextResponse.json({ invoices: [] });
-    const where = session.role === "CUSTOMER" ? { companyId: session.companyId || undefined } : {};
+    // Customers never see drafts (auto-drafted deposit invoices awaiting accounting).
+    const where = session.role === "CUSTOMER" ? { companyId: session.companyId || undefined, status: { not: "draft" } } : {};
     const invoices = await prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, include: { payments: { orderBy: { receivedAt: "desc" } } } });
     const out = invoices.map((i) => ({ ...i, remaining: remaining(i), payUrl: session.role === "CUSTOMER" ? undefined : payUrl(i) }));
     return NextResponse.json({ invoices: out });
@@ -59,7 +61,10 @@ export async function POST(request: NextRequest) {
       // never link to (test) jobs or orders. The job page button is refused.
       if (AR_STANDALONE) {
         if (body.via !== "invoices") return NextResponse.json({ error: STANDALONE_MSG }, { status: 400 });
-        jobId = null; orderId = null;
+        // Real jobs (entered on or after JOBS_LIVE_SINCE) may be linked; test jobs never.
+        const j = jobId ? await prisma.job.findUnique({ where: { id: String(jobId) }, select: { createdAt: true } }) : null;
+        if (!j || j.createdAt < JOBS_LIVE_SINCE) jobId = null;
+        orderId = null;
       }
       // Every invoice hangs off a Customers record (Benjy 11/7): no retyped names.
       const companyId = body.companyId ? String(body.companyId) : null;
@@ -120,6 +125,8 @@ export async function POST(request: NextRequest) {
       const to = String(body.to || inv!.contactEmail || "").trim();
       if (!to) return NextResponse.json({ error: "No customer email on this invoice" }, { status: 400 });
       let cur = inv!;
+      // Sending a draft approves it (it enters AR now).
+      if (cur.status === "draft") cur = await prisma.invoice.update({ where: { id: cur.id }, data: { status: "pending", notes: `${cur.notes ? cur.notes + "\n" : ""}Approved by ${session.name} on ${new Date().toLocaleDateString("en-US")}` }, include: { payments: true } });
       if (!cur.payToken) cur = await prisma.invoice.update({ where: { id: cur.id }, data: { payToken: newPayToken() }, include: { payments: true } });
       if (to !== cur.contactEmail) cur = await prisma.invoice.update({ where: { id: cur.id }, data: { contactEmail: to }, include: { payments: true } });
       const r = await sendEmail({ from: AR_FROM, to, cc: session.email && session.email !== AR_FROM ? [session.email] : undefined, subject: `${cur.kind === "final" ? "Invoice" : "Deposit invoice"} ${cur.invoiceNumber} · ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(remaining(cur))} | C&D Printing`, body: invoiceEmailHtml(cur) });
@@ -227,6 +234,14 @@ export async function POST(request: NextRequest) {
       }
       data.notes = `${inv!.notes ? inv!.notes + "\n" : ""}Edited by ${session.name} on ${new Date().toLocaleDateString("en-US")}: subtotal ${subtotal.toFixed(2)}, tax ${taxAmount.toFixed(2)}, freight ${shipping.toFixed(2)}, total ${total.toFixed(2)}`;
       await prisma.invoice.update({ where: { id: inv!.id }, data });
+      return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
+    }
+
+    // Approve a draft without emailing it (e.g. Denise sends it another way).
+    if (action === "approve") {
+      if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      if (inv!.status !== "draft") return NextResponse.json({ error: "Only drafts need approving" }, { status: 400 });
+      await prisma.invoice.update({ where: { id: inv!.id }, data: { status: "pending", notes: `${inv!.notes ? inv!.notes + "\n" : ""}Approved by ${session.name} on ${new Date().toLocaleDateString("en-US")}` } });
       return NextResponse.json({ invoice: await applyPayments(prisma, inv!.id) });
     }
 

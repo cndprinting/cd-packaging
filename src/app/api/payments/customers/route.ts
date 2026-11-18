@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { AR_STANDALONE, DEPARTMENTS } from "@/lib/ar";
+import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 
 // Customer picker for New invoice (Benjy 11/7: every invoice must hang off the
 // same customer record the rest of Godzilla uses, never a retyped name).
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   const total = await prisma.company.count({ where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) } });
   const ids = companies.map((c) => c.id);
   const jobs = ids.length ? await prisma.job.findMany({
-    where: { order: { companyId: { in: ids } }, status: { notIn: ["CANCELLED"] as any } },
+    where: { order: { companyId: { in: ids } }, status: { notIn: ["CANCELLED"] as any }, ...(AR_STANDALONE ? { createdAt: { gte: JOBS_LIVE_SINCE } } : {}) },
     select: { id: true, order: { select: { companyId: true } }, jobNumber: true, name: true, quotedPrice: true, status: true, salesRep: { select: { name: true } }, createdAt: true },
     orderBy: { createdAt: "desc" }, take: 60,
   }).catch(() => []) : [];
@@ -34,5 +35,5 @@ export async function GET(request: NextRequest) {
   // Sales reps for the manual commission pick (Benjy 11/7: Denise reads the
   // rep off Mary's estimate until jobs live in Godzilla). Jessica is the AI agent.
   const reps = await prisma.user.findMany({ where: { isActive: true, role: { in: ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM"] }, email: { endsWith: "@cndprinting.com", not: "jwaxman@cndprinting.com" }, NOT: { name: { contains: "retired" } } }, select: { id: true, name: true, commissionPct: true }, orderBy: { name: "asc" } });
-  return NextResponse.json({ customers: out, total, reps, standalone: AR_STANDALONE, departments: DEPARTMENTS });
+  return NextResponse.json({ customers: out, total, reps, standalone: AR_STANDALONE && !out.some((c) => c.jobs.length), departments: DEPARTMENTS });
 }

@@ -375,6 +375,49 @@ model LeadEmail {
   @@index([mailbox, conversationId])
 }
 
+// Sales-to-CSR handoff (Benjy 11/17, Carrie's step 3). The salesperson drops
+// in Mary's accepted estimate; AI reads it; the form asks only for what the
+// estimate can't say. A CSR reviews it and enters the job in one click.
+model JobHandoff {
+  id                String   @id @default(cuid())
+  status            String   @default("submitted") // submitted | entered | returned
+  leadId            String?
+  companyId         String?
+  customerName      String
+  submittedById     String?
+  submittedByName   String?
+  salesRepId        String?
+  estimateNumber    String?
+  jobName           String
+  specs             String?
+  quantity          Int?
+  quotedPrice       Float?
+  productType       String?
+  customerPO        String?
+  dueDate           DateTime?
+  artworkStatus     String   // ready | coming | design | reprint
+  artworkNotes      String?
+  newCustomer       Boolean  @default(false)
+  billingContact    String?
+  billingEmail      String?
+  billingPhone      String?
+  billingAddress    String?
+  taxExempt         Boolean  @default(false)
+  paymentTerms      String   // deposit50 | prepaid | net30 | cod
+  deliveryAddress   String
+  shippingNotes     String?
+  specialNotes      String?
+  estimateFileName  String?
+  estimateRead      String?  // JSON of what AI pulled from the estimate
+  jobId             String?
+  returnedNote      String?
+  handledByName     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
 // Social media idea generator (Benjy 10/18): ideas written by Claude from
 // newly closed accounts, 3-month plans, and web trend scans. Owners-only tab.
 model SocialIdea {
@@ -583,6 +626,13 @@ model Job {
   lastJobNumber    String?   // reference to previous job for reprints
   customerPO       String?
   estimateNumber   String?
+  // Payment terms + press gate (Benjy 11/17, from Carrie's procedure): a job
+  // can't go to press until a proof is approved AND, for deposit/prepaid terms,
+  // the deposit is paid on the linked invoice.
+  paymentTerms     String?   // deposit50 | prepaid | net30 | cod
+  artworkStatus    String?   // ready | coming | design | reprint
+  pressOverride    String?   // who released it to press without the gate, when, why
+  handoffId        String?   // the sales-to-CSR handoff this job came from
   repName          String?
   contactName      String?
   numPages         Int?

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { checkPressGate } from "@/lib/press-gate";
 
 const STAGES = [
   "QUOTE", "ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "CUSTOMER_APPROVAL",
@@ -61,16 +62,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "PRINTING", "COATING_FINISHING", "DIE_CUTTING", "GLUING_FOLDING",
       "QA", "PACKED", "SHIPPED", "DELIVERED", "INVOICED",
     ]);
-    const checkPrepressGate = async (jobId: string, nextStatus: string): Promise<string | null> => {
-      if (!GATED_STAGES.has(nextStatus)) return null;
-      const approved = await prisma.proof.count({
-        where: { jobId, status: "APPROVED" },
-      });
-      if (approved === 0) {
-        return "Pre-press gate: cannot move into printing until at least one proof is approved. Upload and approve a proof first.";
-      }
-      return null;
-    };
+    // One gate for every route (Benjy 11/17): proof approved, and for deposit or
+    // prepaid terms, the money in on the job's invoice. See src/lib/press-gate.ts.
+    void GATED_STAGES;
+    const checkPrepressGate = (jobId: string, nextStatus: string) => checkPressGate(prisma, jobId, nextStatus);
 
     // Advance to next stage
     if (action === "advance") {
@@ -118,7 +113,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "inkFront", "inkBack", "varnish", "coating", "pressAssignment", "pressFormat", "paperSource",
       "imposition", "runningSize", "pressmanInitials", "binderyOther", "binderyNotes",
       "deliveryPackaging", "deliveryTo", "samplesTo", "vendorInfo", "pressNotes",
-      "paymentNotes", "prepressNotes", "generalNotes", "plantLocation",
+      "paymentNotes", "prepressNotes", "generalNotes", "plantLocation", "artworkStatus",
     ];
     const boolFields = [
       "fscCertified", "pressCheck", "ledInk", "binderyScore", "binderyPerf",
@@ -138,6 +133,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (updates.dueDate) updateData.dueDate = new Date(updates.dueDate);
     if (updates.priority) updateData.priority = updates.priority;
     if (updates.proofDate) updateData.proofDate = new Date(updates.proofDate);
+    if (updates.quotedPrice !== undefined) updateData.quotedPrice = parseFloat(updates.quotedPrice) || null;
+    if (updates.paymentTerms !== undefined && ["deposit50", "prepaid", "net30", "cod"].includes(updates.paymentTerms)) updateData.paymentTerms = updates.paymentTerms;
 
     const updated = await prisma.job.update({
       where: { id },

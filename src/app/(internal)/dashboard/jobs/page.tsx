@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Search, Plus, X, Loader2, AlertTriangle } from "lucide-react";
-import { demoJobs, demoCompanies } from "@/lib/demo-data";
+import { JobIntake, type IntakePrefill } from "@/components/jobs/job-intake";
+import { HandoffQueue } from "@/components/jobs/handoff-queue";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ interface Job {
   productType?: string;
   estimatedHours?: number;
   actualHours?: number;
+  paymentTerms?: string | null;
+  press?: { cleared: boolean; waitingOn: string[] } | null;
 }
 
 // No "Quote" here: a job ticket only exists after the quote is won (Benjy 8/14, 11/17).
@@ -56,6 +59,21 @@ export default function JobsPage() {
   const [customerFilter, setCustomerFilter] = useState("");
   const [productTypeFilter, setProductTypeFilter] = useState("");
   const [showNewJobModal, setShowNewJobModal] = useState(false);
+  // Sales handoff + new job forms (Benjy 11/17)
+  const [intake, setIntake] = useState<{ mode: "handoff" | "job"; prefill: IntakePrefill } | null>(null);
+  const [role, setRole] = useState("");
+  const [queueKey, setQueueKey] = useState(0);
+  const [note, setNote] = useState<string | null>(null);
+  const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
+  const SALES = ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM", "CSR"];
+  const ENTER = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
+  const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { if (d.jobs) setJobs(d.jobs); }).catch(() => {});
+  useEffect(() => {
+    fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d.user?.role || "")).catch(() => {});
+    // Opened from a won lead in the pipeline: start the handoff pre-filled.
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("handoff")) setIntake({ mode: "handoff", prefill: { leadId: sp.get("leadId") || undefined, companyId: sp.get("companyId") || undefined, customerName: sp.get("customer") || undefined, customerContact: sp.get("contact") || undefined, customerEmail: sp.get("email") || undefined } });
+  }, []);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [newJob, setNewJob] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL", customerName: "", estimatedHours: "", productType: "FOLDING_CARTON" });
@@ -135,10 +153,13 @@ export default function JobsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Jobs &amp; Job Tickets</h1>
           <p className="text-sm text-gray-500">{filtered.length} of {jobs.length} jobs</p>
         </div>
-        <Button onClick={() => setShowNewJobModal(true)} className="gap-2">
-          <Plus className="h-4 w-4" /> New Job
-        </Button>
+        <div className="flex gap-2">
+          {SALES.includes(role) && <Button variant="outline" onClick={() => setIntake({ mode: "handoff", prefill: {} })}>Send won job to CSR</Button>}
+          {(ENTER.includes(role) || !role) && <Button onClick={() => setIntake({ mode: "job", prefill: {} })} className="gap-2"><Plus className="h-4 w-4" /> New Job</Button>}
+        </div>
       </div>
+      {note && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
+      <HandoffQueue reloadKey={queueKey} flash={flash} onEnter={(p) => setIntake({ mode: "job", prefill: p })} onResend={(p) => setIntake({ mode: "handoff", prefill: p })} />
 
       {/* Filters */}
       <Card className="p-4">
@@ -212,6 +233,7 @@ export default function JobsPage() {
                           <span className="text-xs font-mono text-gray-400">{job.jobNumber}</span>
                           <Badge className={getPriorityColor(job.priority)}>{job.priority}</Badge>
                           {job.isLate && <Badge className="bg-red-100 text-red-700">LATE</Badge>}
+                          {job.press && (job.press.cleared ? <Badge className="bg-emerald-100 text-emerald-800">CLEARED FOR PRESS</Badge> : <Badge className="bg-amber-100 text-amber-800" title="Can't go to press until these are done">NEEDS {job.press.waitingOn.join(" + ").toUpperCase()}</Badge>)}
                           {job.isBlocked && <Badge className="bg-orange-100 text-orange-700">BLOCKED</Badge>}
                           {job.productType && <Badge className={job.productType === "FOLDING_CARTON" ? "bg-emerald-50 text-emerald-600" : "bg-sky-50 text-sky-600"}>{job.productType === "FOLDING_CARTON" ? "Carton" : "Print"}</Badge>}
                         </div>
@@ -245,82 +267,7 @@ export default function JobsPage() {
         <div className="text-center py-12 text-gray-400">No jobs match your filters</div>
       )}
 
-      {/* New Job Modal */}
-      {showNewJobModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowNewJobModal(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Create New Job</h2>
-                <button onClick={() => setShowNewJobModal(false)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
-              </div>
-
-              <form onSubmit={handleCreateJob} className="space-y-4">
-                {createError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{createError}</div>}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Name *</label>
-                  <Input placeholder="e.g. Organic Cereal Box - 12oz" value={newJob.name} onChange={(e) => updateNewJob("name", e.target.value)} autoFocus />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <Input placeholder="e.g. Full color printed folding carton with matte finish" value={newJob.description} onChange={(e) => updateNewJob("description", e.target.value)} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
-                    <Input type="number" placeholder="25000" value={newJob.quantity} onChange={(e) => updateNewJob("quantity", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                    <Input type="date" value={newJob.dueDate} onChange={(e) => updateNewJob("dueDate", e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                    <Select value={newJob.priority} onChange={(e) => updateNewJob("priority", e.target.value)} options={[
-                      { value: "LOW", label: "Low" },
-                      { value: "NORMAL", label: "Normal" },
-                      { value: "HIGH", label: "High" },
-                      { value: "URGENT", label: "Urgent" },
-                    ]} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                    <Input placeholder="Company name" value={newJob.customerName} onChange={(e) => updateNewJob("customerName", e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Hours *</label>
-                    <Input type="number" step="0.5" placeholder="e.g. 12" value={newJob.estimatedHours} onChange={(e) => updateNewJob("estimatedHours", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
-                    <Select value={newJob.productType} onChange={(e) => updateNewJob("productType", e.target.value)} options={[{ value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} />
-                  </div>
-                  <div className="flex items-end">
-                    <p className="text-xs text-gray-400 pb-2">Hours will be tracked against this estimate in the Labor Report</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowNewJobModal(false)}>Cancel</Button>
-                  <Button type="submit" className="flex-1" disabled={creating}>
-                    {creating ? <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Creating...</span> : "Create Job"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </>
-      )}
+      {intake && <JobIntake mode={intake.mode} prefill={intake.prefill} onClose={() => setIntake(null)} onDone={(m) => { setIntake(null); flash(m); setQueueKey((k) => k + 1); reloadJobs(); }} />}
     </div>
   );
 }

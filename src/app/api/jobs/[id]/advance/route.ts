@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { checkPressGate } from "@/lib/press-gate";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,6 +14,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
+
+    // Same press gate as the job page (this route used to skip it, Benjy 11/17).
+    const gateError = await checkPressGate(prisma, id, status);
+    if (gateError) return NextResponse.json({ error: gateError }, { status: 409 });
 
     const job = await prisma.job.update({
       where: { id },

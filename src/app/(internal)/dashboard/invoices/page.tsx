@@ -22,8 +22,8 @@ interface Invoice {
   payments: Payment[];
 }
 
-const statusColors: Record<string, string> = { pending: "bg-amber-100 text-amber-700", partial: "bg-amber-100 text-amber-700", deposit_paid: "bg-blue-100 text-blue-700", paid: "bg-emerald-100 text-emerald-700", overdue: "bg-red-100 text-red-700", cancelled: "bg-gray-100 text-gray-400" };
-const statusLabels: Record<string, string> = { pending: "Open", partial: "Partly paid", deposit_paid: "Deposit paid", paid: "Paid", overdue: "Overdue", cancelled: "Cancelled" };
+const statusColors: Record<string, string> = { draft: "bg-sky-100 text-sky-800", pending: "bg-amber-100 text-amber-700", partial: "bg-amber-100 text-amber-700", deposit_paid: "bg-blue-100 text-blue-700", paid: "bg-emerald-100 text-emerald-700", overdue: "bg-red-100 text-red-700", cancelled: "bg-gray-100 text-gray-400" };
+const statusLabels: Record<string, string> = { draft: "Draft, review", pending: "Open", partial: "Partly paid", deposit_paid: "Deposit paid", paid: "Paid", overdue: "Overdue", cancelled: "Cancelled" };
 const kindLabels: Record<string, string> = { final: "Invoice", prebill: "Prebill", deposit: "Deposit" };
 const METHODS = [["check", "Check"], ["ach", "ACH / bank"], ["wire", "Wire"], ["card", "Card (outside Stripe)"], ["other", "Other"]];
 
@@ -83,11 +83,13 @@ export default function InvoicesPage() {
   const filtered = useMemo(() => invoices.filter((inv) => {
     const q = search.toLowerCase();
     const m = !q || inv.invoiceNumber.toLowerCase().includes(q) || inv.customerName.toLowerCase().includes(q) || (inv.salesRepName || "").toLowerCase().includes(q);
-    const s = statusFilter === "all" ? true : statusFilter === "open" ? !["paid", "cancelled"].includes(inv.status) : statusFilter === "commission" ? inv.commissionStatus === "payable" : inv.status === statusFilter;
+    const s = statusFilter === "all" ? true : statusFilter === "open" ? !["paid", "cancelled", "draft"].includes(inv.status) : statusFilter === "commission" ? inv.commissionStatus === "payable" : inv.status === statusFilter;
     return m && s;
   }), [invoices, search, statusFilter]);
 
-  const openInv = invoices.filter((i) => !["paid", "cancelled"].includes(i.status));
+  // Drafts (auto deposit invoices from new jobs) are not AR until approved (Benjy 11/17).
+  const drafts = invoices.filter((i) => i.status === "draft");
+  const openInv = invoices.filter((i) => !["paid", "cancelled", "draft"].includes(i.status));
   const outstanding = openInv.reduce((s, i) => s + i.remaining, 0);
   const overdue = openInv.filter((i) => i.dueDate && new Date(i.dueDate) < new Date()).reduce((s, i) => s + i.remaining, 0);
   const commPayable = invoices.filter((i) => i.commissionStatus === "payable").reduce((s, i) => s + (i.commissionAmount || 0), 0);
@@ -129,7 +131,7 @@ export default function InvoicesPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Invoice, customer, rep" className="pl-9" /></div>
         <div className="flex flex-wrap gap-1 text-xs">
-          {[["open", "Open"], ["overdue", "Overdue"], ["paid", "Paid"], ["commission", "Commission payable"], ["all", "All"]].map(([k, l]) => (
+          {[...(drafts.length ? [["draft", `Drafts to review (${drafts.length})`]] : []), ["open", "Open"], ["overdue", "Overdue"], ["paid", "Paid"], ["commission", "Commission payable"], ["all", "All"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setStatusFilter(k)} className={`rounded-full border px-2.5 py-1 ${statusFilter === k ? "border-brand-600 bg-brand-50 text-brand-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{l}</button>
           ))}
         </div>
@@ -185,6 +187,7 @@ export default function InvoicesPage() {
                         </div>
                         {canMoney && (
                           <div className="flex flex-wrap content-start gap-2">
+                            {inv.status === "draft" && <Button size="sm" onClick={() => act(inv, { action: "approve" }, `${inv.invoiceNumber} approved. Send it when ready.`)}>Approve</Button>}
                             {inv.status !== "cancelled" && <Button size="sm" variant="outline" onClick={() => openEdit(inv)}>Edit invoice</Button>}
                             {inv.kind !== "final" && inv.status !== "cancelled" && <Button size="sm" variant="outline" onClick={() => act(inv, { action: "convert_to_final" }, "Converted to a final invoice")}>Convert to final invoice</Button>}
                             {inv.commissionStatus === "payable" && <Button size="sm" variant="outline" onClick={() => act(inv, { action: "commission_paid" }, "Commission marked paid")}>Commission paid to {inv.salesRepName}</Button>}
