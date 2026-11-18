@@ -22,6 +22,21 @@ export async function GET(request: NextRequest) {
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ prototypes: [] });
   const sp = request.nextUrl.searchParams;
+  // Customer search for a new request (Benjy 11/18): existing leads and customers only, no typed names.
+  const find = (sp.get("find") || "").trim();
+  if (find) {
+    if (find.length < 2) return NextResponse.json({ results: [] });
+    const [leads, cos] = await Promise.all([
+      (prisma as any).lead.findMany({ where: { companyName: { contains: find, mode: "insensitive" }, pipelineStage: { not: "LOST" } }, select: { id: true, companyName: true, pipelineStage: true, companyId: true, city: true, state: true, ownerName: true }, orderBy: { companyName: "asc" }, take: 12 }),
+      (prisma as any).company.findMany({ where: { type: "customer", isActive: true, name: { contains: find, mode: "insensitive" } }, select: { id: true, name: true, city: true, state: true }, orderBy: { name: "asc" }, take: 12 }),
+    ]);
+    const leadCos = new Set(leads.map((l: any) => l.companyId).filter(Boolean));
+    const results = [
+      ...leads.map((l: any) => ({ kind: "lead", leadId: l.id, companyId: l.companyId || null, name: l.companyName, sub: [String(l.pipelineStage).toLowerCase(), l.ownerName, [l.city, l.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ") })),
+      ...cos.filter((c: any) => !leadCos.has(c.id)).map((c: any) => ({ kind: "customer", leadId: null, companyId: c.id, name: c.name, sub: ["customer", [c.city, c.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ") })),
+    ];
+    return NextResponse.json({ results });
+  }
   const where: any = {};
   if (sp.get("leadId")) where.leadId = sp.get("leadId");
   if (sp.get("companyId")) where.companyId = sp.get("companyId");
@@ -52,7 +67,9 @@ export async function POST(request: NextRequest) {
     if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 400 });
     customerName = customerName || lead.companyName; companyId = companyId || lead.companyId || null;
   }
-  if (companyId && !customerName) customerName = (await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }))?.name || "";
+  // Always one of our own records, never a typed name (no duplicates).
+  if (!leadId && !companyId) return NextResponse.json({ error: "Pick the lead or customer from the list. If they're not in Godzilla yet, add them as a lead first." }, { status: 400 });
+  if (companyId && !leadId) customerName = (await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }))?.name || "";
   const req = t(b.request, 4000);
   const missing = [!customerName && "the customer", !req && "what they want"].filter(Boolean);
   if (missing.length) return NextResponse.json({ error: `Still needed: ${missing.join(", ")}.` }, { status: 400 });

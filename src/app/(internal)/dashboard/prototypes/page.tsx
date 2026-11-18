@@ -196,10 +196,19 @@ function AskForm({ prefill, onClose, onDone }: { prefill: { leadId?: string; cus
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
+  // Who it's for: the lead it came from, or picked from existing leads/customers (Benjy 11/18: no dupes).
+  const [who, setWho] = useState<{ leadId: string | null; companyId: string | null; name: string } | null>(prefill.leadId || prefill.companyId ? { leadId: prefill.leadId || null, companyId: prefill.companyId || null, name: prefill.customerName || "" } : null);
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<{ kind: string; leadId: string | null; companyId: string | null; name: string; sub: string }[]>([]);
+  useEffect(() => {
+    if (who || q.trim().length < 2) { setHits([]); return; }
+    const t = setTimeout(() => { fetch(`/api/prototypes?find=${encodeURIComponent(q.trim())}`).then((r) => r.json()).then((d) => setHits(d.results || [])).catch(() => {}); }, 250);
+    return () => clearTimeout(t);
+  }, [q, who]);
   const submit = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/prototypes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, leadId: prefill.leadId || null, companyId: prefill.companyId || null }) });
+      const r = await fetch("/api/prototypes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, customerName: who?.name || "", leadId: who?.leadId || null, companyId: who?.companyId || null }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "Could not send"); setBusy(false); return; }
       onDone(d.prototype);
@@ -210,7 +219,19 @@ function AskForm({ prefill, onClose, onDone }: { prefill: { leadId?: string; cus
       <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 font-semibold text-gray-900"><Box className="h-4 w-4" />Ask Todd for a prototype</h2><button onClick={onClose} aria-label="Close"><X className="h-4 w-4 text-gray-400" /></button></div>
         <div className="mt-3 space-y-3 text-sm">
-          <label className="block"><span className="text-gray-600">Customer or prospect</span><Input value={f.customerName} onChange={(e) => set("customerName", e.target.value)} disabled={!!prefill.leadId} /></label>
+          <div><span className="text-gray-600">Customer or prospect</span>
+            {who ? (
+              <div className="mt-1 flex items-center justify-between rounded-md bg-gray-50 px-3 py-2"><span className="font-medium">{who.name}</span>{!prefill.leadId && <button type="button" onClick={() => { setWho(null); setQ(""); }} className="text-xs text-brand-600 hover:underline">Change</button>}</div>
+            ) : (
+              <div className="mt-1">
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your leads and customers" autoComplete="off" />
+                {hits.length > 0 && <div className="mt-1 max-h-48 overflow-auto rounded-md border border-gray-200">{hits.map((h) => (
+                  <button key={`${h.kind}-${h.leadId || h.companyId}`} type="button" onClick={() => setWho({ leadId: h.leadId, companyId: h.companyId, name: h.name })} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span className="font-medium text-gray-900">{h.name}</span><span className="text-xs text-gray-400">{h.sub}</span></button>
+                ))}</div>}
+                {q.trim().length >= 2 && hits.length === 0 && <div className="mt-1 text-xs text-gray-500">No lead or customer by that name. Add them as a lead in the Sales Pipeline first, then ask from the lead.</div>}
+              </div>
+            )}
+          </div>
           <label className="block"><span className="text-gray-600">What do they want?</span><textarea value={f.request} onChange={(e) => set("request", e.target.value)} rows={4} className={inputCls} placeholder="What goes in the box, how it opens, any window, insert or special feature, and what they didn't like about the last one" /></label>
           <div className="grid grid-cols-4 gap-2">
             <label className="col-span-4 block"><span className="text-gray-600">Style (if known)</span><select value={f.style} onChange={(e) => set("style", e.target.value)} className={inputCls}><option value="">Not sure, Todd decides</option>{STYLES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
@@ -223,7 +244,7 @@ function AskForm({ prefill, onClose, onDone }: { prefill: { leadId?: string; cus
           <label className="block"><span className="text-gray-600">Stock (if known)</span><Input value={f.stock} onChange={(e) => set("stock", e.target.value)} placeholder="e.g. 18pt SBS, kraft" /></label>
           <label className="block"><span className="text-gray-600">Needed by</span><Input type="date" value={f.neededBy} onChange={(e) => set("neededBy", e.target.value)} /></label>
           {err && <div className="rounded-md bg-red-50 p-2 text-xs text-red-700">{err}</div>}
-          <div className="flex gap-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" disabled={busy || !f.customerName.trim() || !f.request.trim()} onClick={submit}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to Todd"}</Button></div>
+          <div className="flex gap-2"><Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button><Button className="flex-1" disabled={busy || !who || !f.request.trim()} onClick={submit}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to Todd"}</Button></div>
         </div>
       </div>
     </div>
