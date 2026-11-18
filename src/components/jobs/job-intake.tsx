@@ -52,6 +52,26 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // An approved prototype for this customer carries its structure onto the job (Benjy 11/18).
+  const [protos, setProtos] = useState<any[]>([]);
+  const [prototypeId, setPrototypeId] = useState<string | null>(null);
+  useEffect(() => {
+    const qs = [f.companyId && `companyId=${encodeURIComponent(f.companyId)}`, prefill.leadId && `leadId=${encodeURIComponent(prefill.leadId)}`].filter(Boolean) as string[];
+    if (!qs.length) { setProtos([]); return; }
+    Promise.all(qs.map((q) => fetch(`/api/prototypes?${q}&status=approved`).then((r) => r.json()).catch(() => ({})))).then((rs) => {
+      const seen = new Set<string>(); const list: any[] = [];
+      for (const r of rs) for (const p of r.prototypes || []) if (!seen.has(p.id) && !p.jobId) { seen.add(p.id); list.push(p); }
+      setProtos(list);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.companyId]);
+  const applyProto = (p: any) => {
+    setPrototypeId(p.id);
+    const sz = [p.style && p.style !== "OTHER" ? p.style : null, p.length && p.width ? `${p.length} x ${p.width}${p.depth ? ` x ${p.depth}` : ""} in (inside)` : null].filter(Boolean).join(" ");
+    const line = `Approved prototype ${p.number} (round ${p.round})${sz ? `: ${sz}` : ""}${p.stock ? `, ${p.stock}` : ""}${p.dieNumber ? `, die ${p.dieNumber}` : ""}${p.makerNotes ? `. ${p.makerNotes}` : ""}`;
+    setF((x) => ({ ...x, specs: x.specs ? `${x.specs}
+${line}` : line }));
+  };
   const termsLabel = (k: string | null | undefined) => TERMS.find(([x]) => x === k)?.[1] || "";
   const termsDiffer = !!onFile?.terms && !!f.paymentTerms && f.paymentTerms !== onFile.terms;
 
@@ -98,7 +118,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
           estimatedHours: f.estimatedHours || null, jobNumber: f.jobNumber || null, estimateNumber: f.estimateNumber, customerPO: f.customerPO,
           quotedPrice: f.quotedPrice, salesRepId: f.salesRepId || null, paymentTerms: f.paymentTerms || null, saveTerms: f.saveTerms || !onFile?.terms, artworkStatus: f.artworkStatus || null,
           deliveryTo: [f.deliveryAddress, f.shippingNotes && `Shipping: ${f.shippingNotes}`].filter(Boolean).join("\n"), generalNotes: notes,
-          contactName: f.billingContact, taxExempt: f.taxExempt, billingEmail: f.billingEmail, handoffId: prefill.handoffId || null,
+          contactName: f.billingContact, taxExempt: f.taxExempt, billingEmail: f.billingEmail, handoffId: prefill.handoffId || null, prototypeId,
           companyId: f.newCustomer ? null : f.companyId, newCustomer: f.newCustomer ? { name: f.customerName, contact: f.billingContact, email: f.billingEmail, phone: f.billingPhone, address: f.billingAddress } : null,
         }) });
       }
@@ -163,6 +183,11 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
               <label className="block"><span className="text-gray-600">Accepted price (total)</span><Input value={f.quotedPrice} onChange={(e) => set("quotedPrice", e.target.value)} inputMode="decimal" placeholder="0.00" /></label>
               <label className="block"><span className="text-gray-600">Product</span><select value={f.productType} onChange={(e) => set("productType", e.target.value)} className={inputCls}><option value="FOLDING_CARTON">Folding carton</option><option value="COMMERCIAL_PRINT">Commercial print</option></select></label>
               <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={f.dueDate} onChange={(e) => set("dueDate", e.target.value)} /></label>
+              {protos.length > 0 && (
+                <div className="col-span-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900">
+                  {protos.map((p) => <div key={p.id} className="flex items-center justify-between gap-2"><span>Approved prototype <b>{p.number}</b>{p.dieNumber ? `, die ${p.dieNumber}` : ""}: {p.request.slice(0, 80)}</span>{prototypeId === p.id ? <span className="font-medium">Added</span> : <button type="button" onClick={() => applyProto(p)} className="rounded border border-emerald-600 px-2 py-0.5 text-emerald-800 hover:bg-white">Use it</button>}</div>)}
+                </div>
+              )}
               <label className="col-span-2 block"><span className="text-gray-600">Specs</span><textarea value={f.specs} onChange={(e) => set("specs", e.target.value)} rows={4} className={areaCls} placeholder="Size, stock, inks, coating, die, finishing" /></label>
               <label className="block"><span className="text-gray-600">Artwork</span><select value={f.artworkStatus} onChange={(e) => set("artworkStatus", e.target.value)} className={inputCls}><option value="">Choose...</option>{ARTWORK.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
               {mode === "handoff" && onFile?.terms ? (

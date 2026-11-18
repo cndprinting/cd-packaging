@@ -150,6 +150,17 @@ export async function POST(request: NextRequest) {
       await tellAccounting(prisma, `Job ${jobNumber} entered on ${TERMS[terms]}`, `<p>${session.name} entered job ${jobNumber} for <b>${onFile.name}</b> on <b>${TERMS[terms]}</b>, just for this job. The customer's terms on file are ${TERMS[onFile.paymentTerms]}.</p>`, session.email);
     }
 
+    // The approved prototype this job came from: link it and carry the die (Benjy 11/18).
+    if (b.prototypeId) {
+      try {
+        const proto = await (prisma as any).prototype.findUnique({ where: { id: String(b.prototypeId) } });
+        if (proto) {
+          await (prisma as any).prototype.update({ where: { id: proto.id }, data: { jobId: job.id, companyId: proto.companyId || companyId } });
+          if (proto.dieNumber && !job.dieNumber) await prisma.job.update({ where: { id: job.id }, data: { dieNumber: proto.dieNumber } as any });
+        }
+      } catch (e) { console.error("prototype link failed", e); }
+    }
+
     // Close the sales handoff it came from.
     if (b.handoffId) await (prisma as any).jobHandoff.update({ where: { id: String(b.handoffId) }, data: { status: "entered", jobId: job.id, handledByName: session.name, companyId } }).catch(() => {});
 

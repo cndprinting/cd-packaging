@@ -1,7 +1,7 @@
 // Role-based permissions for Godzilla
 // Controls page visibility and action permissions per role
 
-export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "PREPRESS_MANAGER" | "DIGITAL_PRESS" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "OPERATOR" | "CUSTOMER";
+export type AppRole = "OWNER" | "GM" | "ADMIN" | "PRODUCTION_MANAGER" | "SENIOR_PLANT_MANAGER" | "ACCOUNTING" | "ESTIMATOR" | "PREPRESS_MANAGER" | "DIGITAL_PRESS" | "CSR" | "SALES_REP" | "SALES_MANAGER" | "SHIPPING" | "FINISHING_MANAGER" | "OPERATOR" | "CUSTOMER";
 
 // Full access roles — can see and do everything
 const FULL_ACCESS: AppRole[] = ["OWNER", "GM", "ADMIN", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "ACCOUNTING"];
@@ -15,17 +15,19 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
   "/dashboard/job-board":  [...FULL_ACCESS, "CSR"],
   "/dashboard/orders":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
-  "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS", "FINISHING_MANAGER"],
   "/dashboard/inventory": [...FULL_ACCESS, "CSR"],
   // Dieline module (Sep 2026): reps size boxes on a call, Mary needs the flat size, prepress reviews
-  "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS_MANAGER"],
-  "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS"],
+  "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS_MANAGER", "FINISHING_MANAGER"],
+  "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS", "FINISHING_MANAGER"],
+  "/dashboard/prototypes": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "FINISHING_MANAGER"],
+  "/dashboard/finishing":  [...FULL_ACCESS, "CSR", "FINISHING_MANAGER", "PREPRESS_MANAGER", "DIGITAL_PRESS"],
   "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
   "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
   "/dashboard/vendors":   [...FULL_ACCESS, "CSR"],
   "/dashboard/reports":   [...FULL_ACCESS],
-  "/dashboard/plant-floor": [...FULL_ACCESS, "CSR", "OPERATOR"],
-  "/dashboard/settings":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "SHIPPING", "OPERATOR"],
+  "/dashboard/plant-floor": [...FULL_ACCESS, "CSR", "OPERATOR", "FINISHING_MANAGER"],
+  "/dashboard/settings":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "SHIPPING", "OPERATOR", "FINISHING_MANAGER"],
   "/dashboard/admin":     ["OWNER", "GM", "ADMIN"],
 };
 

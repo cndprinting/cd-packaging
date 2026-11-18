@@ -23,6 +23,7 @@ enum Role {
   SALES_REP          // Quotes + their own customers only, job status tracking
   SALES_MANAGER      // Same as SALES_REP but with team view
   SHIPPING           // Shipping page only
+  FINISHING_MANAGER  // Todd Pemberton - prototypes (quoting stage) + the finishing department (Benjy 11/18)
   OPERATOR           // Plant floor timer only — nothing else
   CUSTOMER           // Customer portal only
   VENDOR             // Vendor portal only — sees sourcing requests assigned to their vendorName, uploads landed-cost quotes (Benjy 6/16, MWI/Martin)
@@ -1956,4 +1957,46 @@ model FlexQuote {
 
   @@index([customerName])
   @@index([status])
+}
+
+// Prototypes (Benjy 11/18): during the quoting back-and-forth, sales asks Todd
+// for a sample box; the customer reacts ("can we do it this way?") and Todd
+// makes another round. Lives on the lead, before there is any job ticket. The
+// approved structure (die, size, stock) carries onto the job when it's entered.
+model Prototype {
+  id               String    @id @default(cuid())
+  number           String    @unique              // PRO-0001
+  status           String    @default("requested") // requested | making | ready | with_customer | approved | dropped
+  round            Int       @default(1)
+  leadId           String?
+  companyId        String?
+  customerName     String
+  requestedById    String?
+  requestedByName  String
+  requestedByEmail String?
+  request          String                          // what they want, in the rep's words
+  style            String?                         // STE | RTE | TTAB | ... | other
+  length           Float?
+  width            Float?
+  depth            Float?
+  stock            String?
+  samples          Int?
+  neededBy         DateTime?
+  files            String?                         // JSON [{name,url}]
+  dieMatches       String?                         // JSON from the die inventory size check
+  dieNumber        String?                         // die used / to use
+  dielineUrl       String?
+  makerNotes       String?                         // Todd's notes on what he made
+  feedback         String?                         // customer's latest reaction
+  log              String?                         // JSON [{at, by, event}]
+  jobId            String?                         // set when the sold job is entered
+  readyAt          DateTime?
+  sentAt           DateTime?
+  approvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([leadId])
+  @@index([companyId])
 }

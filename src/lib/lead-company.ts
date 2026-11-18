@@ -65,6 +65,8 @@ export async function linkLeadToCompany(prisma: any, lead: { id: string; company
     company = await prisma.company.create({ data: { name: lead.companyName, slug, type: "customer", website: lead.website || null, industry: lead.endMarket || null } });
   }
   await prisma.lead.update({ where: { id: lead.id }, data: { companyId: company.id } });
+  // Prototypes asked for on the lead belong to the customer now too.
+  await prisma.prototype.updateMany({ where: { leadId: lead.id, companyId: null }, data: { companyId: company.id } }).catch(() => {});
   // The lead's files belong to the customer now (Benjy 8/5).
   await prisma.attachment.updateMany({ where: { leadId: lead.id, companyId: null }, data: { companyId: company.id } });
   return company.id as string;
