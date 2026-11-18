@@ -14,8 +14,10 @@ export async function GET(request: NextRequest) {
   const companies = await prisma.company.findMany({
     where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
     select: { id: true, name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
-    orderBy: { name: "asc" }, take: 12,
+    orderBy: { name: "asc" }, take: 25,
   });
+  // How many match, so the picker can say "showing 25 of 2,462, keep typing" (Benjy 11/17).
+  const total = await prisma.company.count({ where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) } });
   const ids = companies.map((c) => c.id);
   const jobs = ids.length ? await prisma.job.findMany({
     where: { order: { companyId: { in: ids } }, status: { notIn: ["CANCELLED"] as any } },
@@ -32,5 +34,5 @@ export async function GET(request: NextRequest) {
   // Sales reps for the manual commission pick (Benjy 11/7: Denise reads the
   // rep off Mary's estimate until jobs live in Godzilla). Jessica is the AI agent.
   const reps = await prisma.user.findMany({ where: { isActive: true, role: { in: ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM"] }, email: { endsWith: "@cndprinting.com", not: "jwaxman@cndprinting.com" }, NOT: { name: { contains: "retired" } } }, select: { id: true, name: true, commissionPct: true }, orderBy: { name: "asc" } });
-  return NextResponse.json({ customers: out, reps, standalone: AR_STANDALONE, departments: DEPARTMENTS });
+  return NextResponse.json({ customers: out, total, reps, standalone: AR_STANDALONE, departments: DEPARTMENTS });
 }

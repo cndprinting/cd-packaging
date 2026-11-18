@@ -253,13 +253,14 @@ export default function ShippingPage() {
 function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { form: typeof blank; setForm: (f: typeof blank) => void; editId: string | null; onClose: () => void; onSaved: (t: string) => void; onError: (t: string) => void }) {
   const [q, setQ] = useState("");
   const [list, setList] = useState<Cust[]>([]);
+  const [total, setTotal] = useState(0);
   const [invs, setInvs] = useState<Inv[]>([]);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof blank, v: unknown) => setForm({ ...form, [k]: v } as typeof blank);
 
   useEffect(() => {
     if (form.companyId) return;
-    const t = setTimeout(async () => { try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); } catch { /* ignore */ } }, 250);
+    const t = setTimeout(async () => { try { const r = await fetch(`/api/payments/customers?q=${encodeURIComponent(q)}`); const d = await r.json(); setList(d.customers || []); setTotal(d.total || 0); } catch { /* ignore */ } }, 250);
     return () => clearTimeout(t);
   }, [q, form.companyId]);
   useEffect(() => {
@@ -287,6 +288,7 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
           <div className="mt-3">
             <label className="text-sm text-gray-600">Customer <span className="text-gray-400">(from the Customers list)</span></label>
             <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing the customer name" />
+            <div className="mt-1 text-[11px] text-gray-400">{total > list.length ? `Showing ${list.length} of ${total.toLocaleString()} customers. Keep typing to narrow it down.` : `${total.toLocaleString()} match${total === 1 ? "" : "es"}`}</div>
             <div className="mt-2 max-h-56 overflow-auto rounded-md border border-gray-200">
               {list.map((c) => <button key={c.id} type="button" onClick={() => pick(c)} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span className="font-medium">{c.name}{c.where && <span className="font-normal text-gray-400"> · {c.where}</span>}</span><span className="text-xs text-gray-400">{c.email || ""}</span></button>)}
               {list.length === 0 && <div className="p-3 text-sm text-gray-500">No match. If the customer isn't set up yet, ask a CSR to add them in Customers.</div>}
