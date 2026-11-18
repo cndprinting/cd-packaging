@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { CustomerTerms } from "@/components/customers/customer-terms";
+import { canSeeEstimating } from "@/lib/estimating-lab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,9 @@ export default function CustomerDetailPage() {
   const params = useParams();
   const [company, setCompany] = useState<CompanyDetail | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  // Estimating is walled off for everyone but owners and estimating (Benjy 11/18).
+  const [estimating, setEstimating] = useState(false);
+  useEffect(() => { fetch("/api/auth/session").then((r) => r.json()).then((d) => setEstimating(canSeeEstimating(d?.user?.role))).catch(() => {}); }, []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -93,9 +97,9 @@ export default function CustomerDetailPage() {
             <div className="mt-2"><CustomerTerms companyId={String(params.id)} /></div>
           </div>
         </div>
-        <Link href={`/dashboard/quotes/estimate`}>
+        {estimating && <Link href={`/dashboard/quotes/estimate`}>
           <Button className="gap-2"><DollarSign className="h-4 w-4" /> New Estimate</Button>
-        </Link>
+        </Link>}
       </div>
 
       {/* Stats */}
@@ -188,7 +192,7 @@ export default function CustomerDetailPage() {
       </div>
 
       {/* Quotes */}
-      {quotes.length > 0 && (
+      {estimating && quotes.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4 text-brand-600" /> Quotes</CardTitle></CardHeader>
           <CardContent>
@@ -259,7 +263,7 @@ export default function CustomerDetailPage() {
         <Card className="p-8 text-center">
           <Clock className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">No orders or quotes yet for this customer</p>
-          <Link href="/dashboard/quotes/estimate"><Button className="mt-4 gap-2"><DollarSign className="h-4 w-4" /> Create First Estimate</Button></Link>
+          {estimating && <Link href="/dashboard/quotes/estimate"><Button className="mt-4 gap-2"><DollarSign className="h-4 w-4" /> Create First Estimate</Button></Link>}
         </Card>
       )}
     </div>

@@ -10,6 +10,7 @@
 // work is auto-saved as a draft, and — crucially — we log the exact error +
 // stack so the NEXT occurrence pinpoints the offending line.
 
+import { isEstimatingPath } from "@/lib/estimating-lab";
 import { useEffect } from "react";
 import { AlertTriangle, RotateCcw, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -61,8 +62,9 @@ export default function DashboardError({
           <Button onClick={() => reset()} className="gap-2">
             <RotateCcw className="h-4 w-4" /> Try again
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => { window.location.href = "/dashboard/quotes"; }}>
-            <FileText className="h-4 w-4" /> Back to Quotes
+          {/* Back to Quotes only from estimating; everyone else goes to the dashboard (Benjy 11/18). */}
+          <Button variant="outline" className="gap-2" onClick={() => { window.location.href = typeof window !== "undefined" && isEstimatingPath(window.location.pathname) ? "/dashboard/quotes" : "/dashboard"; }}>
+            <FileText className="h-4 w-4" /> {typeof window !== "undefined" && isEstimatingPath(window.location.pathname) ? "Back to Quotes" : "Back to dashboard"}
           </Button>
         </div>
       </div>
