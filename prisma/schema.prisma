@@ -862,8 +862,25 @@ model ProductionSchedule {
 
 model Shipment {
   id            String         @id @default(cuid())
-  orderId       String
-  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Order is optional (Benjy 11/17): shipments hang off the CUSTOMER record and,
+  // when they exist, the job and the invoice. Orders are not in use yet.
+  orderId       String?
+  order         Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  companyId     String?        // Customers module record
+  customerName  String?
+  jobId         String?
+  jobNumber     String?        // typed when the job is still in FileMaker
+  invoiceId     String?
+  invoiceNumber String?
+  poNumber      String?
+  contactName   String?
+  contactEmail  String?        // who gets the tracking / ship-date email
+  shipTo        String?        // full ship-to address
+  targetShipDate DateTime?
+  cod           Boolean        @default(false) // collect before release
+  notifiedAt    DateTime?      // last customer email
+  notifyLog     String?        // one line per email sent
+  createdBy     String?
   shipmentNumber String        @unique
   carrier       String?
   trackingNumber String?
@@ -877,6 +894,8 @@ model Shipment {
   weight        Float?
   isPartial     Boolean        @default(false)
   items         ShipmentItem[]
+  @@index([companyId])
+  @@index([status])
   notes         String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt

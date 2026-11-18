@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (!prisma) return NextResponse.json({ customers: [] });
   const companies = await prisma.company.findMany({
     where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
-    select: { id: true, name: true, city: true, state: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
+    select: { id: true, name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
     orderBy: { name: "asc" }, take: 12,
   });
   const ids = companies.map((c) => c.id);
@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
   }).catch(() => []) : [];
   const out = companies.map((c) => ({
     id: c.id, name: c.name, where: [c.city, c.state].filter(Boolean).join(", "),
+    // Full mailing address for the shipping form (Benjy 11/17).
+    address: [c.address, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join("\n") || null,
     email: c.contacts.find((x) => x.email)?.email || null, contact: c.contacts[0]?.name || null,
     jobs: jobs.filter((j: any) => j.order?.companyId === c.id).slice(0, 10).map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quotedPrice: j.quotedPrice, status: j.status, rep: j.salesRep?.name || null })),
   }));
