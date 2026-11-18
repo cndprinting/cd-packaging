@@ -183,6 +183,10 @@ model Company {
   paymentTerms   String?   // deposit50 | prepaid | net30 | cod
   paymentTermsBy String?
   paymentTermsAt DateTime?
+  // Archived = out of business (Benjy 11/18): isActive false, kept for the record.
+  archivedAt     DateTime?
+  archivedBy     String?
+  archivedReason String?
 }
 
 model Contact {

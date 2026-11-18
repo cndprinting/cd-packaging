@@ -1193,7 +1193,7 @@ function AddLeadModal({ initialTab, onClose, onSaved }: { initialTab: string; on
             {hasDupes && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
                 <div className="flex items-center gap-1.5 font-medium mb-1"><AlertTriangle className="h-3.5 w-3.5" />Possible duplicate</div>
-                {dupes!.companies.map((c) => <div key={c.id}>Already a customer: {c.name}</div>)}
+                {dupes!.companies.map((c: any) => <div key={c.id}>{c.isActive === false ? <b>Archived customer{c.archivedReason ? ` (${c.archivedReason})` : " (out of business)"}: {c.name}</b> : <>Already a customer: {c.name}</>}</div>)}
                 {dupes!.leads.map((l) => <div key={l.id}>Already in pipeline: {l.companyName} ({l.pipelineStage.toLowerCase()})</div>)}
                 {dupes!.quotes.map((qq) => <div key={qq.id}>Has a quote: {qq.quoteNumber} — {qq.customerName}</div>)}
               </div>

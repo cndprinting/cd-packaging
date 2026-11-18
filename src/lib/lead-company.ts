@@ -25,7 +25,7 @@ export function keyWord(name: string): string {
 export async function findCompanyByName(prisma: any, name: string) {
   const target = normCompany(name);
   if (!target) return null;
-  const cands = await prisma.company.findMany({ where: { name: { contains: keyWord(name), mode: "insensitive" } }, select: { id: true, name: true }, take: 200 });
+  const cands = await prisma.company.findMany({ where: { name: { contains: keyWord(name), mode: "insensitive" } }, select: { id: true, name: true, isActive: true, archivedReason: true, archivedBy: true, archivedAt: true }, take: 200 });
   return cands.find((c: any) => normCompany(c.name) === target) || null;
 }
 
@@ -37,7 +37,7 @@ export async function similarRecords(prisma: any, name: string) {
   const close = (other: string) => { const n = normCompany(other); return !!n && (n === target || (n.length >= 4 && target.length >= 4 && (n.includes(target) || target.includes(n)))); };
   const [leads, companies, quotes] = await Promise.all([
     prisma.lead.findMany({ where: { companyName: { contains: kw, mode: "insensitive" } }, select: { id: true, companyName: true, pipelineStage: true }, take: 100 }),
-    prisma.company.findMany({ where: { name: { contains: kw, mode: "insensitive" } }, select: { id: true, name: true }, take: 100 }),
+    prisma.company.findMany({ where: { name: { contains: kw, mode: "insensitive" } }, select: { id: true, name: true, isActive: true, archivedReason: true }, take: 100 }),
     prisma.quote.findMany({ where: { customerName: { contains: kw, mode: "insensitive" } }, select: { id: true, quoteNumber: true, customerName: true }, take: 100 }),
   ]);
   return {
@@ -45,6 +45,12 @@ export async function similarRecords(prisma: any, name: string) {
     companies: companies.filter((c: any) => close(c.name)).slice(0, 5),
     quotes: quotes.filter((q: any) => close(q.customerName)).slice(0, 5),
   };
+}
+
+/** The message shown when someone tries to add a customer that was archived. */
+export function archivedMessage(c: { name: string; archivedReason?: string | null; archivedBy?: string | null; archivedAt?: Date | string | null }) {
+  const when = c.archivedAt ? new Date(c.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  return `${c.name} is archived: ${c.archivedReason || "out of business"}${c.archivedBy ? ` (${c.archivedBy}${when ? `, ${when}` : ""})` : ""}. The record is kept for reference. If they're back in business, ask accounting to restore it on the customer's page.`;
 }
 
 const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "customer";

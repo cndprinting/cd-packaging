@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { leadMode, leadStage, leadType, leadRegion, leadOrigin, isStalled } from "@/lib/lead-view";
 import { validateField, normalizeField, VALIDATED_FIELDS, type FieldName } from "@/lib/lead-validate";
-import { linkLeadToCompany, similarRecords, normCompany, keyWord } from "@/lib/lead-company";
+import { linkLeadToCompany, similarRecords, normCompany, keyWord, findCompanyByName, archivedMessage } from "@/lib/lead-company";
 
 // Sales pipeline API (Benjy 6/26) — proprietary CRM, gated by the per-user
 // pipelineAccess flag (not a role). Managers (Benjy/Nitay/Albert) see all.
@@ -100,6 +100,9 @@ export async function POST(request: NextRequest) {
   if (!city || !state) {
     return NextResponse.json({ error: "City and state are required on a new lead — we filter and route the pipeline by geography." }, { status: 400 });
   }
+  // Archived (out of business) customer? Say so (Benjy 11/18).
+  const archivedCo: any = await findCompanyByName(prisma, body.companyName);
+  if (archivedCo && archivedCo.isActive === false && !body.allowDuplicate) return NextResponse.json({ error: archivedMessage(archivedCo), code: "duplicate", archived: true }, { status: 409 });
   // Same company already in the funnel? Stop and say so, unless they confirm (Benjy 11/18).
   if (!body.allowDuplicate) {
     const target = normCompany(body.companyName);
@@ -157,6 +160,8 @@ async function updateLead(prisma: any, body: any) {
   if (body.convert) {
     const lead = await prisma.lead.findUnique({ where: { id: body.id } });
     if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    const co: any = lead.companyId ? await prisma.company.findUnique({ where: { id: lead.companyId }, select: { name: true, isActive: true, archivedReason: true, archivedBy: true, archivedAt: true } }) : await findCompanyByName(prisma, lead.companyName);
+    if (co && co.isActive === false) return NextResponse.json({ error: archivedMessage(co), archived: true }, { status: 409 });
     // Link (or create) the customer record; files carry over (Benjy 8/5, 11/18).
     const companyId = await linkLeadToCompany(prisma, lead);
     const updated = await prisma.lead.update({ where: { id: body.id }, data: { pipelineStage: "CUSTOMER", companyId } });
@@ -258,6 +263,11 @@ async function updateLead(prisma: any, body: any) {
     if (cur?.outreachStatus && !["unsubscribed", "bounced"].includes(cur.outreachStatus)) data.outreachStatus = "done";
   }
 
+  if (data.pipelineStage === "CUSTOMER") {
+    const cur = await prisma.lead.findUnique({ where: { id: body.id }, select: { companyName: true, companyId: true } });
+    const co: any = cur?.companyId ? await prisma.company.findUnique({ where: { id: cur.companyId }, select: { name: true, isActive: true, archivedReason: true, archivedBy: true, archivedAt: true } }) : cur ? await findCompanyByName(prisma, cur.companyName) : null;
+    if (co && co.isActive === false) return NextResponse.json({ error: archivedMessage(co), field: "pipelineStage", archived: true }, { status: 409 });
+  }
   let updated = await prisma.lead.update({ where: { id: body.id }, data });
   // Moving a lead to Customers links it to the customer record jobs and
   // invoices use, so the company is one record everywhere (Benjy 11/18).

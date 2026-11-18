@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { TERMS, TERMS_SET_ROLES, setCustomerTerms } from "@/lib/press-gate";
+import { ARCHIVE_ROLES } from "@/lib/customer-archive";
 
 // A customer's payment terms (Benjy 11/18). Everyone on staff can see them;
 // accounting and Customer Service set them.
@@ -10,9 +11,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
-  const co = await prisma.company.findUnique({ where: { id }, select: { paymentTerms: true, paymentTermsBy: true, paymentTermsAt: true } as any }) as any;
+  const co = await prisma.company.findUnique({ where: { id }, select: { paymentTerms: true, paymentTermsBy: true, paymentTermsAt: true, isActive: true, archivedAt: true, archivedBy: true, archivedReason: true } as any }) as any;
   if (!co) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ terms: co.paymentTerms || null, by: co.paymentTermsBy || null, at: co.paymentTermsAt || null, options: TERMS, canEdit: TERMS_SET_ROLES.includes(session.role) });
+  return NextResponse.json({ terms: co.paymentTerms || null, by: co.paymentTermsBy || null, at: co.paymentTermsAt || null, options: TERMS, canEdit: TERMS_SET_ROLES.includes(session.role),
+    archived: co.isActive === false, archivedAt: co.archivedAt || null, archivedBy: co.archivedBy || null, archivedReason: co.archivedReason || null, canArchive: ARCHIVE_ROLES.includes(session.role) });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

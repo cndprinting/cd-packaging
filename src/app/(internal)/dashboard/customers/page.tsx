@@ -20,8 +20,12 @@ export default function CustomersPage() {
   const [form, setForm] = useState({ name: "", industry: "", phone: "", address: "" });
   const update = (f: string, v: string) => setForm((p) => ({ ...p, [f]: v }));
 
+  // Archived (out of business) customers are kept, shown on their own tab (Benjy 11/18).
+  const [showArchived, setShowArchived] = useState(false);
+  const [archived, setArchived] = useState<any[]>([]);
   useEffect(() => {
     fetch("/api/companies").then(r => r.json()).then(d => { if (d.companies?.length) setCompanies(d.companies); }).catch(() => {});
+    fetch("/api/companies?archived=1").then(r => r.json()).then(d => setArchived(d.companies || [])).catch(() => {});
   }, []);
 
   const [allJobs, setAllJobs] = useState(demoJobs);
@@ -52,19 +56,21 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
-    if (!search) return customerData;
+    const base: any[] = showArchived ? archived.map((c) => ({ ...c, activeJobs: 0, totalOrders: 0 })) : customerData;
+    if (!search) return base;
     const q = search.toLowerCase();
-    return customerData.filter(c =>
+    return base.filter(c =>
       c.name.toLowerCase().includes(q) ||
       (c.industry || "").toLowerCase().includes(q) ||
       (c.phone || "").includes(q)
     );
-  }, [customerData, search]);
+  }, [customerData, search, showArchived, archived]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-gray-900">Customers</h1><p className="text-sm text-gray-500 mt-1">{filtered.length} of {companies.length} companies</p></div>
+        <div><h1 className="text-2xl font-bold text-gray-900">Customers</h1><p className="text-sm text-gray-500 mt-1">{filtered.length} of {showArchived ? archived.length : companies.length} {showArchived ? "archived" : "companies"}</p></div>
+        <div className="ml-auto mr-3"><button type="button" onClick={() => setShowArchived((v) => !v)} className={`rounded-full border px-3 py-1 text-xs ${showArchived ? "border-gray-700 bg-gray-700 text-white" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>{showArchived ? "Back to active customers" : `Archived (${archived.length})`}</button></div>
         <Button onClick={() => setShowModal(true)} className="gap-2"><Plus className="h-4 w-4" />Add Customer</Button>
       </div>
 
@@ -81,7 +87,7 @@ export default function CustomersPage() {
           <TableBody>
             {filtered.map((c) => (
               <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/customers/${c.id}`}>
-                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p></div></TableCell>
+                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p>{showArchived && <span className="text-xs text-gray-500">Archived{c.archivedReason ? `: ${c.archivedReason}` : ""}</span>}</div></TableCell>
                 <TableCell className="text-sm text-gray-600">{c.phone || "—"}</TableCell>
                 <TableCell><Badge className="bg-gray-100 text-gray-600">{c.industry || "—"}</Badge></TableCell>
                 <TableCell className="text-right"><span className={`font-medium ${c.activeJobs > 0 ? "text-green-700" : "text-gray-400"}`}>{c.activeJobs}</span></TableCell>

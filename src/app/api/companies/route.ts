@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { archivedMessage, findCompanyByName } from "@/lib/lead-company";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "customer";
+    const archived = searchParams.get("archived") === "1";
 
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ companies: [], source: "empty" });
     }
     const companies = await prisma.company.findMany({
-      where: { type, isActive: true },
+      where: { type, isActive: !archived },
       include: { contacts: { take: 1 } },
       orderBy: { name: "asc" },
     });
@@ -37,6 +39,10 @@ export async function POST(request: NextRequest) {
     if (!prisma) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+    // Same company under a slightly different spelling, or archived (Benjy 11/18).
+    const same: any = await findCompanyByName(prisma, name);
+    if (same && same.isActive === false) return NextResponse.json({ error: archivedMessage(same), archived: true, existingId: same.id }, { status: 409 });
+    if (same) return NextResponse.json({ error: `${same.name} is already in Customers.`, existingId: same.id }, { status: 409 });
     const existing = await prisma.company.findUnique({ where: { slug } });
     if (existing) return NextResponse.json({ error: "A company with this name already exists" }, { status: 409 });
 

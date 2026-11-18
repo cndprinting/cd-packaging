@@ -81,7 +81,10 @@ export async function POST(request: NextRequest) {
       const nc = b.newCustomer;
       const cname = t(nc.name, 200);
       const slug = cname.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-      const dupe = await prisma.company.findFirst({ where: { OR: [{ slug }, { name: { equals: cname, mode: "insensitive" } }] }, select: { id: true, name: true } });
+      const { findCompanyByName, archivedMessage } = await import("@/lib/lead-company");
+      const same: any = await findCompanyByName(prisma, cname);
+      if (same && same.isActive === false) return NextResponse.json({ error: archivedMessage(same), archived: true, existingId: same.id }, { status: 409 });
+      const dupe = same || await prisma.company.findFirst({ where: { OR: [{ slug }, { name: { equals: cname, mode: "insensitive" } }] }, select: { id: true, name: true } });
       if (dupe) return NextResponse.json({ error: `"${dupe.name}" is already in Customers. Pick it from the list instead.`, existingId: dupe.id }, { status: 409 });
       const lines = t(nc.address, 500).split(/\n/).map((s) => s.trim()).filter(Boolean);
       const last = lines.length > 1 ? lines[lines.length - 1] : "";
