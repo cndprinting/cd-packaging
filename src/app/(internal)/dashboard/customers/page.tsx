@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Building2, ExternalLink, Plus, X, Loader2, Search, Phone, MapPin } from "lucide-react";
-import { demoCompanies, demoJobs } from "@/lib/demo-data";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ import { Combobox } from "@/components/ui/combobox";
 interface Company { id: string; name: string; slug?: string; industry?: string; phone?: string; city?: string; state?: string; }
 
 export default function CustomersPage() {
-  const [companies, setCompanies] = useState<Company[]>(demoCompanies);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -28,7 +27,7 @@ export default function CustomersPage() {
     fetch("/api/companies?archived=1").then(r => r.json()).then(d => setArchived(d.companies || [])).catch(() => {});
   }, []);
 
-  const [allJobs, setAllJobs] = useState(demoJobs);
+  const [allJobs, setAllJobs] = useState<any[]>([]);
   useEffect(() => { fetch("/api/jobs").then(r => r.json()).then(d => { if (d.jobs?.length) setAllJobs(d.jobs); }).catch(() => {}); }, []);
 
   const customerData = useMemo(() => companies.map((c) => {

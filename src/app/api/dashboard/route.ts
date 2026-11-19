@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
+const DONE = ["DELIVERED", "INVOICED"];
+function onTimePct(jobs: any[]): number | null {
+  const done = jobs.filter((j) => DONE.includes(j.status) && j.dueDate);
+  if (!done.length) return null;
+  const onTime = done.filter((j) => new Date(j.updatedAt) <= new Date(new Date(j.dueDate).getTime() + 86400e3));
+  return Math.round((onTime.length / done.length) * 1000) / 10;
+}
+function cycleDays(jobs: any[]): number | null {
+  const done = jobs.filter((j) => DONE.includes(j.status));
+  if (!done.length) return null;
+  const avg = done.reduce((t, j) => t + (new Date(j.updatedAt).getTime() - new Date(j.createdAt).getTime()), 0) / done.length / 86400e3;
+  return Math.round(avg * 10) / 10;
+}
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -16,7 +30,9 @@ export async function GET() {
 
     // Build where clause based on role
     const isCustomer = session?.role === "CUSTOMER";
-    const jobWhere = isCustomer && session.companyId ? { order: { companyId: session.companyId } } : {};
+    // Real jobs only (Benjy 11/19): test jobs from before go-live don't count.
+    const { JOBS_LIVE_SINCE } = await import("@/lib/press-gate");
+    const jobWhere = isCustomer && session.companyId ? { order: { companyId: session.companyId } } : { createdAt: { gte: JOBS_LIVE_SINCE } };
 
     const [allJobs, alerts] = await Promise.all([
       prisma.job.findMany({ where: jobWhere, include: { order: { include: { company: true } } }, orderBy: { createdAt: "desc" } }),
@@ -41,8 +57,10 @@ export async function GET() {
       proofsPending: 0,
       materialShortages: 0,
       readyToShip: packedJobs.length,
-      onTimeShipmentPct: 87.5,
-      avgCycleTimeDays: 14.2,
+      // Measured, not typed in (Benjy 11/19): on time = delivered on or before its due date;
+      // cycle time = entered to delivered. Empty until real jobs deliver.
+      onTimeShipmentPct: onTimePct(allJobs),
+      avgCycleTimeDays: cycleDays(allJobs),
     };
 
     const recentJobs = allJobs.slice(0, 8).map(j => ({

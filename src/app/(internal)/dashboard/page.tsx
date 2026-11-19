@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { getKPIs, getJobsByStatus, demoJobs, demoAlerts } from "@/lib/demo-data";
+// No sample data on the Dashboard (Benjy 11/19): it showed made-up jobs and alerts.
+const EMPTY_KPIS = { openJobs: 0, inProduction: 0, dueThisWeek: 0, lateJobs: 0, blockedJobs: 0, proofsPending: 0, materialShortages: 0, readyToShip: 0, onTimeShipmentPct: null as number | null, avgCycleTimeDays: null as number | null };
 import { getStatusColor, getStatusLabel, getPriorityColor, formatDate } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { FileImage, Send } from "lucide-react";
@@ -129,9 +130,9 @@ function getSeverityBadge(severity: string) {
 }
 
 export default function DashboardPage() {
-  const [kpis, setKpis] = useState(() => getKPIs());
-  const [recentJobs, setRecentJobs] = useState(() => demoJobs.slice(0, 8));
-  const [alerts, setAlerts] = useState(() => demoAlerts);
+  const [kpis, setKpis] = useState(EMPTY_KPIS);
+  const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
 
   const [insights, setInsights] = useState<{ type: string; icon: string; title: string; description: string; action?: string; actionHref?: string }[]>([]);
 
@@ -140,8 +141,8 @@ export default function DashboardPage() {
       .then(r => r.json())
       .then(d => {
         if (d.kpis) setKpis(d.kpis);
-        if (d.recentJobs?.length) setRecentJobs(d.recentJobs);
-        if (d.alerts?.length) setAlerts(d.alerts);
+        setRecentJobs(d.recentJobs || []);
+        setAlerts(d.alerts || []);
       })
       .catch(() => {});
     fetch("/api/insights")
@@ -250,7 +251,7 @@ export default function DashboardPage() {
           icon={Target}
           iconBg="bg-emerald-100"
           iconColor="text-emerald-600"
-          value={`${kpis.onTimeShipmentPct}%`}
+          value={kpis.onTimeShipmentPct == null ? "—" : `${kpis.onTimeShipmentPct}%`}
           label="On-Time Ship %"
           delta={{ value: "+2.1% vs last month", trend: "up" }}
         />
@@ -258,7 +259,7 @@ export default function DashboardPage() {
           icon={Clock}
           iconBg="bg-indigo-100"
           iconColor="text-indigo-600"
-          value={`${kpis.avgCycleTimeDays}d`}
+          value={kpis.avgCycleTimeDays == null ? "—" : `${kpis.avgCycleTimeDays}d`}
           label="Avg Cycle Time"
           delta={{ value: "-0.8d improvement", trend: "up" }}
         />
