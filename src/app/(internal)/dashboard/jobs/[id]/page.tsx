@@ -1444,6 +1444,7 @@ export default function JobDetailPage() {
           <span className="font-semibold text-purple-900">Pre-Press Stage</span>
           <span className="text-xs text-gray-500">— Complete proofs + customer approval before production can schedule.</span>
         </div>
+        <ProofTypeField jobId={jobId} />
         <ProofsCard jobId={jobId} />
         <Card>
           <CardHeader>
@@ -2009,6 +2010,39 @@ export default function JobDetailPage() {
 }
 
 // Proofs card — tied to job, visible to customer via portal
+// Proof type on the ticket (Mike 11/19). Pre-press follows it; the CSR sets it.
+function ProofTypeField({ jobId }: { jobId: string }) {
+  const [v, setV] = useState<string>("");
+  const [def, setDef] = useState<string | null>(null);
+  const [cust, setCust] = useState("");
+  const [always, setAlways] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((d) => { const j = d.job || {}; setV(j.hardProof || ""); setDef(j.order?.company?.hardProofDefault || null); setCust(j.order?.company?.name || ""); }).catch(() => {}); }, [jobId]);
+  const save = async (mode: string, alw = always) => {
+    setV(mode); setMsg("");
+    const r = await fetch("/api/prepress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "hard_mode", jobId, mode, always: alw }) });
+    const d = await r.json().catch(() => ({}));
+    setMsg(r.ok ? "Saved" : d.error || "Could not save");
+    if (r.ok && alw) setDef(mode);
+  };
+  const shown = v || def || "";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+      <span className="font-medium text-gray-700">Proof</span>
+      <select value={shown} onChange={(e) => e.target.value && save(e.target.value)} className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm">
+        <option value="">Not set</option>
+        <option value="none">PDF proof only</option>
+        <option value="customer">PDF + hard proof to the customer</option>
+        <option value="internal">PDF + hard proof, internal check (CSR + sales)</option>
+      </select>
+      {!v && def && <span className="text-xs text-gray-500">(customer default)</span>}
+      {!shown && <span className="text-xs text-red-600">Set this so pre-press knows which proof to make.</span>}
+      {cust && shown && <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={always} onChange={(e) => { setAlways(e.target.checked); if (e.target.checked) save(shown, true); }} />Default for {cust}</label>}
+      {msg && <span className={`text-xs ${msg === "Saved" ? "text-emerald-700" : "text-red-600"}`}>{msg}</span>}
+    </div>
+  );
+}
+
 function ProofsCard({ jobId }: { jobId: string }) {
   const [proofs, setProofs] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string; name?: string } | null>(null);

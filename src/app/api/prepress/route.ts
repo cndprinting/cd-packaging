@@ -4,7 +4,7 @@ import { PROOF_ACT_ROLES, PROOF_MAKE_ROLES, STAGES, PREFLIGHT_ISSUES, HARD_PROOF
 
 // Pre-Press & Proofs board (remade 11/17/26).
 // GET ?test=1 -> { stages, jobs }  (test jobs hidden unless asked)
-// POST actions: art_in, preflight, new_file, imposed, upload_proof (pdf | hard), no_proof, hard_mode,
+// POST actions: art_in, preflight, new_file, imposed, upload_proof (pdf | hard), hard_mode (proof type on the ticket),
 //   send_proof (preview / reminder), mark_sent, record
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const b = await request.json().catch(() => ({}));
   const log = (orderId: string, details: string) => prisma.activityLog.create({ data: { orderId, userId: session.id, action: "PREPRESS", details } }).catch(() => {});
 
-  const JOB_ACTIONS = ["art_in", "upload_proof", "no_proof", "preflight", "new_file", "imposed", "hard_mode"];
+  const JOB_ACTIONS = ["art_in", "upload_proof", "preflight", "new_file", "imposed", "hard_mode"];
   if (JOB_ACTIONS.includes(b.action)) {
     const job = await prisma.job.findUnique({ where: { id: String(b.jobId || "") }, include: { order: { include: { company: true } }, csr: { select: { id: true, email: true, name: true } }, proofs: { where: { kind: "pdf" }, orderBy: { version: "desc" }, take: 1 } } as any }) as any;
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -35,6 +35,19 @@ export async function POST(request: NextRequest) {
       await prisma.job.update({ where: { id: job.id }, data: { artInAt: new Date(), artworkStatus: "ready" } as any });
       await addPrepressEvent(prisma, job.id, { t: "new_file", by: session.name, loc, note: b.note || null });
       await log(job.orderId, `${job.jobNumber}: artwork in, marked by ${session.name}${loc ? ` (${loc})` : ""}`);
+      return NextResponse.json({ ok: true });
+    }
+    // Proof type is part of the ticket (Mike 11/19): CSR, sales or owners set it, not pre-press.
+    if (b.action === "hard_mode") {
+      if (["PREPRESS_MANAGER", "DIGITAL_PRESS"].includes(session.role)) return NextResponse.json({ error: "The CSR sets the proof type on the ticket" }, { status: 403 });
+      const mode = ["customer", "internal", "none"].includes(b.mode) ? b.mode : null;
+      if (!mode) return NextResponse.json({ error: "Pick PDF only, hard proof to customer, or internal check" }, { status: 400 });
+      await prisma.job.update({ where: { id: job.id }, data: { hardProof: mode } as any });
+      if (b.always && job.order?.companyId) await prisma.company.update({ where: { id: job.order.companyId }, data: { hardProofDefault: mode } as any });
+      await log(job.orderId, `${job.jobNumber}: proof type ${HARD_PROOF_LABEL[mode]} set by ${session.name}${b.always ? " (customer default)" : ""}`);
+      // PDF-only and the PDF is already approved: proofing is done now.
+      const pdf = job.proofs?.[0];
+      if (mode === "none" && pdf?.status === "APPROVED") await finalizeProofs(prisma, pdf.id, { name: pdf.respondedByName || "customer", via: `PDF only, set by ${session.name}`, fromEmail: session.email });
       return NextResponse.json({ ok: true });
     }
     if (!PROOF_MAKE_ROLES.includes(session.role)) return NextResponse.json({ error: "Pre-press or CSRs do this" }, { status: 403 });
@@ -75,18 +88,6 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({ ok: true, told });
     }
-    // Hard proof for this job (Mike 11/19: depends on the customer). Optionally the customer's default.
-    if (b.action === "hard_mode") {
-      const mode = ["customer", "internal", "none"].includes(b.mode) ? b.mode : null;
-      if (!mode) return NextResponse.json({ error: "Pick customer, internal or PDF only" }, { status: 400 });
-      await prisma.job.update({ where: { id: job.id }, data: { hardProof: mode } as any });
-      if (b.always && job.order?.companyId) await prisma.company.update({ where: { id: job.order.companyId }, data: { hardProofDefault: mode } as any });
-      await log(job.orderId, `${job.jobNumber}: ${HARD_PROOF_LABEL[mode]} set by ${session.name}${b.always ? " (customer default)" : ""}`);
-      // PDF-only and the PDF is already approved: proofing is done now.
-      const pdf = job.proofs?.[0];
-      if (mode === "none" && pdf?.status === "APPROVED") await finalizeProofs(prisma, pdf.id, { name: pdf.respondedByName || "customer", via: `PDF only, set by ${session.name}`, fromEmail: session.email });
-      return NextResponse.json({ ok: true });
-    }
     if (b.action === "upload_proof") {
       const kind = b.kind === "hard" ? "hard" : "pdf";
       // A hard proof is physical: a photo or scan is optional.
@@ -98,14 +99,7 @@ export async function POST(request: NextRequest) {
       await log(job.orderId, `${job.jobNumber}: ${kind === "hard" ? "hard proof" : "PDF proof"} v${version} ${kind === "hard" ? "printed" : "uploaded"} by ${session.name}`);
       return NextResponse.json({ ok: true, proof });
     }
-    // no_proof: exact reprint or customer waived the proof. Logged as an internal approval; no hard proof either.
-    const reason = String(b.reason || "").trim();
-    if (!reason) return NextResponse.json({ error: "Say why no proof is needed" }, { status: 400 });
-    const version = (await prisma.proof.count({ where: { jobId: job.id, kind: "pdf" } })) + 1;
-    if (!job.hardProof) await prisma.job.update({ where: { id: job.id }, data: { hardProof: "none" } as any });
-    const proof = await prisma.proof.create({ data: { jobId: job.id, kind: "pdf", version, status: "PENDING", fileName: "No proof needed", notes: reason.slice(0, 500), sentDate: new Date() } as any });
-    await onProofApproved(prisma, proof.id, { name: session.name, via: "no proof needed", comment: reason, fromEmail: session.email });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
   const proof = await prisma.proof.findUnique({ where: { id: String(b.proofId || "") }, include: { job: { include: { order: { include: { company: true } } } } } }) as any;

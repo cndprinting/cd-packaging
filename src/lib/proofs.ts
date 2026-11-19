@@ -25,7 +25,7 @@ export const STAGES: { key: Stage; label: string; who: string; help: string }[] 
   { key: "make", label: "Make PDF proof", who: "Pre-press", help: "Files are good. 24-hour proof target. Customer changes land here too." },
   { key: "send", label: "Send to customer", who: "CSR", help: "Proof is ready. Send it for approval." },
   { key: "customer", label: "With customer", who: "Customer", help: "Waiting on the customer to approve or ask for changes." },
-  { key: "hard", label: "Hard proof", who: "Pre-press / CSR", help: "PDF approved. Print and assemble the hard proof; internal ones are signed off here by CSR and sales." },
+  { key: "hard", label: "Hard proof", who: "Pre-press / CSR", help: "PDF approved. Print and assemble the hard proof as the ticket says; internal ones are signed off here by CSR and sales." },
   { key: "okay", label: "Okay to plate", who: "Plant", help: "Final proof approved. Plates, then press once the deposit is in." },
 ];
 export const HARD_PROOF_LABEL: Record<string, string> = { customer: "Hard proof to customer", internal: "Hard proof, internal check", none: "PDF only" };
@@ -150,9 +150,10 @@ export async function onProofApproved(prisma: any, proofId: string, by: { name: 
     if (!/^QA-/i.test(job.jobNumber || "")) try {
       const { sendEmail } = await import("@/lib/email/graph-client");
       const pre = await prisma.user.findMany({ where: { isActive: true, role: "PREPRESS_MANAGER" }, select: { email: true } });
-      const to = [...new Set([...pre.map((u: any) => u.email), job.csr?.email].filter(Boolean))] as string[];
       const hp = hardMode(job);
-      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: `PDF approved, hard proof next: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved PDF proof v${proof.version} for job ${esc(job.jobNumber)}, ${esc(job.name)} (${esc(by.name)}, ${esc(by.via)}).</p><p>${hp ? `Next: ${esc(HARD_PROOF_LABEL[hp] || hp)}.` : "Next: decide the hard proof (to the customer, internal check, or PDF only)."} <a href="${BASE_URL}/dashboard/prepress">Open Pre-Press &amp; Proofs</a></p></div>` });
+      // No proof type on the ticket (Mike 11/19): pre-press can't know, so only the CSR is asked.
+      const to = [...new Set([...(hp ? pre.map((u: any) => u.email) : []), job.csr?.email].filter(Boolean))] as string[];
+      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: hp ? `PDF approved, hard proof next: ${job.jobNumber} (${job.order?.company?.name || ""})` : `Set the proof type: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved PDF proof v${proof.version} for job ${esc(job.jobNumber)}, ${esc(job.name)} (${esc(by.name)}, ${esc(by.via)}).</p><p>${hp ? `Next: ${esc(HARD_PROOF_LABEL[hp] || hp)}.` : "The ticket has no proof type. Set it: PDF only, hard proof to the customer, or hard proof internal check."} <a href="${BASE_URL}/dashboard/${hp ? "prepress" : `jobs/${job.id}`}">${hp ? "Open Pre-Press &amp; Proofs" : "Open the job"}</a></p></div>` });
     } catch (e) { console.error("pdf approved notice failed", e); }
     return proof;
   }

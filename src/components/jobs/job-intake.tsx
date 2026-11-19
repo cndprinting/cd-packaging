@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, X, CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ARTWORK, CustomerPicker, EstimateReader, TERMS, areaCls, inputCls, type Cust, type EstimateRead, type Rep } from "./shared";
+import { ARTWORK, CustomerPicker, EstimateReader, PROOF, TERMS, areaCls, inputCls, type Cust, type EstimateRead, type Rep } from "./shared";
 
 export type IntakePrefill = Partial<{
   handoffId: string; leadId: string; companyId: string; customerName: string; customerEmail: string; customerContact: string; customerAddress: string;
@@ -29,8 +29,9 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
     quantity: prefill.quantity || "", quotedPrice: prefill.quotedPrice || "", productType: prefill.productType || "FOLDING_CARTON", customerPO: prefill.customerPO || "",
     dueDate: prefill.dueDate || "", salesRepId: prefill.salesRepId || "", artworkStatus: prefill.artworkStatus || "", artworkNotes: prefill.artworkNotes || "",
     paymentTerms: prefill.paymentTerms || "", saveTerms: false, deliveryAddress: prefill.deliveryAddress || prefill.customerAddress || "", shippingNotes: prefill.shippingNotes || "", specialNotes: prefill.specialNotes || "",
-    jobNumber: "", priority: "NORMAL", estimatedHours: "",
+    jobNumber: "", priority: "NORMAL", estimatedHours: "", hardProof: "", saveProof: false,
   });
+  const [proofOnFile, setProofOnFile] = useState<string | null>(null);
   const [reps, setReps] = useState<Rep[]>([]);
   const [read, setRead] = useState<EstimateRead | null>(null);
   const [matches, setMatches] = useState<Cust[]>([]);
@@ -42,13 +43,13 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
   // Reps for the dropdown, even when the customer is already filled in.
   useEffect(() => { fetch("/api/payments/customers?q=%23%23none%23%23").then((r) => r.json()).then((d) => { if (d.reps) setReps(d.reps); }).catch(() => {}); }, []);
 
-  const pickCustomer = (c: Cust) => { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); setF((p) => ({ ...p, paymentTerms: c.terms || p.paymentTerms, saveTerms: false, companyId: c.id, customerName: c.name, newCustomer: false, billingEmail: p.billingEmail || c.email || "", billingContact: p.billingContact || c.contact || "", deliveryAddress: p.deliveryAddress || c.address || "" })); };
+  const pickCustomer = (c: Cust) => { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); setProofOnFile(c.proof || null); setF((p) => ({ ...p, paymentTerms: c.terms || p.paymentTerms, saveTerms: false, hardProof: c.proof || p.hardProof, saveProof: false, companyId: c.id, customerName: c.name, newCustomer: false, billingEmail: p.billingEmail || c.email || "", billingContact: p.billingContact || c.contact || "", deliveryAddress: p.deliveryAddress || c.address || "" })); };
   // Coming from a handoff the customer is already set: look up its terms.
   useEffect(() => {
     if (!prefill.companyId || !prefill.customerName) return;
     fetch(`/api/payments/customers?q=${encodeURIComponent(prefill.customerName)}`).then((r) => r.json()).then((d) => {
       const c = (d.customers || []).find((x: Cust) => x.id === prefill.companyId);
-      if (c) { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); if (c.terms && mode === "job") setF((p) => ({ ...p, paymentTerms: c.terms })); }
+      if (c) { setOnFile({ terms: c.terms || null, by: c.termsBy || null, at: c.termsAt || null }); setProofOnFile(c.proof || null); if (mode === "job") setF((p) => ({ ...p, paymentTerms: c.terms || p.paymentTerms, hardProof: c.proof || p.hardProof })); }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -97,13 +98,13 @@ ${line}` : line }));
       ["Accepted estimate", !!f.estimateNumber.trim() || !!f.estimateFileName],
       ["Job name, quantity and price", !!f.jobName.trim() && Number(f.quantity) > 0 && Number(f.quotedPrice) > 0],
       ["Artwork status", !!f.artworkStatus],
-      ...(mode === "job" ? [["Payment terms", !!f.paymentTerms] as [string, boolean]] : []),
+      ...(mode === "job" ? [["Payment terms", !!f.paymentTerms] as [string, boolean], ["Proof type", !!f.hardProof] as [string, boolean]] : []),
       ["Delivery address", !!f.deliveryAddress.trim()],
     ];
     if (f.newCustomer) list.push(["New customer billing info", !!f.billingContact.trim() && email && !!f.billingAddress.trim()]);
     return list;
   }, [f]);
-  const ready = mode === "handoff" ? checks.every(([, ok]) => ok) : (!!f.companyId || (f.newCustomer && !!f.customerName.trim())) && !!f.jobName.trim() && Number(f.quantity) > 0;
+  const ready = mode === "handoff" ? checks.every(([, ok]) => ok) : (!!f.companyId || (f.newCustomer && !!f.customerName.trim())) && !!f.jobName.trim() && Number(f.quantity) > 0 && !!f.hardProof;
 
   const submit = async () => {
     setBusy(true); setErr(null);
@@ -117,6 +118,7 @@ ${line}` : line }));
           name: f.jobName, description: f.specs, quantity: f.quantity, dueDate: f.dueDate || null, priority: f.priority, productType: f.productType,
           estimatedHours: f.estimatedHours || null, jobNumber: f.jobNumber || null, estimateNumber: f.estimateNumber, customerPO: f.customerPO,
           quotedPrice: f.quotedPrice, salesRepId: f.salesRepId || null, paymentTerms: f.paymentTerms || null, saveTerms: f.saveTerms || !onFile?.terms, artworkStatus: f.artworkStatus || null,
+          hardProof: f.hardProof || null, saveProof: f.saveProof || !proofOnFile,
           deliveryTo: [f.deliveryAddress, f.shippingNotes && `Shipping: ${f.shippingNotes}`].filter(Boolean).join("\n"), generalNotes: notes,
           contactName: f.billingContact, taxExempt: f.taxExempt, billingEmail: f.billingEmail, handoffId: prefill.handoffId || null, prototypeId,
           companyId: f.newCustomer ? null : f.companyId, newCustomer: f.newCustomer ? { name: f.customerName, contact: f.billingContact, email: f.billingEmail, phone: f.billingPhone, address: f.billingAddress } : null,
@@ -198,6 +200,10 @@ ${line}` : line }));
                   {mode === "job" && termsDiffer && <label className="mt-1 flex items-center gap-1.5 text-[11px] text-amber-800"><input type="checkbox" checked={f.saveTerms} onChange={(e) => set("saveTerms", e.target.checked)} />Make this the customer's terms from now on (otherwise just this job)</label>}
                 </label>
               )}
+              {mode === "job" && <label className="col-span-2 block"><span className="text-gray-600">Proof</span><select value={f.hardProof} onChange={(e) => set("hardProof", e.target.value)} className={inputCls}><option value="">Choose...</option>{PROOF.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                <span className="mt-1 block text-[11px] text-gray-500">{proofOnFile ? <>On file for this customer: {PROOF.find(([k]) => k === proofOnFile)?.[1]}.</> : f.companyId || f.newCustomer ? "Nothing on file for this customer yet. What you pick here is saved as their default." : ""}</span>
+                {proofOnFile && f.hardProof && f.hardProof !== proofOnFile && <label className="mt-1 flex items-center gap-1.5 text-[11px] text-amber-800"><input type="checkbox" checked={f.saveProof} onChange={(e) => set("saveProof", e.target.checked)} />Make this the customer's default from now on (otherwise just this job)</label>}
+              </label>}
               <label className="col-span-2 block"><span className="text-gray-600">Artwork notes</span><Input value={f.artworkNotes} onChange={(e) => set("artworkNotes", e.target.value)} placeholder="Where the files are, or what's coming" /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Deliver to</span><textarea value={f.deliveryAddress} onChange={(e) => set("deliveryAddress", e.target.value)} rows={2} className={areaCls} /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Shipping instructions</span><Input value={f.shippingNotes} onChange={(e) => set("shippingNotes", e.target.value)} placeholder="Dock hours, liftgate, split shipments" /></label>

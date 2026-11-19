@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export type Cust = { id: string; name: string; where?: string; email: string | null; contact: string | null; address?: string | null; terms?: string | null; termsBy?: string | null; termsAt?: string | null };
+export type Cust = { id: string; name: string; where?: string; email: string | null; contact: string | null; address?: string | null; terms?: string | null; termsBy?: string | null; termsAt?: string | null; proof?: string | null };
 export type Rep = { id: string; name: string };
 export type EstimateRead = {
   customerName: string | null; contactName: string | null; estimateNumber: string | null; estimateDate: string | null; salesRep: string | null;
@@ -25,6 +25,12 @@ export const ARTWORK: [string, string][] = [
   ["coming", "Customer is sending art"],
   ["design", "We're designing it"],
   ["reprint", "Exact reprint, no art changes"],
+];
+// Proof type on the ticket (Mike 11/19: "every job gets a proof as requested on the ticket").
+export const PROOF: [string, string][] = [
+  ["none", "PDF proof only"],
+  ["customer", "PDF + hard proof to the customer"],
+  ["internal", "PDF + hard proof, internal check (CSR + sales)"],
 ];
 export const inputCls = "mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm focus:border-brand-500 focus:outline-none";
 export const areaCls = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none";

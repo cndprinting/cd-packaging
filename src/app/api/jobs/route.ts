@@ -27,7 +27,7 @@ function waitingFor(j: any, press: { cleared: boolean; waitingOn: string[] } | n
   if (st === "make") return pdf ? "Proof changes (pre-press)" : "Proof from pre-press";
   if (st === "send") return onHard ? "CSR to send hard proof" : "CSR to send proof";
   if (st === "customer") return onHard ? "Customer hard proof approval" : "Customer proof approval";
-  if (st === "hard") { const h = hardStep(j, pdf, hard); return h === "decide" ? "Hard proof decision (pre-press)" : h === "review" ? "Hard proof check (CSR + sales)" : h === "reprint" ? "Hard proof changes (pre-press)" : "Hard proof (pre-press)"; }
+  if (st === "hard") { const h = hardStep(j, pdf, hard); return h === "decide" ? "Proof type on ticket (CSR)" : h === "review" ? "Hard proof check (CSR + sales)" : h === "reprint" ? "Hard proof changes (pre-press)" : "Hard proof (pre-press)"; }
   if (press && !press.cleared) return press.waitingOn.filter((w) => w !== "proof").map((w) => w[0].toUpperCase() + w.slice(1)).join(" + ") || "Press";
   if (!j.routedAt) return "Darrin to route";
   return "Ready for press";
@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
         generalNotes: t(b.generalNotes, 4000) || null, enteredDate: new Date(),
         paymentTerms: terms, artworkStatus: ["ready", "coming", "design", "reprint"].includes(b.artworkStatus) ? b.artworkStatus : null,
         jobType: b.artworkStatus === "reprint" ? "EXACT_REPRINT" : "NEW_ORDER", handoffId: b.handoffId || null,
+        hardProof: ["customer", "internal", "none"].includes(b.hardProof) ? b.hardProof : null,
       } as any,
       include: { order: { include: { company: true } } },
     });
@@ -186,6 +187,9 @@ export async function POST(request: NextRequest) {
     } else if (onFile?.paymentTerms && terms !== onFile.paymentTerms && (terms === "net30" || terms === "cod") && !["OWNER", "GM", "ADMIN", "ACCOUNTING"].includes(session.role)) {
       await tellAccounting(prisma, `Job ${jobNumber} entered on ${TERMS[terms]}`, `<p>${session.name} entered job ${jobNumber} for <b>${onFile.name}</b> on <b>${TERMS[terms]}</b>, just for this job. The customer's terms on file are ${TERMS[onFile.paymentTerms]}.</p>`, session.email);
     }
+
+    // Proof type: becomes the customer's default when asked, or when none is on file (Benjy 11/19).
+    if (["customer", "internal", "none"].includes(b.hardProof) && b.saveProof) await prisma.company.update({ where: { id: companyId }, data: { hardProofDefault: b.hardProof } as any }).catch(() => {});
 
     // The approved prototype this job came from: link it and carry the die (Benjy 11/18).
     if (b.prototypeId) {

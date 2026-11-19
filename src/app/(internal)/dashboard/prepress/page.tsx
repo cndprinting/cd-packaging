@@ -37,7 +37,7 @@ export default function PrepressPage() {
   const [cards, setCards] = useState<Card[]>([]);
   const [issuesList, setIssuesList] = useState<string[]>([]);
   const [hardLabels, setHardLabels] = useState<Record<string, string>>({});
-  const [me, setMe] = useState<{ canAct: boolean; canMake: boolean }>({ canAct: false, canMake: false });
+  const [me, setMe] = useState<{ role?: string; canAct: boolean; canMake: boolean }>({ canAct: false, canMake: false });
   const [loading, setLoading] = useState(true);
   const [showTest, setShowTest] = useState(false);
   const [q, setQ] = useState("");
@@ -144,6 +144,7 @@ export default function PrepressPage() {
                     <div className="font-medium text-gray-900">{c.name}</div>
                     <div className="text-xs text-gray-500">{c.customer}{c.quantity ? ` · ${c.quantity.toLocaleString()}` : ""}</div>
                     <div className="text-[11px] text-gray-400">{[c.csr && `CSR ${c.csr}`, c.salesRep && `Sales ${c.salesRep}`, c.dueDate && `due ${String(c.dueDate).slice(5, 10)}`].filter(Boolean).join(" · ")}</div>
+                    {!c.hardProof && <div className="mt-1 inline-block rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-700">No proof type on ticket (CSR)</div>}
                     {c.hardProof && <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] ${c.hardProof === "none" ? "bg-amber-50 text-amber-800" : "bg-orange-50 text-orange-800"}`}>{hardLabels[c.hardProof] || c.hardProof}</div>}
                     {c.proof && !["art", "preflight"].includes(c.stage) && (
                       <div className="mt-1 text-[11px]">
@@ -162,7 +163,6 @@ export default function PrepressPage() {
                       {c.stage === "art" && me.canAct && <Button size="sm" variant="outline" onClick={() => openFile(c, "art_in")}>Art is in</Button>}
                       {c.stage === "preflight" && me.canMake && <Button size="sm" onClick={() => setPre({ c, issues: [], note: "", result: "ok", busy: false })} className="gap-1"><FileSearch className="h-3.5 w-3.5" />Preflight</Button>}
                       {c.stage === "make" && me.canMake && <Button size="sm" disabled={busyId === c.id} onClick={() => { uploadFor.current = c; fileRef.current?.click(); }} className="gap-1">{busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}{c.pdf ? `Upload PDF v${c.pdf.version + 1}` : "Upload PDF proof"}</Button>}
-                      {c.stage === "make" && me.canMake && !c.pdf && <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => { const reason = prompt(`Why does ${c.jobNumber} need no proof? (e.g. exact reprint, customer waived)`); if (reason) post({ action: "no_proof", jobId: c.id, reason }, `${c.jobNumber} marked okay without a proof.`); }}>No proof needed</button>}
                       {c.stage === "send" && me.canAct && c.proof?.fileUrl && <Button size="sm" onClick={() => openSend(c)} className="gap-1"><Send className="h-3.5 w-3.5" />Email {kindName(c)}</Button>}
                       {c.stage === "send" && me.canAct && <button type="button" className={c.proof?.fileUrl ? "text-[11px] text-gray-500 underline" : "rounded border border-sky-300 px-2 py-1 text-xs text-sky-800"} onClick={() => post({ action: "mark_sent", proofId: c.proof!.id, method: "physical" }, "Marked sent")}>{c.proof?.kind === "hard" ? "Hard proof handed over / shipped" : "Sent a physical proof / another way"}</button>}
                       {c.stage === "customer" && me.canAct && <>
@@ -170,9 +170,12 @@ export default function PrepressPage() {
                         <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "approve", name: c.contactName || "", comment: "", internal: false, busy: false })}>They approved (signed proof, phone or email)</button>
                         <button type="button" className="text-[11px] text-gray-500 underline" onClick={() => setRecord({ c, decision: "changes", name: c.contactName || "", comment: "", internal: false, busy: false })}>They want changes</button>
                       </>}
-                      {c.stage === "hard" && c.hardStep === "decide" && me.canAct && (
+                      {c.stage === "hard" && c.hardStep === "decide" && me.canAct && ["PREPRESS_MANAGER", "DIGITAL_PRESS"].includes(me.role || "") && (
+                        <div className="w-full rounded bg-orange-50 p-1.5 text-[11px] text-orange-900">PDF approved. The ticket has no proof type; {c.csr || "the CSR"} has been asked to set it.</div>
+                      )}
+                      {c.stage === "hard" && c.hardStep === "decide" && me.canAct && !["PREPRESS_MANAGER", "DIGITAL_PRESS"].includes(me.role || "") && (
                         <div className="w-full rounded bg-orange-50 p-1.5 text-[11px] text-orange-900">
-                          <div className="mb-1 font-medium">PDF approved. Hard proof?</div>
+                          <div className="mb-1 font-medium">PDF approved. No proof type on the ticket. Set it:</div>
                           <div className="flex flex-wrap gap-1">
                             {(["customer", "internal", "none"] as const).map((m) => <button key={m} type="button" className="rounded border border-orange-300 bg-white px-1.5 py-0.5 hover:bg-orange-100" onClick={() => post({ action: "hard_mode", jobId: c.id, mode: m, always: !!always[c.id] }, `${c.jobNumber}: ${hardLabels[m]}${always[c.id] ? ` (default for ${c.customer})` : ""}`)}>{m === "customer" ? "To customer" : m === "internal" ? "Internal check" : "PDF only"}</button>)}
                           </div>
