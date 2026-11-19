@@ -281,6 +281,7 @@ export async function kickoffAgent(prisma: any, lead: any): Promise<void> {
   const body = wrap(`
     <p>Hi Mary,</p>
     <p>Can you put a quote together for this one when you get a chance? Everything we have is below. Just reply to me with your price and terms, or let me know if you need anything else, and I'll take it from there.</p>
+    ${proposedCarton(lead) ? `<p><strong>The customer already agreed to a heavier folding carton instead of corrugated</strong>, as long as it's sturdy enough to ship. Please quote it on carton board. If carton can't work, tell me why and I'll get the owners involved.</p>` : ""}
     <p><strong>${lead.companyName}</strong>${lead.contactName ? ` · ${lead.contactName}` : ""}${lead.contactEmail ? ` · ${lead.contactEmail}` : ""}${lead.contactPhone ? ` · ${lead.contactPhone}` : ""}</p>
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.commentary || "").replace(/</g, "&lt;")}</pre>
     <p>Thanks,<br>${leadAgentFirst(lead)}</p>`);
@@ -324,10 +325,19 @@ export async function askCustomer(prisma: any, lead: any, missing: string[]): Pr
 // can't produce, the agent proposes a heavier folding carton and asks if that
 // works. If the customer says yes, their reply loops back into the quote flow
 // (now tagged Folding Carton). Benjy 7/7.
-export async function suggestFoldingCarton(prisma: any, lead: any): Promise<void> {
+export const proposedCarton = (lead: any) => /Proposed folding carton alternative/.test(String(lead?.agentLog || ""));
+export async function suggestFoldingCarton(prisma: any, lead: any): Promise<"proposed" | "escalated" | void> {
   if (!agentEnabled()) return;
   if (await dropIfDuplicate(prisma, lead)) return;
   const token = lead.agentToken || newToken();
+  // Already asked once (Benjy 11/19, TxRx Data got the same email 4 times): the
+  // customer said carton works and Mary still says corrugated. That is a call
+  // for a person, not another email to the customer.
+  if (proposedCarton(lead)) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "needs_owner", agentNextAt: null, stage: "Mary says corrugated, customer OK with carton - needs you", agentLog: logLine(lead.agentLog, "Mary no-bid again after customer accepted carton - handed to owners") } });
+    try { await prisma.leadNote.create({ data: { leadId: lead.id, kind: "system", source: "agent", authorName: "Jessica (AI)", body: "[Agent] Customer already agreed to a heavier folding carton, but Mary no-bid it again as corrugated. Not emailing the customer again. Needs a person to decide." } }); } catch { /* ignore */ }
+    return "escalated";
+  }
   if (!lead.contactEmail) { await kickoffAgent(prisma, { ...lead, agentToken: token }); return; }
   const body = wrap(`
     <p>Hi ${firstName(lead.contactName)},</p>
@@ -339,6 +349,7 @@ export async function suggestFoldingCarton(prisma: any, lead: any): Promise<void
     where: { id: lead.id },
     data: { agentStatus: "awaiting_customer_info", agentToken: token, productCategory: "Folding Carton", stage: "Proposed folding carton (no corrugated)", agentNextAt: addBusinessDays(new Date(), 3), commentary: `${lead.commentary || ""}\n\n[Agent] Customer asked for corrugated (we don't do corrugated). Proposed a heavier folding carton and asked if that works.`.slice(0, 4000), agentLog: logLine(lead.agentLog, "Proposed folding carton alternative (no corrugated)") },
   });
+  return "proposed";
 }
 
 // ── MailerCity (direct-mail) lane ───────────────────────────────────────────
@@ -543,7 +554,10 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
       if (l.agentStatus === "awaiting_customer_info") {
         // Customer hasn't sent the details yet — nudge once.
         if (l.contactEmail) {
-          await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works, happy to help.</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
+          const cartonQ = /Proposed folding carton/.test(l.stage || "");
+          await agentCustomerSend(prisma, l, { body: wrap(cartonQ
+            ? `<p>Hi ${firstName(l.contactName)},</p><p>Checking back: would a heavier folding carton work for you instead of corrugated? If so, we'll get the quote going.</p><p>Best regards,<br>${leadAgentName(l)}</p>`
+            : `<p>Hi ${firstName(l.contactName)},</p><p>Just circling back on the few details we need to quote your ${l.productName || "project"}. If anything's unclear, reply and we'll recommend what works, happy to help.</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
         }
         await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "info_nudge_1", agentNextAt: addBusinessDays(now, 2), agentLog: logLine(l.agentLog, "Nudged customer for missing specs") } });
       } else if (l.agentStatus === "info_nudge_1") {

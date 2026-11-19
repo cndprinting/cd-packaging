@@ -281,8 +281,12 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
           // heavier folding carton to the customer and stop chasing Mary.
           const { suggestFoldingCarton } = await import("@/lib/agent/agent");
           const fresh = await prisma.lead.findUnique({ where: { id: ml.id } });
-          await suggestFoldingCarton(prisma, { ...fresh, productName: fresh.productCategory });
-          await agentSend({ to: OWNERS, subject: `FYI - ${ml.companyName} is corrugated; proposed folding carton`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary flagged <strong>${ml.companyName}</strong> as corrugated (we don't make corrugated), so I stopped chasing her and asked the customer whether a heavier folding carton works. Her note:</p>${quoted(reply)}</div>` });
+          const how = await suggestFoldingCarton(prisma, { ...fresh, productName: fresh.productCategory });
+          if (how === "escalated") {
+            await agentSend({ to: OWNERS, subject: `Needs you: ${ml.companyName} - customer OK with carton, Mary says corrugated`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><strong>${ml.companyName}</strong> already said a heavier folding carton works, but Mary no-bid it again as corrugated. I have not emailed the customer again. Please decide: quote it on carton board, or tell the customer we can't.</p><p>Mary's note:</p>${quoted(reply)}</div>` });
+          } else {
+            await agentSend({ to: OWNERS, subject: `FYI - ${ml.companyName} is corrugated; proposed folding carton`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>Mary flagged <strong>${ml.companyName}</strong> as corrugated (we don't make corrugated), so I stopped chasing her and asked the customer whether a heavier folding carton works. Her note:</p>${quoted(reply)}</div>` });
+          }
         } else {
           // Hard blocker (size / process) → close the loop OURSELVES: tell the
           // customer honestly, move the lead to Lost, one-time FYI to owners.
