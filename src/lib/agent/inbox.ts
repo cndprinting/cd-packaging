@@ -178,7 +178,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       // a revised price, an answer, freight from Shayla — after the lead has
       // moved to quote_received/needs_owner/sent, and those were dropped on the
       // floor because the matcher only looked at awaiting_mary.
-      const LIVE_FOR_INTERNAL = ["awaiting_mary", "quote_received", "needs_owner", "needs_info", "awaiting_customer_file", "awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3", "replied"];
+      const LIVE_FOR_INTERNAL = ["awaiting_mary", "quote_received", "needs_owner", "needs_info", "awaiting_customer_file", "awaiting_customer_info", "info_nudge_1", "sent", "followup_1", "followup_2", "followup_3", "quote_no_reply", "replied"];
       // Match on the AGENT's own conversation/state, NOT on who owns the lead
       // (Benjy 7/27): embe is Suzanne's but the agent had asked Mary for that
       // quote, and her reply was being dropped because the owner wasn't
@@ -317,8 +317,8 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       where: {
         contactEmail: { equals: from, mode: "insensitive" },
         OR: [
-          { pipelineStage: "LEAD", agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"] } },
-          { pipelineStage: "QUALIFIED", ownerName: { equals: "Jessica", mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file", "closed"] } }, // agent-run qualified leads (Benjy 7/15)
+          { pipelineStage: "LEAD", agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "quote_no_reply", "mailercity_qualifying", "awaiting_customer_file"] } },
+          { pipelineStage: "QUALIFIED", ownerName: { equals: "Jessica", mode: "insensitive" }, agentStatus: { in: ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "quote_no_reply", "mailercity_qualifying", "awaiting_customer_file", "closed"] } }, // agent-run qualified leads (Benjy 7/15)
           { pipelineStage: "LOST", agentStatus: "declined" }, // customer came back after a can't-produce decline (revised specs?)
         ],
       },

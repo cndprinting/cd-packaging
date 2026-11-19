@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
               // Hand-off states nag until a real person takes ownership: changing the
               // lead's Owner to yourself (not Jessica/TBD) tells Godzilla you're on it
               // and drops it from this digest (Benjy 7/14, Avini -> Suzanne).
-              { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
+              { agentStatus: { in: ["owner_handling", "needs_review", "needs_owner", "mailercity_handoff", "quote_no_reply"] }, OR: [{ ownerName: { in: ["Jessica", "TBD"], mode: "insensitive" } }, { ownerName: null }] },
               { agentStatus: { in: ["quote_received", "needs_info"] } },
               { agentStatus: { in: ["awaiting_mary", "awaiting_customer_info", "info_nudge_1", "mailercity_qualifying", "awaiting_customer_file"] }, agentNextAt: { lt: stale } },
             ],
@@ -191,6 +191,7 @@ export async function GET(request: NextRequest) {
           case "quote_received": return "Approve &amp; send Mary's quote to the customer (reply 'approved' to the Approve email)";
           case "replied": return "Customer replied - review and respond";
           case "owner_handling": return "Existing account - reach out to them directly";
+          case "quote_no_reply": return "Quote sent - no answer after 2 check-ins, give them a call";
           case "needs_review": return "Review - flagged possible scam";
           case "needs_info":
           case "needs_owner": return "Mary needs something / a decision from you";
@@ -235,7 +236,7 @@ export async function GET(request: NextRequest) {
       select: { id: true, companyName: true, pipelineStage: true, stage: true, followUpNote: true, agentStatus: true, outreachStatus: true, commentary: true },
       take: 100,
     });
-    const ACTIVE_A = ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "mailercity_qualifying", "awaiting_customer_file"];
+    const ACTIVE_A = ["awaiting_customer_info", "info_nudge_1", "awaiting_mary", "quote_received", "sent", "followup_1", "followup_2", "followup_3", "quote_no_reply", "mailercity_qualifying", "awaiting_customer_file"];
     const ACTIVE_O = ["intro_sent", "followup_1"];
     // Benjy 9/22 ("if it's dead stop reminding me"): a lead the agent already
     // closed out (declined, disqualified, dead) is not a to-do for anyone.

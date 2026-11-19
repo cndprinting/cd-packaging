@@ -40,7 +40,7 @@ export const HUMAN_OWNERS = ["benjy", "nitay", "albert", "shimmie", "suzanne", "
 // Agent statuses where a HUMAN has to do something next.
 const NEEDS_YOU_AGENT = [
   "quote_received", "replied", "needs_owner", "needs_review",
-  "needs_info", "mailercity_handoff", "owner_handling", "blocked",
+  "needs_info", "mailercity_handoff", "owner_handling", "blocked", "quote_no_reply",
 ];
 const NEEDS_YOU_OUTREACH = ["needs_name", "bounced", "replied"];
 
@@ -91,6 +91,7 @@ const AGENT_STAGE: Record<string, StageLabel> = {
   followup_1: "Following up",
   followup_2: "Following up",
   followup_3: "Following up",
+  quote_no_reply: "Following up",
   replied: "Replied - needs you",
   needs_owner: "Replied - needs you",
   needs_info: "Replied - needs you",

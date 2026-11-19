@@ -514,10 +514,13 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
   await prisma.lead.update({ where: { id: lead.id }, data: { agentStatus: "sent", stage: "Sent", agentNextAt: addBusinessDays(new Date(), 2), agentLog: logLine(lead.agentLog, "Quote sent to customer (price in body)") } });
 }
 
-const FOLLOWUPS: Record<string, { next: string; days: number; msg: string }> = {
+// After a quote goes out (Benjy 11/19): two check-ins, then if there's still
+// no answer the owners get it on the "needs your attention" email instead of
+// the lead quietly going to Lost.
+const FOLLOWUPS: Record<string, { next: string; days: number; msg: string | null }> = {
   sent: { next: "followup_1", days: 4, msg: "Just following up on the quote we sent — happy to answer any questions." },
   followup_1: { next: "followup_2", days: 5, msg: "Checking back — we can adjust the quantity or specs if that helps." },
-  followup_2: { next: "followup_3", days: 0, msg: "We'll leave this open on our end — reach out anytime and we'll pick right back up." },
+  followup_2: { next: "quote_no_reply", days: 0, msg: null },
 };
 
 // ── Cron worker: act on every lead whose clock is due ──────────────────────
@@ -587,13 +590,15 @@ export async function processDueAgentLeads(prisma: any): Promise<{ acted: number
         await prisma.lead.update({ where: { id: l.id }, data: { agentNextAt: addBusinessDays(now, 1), agentLog: logLine(l.agentLog, "Nudged owners to approve") } });
       } else {
         const step = FOLLOWUPS[l.agentStatus as string];
-        if (step) {
-          if (l.contactEmail) {
+        if (step && step.next === "quote_no_reply") {
+          // Two check-ins, no answer: hand it to the owners (stays open, not Lost).
+          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: "quote_no_reply", stage: "Quote sent - no answer after 2 check-ins", agentNextAt: null, agentLog: logLine(l.agentLog, "No answer after 2 quote check-ins - handed to owners") } });
+          try { await prisma.leadNote.create({ data: { leadId: l.id, kind: "system", source: "agent", authorName: "Jessica (AI)", body: "[Agent] Followed up twice on the quote with no answer. Handing it to you: worth a call." } }); } catch { /* ignore */ }
+        } else if (step) {
+          if (l.contactEmail && step.msg) {
             await agentCustomerSend(prisma, l, { body: wrap(`<p>Hi ${firstName(l.contactName)},</p><p>${step.msg}</p><p>Best regards,<br>${leadAgentName(l)}</p>`) });
           }
-          const next = step.days > 0 ? addBusinessDays(now, step.days) : null;
-          const status = step.days > 0 ? step.next : "closed";
-          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: status, stage: status === "closed" ? "Closed (no response)" : "Sent", agentNextAt: next, pipelineStage: status === "closed" ? "LOST" : l.pipelineStage, agentLog: logLine(l.agentLog, `Sent ${l.agentStatus} follow-up`) } });
+          await prisma.lead.update({ where: { id: l.id }, data: { agentStatus: step.next, stage: "Sent", agentNextAt: addBusinessDays(now, step.days), agentLog: logLine(l.agentLog, `Sent ${l.agentStatus === "sent" ? "1st" : "2nd"} quote check-in`) } });
         }
       }
       acted++;
