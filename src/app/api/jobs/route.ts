@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
+import { hardStep, proofsDone, stageFor } from "@/lib/proofs";
 
 // Jobs page tabs use Darrin's FileMaker statuses (Benjy 11/18): New until he
 // routes it, then PRE / DIG / BND / OUT / ASI as he sets them, then shipping.
@@ -14,16 +15,19 @@ function tabFor(j: any) {
   return j.routeStatus;
 }
 /** One plain line: what this job is waiting on right now. */
-function waitingFor(j: any, press: { cleared: boolean; waitingOn: string[] } | null, proof: any) {
+function waitingFor(j: any, press: { cleared: boolean; waitingOn: string[] } | null, pdf: any, hard: any) {
   if (DONE.includes(j.status)) return j.status === "INVOICED" ? "Invoiced" : j.status === "DELIVERED" ? "Delivered" : "Shipped";
   if (j.status === "PACKED") return "Shipping";
   if (PRESS_ON.includes(j.status)) return STEP_LABEL[j.status];
   if (j.createdAt < JOBS_LIVE_SINCE) return "";
-  if (j.artworkStatus === "coming" && !j.artInAt) return "Artwork from customer";
-  if (!proof) return "Proof from pre-press";
-  if (proof.status === "REVISION_REQUESTED" || proof.status === "REJECTED") return "Proof changes (pre-press)";
-  if (proof.status !== "APPROVED" && !proof.sentToCustomerAt) return "CSR to send proof";
-  if (proof.status !== "APPROVED") return "Customer proof approval";
+  // Pre-press steps per Mike (11/19): preflight, PDF proof, hard proof.
+  const st = stageFor(j, pdf, hard), onHard = pdf?.status === "APPROVED";
+  if (st === "art") return "Artwork from customer";
+  if (st === "preflight") return "Preflight (pre-press)";
+  if (st === "make") return pdf ? "Proof changes (pre-press)" : "Proof from pre-press";
+  if (st === "send") return onHard ? "CSR to send hard proof" : "CSR to send proof";
+  if (st === "customer") return onHard ? "Customer hard proof approval" : "Customer proof approval";
+  if (st === "hard") { const h = hardStep(j, pdf, hard); return h === "decide" ? "Hard proof decision (pre-press)" : h === "review" ? "Hard proof check (CSR + sales)" : h === "reprint" ? "Hard proof changes (pre-press)" : "Hard proof (pre-press)"; }
   if (press && !press.cleared) return press.waitingOn.filter((w) => w !== "proof").map((w) => w[0].toUpperCase() + w.slice(1)).join(" + ") || "Press";
   if (!j.routedAt) return "Darrin to route";
   return "Ready for press";
@@ -45,12 +49,13 @@ export async function GET() {
     const liveIds = jobs.filter((j) => j.createdAt >= JOBS_LIVE_SINCE).map((j) => j.id);
     const [invs, proofs] = liveIds.length ? await Promise.all([
       prisma.invoice.findMany({ where: { jobId: { in: liveIds }, status: { notIn: ["cancelled"] } }, select: { jobId: true, status: true, depositPaid: true, total: true, paidAmount: true } }),
-      prisma.proof.groupBy({ by: ["jobId"], where: { jobId: { in: liveIds }, status: "APPROVED" }, _count: true }),
+      prisma.proof.findMany({ where: { jobId: { in: liveIds }, status: "APPROVED" }, select: { jobId: true, kind: true } }),
     ]) : [[], []];
-    const approved = new Set((proofs as any[]).map((p) => p.jobId));
+    // Proofing is done with the final proof: the hard proof, or the PDF on PDF-only jobs (Mike 11/19).
+    const approved = new Set(jobs.filter((j: any) => proofsDone(j, (proofs as any[]).filter((p) => p.jobId === j.id))).map((j: any) => j.id));
     // Latest proof per live job, for the "Waiting on" column (Benjy 11/18).
-    const latestProofs = liveIds.length ? await prisma.proof.findMany({ where: { jobId: { in: liveIds } }, orderBy: { version: "desc" }, select: { jobId: true, status: true, sentToCustomerAt: true } }) : [];
-    const proofOf = (id: string) => (latestProofs as any[]).find((p) => p.jobId === id) || null;
+    const latestProofs = liveIds.length ? await prisma.proof.findMany({ where: { jobId: { in: liveIds } }, orderBy: { version: "desc" }, select: { jobId: true, status: true, sentToCustomerAt: true, kind: true } }) : [];
+    const proofOf = (id: string, kind: string) => (latestProofs as any[]).find((p) => p.jobId === id && (p.kind || "pdf") === kind) || null;
 
     const formatted = jobs.map((j: any) => {
       let press: { cleared: boolean; waitingOn: string[] } | null = null;
@@ -70,7 +75,7 @@ export async function GET() {
         isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
         isBlocked: false, paymentTerms: j.paymentTerms || null, press,
         productType: j.productType, routeStatus: j.routeStatus || null, routed: !!j.routedAt,
-        test: j.createdAt < JOBS_LIVE_SINCE, tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id)),
+        test: j.createdAt < JOBS_LIVE_SINCE, tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id, "pdf"), proofOf(j.id, "hard")),
       };
     });
     return NextResponse.json({ jobs: formatted, source: "database" });

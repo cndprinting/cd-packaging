@@ -44,6 +44,7 @@ export default function JobsPage() {
   const [deepSearching, setDeepSearching] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
   const [productTypeFilter, setProductTypeFilter] = useState("");
   const [showTest, setShowTest] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "due", dir: 1 });
@@ -82,13 +83,15 @@ export default function JobsPage() {
       if (q && ![j.name, j.jobNumber, j.companyName].some((v) => (v || "").toLowerCase().includes(q))) return false;
       if (priorityFilter && j.priority !== priorityFilter) return false;
       if (customerFilter && j.companyName !== customerFilter) return false;
+      if (repFilter && (j.salesRepName || "") !== repFilter) return false;
       if (productTypeFilter && j.productType !== productTypeFilter) return false;
       return true;
     });
     const val = (j: Job) => sort.key === "due" ? (j.dueDate || "9999") : sort.key === "job" ? j.jobNumber : sort.key === "customer" ? j.companyName.toLowerCase() : j.quantity;
     return [...list].sort((a, b) => (val(a) < val(b) ? -1 : val(a) > val(b) ? 1 : 0) * sort.dir);
-  }, [visible, tab, search, priorityFilter, customerFilter, productTypeFilter, sort]);
+  }, [visible, tab, search, priorityFilter, customerFilter, productTypeFilter, repFilter, sort]);
   const customers = useMemo(() => [...new Set(visible.map((j) => j.companyName))].sort(), [visible]);
+  const reps = useMemo(() => [...new Set(visible.map((j) => j.salesRepName).filter(Boolean))].sort(), [visible]);
   const testCount = (jobs || []).filter((j) => j.test).length;
   const sortBy = (key: SortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }));
   const Th = ({ k, children, className = "" }: { k?: SortKey; children: React.ReactNode; className?: string }) => (
@@ -129,6 +132,7 @@ export default function JobsPage() {
           <Input placeholder="Search job #, customer, job name (3+ letters also searches PO#, die#, ink...)" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} placeholder="All Priorities" options={[{ value: "", label: "All Priorities" }, { value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} className="w-36" />
+        <Select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} options={[{ value: "", label: "All Salespeople" }, ...reps.map((r) => ({ value: r, label: r }))]} className="w-40" />
         <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="All Customers" options={[{ value: "", label: "All Customers" }, ...customers.map((c) => ({ value: c, label: c }))]} className="w-44" />
         <Select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)} options={[{ value: "", label: "All Types" }, { value: "FOLDING_CARTON", label: "Folding Carton" }, { value: "COMMERCIAL_PRINT", label: "Commercial Print" }]} className="w-40" />
         {testCount > 0 && <label className="flex items-center gap-1.5 text-xs text-gray-500"><input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />Show test jobs ({testCount})</label>}

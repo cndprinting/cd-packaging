@@ -188,6 +188,8 @@ model Company {
   archivedAt     DateTime?
   archivedBy     String?
   archivedReason String?
+  // Mike 11/19/26: some customers always get a hard proof, some never. customer | internal | none
+  hardProofDefault String?
 }
 
 model Contact {
@@ -648,6 +650,12 @@ model Job {
   artworkStatus    String?   // ready | coming | design | reprint
   pressOverride    String?   // who released it to press without the gate, when, why
   artInAt          DateTime? // when print-ready art was in hand; the 24-hour proof clock starts here
+  // Pre-press per Mike Metroka (11/19/26): preflight report to the CSR, hard proof
+  // after the PDF is approved, and his "Event Management" grid of dates per round.
+  hardProof        String?   // customer (customer approves) | internal (CSR + sales review) | none (PDF only)
+  preflightAt      DateTime? // preflight passed (or fixed); null again when new art is needed
+  preflight        Json?     // last report: { issues[], note, result: ok|fixed|new_art, by, at }
+  prepressEvents   Json?     // [{ t: new_file|imposition|eproof|physical|preflight, at, by, round, loc?, target?, note? }]
   clearedNotifiedAt DateTime? // "cleared for press" email sent (once)
   // Darrin's routing (11/18/26): he reviews every new ticket and decides where it
   // goes. Unrouted live jobs sit on his "To route" list.
@@ -815,6 +823,8 @@ model Proof {
   respondedByName    String?     // name the customer typed when answering
   customerComment    String?     // what they want changed (or a note with the approval)
   respondedVia       String?     // link | phone | email | internal
+  kind               String      @default("pdf") // pdf | hard (Mike 11/19: hard proof after the PDF is approved)
+  location           String?     // where the file lives (network path, ShareFile link)
 
   createdAt     DateTime    @default(now())
 

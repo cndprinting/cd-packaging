@@ -59,11 +59,14 @@ export type PaymentState = {
 };
 
 export async function paymentState(prisma: any, jobId: string): Promise<PaymentState | null> {
-  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, paymentTerms: true, createdAt: true, pressOverride: true } });
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, paymentTerms: true, createdAt: true, pressOverride: true, hardProof: true, order: { select: { company: { select: { hardProofDefault: true } } } } } as any }) as any;
   if (!job) return null;
   const invs = await prisma.invoice.findMany({ where: { jobId, status: { not: "cancelled" } }, orderBy: { createdAt: "asc" } });
-  const proofApproved = (await prisma.proof.count({ where: { jobId, status: "APPROVED" } })) > 0;
+  const approvedProofs = await prisma.proof.findMany({ where: { jobId, status: "APPROVED" }, select: { kind: true } });
   const live = new Date(job.createdAt) >= JOBS_LIVE_SINCE;
+  // Live jobs need the FINAL proof: the hard proof, or the PDF when the job is PDF-only (Mike 11/19).
+  const { proofsDone } = await import("@/lib/proofs");
+  const proofApproved = live ? proofsDone(job, approvedProofs) : approvedProofs.length > 0;
   const terms = job.paymentTerms || (live ? DEFAULT_TERMS : null);
   const depositRequired = live && (terms === "deposit50" || terms === "prepaid");
   const real = invs.filter((i: any) => i.status !== "draft");
@@ -71,7 +74,7 @@ export async function paymentState(prisma: any, jobId: string): Promise<PaymentS
     : terms === "prepaid" ? real.length > 0 && real.every((i: any) => i.status === "paid" || rem(i) <= 0)
     : real.some((i: any) => i.depositPaid || i.status === "paid" || i.status === "deposit_paid");
   const waitingOn: string[] = [];
-  if (!proofApproved) waitingOn.push("proof approval");
+  if (!proofApproved) waitingOn.push(approvedProofs.length ? "hard proof" : "proof approval");
   if (!depositPaid) waitingOn.push(terms === "prepaid" ? "payment in full" : "50% deposit");
   return {
     terms, termsLabel: terms ? TERMS[terms] || terms : "Not set", live,
