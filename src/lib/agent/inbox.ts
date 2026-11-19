@@ -55,6 +55,31 @@ function companyMatches(name: string | null, subjectLc: string): boolean {
   return tokens.every((w) => subjectLc.includes(w));       // ALL distinctive tokens must be present
 }
 
+// Late replies after a hand-off (Benjy 11/19, Inquisitive + Anderson County sat
+// unseen in Jessica's mailbox for weeks): forward the actual email to whoever
+// owns the lead now, unless they're already on it.
+async function ownerFor(prisma: any, ownerName: string | null | undefined): Promise<{ to: string[]; who: string }> {
+  const n = String(ownerName || "").trim();
+  if (n && !/^(jessica|tbd)$/i.test(n)) {
+    const u = await prisma.user.findFirst({ where: { isActive: true, name: { startsWith: n.split(/\s+/)[0], mode: "insensitive" }, email: { endsWith: "@cndprinting.com" } }, select: { email: true, name: true } }).catch(() => null);
+    if (u) return { to: [u.email], who: u.name };
+  }
+  return { to: OWNERS, who: "the owners" };
+}
+async function forwardToOwner(prisma: any, client: any, m: any, lead: any, why: string): Promise<string | null> {
+  // Only fresh mail: turning this on must not dump weeks of old threads on anyone.
+  if (new Date(m.receivedDateTime).getTime() < Date.now() - 2 * 24 * 3600 * 1000) return null;
+  const { to, who } = await ownerFor(prisma, lead.ownerName);
+  const on = [...(m.toRecipients || []), ...(m.ccRecipients || [])].map((r: any) => String(r?.emailAddress?.address || "").toLowerCase());
+  const missing = to.filter((e) => !on.includes(e.toLowerCase()));
+  if (!missing.length) return null;
+  try {
+    await client.api(`/users/${m._mb}/messages/${m.id}/forward`).post({ toRecipients: missing.map((a) => ({ emailAddress: { address: a } })), comment: `This came to Jessica's mailbox for ${lead.companyName}. ${why} Jessica is not handling it, so it's yours.` });
+    return who;
+  } catch (e) { console.error("[agent inbox] forward to owner failed", e); return null; }
+}
+const already = (lead: any, m: any) => !!lead?.agentLastMsgAt && new Date(m.receivedDateTime) <= new Date(lead.agentLastMsgAt);
+
 export async function pollAgentInbox(prisma: any): Promise<{ checked: number; handled: number; error?: string }> {
   if (process.env.AGENT_ENABLED !== "true") return { checked: 0, handled: 0 };
   // Weekend: don't process replies either — handling one sends mail (a quote
@@ -80,7 +105,7 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         .filter(`receivedDateTime ge ${cutoff}`)
         .orderby("receivedDateTime desc")   // NEWEST first — a busy mailbox has >100 msgs in 5d; asc missed recent replies
         .top(200)
-        .select("id,subject,from,bodyPreview,receivedDateTime,hasAttachments,conversationId,internetMessageId")
+        .select("id,subject,from,toRecipients,ccRecipients,bodyPreview,receivedDateTime,hasAttachments,conversationId,internetMessageId")
         .get();
       for (const m of (res.value || [])) { m._mb = box; items.push(m); }
     } catch (e) {
@@ -194,11 +219,13 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       const HUMAN_OWNERS = ["benjy", "nitay", "albert", "shimmie", "suzanne", "mary"];
       if (ml && HUMAN_OWNERS.includes((ml.ownerName || "").trim().toLowerCase())) {
         const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
+        if (already(ml, m)) continue; // logged on an earlier poll
+        const fwd = await forwardToOwner(prisma, client, m, ml, `${who} replied after the lead moved to ${ml.ownerName}.`);
         try {
           await prisma.lead.update({ where: { id: ml.id }, data: {
-            agentStatus: "owner_handling", agentNextAt: null, stage: "Owner handling - agent stood down",
+            agentStatus: "owner_handling", agentNextAt: null, stage: "Owner handling - agent stood down", agentLastMsgAt: new Date(m.receivedDateTime),
             commentary: `${ml.commentary || ""}
-[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 200)}`.slice(0, 8000),
+[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 200)}${fwd ? ` (forwarded to ${fwd})` : ""}`.slice(0, 8000),
           } });
         } catch { /* non-fatal */ }
         try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
@@ -211,13 +238,16 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
         // Holy Toast (Albert), Tempted (Albert), Cardon (nobody) all got
         // flagged as "unmatched" — but a human-run lead is NOT the agent's
         // business: log it on the record and stay silent (Benjy 7/27).
-        const human = await prisma.lead.findMany({ orderBy: { updatedAt: "desc" }, take: 400, select: { id: true, companyName: true, commentary: true, ownerName: true } });
+        const human = await prisma.lead.findMany({ orderBy: { updatedAt: "desc" }, take: 400, select: { id: true, companyName: true, commentary: true, ownerName: true, agentStatus: true, agentLastMsgAt: true } });
         const owned = human.find((l: any) => companyMatches(l.companyName, subjectLc));
         if (owned) {
           const who = from === MARY.toLowerCase() ? "Mary" : "Shayla";
+          if (already(owned, m)) continue; // logged on an earlier poll
+          const fwd = owned.agentStatus === "owner_handling" || !/^(jessica|tbd)?$/i.test(String(owned.ownerName || "").trim())
+            ? await forwardToOwner(prisma, client, m, owned, `${who} replied on a lead Jessica handed off.`) : null;
           try {
-            await prisma.lead.update({ where: { id: owned.id }, data: { commentary: `${owned.commentary || ""}
-[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 160)}`.slice(0, 8000) } });
+            await prisma.lead.update({ where: { id: owned.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime), commentary: `${owned.commentary || ""}
+[${who}] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 160)}${fwd ? ` (forwarded to ${fwd})` : ""}`.slice(0, 8000) } });
           } catch { /* non-fatal */ }
           try { await client.api(`/users/${MAILBOX}/messages/${m.id}`).patch({ isRead: true }); } catch { /* ignore */ }
           handled++;
@@ -328,7 +358,16 @@ export async function pollAgentInbox(prisma: any): Promise<{ checked: number; ha
       },
       orderBy: { updatedAt: "desc" },
     });
-    if (!lead) continue;
+    if (!lead) {
+      const held = await prisma.lead.findFirst({ where: { contactEmail: { equals: from, mode: "insensitive" }, agentStatus: "owner_handling", pipelineStage: { in: ["LEAD", "QUALIFIED"] } }, orderBy: { updatedAt: "desc" } });
+      if (held && !already(held, m)) {
+        const fwd = await forwardToOwner(prisma, client, m, held, "The customer replied after Jessica handed the lead off.");
+        try { await prisma.lead.update({ where: { id: held.id }, data: { agentLastMsgAt: new Date(m.receivedDateTime), commentary: `${held.commentary || ""}
+[Customer replied] ${new Date().toLocaleDateString("en-US")}: ${(m.subject || "").slice(0, 90)} - ${(m.bodyPreview || "").slice(0, 200)}${fwd ? ` (forwarded to ${fwd})` : ""}`.slice(0, 8000) } }); } catch { /* non-fatal */ }
+        handled++;
+      }
+      continue;
+    }
     // Skip if we already handled this message (an owner may have opened it since).
     if (lead.agentLastMsgAt && new Date(m.receivedDateTime) <= new Date(lead.agentLastMsgAt)) continue;
 

@@ -190,7 +190,8 @@ export async function GET(request: NextRequest) {
         switch (l.agentStatus) {
           case "quote_received": return "Approve &amp; send Mary's quote to the customer (reply 'approved' to the Approve email)";
           case "replied": return "Customer replied - review and respond";
-          case "owner_handling": return "Existing account - reach out to them directly";
+          // owner_handling means two things (Benjy 11/19): an existing account from intake, or Jessica stood down after a hand-off.
+          case "owner_handling": return /^Existing account/i.test(l.stage || "") ? "Existing account - reach out to them directly" : "Jessica stood down and no rep owns it - take it or assign an owner";
           case "quote_no_reply": return "Quote sent - no answer after 2 check-ins, give them a call";
           case "needs_review": return "Review - flagged possible scam";
           case "needs_info":

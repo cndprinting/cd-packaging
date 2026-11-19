@@ -50,6 +50,7 @@ export default function PackingSlip() {
       </div>
       <div style={{ borderTop: "3px solid #111", margin: "10px 0 6px" }} />
       <h1 style={{ textAlign: "center", fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 40, margin: "4px 0 10px", letterSpacing: 1 }}>PACKING SLIP</h1>
+      {s.kind && s.kind !== "job" && <div style={{ textAlign: "center", fontWeight: 700, fontSize: 18, margin: "0 0 10px" }}>{s.kind === "proof" ? "HARD PROOF" : s.kind === "prototype" ? "PROTOTYPE" : "SAMPLES"}</div>}
       {d.label && <div style={{ textAlign: "center", fontWeight: 700, fontSize: 15, border: "2px solid #111", padding: "6px", margin: "0 0 12px" }}>{d.label.text}</div>}
 
       <div style={{ fontSize: 16, marginBottom: 12 }}><b>Customer P.O.</b> <span style={{ border: "1.5px solid #222", padding: "2px 10px", display: "inline-block", minWidth: 220 }}>{s.poNumber || d.job?.customerPO || ""}</span></div>

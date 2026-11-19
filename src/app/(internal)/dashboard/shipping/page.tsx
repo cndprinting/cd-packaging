@@ -10,7 +10,7 @@ import { Truck, Plus, X, Loader2, ExternalLink, Package, Mail, Search, AlertTria
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CARRIERS, trackingUrl } from "@/lib/shipping";
+import { CARRIERS, SHIP_KINDS, trackingUrl } from "@/lib/shipping";
 
 type Item = { description: string; quantity: number; boxes?: string | null };
 type Tally = { ordered: number; shipped: number; remaining: number; shipments: number } | null;
@@ -23,8 +23,10 @@ type Shipment = {
   isPartial: boolean; cod: boolean; notes: string | null; notifiedAt: string | null; notifyLog: string | null;
   items: Item[]; invoicePaid: boolean | null; invoiceBalance: number | null; createdAt: string;
   freightCost: number | null; freightNote: string | null; codRequestedAt: string | null; codRequestedBy: string | null; codReleasedAt: string | null; codReleasedBy: string | null; codReleased: boolean; tally: Tally;
+  kind: string; leadId: string | null; prototypeId: string | null; proofId: string | null;
 };
-type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally; shipTo: string | null; instructions: string | null; contactName: string | null; contactEmail: string | null };
+type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally; shipTo: string | null; instructions: string | null; contactName: string | null; contactEmail: string | null;
+  kind?: string; proofId?: string; prototypeId?: string; leadId?: string | null; itemText?: string };
 type Cust = { id: string; name: string; where: string; email: string | null; contact: string | null; address?: string | null };
 type Inv = { id: string; invoiceNumber: string; status: string; total: number; remaining: number; description: string | null };
 
@@ -47,13 +49,15 @@ const fmt = (v?: string | null) => (v ? new Date(v).toLocaleDateString("en-US", 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
-const blank = { companyId: "", customerName: "", jobId: "", jobNumber: "", poNumber: "", invoiceId: "", contactName: "", contactEmail: "", shipTo: "", targetShipDate: "", carrier: "FedEx", trackingNumber: "", estimatedDelivery: "", cartons: "", pallets: "", weight: "", freightCost: "", isPartial: false, cod: false, notes: "", items: [{ description: "", quantity: "", boxes: "" }] as { description: string; quantity: string; boxes: string }[] };
+const KIND_LABEL: Record<string, string> = Object.fromEntries(SHIP_KINDS);
+const blank = { kind: "job", leadId: "", prototypeId: "", proofId: "", companyId: "", customerName: "", jobId: "", jobNumber: "", poNumber: "", invoiceId: "", contactName: "", contactEmail: "", shipTo: "", targetShipDate: "", carrier: "FedEx", trackingNumber: "", estimatedDelivery: "", cartons: "", pallets: "", weight: "", freightCost: "", isPartial: false, cod: false, notes: "", items: [{ description: "", quantity: "", boxes: "" }] as { description: string; quantity: string; boxes: string }[] };
 const RELEASE_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
 const tallyText = (t: Tally) => (t && t.ordered ? `${t.shipped.toLocaleString()} of ${t.ordered.toLocaleString()} delivered${t.remaining > 0 ? `, ${t.remaining.toLocaleString()} left` : ", complete"}` : "");
 
 export default function ShippingPage() {
   const [rows, setRows] = useState<Shipment[]>([]);
   const [ready, setReady] = useState<Ready[]>([]);
+  const [other, setOther] = useState<Ready[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("toship");
   const [q, setQ] = useState("");
@@ -73,7 +77,7 @@ export default function ShippingPage() {
   const [notify, setNotify] = useState<{ s: Shipment; kind: "shipdate" | "tracking"; to: string; note: string; html: string; subject: string; busy: boolean } | null>(null);
 
   const load = async () => {
-    try { const r = await fetch("/api/shipments"); const d = await r.json(); setRows(d.shipments || []); setReady(d.ready || []); } catch { /* ignore */ }
+    try { const r = await fetch("/api/shipments"); const d = await r.json(); setRows(d.shipments || []); setReady(d.ready || []); setOther(d.other || []); } catch { /* ignore */ }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -106,10 +110,10 @@ export default function ShippingPage() {
     await load(); return true;
   };
 
-  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, items: [{ description: "", quantity: "", boxes: "" }], ...(r ? { jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", shipTo: r.shipTo || "", notes: r.instructions || "", contactName: r.contactName || "", contactEmail: r.contactEmail || "", items: [{ description: r.name || "", quantity: String(r.tally?.remaining ?? r.quantity ?? ""), boxes: "" }] } : {}) }); };
+  const startNew = (r?: Ready) => { setEditId(null); setForm({ ...blank, ...(r && r.kind === "prototype" ? { kind: "prototype", prototypeId: r.prototypeId || "", leadId: r.leadId || "", companyId: r.companyId || "", customerName: r.customerName || "", shipTo: r.shipTo || "", contactName: r.contactName || "", contactEmail: r.contactEmail || "", items: [{ description: r.itemText || "Prototype", quantity: String(r.quantity || 1), boxes: "" }] } : r ? { kind: r.kind || "job", proofId: r.proofId || "", jobId: r.id, jobNumber: r.jobNumber, poNumber: r.poNumber || "", invoiceId: r.invoiceId || "", companyId: r.companyId || "", customerName: r.customerName || "", shipTo: r.shipTo || "", notes: r.instructions || "", contactName: r.contactName || "", contactEmail: r.contactEmail || "", items: [{ description: r.itemText || r.name || "", quantity: String(r.tally?.remaining ?? r.quantity ?? ""), boxes: "" }] } : {}) }); };
   const startEdit = (s: Shipment) => {
     setEditId(s.id);
-    setForm({ ...blank, companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", freightCost: s.freightCost?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity), boxes: i.boxes || "" })) : [{ description: "", quantity: "", boxes: "" }] });
+    setForm({ ...blank, kind: s.kind || "job", leadId: s.leadId || "", prototypeId: s.prototypeId || "", proofId: s.proofId || "", companyId: s.companyId || "", customerName: s.customerName || "", jobId: s.jobId || "", jobNumber: s.jobNumber || "", poNumber: s.poNumber || "", invoiceId: s.invoiceId || "", contactName: s.contactName || "", contactEmail: s.contactEmail || "", shipTo: s.shipTo || "", targetShipDate: d10(s.targetShipDate), carrier: s.carrier || "FedEx", trackingNumber: s.trackingNumber || "", estimatedDelivery: d10(s.estimatedDelivery), cartons: s.cartons?.toString() || "", pallets: s.pallets?.toString() || "", weight: s.weight?.toString() || "", freightCost: s.freightCost?.toString() || "", isPartial: s.isPartial, cod: s.cod, notes: s.notes || "", items: s.items.length ? s.items.map((i) => ({ description: i.description, quantity: String(i.quantity), boxes: i.boxes || "" })) : [{ description: "", quantity: "", boxes: "" }] });
   };
 
   const openNotify = async (s: Shipment, kind: "shipdate" | "tracking") => {
@@ -150,6 +154,20 @@ export default function ShippingPage() {
         <Card className="p-4"><p className="text-2xl font-bold text-emerald-600">{counts.delivered}</p><p className="text-xs text-gray-500">Delivered</p></Card>
       </div>
 
+      {other.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-2 flex items-center gap-2 font-semibold text-gray-900"><Package className="h-4 w-4 text-violet-600" />Hard proofs and prototypes ready to go out</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {other.map((r) => (
+              <div key={`${r.kind}-${r.proofId || r.prototypeId}`} className="flex items-center justify-between rounded-md border border-violet-200 bg-violet-50 p-3 text-sm">
+                <div><div><span className="rounded bg-violet-200 px-1 text-[10px] font-semibold text-violet-900">{KIND_LABEL[r.kind || "job"]}</span> <span className="font-mono font-medium">{r.jobNumber}</span></div><div className="text-xs text-gray-600">{r.customerName || "No customer"} · {r.itemText || r.name}</div></div>
+                <Button size="sm" onClick={() => startNew(r)}>Ship</Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {ready.length > 0 && (
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2 font-semibold text-gray-900"><Package className="h-4 w-4 text-amber-600" />Packed and ready to ship</div>
@@ -186,8 +204,8 @@ export default function ShippingPage() {
                   return (
                     <Fragment key={s.id}>
                       <tr onClick={() => setOpen(open === s.id ? null : s.id)} className="cursor-pointer border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
-                        <td className="px-2 py-2">{s.companyId ? <Link onClick={(e) => e.stopPropagation()} href={`/dashboard/customers/${s.companyId}`} className="text-brand-600 hover:underline">{s.customerName}</Link> : <span className="text-amber-700">{s.customerName || "No customer"}</span>}</td>
+                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.kind && s.kind !== "job" && <span className="ml-1 rounded bg-violet-100 px-1 font-sans text-[10px] font-semibold text-violet-800">{KIND_LABEL[s.kind]}</span>}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
+                        <td className="px-2 py-2">{!s.companyId && s.leadId ? <Link onClick={(e) => e.stopPropagation()} href="/dashboard/pipeline" className="text-brand-600 hover:underline">{s.customerName} <span className="text-[10px] text-gray-400">(lead)</span></Link> : s.companyId ? <Link onClick={(e) => e.stopPropagation()} href={`/dashboard/customers/${s.companyId}`} className="text-brand-600 hover:underline">{s.customerName}</Link> : <span className="text-amber-700">{s.customerName || "No customer"}</span>}</td>
                         <td className="px-2 py-2 text-xs"><div className="font-mono">{s.jobNumber || "-"}</div>{s.jobNumber && (s.jobId ? <div className="text-[10px] font-medium text-emerald-700">✓ Job ticket</div> : <div className="text-[10px] text-gray-400" title="Links on its own once the job ticket is entered in Godzilla">Typed #, not in Godzilla yet</div>)}{s.poNumber && <div className="text-gray-500">PO {s.poNumber}</div>}</td>
                         <td className="px-2 py-2 text-xs">
                           {s.invoiceNumber ? <div className="font-mono">{s.invoiceNumber}</div> : <span className="text-gray-400">not linked</span>}
@@ -275,6 +293,14 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
   const [total, setTotal] = useState(0);
   const [invs, setInvs] = useState<Inv[]>([]);
   const [busy, setBusy] = useState(false);
+  const isJob = form.kind === "job", hasJob = form.kind === "job" || form.kind === "proof";
+  const [leadHits, setLeadHits] = useState<any[]>([]);
+  useEffect(() => {
+    if (hasJob || form.companyId || form.leadId || q.trim().length < 2) { setLeadHits([]); return; }
+    const t = setTimeout(() => { fetch(`/api/shipments?leads=${encodeURIComponent(q.trim())}`).then((r) => r.json()).then((d) => setLeadHits(d.leads || [])).catch(() => {}); }, 250);
+    return () => clearTimeout(t);
+  }, [q, hasJob, form.companyId, form.leadId]);
+  const pickLead = (l: any) => setForm({ ...form, leadId: l.id, companyId: l.companyId || "", customerName: l.companyName, contactName: form.contactName || l.contactName || "", contactEmail: form.contactEmail || l.contactEmail || "" } as typeof blank);
   const set = (k: keyof typeof blank, v: unknown) => setForm({ ...form, [k]: v } as typeof blank);
 
   useEffect(() => {
@@ -309,7 +335,7 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
   ) : null;
   const pick = (c: Cust) => setForm({ ...form, companyId: c.id, customerName: c.name, contactEmail: form.contactEmail || c.email || "", contactName: form.contactName || c.contact || "", shipTo: form.shipTo || c.address || "" });
   const save = async () => {
-    if (!form.companyId) { onError("Pick the customer first"); return; }
+    if (!form.companyId && !form.leadId && !form.prototypeId) { onError("Pick the customer first"); return; }
     setBusy(true);
     const body = { ...form, items: form.items.filter((i) => i.description.trim()).map((i) => ({ description: i.description, quantity: Number(String(i.quantity).replace(/,/g, "")) || 0, boxes: i.boxes || null })) };
     const r = editId ? await fetch(`/api/shipments/${editId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) : await fetch("/api/shipments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -323,11 +349,17 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
       <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">{editId ? "Edit shipment" : "New shipment"}</h2><button onClick={onClose}><X className="h-4 w-4 text-gray-400" /></button></div>
 
-        {!form.companyId ? (
+        {!editId && (
+          <div className="mt-3 flex flex-wrap gap-1 text-sm">{SHIP_KINDS.map(([k, l]) => (
+            <button key={k} type="button" disabled={!!form.prototypeId || !!form.proofId} onClick={() => setForm({ ...form, kind: k } as typeof blank)} className={`rounded-full border px-3 py-1 ${form.kind === k ? "border-gray-900 bg-gray-900 text-white" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{l}</button>
+          ))}</div>
+        )}
+        {!form.companyId && !form.leadId && !form.prototypeId ? (
           <div className="mt-3">
             <label className="text-sm text-gray-600">Customer <span className="text-gray-400">(from the Customers list)</span></label>
             <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing the customer name" />
-            <div className="mt-3"><label className="text-sm text-gray-600">Or find the job ticket <span className="text-gray-400">(job #, customer or job name)</span></label><Input value={jobQ} onChange={(e) => setJobQ(e.target.value)} placeholder="e.g. 263627" autoComplete="off" />{JobHits()}</div>
+            {!hasJob && leadHits.length > 0 && <div className="mt-2 rounded-md border border-violet-200"><div className="px-3 pt-2 text-[11px] font-medium uppercase text-violet-700">Prospects in Leads</div>{leadHits.map((l) => <button key={l.id} type="button" onClick={() => pickLead(l)} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span className="font-medium">{l.companyName}{(l.city || l.state) && <span className="font-normal text-gray-400"> · {[l.city, l.state].filter(Boolean).join(", ")}</span>}</span><span className="text-xs text-gray-400">{l.contactName || ""}</span></button>)}</div>}
+            {hasJob && <div className="mt-3"><label className="text-sm text-gray-600">Or find the job ticket <span className="text-gray-400">(job #, customer or job name)</span></label><Input value={jobQ} onChange={(e) => setJobQ(e.target.value)} placeholder="e.g. 263627" autoComplete="off" />{JobHits()}</div>}
             <div className="mt-1 text-[11px] text-gray-400">{total > list.length ? `Showing ${list.length} of ${total.toLocaleString()} customers. Keep typing to narrow it down.` : `${total.toLocaleString()} match${total === 1 ? "" : "es"}`}</div>
             <div className="mt-2 max-h-56 overflow-auto rounded-md border border-gray-200">
               {list.map((c) => <button key={c.id} type="button" onClick={() => pick(c)} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span className="font-medium">{c.name}{c.where && <span className="font-normal text-gray-400"> · {c.where}</span>}</span><span className="text-xs text-gray-400">{c.email || ""}</span></button>)}
@@ -336,17 +368,17 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
           </div>
         ) : (
           <div className="mt-3 space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2"><span className="font-medium">{form.customerName}</span>{!editId && <button type="button" onClick={() => set("companyId", "")} className="text-xs text-brand-600 hover:underline">Change</button>}</div>
+            <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2"><span className="font-medium">{form.customerName}{!form.companyId && form.leadId && <span className="ml-1 text-xs font-normal text-violet-700">(prospect)</span>}{!isJob && <span className="ml-2 rounded bg-violet-100 px-1.5 text-[11px] text-violet-800">{KIND_LABEL[form.kind]}</span>}</span>{!editId && !form.prototypeId && <button type="button" onClick={() => setForm({ ...form, companyId: "", leadId: "" } as typeof blank)} className="text-xs text-brand-600 hover:underline">Change</button>}</div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="block"><span className="text-gray-600">Job #</span> {form.jobId ? <span className="text-[11px] font-medium text-emerald-700">✓ linked to the job ticket</span> : form.jobNumber ? <span className="text-[11px] text-gray-400">not in Godzilla yet, links when entered</span> : null}
-                <Input value={form.jobNumber} onChange={(e) => { setForm({ ...form, jobNumber: e.target.value, jobId: "" } as typeof blank); setJobQ(e.target.value); }} placeholder="FileMaker or Godzilla job #" autoComplete="off" />{JobHits()}</div>
+              {hasJob && <div className="block"><span className="text-gray-600">Job #</span> {form.jobId ? <span className="text-[11px] font-medium text-emerald-700">✓ linked to the job ticket</span> : form.jobNumber ? <span className="text-[11px] text-gray-400">not in Godzilla yet, links when entered</span> : null}
+                <Input value={form.jobNumber} onChange={(e) => { setForm({ ...form, jobNumber: e.target.value, jobId: "" } as typeof blank); setJobQ(e.target.value); }} placeholder="FileMaker or Godzilla job #" autoComplete="off" />{JobHits()}</div>}
               <label className="block"><span className="text-gray-600">Customer PO #</span><Input value={form.poNumber} onChange={(e) => set("poNumber", e.target.value)} autoComplete="off" /></label>
-              <label className="col-span-2 block"><span className="text-gray-600">Invoice</span>
+              {isJob && <label className="col-span-2 block"><span className="text-gray-600">Invoice</span>
                 <select value={form.invoiceId} onChange={(e) => set("invoiceId", e.target.value)} className={inputCls}>
                   <option value="">Not linked yet</option>
                   {invs.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} · {i.description || ""} · {i.remaining > 0 ? `${money(i.remaining)} open` : "paid"}</option>)}
                 </select>
-              </label>
+              </label>}
               <label className="block"><span className="text-gray-600">Contact name</span><Input value={form.contactName} onChange={(e) => set("contactName", e.target.value)} /></label>
               <label className="block"><span className="text-gray-600">Contact email (gets the ship emails)</span><Input value={form.contactEmail} onChange={(e) => set("contactEmail", e.target.value)} /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Ship to</span><textarea value={form.shipTo} onChange={(e) => set("shipTo", e.target.value)} rows={2} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" /></label>
@@ -357,11 +389,11 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
               <label className="block"><span className="text-gray-600">Cartons</span><Input value={form.cartons} onChange={(e) => set("cartons", e.target.value)} inputMode="numeric" /></label>
               <label className="block"><span className="text-gray-600">Pallets</span><Input value={form.pallets} onChange={(e) => set("pallets", e.target.value)} inputMode="numeric" /></label>
               <label className="block"><span className="text-gray-600">Weight (lb)</span><Input value={form.weight} onChange={(e) => set("weight", e.target.value)} inputMode="decimal" /></label>
-              <label className="block"><span className="text-gray-600">Shipping cost ($)</span><Input value={form.freightCost} onChange={(e) => set("freightCost", e.target.value)} inputMode="decimal" placeholder="UPS / freight charge" /><span className="text-[11px] text-gray-400">Goes on the invoice's freight line</span></label>
-              <div className="flex flex-col justify-end gap-1 pb-1">
+              <label className="block"><span className="text-gray-600">Shipping cost ($)</span><Input value={form.freightCost} onChange={(e) => set("freightCost", e.target.value)} inputMode="decimal" placeholder="UPS / freight charge" />{isJob && <span className="text-[11px] text-gray-400">Goes on the invoice's freight line</span>}</label>
+              {isJob && <div className="flex flex-col justify-end gap-1 pb-1">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={form.isPartial} onChange={(e) => set("isPartial", e.target.checked)} /> Partial shipment <span className="text-[11px] text-gray-400">(set for you when the quantity is short)</span></label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={form.cod} onChange={(e) => set("cod", e.target.checked)} /> COD, hold for accounting's OK</label>
-              </div>
+              </div>}
             </div>
             <div>
               <div className="text-gray-600">In this shipment</div>

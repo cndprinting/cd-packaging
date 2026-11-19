@@ -10,7 +10,7 @@ export async function jobTallies(prisma: any, jobIds: string[]) {
   if (!ids.length) return m;
   const [jobs, ships] = await Promise.all([
     prisma.job.findMany({ where: { id: { in: ids } }, select: { id: true, quantity: true } }),
-    prisma.shipment.findMany({ where: { jobId: { in: ids } }, select: { jobId: true, items: { select: { quantity: true } } } }),
+    prisma.shipment.findMany({ where: { jobId: { in: ids }, kind: "job" }, select: { jobId: true, items: { select: { quantity: true } } } }),
   ]);
   for (const j of jobs) {
     const mine = ships.filter((s: any) => s.jobId === j.id);
@@ -21,11 +21,11 @@ export async function jobTallies(prisma: any, jobIds: string[]) {
 }
 
 /** What the packing slip says about this delivery: partial (with what's left) or the balance. */
-export async function deliveryLabel(prisma: any, s: { id: string; jobId: string | null; createdAt: Date | string; items?: { quantity: number }[] }) {
-  if (!s.jobId) return null;
+export async function deliveryLabel(prisma: any, s: { id: string; jobId: string | null; createdAt: Date | string; items?: { quantity: number }[]; kind?: string | null }) {
+  if (!s.jobId || (s.kind && s.kind !== "job")) return null;
   const job = await prisma.job.findUnique({ where: { id: s.jobId }, select: { quantity: true } });
   if (!job?.quantity) return null;
-  const earlier = await prisma.shipment.findMany({ where: { jobId: s.jobId, createdAt: { lt: new Date(s.createdAt) }, id: { not: s.id } }, select: { items: { select: { quantity: true } } } });
+  const earlier = await prisma.shipment.findMany({ where: { jobId: s.jobId, kind: "job", createdAt: { lt: new Date(s.createdAt) }, id: { not: s.id } }, select: { items: { select: { quantity: true } } } });
   const before = earlier.reduce((t: number, x: any) => t + qtyOf(x), 0);
   const after = before + qtyOf(s);
   if (after < job.quantity) return { kind: "partial", text: `PARTIAL DELIVERY: ${after.toLocaleString()} of ${job.quantity.toLocaleString()} delivered${before ? " to date" : ""}, ${(job.quantity - after).toLocaleString()} to follow` };
@@ -98,4 +98,27 @@ export async function linkShipmentsToJob(prisma: any, jobId: string) {
     n++;
   }
   return n;
+}
+
+/** A hard proof, prototype or samples shipment just went out (Benjy 11/19): move what it carries. */
+export async function onShipmentOut(prisma: any, s: any, session: { id: string; name: string }) {
+  const via = [s.carrier, s.trackingNumber ? `tracking ${s.trackingNumber}` : null].filter(Boolean).join(", ");
+  const what = s.kind === "proof" ? "Hard proof" : s.kind === "prototype" ? "Prototype" : "Samples";
+  // Hard proof: Pre-Press board moves it to With customer.
+  if (s.kind === "proof" && s.proofId) {
+    const p = await prisma.proof.findUnique({ where: { id: s.proofId }, include: { job: { select: { orderId: true, jobNumber: true } } } });
+    if (p && !p.sentToCustomerAt && p.status !== "APPROVED") {
+      await prisma.proof.update({ where: { id: p.id }, data: { deliveryMethod: "physical", sentToCustomerAt: new Date(), sentToCustomerById: session.id, status: "SENT", sentTo: s.contactEmail || p.sentTo || null } });
+      await prisma.activityLog.create({ data: { orderId: p.job.orderId, userId: session.id, action: "PREPRESS", details: `${p.job.jobNumber}: hard proof v${p.version} shipped (${s.shipmentNumber}${via ? `, ${via}` : ""}) by ${session.name}` } }).catch(() => {});
+    }
+  }
+  // Prototype: with the customer.
+  if (s.kind === "prototype" && s.prototypeId) {
+    const p = await prisma.prototype.findUnique({ where: { id: s.prototypeId } });
+    if (p && ["requested", "making", "ready"].includes(p.status)) {
+      const { addLog } = await import("@/lib/prototypes");
+      await prisma.prototype.update({ where: { id: p.id }, data: { status: "with_customer", sentAt: new Date(), log: addLog(p.log, session.name, `Round ${p.round} shipped to the customer (${s.shipmentNumber}${via ? `, ${via}` : ""})`) } });
+    }
+  }
+  if (s.leadId) await prisma.leadNote.create({ data: { leadId: s.leadId, kind: "system", source: "shipping", authorName: session.name, body: `${what} shipped: ${s.shipmentNumber}${via ? `, ${via}` : ""}${s.shipTo ? ` to ${String(s.shipTo).split("\n")[0]}` : ""}` } }).catch(() => {});
 }

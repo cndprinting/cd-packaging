@@ -3,6 +3,9 @@
 // the invoice. Shayla can email the customer the ship date and tracking
 // straight from the queue, from her own mailbox.
 
+export const SHIP_KINDS: [string, string][] = [["job", "Job"], ["proof", "Hard proof"], ["prototype", "Prototype"], ["samples", "Samples"]];
+const NOUN: Record<string, string> = { job: "order", proof: "hard proof", prototype: "prototype", samples: "samples" };
+
 export const CARRIERS = ["FedEx", "UPS", "USPS", "C&D Local", "Customer Pickup", "Freight / LTL", "Other"];
 
 export function trackingUrl(carrier?: string | null, tracking?: string | null): string | null {
@@ -27,6 +30,8 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
   const first = String(s.contactName || "").trim().split(/\s+/)[0];
   const ref = [s.poNumber ? `PO ${s.poNumber}` : null, s.jobNumber ? `job ${s.jobNumber}` : null].filter(Boolean).join(", ");
   const url = trackingUrl(s.carrier, s.trackingNumber);
+  const noun = NOUN[s.kind || "job"] || "order", are = noun === "samples" ? "are" : "is", have = noun === "samples" ? "have" : "has";
+  const Noun = noun[0].toUpperCase() + noun.slice(1);
   const items = (s.items || []).map((i: any) => `<li>${esc(i.quantity)} x ${esc(i.description)}</li>`).join("");
   const rows: string[] = [];
   const row = (k: string, v: string | null) => { if (v) rows.push(`<tr><td style="padding:6px 16px 6px 0;color:#666;">${k}</td><td style="padding:6px 0;">${v}</td></tr>`); };
@@ -44,11 +49,11 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
   row("Ship to", s.shipTo ? esc(s.shipTo).replace(/\n/g, "<br>") : null);
   row("Invoice", esc(s.invoiceNumber || ""));
   const lead = kind === "shipdate"
-    ? `Your order${ref ? ` (${esc(ref)})` : ""} is scheduled to ship on <strong>${esc(day(s.targetShipDate))}</strong>.`
-    : `Your order${ref ? ` (${esc(ref)})` : ""} has shipped${s.isPartial ? " (this is a partial shipment, the rest will follow)" : ""}.`;
+    ? `Your ${noun}${ref ? ` (${esc(ref)})` : ""} ${are} scheduled to ship on <strong>${esc(day(s.targetShipDate))}</strong>.`
+    : `Your ${noun}${ref ? ` (${esc(ref)})` : ""} ${have} shipped${s.isPartial ? " (this is a partial shipment, the rest will follow)" : ""}.`;
   const subject = kind === "shipdate"
-    ? `Your order ships ${new Date(s.targetShipDate).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}${ref ? ` (${ref})` : ""} | C&D Printing`
-    : `Your order has shipped${s.trackingNumber ? `: tracking ${s.trackingNumber}` : ""}${ref ? ` (${ref})` : ""} | C&D Printing`;
+    ? `Your ${noun} ship${noun === "samples" ? "" : "s"} ${new Date(s.targetShipDate).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}${ref ? ` (${ref})` : ""} | C&D Printing`
+    : `${Noun} shipped${s.trackingNumber ? `: tracking ${s.trackingNumber}` : ""}${ref ? ` (${ref})` : ""} | C&D Printing`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;max-width:600px;">
 <p>Hi${first ? ` ${esc(first)}` : ""},</p>
 <p>${lead}</p>

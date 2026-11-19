@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { shipmentEmail, type NotifyKind } from "@/lib/shipping";
-import { deliveryLabel, jobTallies, syncFreight } from "@/lib/shipping-server";
+import { deliveryLabel, jobTallies, onShipmentOut, syncFreight } from "@/lib/shipping-server";
 
 const RELEASE_ROLES = ["OWNER", "GM", "ADMIN", "ACCOUNTING"];
 const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const rows = b.items.filter((i: any) => i?.description).map((i: any) => ({ shipmentId: s.id, description: String(i.description).slice(0, 200), quantity: Number(i.quantity) || 0, boxes: i.boxes ? String(i.boxes).slice(0, 80) : null }));
     if (rows.length) await prisma.shipmentItem.createMany({ data: rows });
     // Less than what's left on the job is a partial (Shayla 11/18).
-    const jid = s.jobId;
+    const jid = (s as any).kind === "job" ? s.jobId : null;
     if (jid && !("isPartial" in b && b.isPartial)) {
       const qty = rows.reduce((t: number, r: any) => t + r.quantity, 0);
       const tl = (await jobTallies(prisma, [jid])).get(jid);
@@ -107,13 +107,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
   let shipment: any = await prisma.shipment.update({ where: { id: s.id }, data, include: { items: true } });
   // Freight cost onto the invoice's freight line (Shayla 11/18).
-  if ("freightCost" in b || "invoiceId" in b || "invoiceId" in data) { await syncFreight(prisma, s.id, c.session.name); shipment = await prisma.shipment.findUnique({ where: { id: s.id }, include: { items: true } }); }
+  const isJob = ((s as any).kind || "job") === "job";
+  if (isJob && ("freightCost" in b || "invoiceId" in b || "invoiceId" in data)) { await syncFreight(prisma, s.id, c.session.name); shipment = await prisma.shipment.findUnique({ where: { id: s.id }, include: { items: true } }); }
   // It just went out: tell accounting so they can bill it now (Denise 11/18).
-  if (!OUT.includes(s.status) && OUT.includes(shipment.status) && !s.billingNotifiedAt) {
+  if (isJob && !OUT.includes(s.status) && OUT.includes(shipment.status) && !s.billingNotifiedAt) {
     try { await notifyBilling(prisma, shipment, c.session); } catch (e) { console.error("billing notice failed", e); }
   }
+  // Hard proof / prototype / samples went out: move what it carries (Benjy 11/19).
+  if (!isJob && !OUT.includes(s.status) && OUT.includes(shipment.status)) {
+    try { await onShipmentOut(prisma, shipment, c.session); } catch (e) { console.error("shipment out effects failed", e); }
+  }
   // Move the job with its shipment (a partial doesn't ship the whole job).
-  if (b.status && shipment.jobId) {
+  if (isJob && b.status && shipment.jobId) {
     try {
       const job = await prisma.job.findUnique({ where: { id: shipment.jobId }, select: { status: true } });
       const order = ["PACKED", "SHIPPED", "DELIVERED", "INVOICED"];

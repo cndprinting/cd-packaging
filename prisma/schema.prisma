@@ -999,6 +999,12 @@ model Shipment {
   codReleasedAt     DateTime?
   codReleasedBy     String?
   billingNotifiedAt DateTime?   // accounting told it went out (Denise 11/18)
+  // Shipment types (Benjy 11/19): job | proof (hard proof) | prototype | samples.
+  // Only "job" shipments count toward the job's quantity, bill, or move the job.
+  kind          String         @default("job")
+  leadId        String?        // samples / prototypes can go to a prospect
+  prototypeId   String?
+  proofId       String?
   items         ShipmentItem[]
   @@index([companyId])
   @@index([status])
