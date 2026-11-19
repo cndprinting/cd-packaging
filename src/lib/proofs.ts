@@ -82,7 +82,7 @@ export async function onProofApproved(prisma: any, proofId: string, by: { name: 
   const job = proof.job;
   if (["ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PROOFING", "PREPRESS"].includes(job.status)) await prisma.job.update({ where: { id: job.id }, data: { status: "CUSTOMER_APPROVAL" } });
   await prisma.activityLog.create({ data: { orderId: job.orderId, action: "PROOF_APPROVED", details: `${job.jobNumber} proof v${proof.version} approved by ${by.name} (${by.via})` } }).catch(() => {});
-  if (!proof.productionAlertSentAt) {
+  if (!proof.productionAlertSentAt && !/^QA-/i.test(job.jobNumber || "")) { // test jobs never email the plant
     try {
       const { sendEmail } = await import("@/lib/email/graph-client");
       const plant = await prisma.user.findMany({ where: { isActive: true, role: { in: ["PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "PREPRESS_MANAGER"] } }, select: { email: true } });
@@ -101,7 +101,7 @@ export async function onProofChanges(prisma: any, proofId: string, by: { name: s
   const job = proof.job;
   if (job.status === "CUSTOMER_APPROVAL") await prisma.job.update({ where: { id: job.id }, data: { status: "PROOFING" } });
   await prisma.activityLog.create({ data: { orderId: job.orderId, action: "PROOF_CHANGES", details: `${job.jobNumber} proof v${proof.version}: changes requested by ${by.name} (${by.via}): ${by.comment}`.slice(0, 1000) } }).catch(() => {});
-  try {
+  if (!/^QA-/i.test(job.jobNumber || "")) try { // test jobs never email pre-press
     const { sendEmail } = await import("@/lib/email/graph-client");
     const pre = await prisma.user.findMany({ where: { isActive: true, role: "PREPRESS_MANAGER" }, select: { email: true } });
     const to = [...new Set([...pre.map((u: any) => u.email), job.csr?.email, job.salesRep?.email].filter(Boolean))] as string[];
