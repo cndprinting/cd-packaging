@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { jobTallies, syncFreight } from "@/lib/shipping-server";
+import { JOBS_LIVE_SINCE as LIVE } from "@/lib/press-gate";
 
 // Shipping queue (rebuilt 11/17/26). Every shipment is tied to a Customers
 // record, and to the job and invoice when there is one.
@@ -27,6 +28,20 @@ export async function GET(request: NextRequest) {
   if (!prisma) return NextResponse.json({ shipments: [], ready: [] });
   const sp = new URL(request.url).searchParams;
 
+  // Job # lookup for the shipment form (Benjy 11/19): pick the ticket, everything fills in.
+  const jq = (sp.get("jobs") || "").trim();
+  if (jq) {
+    if (jq.length < 2) return NextResponse.json({ jobs: [] });
+    const found = await prisma.job.findMany({
+      where: { createdAt: { gte: LIVE }, status: { notIn: ["DELIVERED", "INVOICED"] as any }, OR: [{ jobNumber: { contains: jq, mode: "insensitive" } }, { name: { contains: jq, mode: "insensitive" } }, { order: { company: { name: { contains: jq, mode: "insensitive" } } } }] },
+      select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
+      orderBy: { createdAt: "desc" }, take: 8,
+    });
+    const ids = found.map((j: any) => j.id);
+    const invs = ids.length ? await prisma.invoice.findMany({ where: { jobId: { in: ids }, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "desc" }, select: { id: true, jobId: true } }) : [];
+    const tl = await jobTallies(prisma, ids);
+    return NextResponse.json({ jobs: found.map((j: any) => ({ id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, companyId: j.order?.companyId || null, customerName: j.order?.company?.name || null, poNumber: j.customerPO || j.order?.poNumber || null, invoiceId: invs.find((i: any) => i.jobId === j.id)?.id || null, tally: tl.get(j.id) || null, ...fromTicket(j) })) });
+  }
   const invoicesFor = sp.get("invoicesFor");
   if (invoicesFor) {
     const invs = await prisma.invoice.findMany({ where: { companyId: invoicesFor, status: { not: "cancelled" } }, orderBy: { createdAt: "desc" }, take: 25, select: { id: true, invoiceNumber: true, status: true, total: true, paidAmount: true, description: true, poNumber: true } as any });

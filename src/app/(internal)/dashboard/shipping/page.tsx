@@ -188,7 +188,7 @@ export default function ShippingPage() {
                       <tr onClick={() => setOpen(open === s.id ? null : s.id)} className="cursor-pointer border-b border-gray-50 hover:bg-gray-50">
                         <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
                         <td className="px-2 py-2">{s.companyId ? <Link onClick={(e) => e.stopPropagation()} href={`/dashboard/customers/${s.companyId}`} className="text-brand-600 hover:underline">{s.customerName}</Link> : <span className="text-amber-700">{s.customerName || "No customer"}</span>}</td>
-                        <td className="px-2 py-2 text-xs"><div className="font-mono">{s.jobNumber || "-"}</div>{s.poNumber && <div className="text-gray-500">PO {s.poNumber}</div>}</td>
+                        <td className="px-2 py-2 text-xs"><div className="font-mono">{s.jobNumber || "-"}</div>{s.jobNumber && (s.jobId ? <div className="text-[10px] font-medium text-emerald-700">✓ Job ticket</div> : <div className="text-[10px] text-gray-400" title="Links on its own once the job ticket is entered in Godzilla">Typed #, not in Godzilla yet</div>)}{s.poNumber && <div className="text-gray-500">PO {s.poNumber}</div>}</td>
                         <td className="px-2 py-2 text-xs">
                           {s.invoiceNumber ? <div className="font-mono">{s.invoiceNumber}</div> : <span className="text-gray-400">not linked</span>}
                           {s.invoiceNumber && s.invoicePaid !== null && <span className={`rounded px-1 text-[10px] font-semibold ${s.invoicePaid ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{s.invoicePaid ? "paid" : `${money(s.invoiceBalance || 0)} open`}</span>}
@@ -287,6 +287,26 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
     fetch(`/api/shipments?invoicesFor=${form.companyId}`).then((r) => r.json()).then((d) => setInvs(d.invoices || [])).catch(() => {});
   }, [form.companyId]);
 
+  // Job # lookup (Benjy 11/19): pick the ticket and the shipment fills in from it.
+  const [jobHits, setJobHits] = useState<any[]>([]);
+  const [jobQ, setJobQ] = useState("");
+  useEffect(() => {
+    if (jobQ.trim().length < 2) { setJobHits([]); return; }
+    const t = setTimeout(() => { fetch(`/api/shipments?jobs=${encodeURIComponent(jobQ.trim())}`).then((r) => r.json()).then((d) => setJobHits(d.jobs || [])).catch(() => {}); }, 250);
+    return () => clearTimeout(t);
+  }, [jobQ]);
+  const pickJob = (j: any) => {
+    setJobHits([]); setJobQ("");
+    setForm({ ...form, jobId: j.id, jobNumber: j.jobNumber, companyId: j.companyId || form.companyId, customerName: j.customerName || form.customerName,
+      poNumber: form.poNumber || j.poNumber || "", invoiceId: form.invoiceId || j.invoiceId || "", contactName: form.contactName || j.contactName || "", contactEmail: form.contactEmail || j.contactEmail || "",
+      shipTo: form.shipTo || j.shipTo || "", notes: form.notes || j.instructions || "",
+      items: form.items.some((i) => i.description.trim()) ? form.items : [{ description: j.name || "", quantity: String(j.tally?.remaining ?? j.quantity ?? ""), boxes: "" }] } as typeof blank);
+  };
+  const JobHits = () => jobHits.length ? (
+    <div className="mt-1 max-h-48 overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">{jobHits.map((j) => (
+      <button key={j.id} type="button" onClick={() => pickJob(j)} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span><span className="font-mono font-medium">{j.jobNumber}</span> · {j.customerName} · {j.name}</span><span className="text-xs text-gray-400">{(j.tally?.remaining ?? j.quantity ?? 0).toLocaleString()} to ship</span></button>
+    ))}</div>
+  ) : null;
   const pick = (c: Cust) => setForm({ ...form, companyId: c.id, customerName: c.name, contactEmail: form.contactEmail || c.email || "", contactName: form.contactName || c.contact || "", shipTo: form.shipTo || c.address || "" });
   const save = async () => {
     if (!form.companyId) { onError("Pick the customer first"); return; }
@@ -307,6 +327,7 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
           <div className="mt-3">
             <label className="text-sm text-gray-600">Customer <span className="text-gray-400">(from the Customers list)</span></label>
             <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing the customer name" />
+            <div className="mt-3"><label className="text-sm text-gray-600">Or find the job ticket <span className="text-gray-400">(job #, customer or job name)</span></label><Input value={jobQ} onChange={(e) => setJobQ(e.target.value)} placeholder="e.g. 263627" autoComplete="off" />{JobHits()}</div>
             <div className="mt-1 text-[11px] text-gray-400">{total > list.length ? `Showing ${list.length} of ${total.toLocaleString()} customers. Keep typing to narrow it down.` : `${total.toLocaleString()} match${total === 1 ? "" : "es"}`}</div>
             <div className="mt-2 max-h-56 overflow-auto rounded-md border border-gray-200">
               {list.map((c) => <button key={c.id} type="button" onClick={() => pick(c)} className="flex w-full justify-between border-b border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50"><span className="font-medium">{c.name}{c.where && <span className="font-normal text-gray-400"> · {c.where}</span>}</span><span className="text-xs text-gray-400">{c.email || ""}</span></button>)}
@@ -317,7 +338,8 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
           <div className="mt-3 space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2"><span className="font-medium">{form.customerName}</span>{!editId && <button type="button" onClick={() => set("companyId", "")} className="text-xs text-brand-600 hover:underline">Change</button>}</div>
             <div className="grid grid-cols-2 gap-3">
-              <label className="block"><span className="text-gray-600">Job #</span><Input value={form.jobNumber} onChange={(e) => set("jobNumber", e.target.value)} placeholder="FileMaker or Godzilla job #" autoComplete="off" /></label>
+              <div className="block"><span className="text-gray-600">Job #</span> {form.jobId ? <span className="text-[11px] font-medium text-emerald-700">✓ linked to the job ticket</span> : form.jobNumber ? <span className="text-[11px] text-gray-400">not in Godzilla yet, links when entered</span> : null}
+                <Input value={form.jobNumber} onChange={(e) => { setForm({ ...form, jobNumber: e.target.value, jobId: "" } as typeof blank); setJobQ(e.target.value); }} placeholder="FileMaker or Godzilla job #" autoComplete="off" />{JobHits()}</div>
               <label className="block"><span className="text-gray-600">Customer PO #</span><Input value={form.poNumber} onChange={(e) => set("poNumber", e.target.value)} autoComplete="off" /></label>
               <label className="col-span-2 block"><span className="text-gray-600">Invoice</span>
                 <select value={form.invoiceId} onChange={(e) => set("invoiceId", e.target.value)} className={inputCls}>

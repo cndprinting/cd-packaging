@@ -46,6 +46,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const num = (k: string, int = false) => { if (k in b) data[k] = b[k] === "" || b[k] === null || !Number.isFinite(Number(b[k])) ? null : (int ? Math.round(Number(b[k])) : Number(b[k])); };
   ["carrier", "trackingNumber", "poNumber", "contactName", "destination", "notes"].forEach((k) => str(k));
   str("shipTo", 500); str("jobNumber", 60);
+  // Tie to the job ticket (Benjy 11/19): an explicit pick, or a typed number that matches one.
+  if ("jobId" in b || "jobNumber" in b) {
+    let job: any = null;
+    if (b.jobId) job = await prisma.job.findUnique({ where: { id: String(b.jobId) }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
+    else if (b.jobNumber) {
+      const hits = await prisma.job.findMany({ where: { jobNumber: { equals: String(b.jobNumber).trim(), mode: "insensitive" } }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
+      job = hits.find((h: any) => !s.companyId || h.order?.companyId === s.companyId) || null;
+    }
+    data.jobId = job?.id || null;
+    if (job) {
+      data.jobNumber = job.jobNumber;
+      if (!s.poNumber && !b.poNumber && (job.customerPO || job.order?.poNumber)) data.poNumber = job.customerPO || job.order?.poNumber;
+      if (!s.invoiceId && !b.invoiceId) {
+        const inv = await prisma.invoice.findFirst({ where: { jobId: job.id, status: { notIn: ["cancelled", "draft"] } }, orderBy: { createdAt: "desc" }, select: { id: true, invoiceNumber: true } });
+        if (inv) { data.invoiceId = inv.id; data.invoiceNumber = inv.invoiceNumber; }
+      }
+    }
+  }
   if ("contactEmail" in b) data.contactEmail = b.contactEmail ? String(b.contactEmail).trim().toLowerCase() : null;
   ["targetShipDate", "shipDate", "estimatedDelivery", "actualDelivery"].forEach(date);
   num("cartons", true); num("pallets", true); num("weight"); num("freightCost");
@@ -89,7 +107,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
   let shipment: any = await prisma.shipment.update({ where: { id: s.id }, data, include: { items: true } });
   // Freight cost onto the invoice's freight line (Shayla 11/18).
-  if ("freightCost" in b || "invoiceId" in b) { await syncFreight(prisma, s.id, c.session.name); shipment = await prisma.shipment.findUnique({ where: { id: s.id }, include: { items: true } }); }
+  if ("freightCost" in b || "invoiceId" in b || "invoiceId" in data) { await syncFreight(prisma, s.id, c.session.name); shipment = await prisma.shipment.findUnique({ where: { id: s.id }, include: { items: true } }); }
   // It just went out: tell accounting so they can bill it now (Denise 11/18).
   if (!OUT.includes(s.status) && OUT.includes(shipment.status) && !s.billingNotifiedAt) {
     try { await notifyBilling(prisma, shipment, c.session); } catch (e) { console.error("billing notice failed", e); }

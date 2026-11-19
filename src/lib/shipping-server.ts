@@ -80,3 +80,22 @@ export async function syncFreight(prisma: any, shipmentId: string, byName: strin
   } catch (e) { console.error("freight email failed", e); }
   return note;
 }
+
+/** Shayla's shipments that were keyed with a job # before the ticket was in Godzilla
+ *  (Benjy 11/19): once a CSR enters that ticket, link them and fill in what was blank. */
+export async function linkShipmentsToJob(prisma: any, jobId: string) {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
+  if (!job?.jobNumber) return 0;
+  const ships = await prisma.shipment.findMany({ where: { jobId: null, jobNumber: { equals: job.jobNumber, mode: "insensitive" } } });
+  const companyId = job.order?.companyId || null;
+  let n = 0;
+  for (const s of ships) {
+    if (s.companyId && companyId && s.companyId !== companyId) continue; // same number, different customer: leave it
+    const data: any = { jobId: job.id, jobNumber: job.jobNumber };
+    if (!s.poNumber && (job.customerPO || job.order?.poNumber)) data.poNumber = job.customerPO || job.order?.poNumber;
+    if (!s.companyId && companyId) data.companyId = companyId;
+    await prisma.shipment.update({ where: { id: s.id }, data });
+    n++;
+  }
+  return n;
+}
