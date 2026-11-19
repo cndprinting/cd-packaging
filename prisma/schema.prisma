@@ -190,6 +190,7 @@ model Company {
   archivedReason String?
   // Mike 11/19/26: some customers always get a hard proof, some never. customer | internal | none
   hardProofDefault String?
+  cocRequired      Boolean  @default(false) // ships with a Certificate of Conformance (Shayla 11/19)
 }
 
 model Contact {
@@ -1013,6 +1014,22 @@ model Shipment {
   updatedAt     DateTime       @updatedAt
 
   @@index([orderId])
+}
+
+// Certificate of Conformance (Shayla 11/19/26). Numbered after her paper #003968.
+model Coc {
+  id          String   @id @default(cuid())
+  number      Int      @unique
+  shipmentId  String?
+  jobId       String?
+  companyId   String?
+  data        Json     // everything printed, as saved
+  preparedBy  String
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([shipmentId])
+  @@index([jobId])
 }
 
 model ShipmentItem {

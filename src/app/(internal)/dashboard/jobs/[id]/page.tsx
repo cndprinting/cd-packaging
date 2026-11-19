@@ -817,6 +817,7 @@ export default function JobDetailPage() {
 
       {/* Darrin's routing review (11/18/26) */}
       <RoutingPanel jobId={job.id} />
+      <JobCocs jobId={job.id} />
 
       {/* Edit Form */}
       {editing && (
@@ -2010,6 +2011,19 @@ export default function JobDetailPage() {
 }
 
 // Proofs card — tied to job, visible to customer via portal
+// COCs printed for this job (Shayla 11/19): the copy kept on the job.
+function JobCocs({ jobId }: { jobId: string }) {
+  const [list, setList] = useState<any[]>([]);
+  useEffect(() => { fetch(`/api/coc?jobId=${jobId}`).then((r) => r.json()).then((d) => setList(d.cocs || [])).catch(() => {}); }, [jobId]);
+  if (!list.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+      <span className="font-medium text-gray-700">Certificates of Conformance</span>
+      {list.map((c) => <a key={c.id} href={`/print/coc/${c.id}`} target="_blank" rel="noreferrer" className="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800 hover:underline">COC #{c.label} · {new Date(c.createdAt).toLocaleDateString("en-US")}</a>)}
+    </div>
+  );
+}
+
 // Proof type on the ticket (Mike 11/19). Pre-press follows it; the CSR sets it.
 function ProofTypeField({ jobId }: { jobId: string }) {
   const [v, setV] = useState<string>("");

@@ -24,6 +24,7 @@ type Shipment = {
   items: Item[]; invoicePaid: boolean | null; invoiceBalance: number | null; createdAt: string;
   freightCost: number | null; freightNote: string | null; codRequestedAt: string | null; codRequestedBy: string | null; codReleasedAt: string | null; codReleasedBy: string | null; codReleased: boolean; tally: Tally;
   kind: string; leadId: string | null; prototypeId: string | null; proofId: string | null;
+  coc: { id: string; label: string } | null; cocNeeded: boolean;
 };
 type Ready = { id: string; jobNumber: string; name: string | null; quantity: number; dueDate: string | null; companyId: string | null; customerName: string | null; poNumber: string | null; invoiceId: string | null; tally: Tally; shipTo: string | null; instructions: string | null; contactName: string | null; contactEmail: string | null;
   kind?: string; proofId?: string; prototypeId?: string; leadId?: string | null; itemText?: string };
@@ -64,6 +65,7 @@ export default function ShippingPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [form, setForm] = useState<typeof blank | null>(null);
+  const [cocFor, setCocFor] = useState<Shipment | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [role, setRole] = useState("");
   useEffect(() => { fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d?.user?.role || "")).catch(() => {}); }, []);
@@ -204,7 +206,7 @@ export default function ShippingPage() {
                   return (
                     <Fragment key={s.id}>
                       <tr onClick={() => setOpen(open === s.id ? null : s.id)} className="cursor-pointer border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.kind && s.kind !== "job" && <span className="ml-1 rounded bg-violet-100 px-1 font-sans text-[10px] font-semibold text-violet-800">{KIND_LABEL[s.kind]}</span>}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
+                        <td className="px-4 py-2 font-mono text-xs">{s.shipmentNumber}{s.kind && s.kind !== "job" && <span className="ml-1 rounded bg-violet-100 px-1 font-sans text-[10px] font-semibold text-violet-800">{KIND_LABEL[s.kind]}</span>}{s.isPartial && <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600">partial</span>}{s.coc ? <span className="ml-1 rounded bg-emerald-100 px-1 font-sans text-[10px] text-emerald-800">COC {s.coc.label}</span> : s.cocNeeded ? <span className="ml-1 rounded bg-red-100 px-1 font-sans text-[10px] font-semibold text-red-700">COC needed</span> : null}{s.tally && s.tally.shipped > 0 && <div className="font-sans text-[10px] text-gray-500">{tallyText(s.tally)}</div>}</td>
                         <td className="px-2 py-2">{!s.companyId && s.leadId ? <Link onClick={(e) => e.stopPropagation()} href="/dashboard/pipeline" className="text-brand-600 hover:underline">{s.customerName} <span className="text-[10px] text-gray-400">(lead)</span></Link> : s.companyId ? <Link onClick={(e) => e.stopPropagation()} href={`/dashboard/customers/${s.companyId}`} className="text-brand-600 hover:underline">{s.customerName}</Link> : <span className="text-amber-700">{s.customerName || "No customer"}</span>}</td>
                         <td className="px-2 py-2 text-xs"><div className="font-mono">{s.jobNumber || "-"}</div>{s.jobNumber && (s.jobId ? <div className="text-[10px] font-medium text-emerald-700">✓ Job ticket</div> : <div className="text-[10px] text-gray-400" title="Links on its own once the job ticket is entered in Godzilla">Typed #, not in Godzilla yet</div>)}{s.poNumber && <div className="text-gray-500">PO {s.poNumber}</div>}</td>
                         <td className="px-2 py-2 text-xs">
@@ -245,6 +247,7 @@ export default function ShippingPage() {
                             </div>
                             <div className="flex flex-wrap content-start gap-2">
                               <a href={`/print/packing-slip/${s.id}`} target="_blank" rel="noreferrer"><Button size="sm" className="gap-1"><Printer className="h-3.5 w-3.5" />Packing slip</Button></a>
+                              {(s.kind || "job") === "job" && <Button size="sm" variant={s.cocNeeded && !s.coc ? "default" : "outline"} className="gap-1" onClick={() => setCocFor(s)}><Printer className="h-3.5 w-3.5" />{s.coc ? `COC #${s.coc.label}` : "Make COC"}</Button>}
                               {s.cod && !s.codReleased && <Button size="sm" variant="outline" className="gap-1 border-amber-400 text-amber-800" onClick={() => cod(s, "cod_request")}><Mail className="h-3.5 w-3.5" />{s.codRequestedAt ? "Ask accounting again" : "Ask Denise to release"}</Button>}
                               {s.cod && !s.codReleased && RELEASE_ROLES.includes(role) && <Button size="sm" className="gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => cod(s, "cod_release")}><CheckCircle2 className="h-3.5 w-3.5" />OK to release</Button>}
                               <Button size="sm" variant="outline" className="gap-1" onClick={() => openNotify(s, "shipdate")}><Mail className="h-3.5 w-3.5" />Email ship date</Button>
@@ -264,6 +267,7 @@ export default function ShippingPage() {
         )}
       </Card>
 
+      {cocFor && <CocForm s={cocFor} onClose={() => { setCocFor(null); load(); }} onError={(t) => flash(false, t)} />}
       {form && <ShipmentForm form={form} setForm={setForm} editId={editId} onClose={() => setForm(null)} onSaved={(t) => { setForm(null); flash(true, t); load(); }} onError={(t) => flash(false, t)} />}
 
       {notify && (
@@ -408,6 +412,72 @@ function ShipmentForm({ form, setForm, editId, onClose, onSaved, onError }: { fo
             </div>
             <label className="block"><span className="text-gray-600">Special shipping instructions <span className="text-gray-400">(print on the packing slip)</span></span><textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Must deliver COC with each version. Deliver before 3:00." /></label>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : editId ? "Save" : "Create shipment"}</Button></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Certificate of Conformance (Shayla 11/19): filled from the ticket, edit anything, save, print.
+function CocForm({ s, onClose, onError }: { s: Shipment; onClose: () => void; onError: (t: string) => void }) {
+  const [d, setD] = useState<any>(null);
+  const [coc, setCoc] = useState<{ id: string; label: string } | null>(null);
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    fetch(`/api/coc?shipmentId=${s.id}`).then((r) => r.json()).then((j) => { if (j.coc) { setCoc({ id: j.coc.id, label: j.coc.label }); setD(j.coc.data); } else if (j.draft) { setD(j.draft); setNext(j.next || ""); } else onError(j.error || "Could not load"); }).catch(() => onError("Could not load"));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.id]);
+  const set = (k: string, v: string) => setD((p: any) => {
+    const n = { ...p, [k]: v };
+    if (k === "mfgDate" && v) { const x = new Date(`${v}T12:00:00Z`); if (!isNaN(x.getTime())) { x.setUTCFullYear(x.getUTCFullYear() + 2); n.expDate = x.toISOString().slice(0, 10); } }
+    return n;
+  });
+  const save = async () => {
+    setBusy(true);
+    const r = await fetch("/api/coc", { method: coc ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(coc ? { id: coc.id, data: d } : { shipmentId: s.id, data: d }) });
+    const j = await r.json(); setBusy(false);
+    if (!r.ok) { onError(j.error || "Could not save"); return; }
+    setCoc({ id: j.coc.id, label: j.coc.label }); setSaved(true);
+  };
+  const F = ({ k, label, wide, type }: { k: string; label: string; wide?: boolean; type?: string }) => (
+    <label className={`block ${wide ? "col-span-2" : ""}`}><span className="text-xs text-gray-600">{label}</span><Input type={type || "text"} value={d?.[k] || ""} onChange={(e) => set(k, e.target.value)} /></label>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">C.O.C. {coc ? `#${coc.label}` : next ? `(will be #${next})` : ""} · {s.customerName} {s.jobNumber ? `· job ${s.jobNumber}` : ""}</h2><button onClick={onClose}><X className="h-4 w-4 text-gray-400" /></button></div>
+        {!d ? <div className="p-6 text-sm text-gray-400"><Loader2 className="inline h-4 w-4 animate-spin" /> Loading</div> : (
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            {F({ k: "to", label: "To" })}{F({ k: "attn", label: "Attn" })}
+            {F({ k: "subject", label: "Subject", wide: true })}
+            {F({ k: "customerPO", label: "Customer P.O." })}{F({ k: "estimate", label: "Est #" })}
+            <div className="grid grid-cols-2 gap-2">{F({ k: "flatW", label: "Flat W" })}{F({ k: "flatH", label: "Flat H" })}</div>
+            <div className="grid grid-cols-2 gap-2">{F({ k: "finishedW", label: "Finished W" })}{F({ k: "finishedH", label: "Finished H" })}</div>
+            {F({ k: "stock", label: "Stock", wide: true })}
+            {F({ k: "inks", label: "Inks", wide: true })}
+            {F({ k: "filePrep", label: "File prep" })}{F({ k: "finishing", label: "Finishing" })}
+            {F({ k: "packaging", label: "Packaging" })}<div />
+            {F({ k: "mfgDate", label: "Manufacture date", type: "date" })}{F({ k: "expDate", label: "Expiration date (2 years out)", type: "date" })}
+            <div className="col-span-2">
+              <div className="text-xs text-gray-600">Quantity lines (lot / version codes go in the description)</div>
+              {(d.lines || []).map((l: any, i: number) => (
+                <div key={i} className="mt-1 flex gap-2">
+                  <Input value={l.qty} onChange={(e) => { const lines = [...d.lines]; lines[i] = { ...l, qty: e.target.value }; setD({ ...d, lines }); }} placeholder="Qty" className="w-28" />
+                  <Input value={l.description} onChange={(e) => { const lines = [...d.lines]; lines[i] = { ...l, description: e.target.value }; setD({ ...d, lines }); }} placeholder="e.g. EA 11 MR-30076 #7623 / MR-30200 #7653" />
+                </div>
+              ))}
+              {(d.lines || []).length < 12 && <button type="button" onClick={() => setD({ ...d, lines: [...(d.lines || []), { qty: "", description: "" }] })} className="mt-1 text-xs text-brand-600 hover:underline">+ Add line</button>}
+            </div>
+            {F({ k: "qualityBy", label: "Quality signature (name)" })}{F({ k: "qualityDate", label: "Date", type: "date" })}
+            {F({ k: "preparedBy", label: "Prepared by" })}<div />
+            <div className="col-span-2 flex items-center justify-end gap-2">
+              {saved && coc && <span className="text-xs text-emerald-700">Saved as COC #{coc.label}</span>}
+              {coc && <a href={`/print/coc/${coc.id}`} target="_blank" rel="noreferrer"><Button variant="outline" className="gap-1"><Printer className="h-4 w-4" />Print</Button></a>}
+              <Button onClick={save} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : coc ? "Save changes" : "Save COC"}</Button>
+            </div>
           </div>
         )}
       </div>

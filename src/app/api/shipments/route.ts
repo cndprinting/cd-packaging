@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { jobTallies, syncFreight } from "@/lib/shipping-server";
 import { JOBS_LIVE_SINCE as LIVE } from "@/lib/press-gate";
 import { hardMode } from "@/lib/proofs";
+import { cocNumber, needsCoc } from "@/lib/coc";
 
 // Shipping queue (rebuilt 11/17/26). Every shipment is tied to a Customers
 // record, and to the job and invoice when there is one.
@@ -72,9 +73,17 @@ export async function GET(request: NextRequest) {
   const invFor = (jobId: string) => jobInvs.find((i: any) => i.jobId === jobId)?.id || null;
   // Ordered / delivered / balance per job (Shayla 11/18: partials).
   const tally = await jobTallies(prisma, [...shipments.map((s: any) => s.jobId), ...readyIds]);
+  // COC (Shayla 11/19): needed for COC customers and folder-gluer jobs; show the one made.
+  const sIds = shipments.map((s: any) => s.id);
+  const [cocs, cocCos, cocJobs] = await Promise.all([
+    sIds.length ? (prisma as any).coc.findMany({ where: { shipmentId: { in: sIds } }, select: { id: true, number: true, shipmentId: true } }) : [],
+    prisma.company.findMany({ where: { id: { in: [...new Set(shipments.map((s: any) => s.companyId).filter(Boolean))] as string[] } }, select: { id: true, cocRequired: true } as any }),
+    prisma.job.findMany({ where: { id: { in: [...new Set(shipments.map((s: any) => s.jobId).filter(Boolean))] as string[] } }, select: { id: true, gluerCode: true } as any }),
+  ]);
   const out = shipments.map((s: any) => {
     const inv: any = s.invoiceId ? invMap.get(s.invoiceId) : null;
-    return { ...s, invoicePaid: inv ? inv.status === "paid" || remaining(inv) <= 0 : null, invoiceBalance: inv ? remaining(inv) : null, codReleased: !!s.codReleasedAt || (inv ? inv.status === "paid" || remaining(inv) <= 0 : false), tally: s.jobId && (s.kind || "job") === "job" ? tally.get(s.jobId) || null : null };
+    const coc = (cocs as any[]).find((c) => c.shipmentId === s.id);
+    return { ...s, coc: coc ? { id: coc.id, label: cocNumber(coc.number) } : null, cocNeeded: needsCoc(s, (cocCos as any[]).find((c) => c.id === s.companyId) || null, (cocJobs as any[]).find((j) => j.id === s.jobId) || null), invoicePaid: inv ? inv.status === "paid" || remaining(inv) <= 0 : null, invoiceBalance: inv ? remaining(inv) : null, codReleased: !!s.codReleasedAt || (inv ? inv.status === "paid" || remaining(inv) <= 0 : false), tally: s.jobId && (s.kind || "job") === "job" ? tally.get(s.jobId) || null : null };
   });
   // Also ready to go out (Benjy 11/19): hard proofs printed for the customer, and finished prototypes.
   const shippedProofs = new Set(shipments.map((s: any) => s.proofId).filter(Boolean));
