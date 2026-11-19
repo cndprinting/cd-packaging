@@ -172,8 +172,9 @@ export default function DielinesPage() {
               <label className="block text-sm">
                 <span className="text-gray-600">Tuck on</span>
                 <select value={tuckPanel} onChange={(e) => setTuckPanel(e.target.value as "far" | "near")} className={inputCls}>
-                  <option value="far">Back panel (C&D default)</option>
-                  <option value="near">Panel next to glue flap</option>
+                  {/* Todd 11/19: on crash lock (ABTT) the top tuck is on the front panel, glue tab on the back panel side. */}
+                  <option value="far">{style === "TTAB" ? "Front panel (C&D default)" : "Back panel (C&D default)"}</option>
+                  <option value="near">{style === "TTAB" ? "Back panel (glue tab side)" : "Panel next to glue flap"}</option>
                 </select>
               </label>
             )}
@@ -253,7 +254,7 @@ export default function DielinesPage() {
                         <tr key={p.label + (p.from || "")} className={`border-t border-gray-100 cursor-pointer hover:bg-gray-50 ${p.label === nest.pick.label && (p.from || "") === (nest.pick.from || "") ? "bg-emerald-50" : ""}`} onClick={() => setSheet(p.label)}>
                           <td className="py-1">{i === 0 && !sheet ? "★ " : ""}{p.label}{p.from ? <span className="text-gray-400"> · {p.from}</span> : ""}</td><td>{p.nUp}</td><td>{(p.waste * 100).toFixed(0)}%</td><td>{p.sheets ? p.sheets.toLocaleString() : "—"}</td>
                         </tr>))}</tbody></table>
-                    <div className="mt-2 text-[11px] text-gray-500">Ranked by fewest sheets for the quantity, then least waste. Komori max 23.25 × 29.75. Blanks are placed on their bounding box with 3/4" gripper, 1/8" side guide and 1/16" per blank dimension, same as the estimator. Grain, color bars and nesting into flap gaps are not counted yet.</div>
+                    <div className="mt-2 text-[11px] text-gray-500">Ranked by fewest sheets for the quantity, then least waste. Komori max 23.25 × 29.75. Blanks are placed on their bounding box with 3/4" gripper, 1/8" side guide and a 1/2" gap between blanks both ways for bleed and clean die cutting (Todd's default). Grain, color bars and nesting into flap gaps are not counted yet.</div>
                   </div>
                 </div>
               ) : <div className="mt-3 text-sm text-gray-500">Enter a box size to see the sheet plan.</div>}

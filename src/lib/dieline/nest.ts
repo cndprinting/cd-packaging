@@ -3,7 +3,7 @@
 //
 // Allowances are the same ones Mary's imposition calculator uses (verified
 // against pressroom jobs): 3/4" gripper on the lead edge, 1/8" side guide, 1/16"
-// added to each blank dimension. Blanks are packed on their bounding box with a
+// added to each blank dimension (now a 1/2" gap both ways, Todd 11/19). Blanks are packed on their bounding box with a
 // two-stage layout: a main grid in one orientation, then the leftover strip on
 // the long and the short side filled with blanks turned 90 degrees. The Komori
 // maximum is 23.25 x 29.75 (29" presses), so nothing larger is offered.
@@ -11,6 +11,9 @@ import { IMPOSITION } from "@/lib/classic-estimate";
 import { flatten, type Dieline, type Pt } from "./tuck-box";
 
 export const PRESS_MAX = { w: 23.25, h: 29.75 };
+/** Gap between blanks, both directions, for print bleed and clean die cutting (Todd 11/19/26).
+ *  The dieline tool only; the estimator keeps its own 1/16" allowance. */
+export const NEST_GAP = 0.5;
 export const PRESS_MIN = { w: 12.5, h: 19 };
 
 /** Sheets C&D can run on the Komoris: stock press sheets plus common parent sheets cut in half. */
@@ -30,7 +33,7 @@ export interface SheetPlan {
 }
 
 export function layoutOnSheet(blankW: number, blankH: number, sheetW: number, sheetH: number): { placed: Placed[]; grid: string } {
-  const bw = blankW + IMPOSITION.bleedTotalIn, bh = blankH + IMPOSITION.bleedTotalIn;
+  const bw = blankW + NEST_GAP, bh = blankH + NEST_GAP;
   // usable area: gripper off the lead edge (sheet first dimension = across the press), side guide off the other
   const ux0 = IMPOSITION.gripperIn, uy0 = IMPOSITION.sideGuideIn, UW = sheetW - IMPOSITION.gripperIn, UH = sheetH - IMPOSITION.sideGuideIn;
   const fill = (w: number, h: number, rot: 0 | 90, x0: number, y0: number, aw: number, ah: number, out: Placed[]) => {
@@ -94,7 +97,7 @@ function outline(d: Dieline) {
 
 /** Transform a blank-local point for a placement (bleed allowance centers the blank in its cell). */
 function place(p: Pt, pl: Placed, d: Dieline): Pt {
-  const g = IMPOSITION.bleedTotalIn / 2;
+  const g = NEST_GAP / 2;
   if (pl.rot === 0) return [pl.x + g + p[0], pl.y + g + p[1]];
   return [pl.x + g + (d.flat.height - p[1]), pl.y + g + p[0]];
 }
@@ -129,7 +132,7 @@ export async function layoutPDF(d: Dieline, plan: SheetPlan, info: { title: stri
     `Box ${info.box}  ·  flat blank ${info.flat} in  ·  style ${info.style}`,
     `Run on ${plan.label} in${plan.from ? ` (${plan.from})` : ""}  ·  ${plan.nUp} up, ${plan.grid}  ·  ${(plan.waste * 100).toFixed(1)}% waste`,
     info.qty > 0 ? `Quantity ${info.qty.toLocaleString()}  ·  ${plan.sheets.toLocaleString()} press sheets before makeready and spoilage` : "Quantity not set",
-    `Gripper ${IMPOSITION.gripperIn}" on the ${fmt(plan.sheetW)}" edge (shaded), side guide ${IMPOSITION.sideGuideIn}", ${IMPOSITION.bleedTotalIn}" added per blank dimension. Blanks on bounding boxes; nesting into flap gaps not counted.`,
+    `Gripper ${IMPOSITION.gripperIn}" on the ${fmt(plan.sheetW)}" edge (shaded), side guide ${IMPOSITION.sideGuideIn}", ${NEST_GAP}" gap between blanks both ways. Blanks on bounding boxes; nesting into flap gaps not counted.`,
   ];
   lines.forEach((t, i) => page.drawText(t, { x: 36, y: 556 - i * 14, size: 9.5, font }));
   // drawing area
