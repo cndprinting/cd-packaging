@@ -61,6 +61,7 @@ export function TicketDetails({ jobId }: { jobId: string }) {
         <label className="block sm:col-span-1 lg:col-span-1">
           <span className={lab}>Proofs</span>
           <textarea defaultValue={j.proofsNote ?? ""} rows={3} placeholder={"PDF\nEpson 99\nSh 2"} onBlur={(e) => { if (e.target.value !== (j.proofsNote ?? "")) save(jobId, { proofsNote: e.target.value }); }} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm" />
+          <span className="mt-0.5 block text-[11px] text-gray-400">Epson = hi-res proof · Sh = Sherpa, low-res imposition proof</span>
         </label>
         <Field label="Mails" value={j.mailDate} onSave={put("mailDate")} placeholder="Mail date" />
         <Field label="Mail qty" type="number" value={j.mailQty} onSave={put("mailQty")} />
