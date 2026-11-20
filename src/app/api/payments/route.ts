@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, floridaTax, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
+import { isTestJob } from "@/lib/test-mode";
 // A picked due date ("2026-12-18") is stored at noon UTC so it reads as the
 // same day in Florida and everywhere else (midnight UTC showed a day early).
 const dayDate = (v: string) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? `${v}T12:00:00.000Z` : v);
@@ -65,8 +66,8 @@ export async function POST(request: NextRequest) {
       if (AR_STANDALONE) {
         if (body.via !== "invoices") return NextResponse.json({ error: STANDALONE_MSG }, { status: 400 });
         // Real jobs (entered on or after JOBS_LIVE_SINCE) may be linked; test jobs never.
-        const j = jobId ? await prisma.job.findUnique({ where: { id: String(jobId) }, select: { createdAt: true } }) : null;
-        if (!j || j.createdAt < JOBS_LIVE_SINCE) jobId = null;
+        const j: any = jobId ? await prisma.job.findUnique({ where: { id: String(jobId) }, select: { createdAt: true, isTest: true, jobNumber: true } as any }) : null;
+        if (!j || j.createdAt < JOBS_LIVE_SINCE || isTestJob(j)) jobId = null;
         orderId = null;
       }
       // Every invoice hangs off a Customers record (Benjy 11/7): no retyped names.

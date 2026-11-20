@@ -4,6 +4,7 @@
 // job drafts its deposit invoice for accounting automatically, so nobody has
 // to forward job details or ask whether the deposit came in.
 import { floridaTax, newPayToken, round2, AR_FROM } from "@/lib/ar";
+import { isTestJob, tSubj } from "@/lib/test-mode";
 
 export const TERMS: Record<string, string> = {
   deposit50: "50% deposit, balance before delivery",
@@ -110,7 +111,7 @@ export async function notifyIfCleared(prisma: any, jobId: string) {
     // QA- jobs are test runs: record the notice, email no one.
     if (to.length && !String(job.jobNumber).startsWith("QA-")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
-      await sendEmail({ from: AR_FROM, to, subject: `Cleared for press: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${job.order?.company?.name || ""}</b> job ${job.jobNumber}, ${job.name}, is cleared for press: the proof is approved${st.depositRequired ? " and the deposit is paid" : ""}.</p><p>Quantity ${job.quantity?.toLocaleString() || "-"}${job.dueDate ? `, due ${new Date(job.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })}` : ""}.</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs/${job.id}">Open the job</a> to schedule it.</p></div>` });
+      await sendEmail({ from: AR_FROM, to, subject: tSubj(job, `Cleared for press: ${job.jobNumber} (${job.order?.company?.name || ""})`), body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${job.order?.company?.name || ""}</b> job ${job.jobNumber}, ${job.name}, is cleared for press: the proof is approved${st.depositRequired ? " and the deposit is paid" : ""}.</p><p>Quantity ${job.quantity?.toLocaleString() || "-"}${job.dueDate ? `, due ${new Date(job.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })}` : ""}.</p><p><a href="https://packaging.cndprinting.com/dashboard/jobs/${job.id}">Open the job</a> to schedule it.</p></div>` });
     }
   } catch (e) { console.error("cleared email failed", e); }
   return true;
@@ -127,6 +128,7 @@ async function nextInvoiceNumber(prisma: any) {
 export async function draftDepositInvoice(prisma: any, jobId: string, opts: { byName: string; byEmail?: string | null; taxExempt?: boolean; contactEmail?: string | null }) {
   const job = await prisma.job.findUnique({ where: { id: jobId }, include: { order: { include: { company: { include: { contacts: { orderBy: { isPrimary: "desc" }, take: 3 } } } } }, salesRep: { select: { id: true, name: true } } } });
   if (!job || new Date(job.createdAt) < JOBS_LIVE_SINCE) return null;
+  if (isTestJob(job)) return null; // TEST jobs never create an invoice (Denise is live)
   const terms = job.paymentTerms || DEFAULT_TERMS;
   if (!["deposit50", "prepaid"].includes(terms)) return null;
   const subtotal = round2(Number(job.quotedPrice) || 0);

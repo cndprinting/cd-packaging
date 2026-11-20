@@ -35,7 +35,24 @@ export interface SendEmailOptions {
   attachments?: { name: string; contentType: string; base64Content: string }[];
 }
 
+/** December test mode (11/20/26): a [TEST] email only goes to C&D people who are testing.
+ *  Customers (anything outside @cndprinting.com) and the live team (accounting, shipping)
+ *  are dropped, and it never goes out from a live person's mailbox. Returns null if nobody's left. */
+export async function guardTestEmail<T extends { from: string; to: string | string[]; cc?: string | string[]; bcc?: string | string[]; subject: string }>(options: T): Promise<T | null> {
+  const { isTestSubject, liveTeamEmails, TEST_FROM } = await import("@/lib/test-mode");
+  if (!isTestSubject(options.subject)) return options;
+  const live = await liveTeamEmails();
+  const keep = (v?: string | string[]) => (v === undefined ? [] : Array.isArray(v) ? v : [v]).map((e) => String(e).trim()).filter((e) => /@cndprinting\.com$/i.test(e) && !live.has(e.toLowerCase()));
+  const to = keep(options.to), cc = keep(options.cc), bcc = keep(options.bcc);
+  if (!to.length && !cc.length && !bcc.length) return null;
+  const from = live.has(String(options.from).toLowerCase()) || !/@cndprinting\.com$/i.test(options.from) ? TEST_FROM : options.from;
+  return { ...options, from, to, cc, bcc };
+}
+
 export async function sendEmail(options: SendEmailOptions): Promise<{ success: boolean; error?: string }> {
+  const guarded = await guardTestEmail(options);
+  if (!guarded) return { success: true, error: "TEST email: no one to send it to (customers and the live team never get test email)" };
+  options = guarded;
   const client = getGraphClient();
   if (!client) {
     return { success: false, error: "Email not configured — Azure credentials missing" };

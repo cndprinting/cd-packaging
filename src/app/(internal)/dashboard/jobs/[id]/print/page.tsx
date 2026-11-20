@@ -97,7 +97,7 @@ export default function PrintJobTicketPage() {
       {/* ── Header ── */}
       <table><tbody><tr>
         <td style={{ width: "62%", verticalAlign: "top", paddingTop: 4 }}>
-          <div><span className="l">Job Ticket #</span> <span className="v" style={{ fontSize: 16, minWidth: 80 }}>{job.jobNumber}</span>
+          <div><span className="l">Job Ticket #</span> <span className="v" style={{ fontSize: 16, minWidth: 80 }}>{job.jobNumber}</span>{(job.isTest || /^QA-/i.test(job.jobNumber || "")) && <span style={{ marginLeft: 6, background: "#fde047", border: "1.5px solid #000", fontWeight: 900, fontSize: 13, padding: "0 6px" }}>TEST</span>}
             <span className="l" style={{ marginLeft: 10 }}>Last Job #</span> <span className="v" style={{ minWidth: 60 }}>{job.lastJobNumber || ""}</span>
             <span className="l" style={{ marginLeft: 10 }}>Rep job #</span> <span style={{ display: "inline-block", border: "1px solid #999", minWidth: 70, height: 16, verticalAlign: "bottom", fontWeight: 700, paddingLeft: 3 }}>{job.repJobNumber || ""}</span></div>
           <div style={{ marginTop: 5, fontSize: 11, whiteSpace: "nowrap" }}>{JOB_TYPES.map(([k, l], i) => <span key={k}><span className={`rd ${(job.jobType || "NEW_ORDER") === k ? "on" : ""}`} style={i === 0 ? { marginLeft: 4 } : { marginLeft: 7 }} />{l}</span>)}</div>

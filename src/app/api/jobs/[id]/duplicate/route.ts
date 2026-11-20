@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { isTester } from "@/lib/test-mode";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         productType: sourceJob.productType,
         status: "ARTWORK_RECEIVED",
         csrId: session.role === "CSR" ? session.id : sourceJob.csrId,
+        isTest: isTester(session) || !!(sourceJob as any).isTest,
         salesRepId: sourceJob.salesRepId,
         paymentTerms: (sourceJob as any).paymentTerms,
         hardProof: (sourceJob as any).hardProof,

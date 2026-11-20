@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { tSubj } from "@/lib/test-mode";
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
         await sendEmail({
           from: session.email || process.env.DEFAULT_EMAIL_FROM || "no-reply@cndprinting.com",
           to: proof.job.csr.email,
-          subject: `Heads up: proof on ${job.jobNumber} (${customer}) — ${status}`,
+          subject: tSubj(job, `Heads up: proof on ${job.jobNumber} (${customer}) — ${status}`),
           body: `
             <p>Hi ${proof.job.csr.name || ""},</p>
             <p>${session.name || "A teammate"} flagged this proof for your attention:</p>
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
                 await sendEmail({
                   from: session.email || process.env.DEFAULT_EMAIL_FROM || "no-reply@cndprinting.com",
                   to,
-                  subject: `Proof approved: ${job.jobNumber} (${customer}) — ready to schedule`,
+                  subject: tSubj(job, `Proof approved: ${job.jobNumber} (${customer}) — ready to schedule`),
                   body: `
                     <p><strong>Proof approved.</strong> Job is ready to move into production scheduling.</p>
                     <ul>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { TERMS } from "@/lib/press-gate";
+import { isTester } from "@/lib/test-mode";
 
 // Sales-to-CSR handoff (Benjy 11/17, Carrie's step 3). Sales submits the won
 // job with everything the CSR needs; it can't be submitted incomplete. CSRs see
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
   const h = await (prisma as any).jobHandoff.create({ data: {
     leadId: b.leadId || null, companyId: b.companyId || null, customerName,
-    submittedById: session.id, submittedByName: session.name,
+    submittedById: session.id, submittedByName: session.name, isTest: isTester(session),
     salesRepId: b.salesRepId || (["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN"].includes(session.role) ? session.id : null),
     estimateNumber: t(b.estimateNumber, 60) || null, jobName: t(b.jobName, 200), specs: t(b.specs, 4000) || null,
     quantity: Math.round(Number(b.quantity)), quotedPrice: Math.round(Number(b.quotedPrice) * 100) / 100,
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     if (to.length && session.email?.endsWith("@cndprinting.com")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
       const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(h.quotedPrice);
-      await sendEmail({ from: session.email, to, subject: `New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}${h.paymentTerms ? `<br>Rep says terms: ${TERMS[h.paymentTerms]}` : ""}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to review it and create the job ticket.</p></div>` });
+      await sendEmail({ from: session.email, to, subject: `${(h as any).isTest ? "[TEST] " : ""}New job to enter: ${customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} handed off a won job.</p><p><b>${customerName}</b>${h.newCustomer ? " (new customer)" : ""}<br>${h.jobName}<br>${h.quantity.toLocaleString()} at ${money}${h.estimateNumber ? `, estimate ${h.estimateNumber}` : ""}${h.paymentTerms ? `<br>Rep says terms: ${TERMS[h.paymentTerms]}` : ""}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to review it and create the job ticket.</p></div>` });
     }
   } catch { /* the handoff is saved either way */ }
   return NextResponse.json({ handoff: h });
@@ -115,7 +116,7 @@ export async function PUT(request: NextRequest) {
     const rep = h.submittedById ? await prisma.user.findUnique({ where: { id: h.submittedById }, select: { email: true } }) : null;
     if (rep?.email && session.email?.endsWith("@cndprinting.com")) {
       const { sendEmail } = await import("@/lib/email/graph-client");
-      await sendEmail({ from: session.email, to: rep.email, subject: `Need more info: ${h.customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} sent this job back before entering it:</p><p>${note.replace(/</g, "&lt;")}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to fix and resend it.</p></div>` });
+      await sendEmail({ from: session.email, to: rep.email, subject: `${(h as any).isTest ? "[TEST] " : ""}Need more info: ${h.customerName}, ${h.jobName}`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>${session.name} sent this job back before entering it:</p><p>${note.replace(/</g, "&lt;")}</p><p><a href="https://packaging.cndprinting.com/dashboard/csr-queue">Open the CSR Job Queue</a> to fix and resend it.</p></div>` });
     }
   } catch { /* ignore */ }
   return NextResponse.json({ handoff: updated });

@@ -7,7 +7,7 @@ import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES, ROUTE_TASKS, STATUS_ROLES, 
 // POST -> save it { routeStatus, routeTasks[], foils, inkFront, inkBack, pressAssignment, dieCutterCode, gluerCode }
 // PATCH -> from the Jobs list (WIP screen): { routeStatus? , pressAssignment? } only
 async function load(prisma: any, id: string) {
-  return prisma.job.findUnique({ where: { id }, select: { id: true, jobNumber: true, routedAt: true, routedBy: true, routeStatus: true, routeTasks: true, foils: true, inkFront: true, inkBack: true, pressAssignment: true, dieCutterCode: true, gluerCode: true, routeNote: true } as any });
+  return prisma.job.findUnique({ where: { id }, select: { id: true, jobNumber: true, routedAt: true, routedBy: true, routeStatus: true, routeTasks: true, foils: true, inkFront: true, inkBack: true, pressAssignment: true, dieCutterCode: true, gluerCode: true, routeNote: true, isTest: true } as any });
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

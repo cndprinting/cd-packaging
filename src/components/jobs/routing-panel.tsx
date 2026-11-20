@@ -117,6 +117,7 @@ export function WipBar({ jobId, waitingOn, onShowStages, stagesOpen }: { jobId: 
   const pressLabel = (d.presses as [string, string][]).find(([k]) => k === r.pressAssignment)?.[1] || r.pressAssignment || "Not set";
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border-2 border-brand-200 bg-brand-50/40 px-4 py-3">
+      {d.routing.isTest && <span className="rounded bg-yellow-300 px-2 py-1 text-xs font-bold text-yellow-900" title="December test mode: never reaches invoicing, shipping, customers or the live team">TEST JOB</span>}
       <label className="flex items-center gap-2 text-sm font-medium text-gray-700">Status
         {d.canStatus ? (
           <select aria-label="Job status" value={r.routeStatus || ""} onChange={(e) => change("routeStatus", e.target.value)} className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm font-semibold">

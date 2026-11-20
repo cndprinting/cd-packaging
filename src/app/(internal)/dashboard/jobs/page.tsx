@@ -20,7 +20,7 @@ import { getStatusColor, getStatusLabel } from "@/lib/utils";
 interface Job {
   id: string; jobNumber: string; name: string; companyName: string; status: string; priority: string; quantity: number;
   dueDate: string; isLate: boolean; productType?: string; csrName: string; salesRepName: string;
-  routeStatus: string | null; pressAssignment?: string | null; pay?: { label: string; tone: string } | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
+  routeStatus: string | null; pressAssignment?: string | null; isTest?: boolean; pay?: { label: string; tone: string } | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
 }
 
 const TABS: { key: string; label: string; hint: string }[] = [
@@ -70,7 +70,8 @@ export default function JobsPage() {
   const ENTER = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
   const [wip, setWip] = useState<{ statuses: [string, string][]; presses: [string, string][]; canPress: boolean } | null>(null);
   const [wipErr, setWipErr] = useState<string | null>(null);
-  const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setWip(d.wip || null); }).catch(() => setJobs([]));
+  const [testMode, setTestMode] = useState(false);
+  const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setWip(d.wip || null); setTestMode(!!d.testMode); }).catch(() => setJobs([]));
   // Darrin's WIP screen: change Status / Press right in the row (11/20).
   const setRoute = async (j: Job, field: "routeStatus" | "pressAssignment", value: string) => {
     setWipErr(null);
@@ -132,6 +133,7 @@ export default function JobsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Jobs &amp; Job Tickets</h1>
           <p className="text-sm text-gray-500">{rows.length} of {visible.length} jobs</p>
+          {testMode && <p className="mt-1 rounded-md bg-yellow-100 px-2 py-1 text-xs text-yellow-900"><b>December test mode:</b> jobs you enter are TEST jobs. Try anything. They never reach invoicing, shipping, customers or the live team. FileMaker is still the real system until January 1.</p>}
         </div>
         <div className="flex gap-2">
           {/* Send won job to CSR lives on the sales side (Benjy 11/18): this page is the job ticket board. */}
@@ -189,7 +191,7 @@ export default function JobsPage() {
             <tbody>
               {rows.map((j) => (
                 <tr key={j.id} className={`border-b border-gray-50 hover:bg-gray-50 ${j.test ? "opacity-60" : ""}`}>
-                  <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/jobs/${j.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">{j.jobNumber}</Link>{(j.priority === "HIGH" || j.priority === "URGENT") && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-semibold text-red-700">{j.priority}</span>}</td>
+                  <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/jobs/${j.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">{j.jobNumber}</Link>{j.isTest && <span className="ml-1 rounded bg-yellow-300 px-1 text-[10px] font-bold text-yellow-900" title="TEST job (December test mode): never reaches invoicing, shipping, customers or the live team">TEST</span>}{(j.priority === "HIGH" || j.priority === "URGENT") && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-semibold text-red-700">{j.priority}</span>}</td>
                   <td className="max-w-[180px] truncate px-3 py-2 text-gray-800">{j.companyName}</td>
                   <td className="max-w-[260px] truncate px-3 py-2"><Link href={`/dashboard/jobs/${j.id}`} className="text-gray-900 hover:underline">{j.name}</Link></td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">{(j.quantity || 0).toLocaleString()}</td>

@@ -58,9 +58,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   // Tie to the job ticket (Benjy 11/19): an explicit pick, or a typed number that matches one.
   if ("jobId" in b || "jobNumber" in b) {
     let job: any = null;
-    if (b.jobId) job = await prisma.job.findUnique({ where: { id: String(b.jobId) }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
+    if (b.jobId) { job = await prisma.job.findUnique({ where: { id: String(b.jobId) }, select: { id: true, jobNumber: true, customerPO: true, isTest: true, order: { select: { companyId: true, poNumber: true } } } as any }); if (job?.isTest) job = null; }
     else if (b.jobNumber) {
-      const hits = await prisma.job.findMany({ where: { jobNumber: { equals: String(b.jobNumber).trim(), mode: "insensitive" } }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
+      const hits = await prisma.job.findMany({ where: { isTest: false, jobNumber: { equals: String(b.jobNumber).trim(), mode: "insensitive" } } as any, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
       job = hits.find((h: any) => !s.companyId || h.order?.companyId === s.companyId) || null;
     }
     data.jobId = job?.id || null;

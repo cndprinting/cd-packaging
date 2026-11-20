@@ -4,6 +4,7 @@
 import { randomBytes } from "crypto";
 import { AR_FROM } from "@/lib/ar";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
+import { tSubj } from "@/lib/test-mode";
 
 export const BASE_URL = process.env.NEXTAUTH_URL || "https://packaging.cndprinting.com";
 export const PROOF_SLA_HOURS = 24;
@@ -115,7 +116,7 @@ export async function board(prisma: any, opts: { includeTest?: boolean } = {}) {
       csr: j.csr?.name || null, salesRep: j.salesRep?.name || j.repName || null, artworkStatus: j.artworkStatus || null, jobType: j.jobType || null,
       stage, hardStep: step, hardProof: hardMode(j), hardProofDefault: j.order?.company?.hardProofDefault || null,
       preflight: j.preflight || null, events: Array.isArray(j.prepressEvents) ? j.prepressEvents : [],
-      hours: Math.round(hours * 10) / 10, slaLate: stage === "make" && hours > PROOF_SLA_HOURS, test: new Date(j.createdAt) < JOBS_LIVE_SINCE,
+      hours: Math.round(hours * 10) / 10, slaLate: stage === "make" && hours > PROOF_SLA_HOURS, test: new Date(j.createdAt) < JOBS_LIVE_SINCE, isTest: !!j.isTest || /^QA-/i.test(j.jobNumber || ""),
       proof: shapeProof(current), pdf: shapeProof(pdf), hard: shapeProof(hard),
     };
   });
@@ -153,7 +154,7 @@ export async function onProofApproved(prisma: any, proofId: string, by: { name: 
       const hp = hardMode(job);
       // No proof type on the ticket (Mike 11/19): pre-press can't know, so only the CSR is asked.
       const to = [...new Set([...(hp ? pre.map((u: any) => u.email) : []), job.csr?.email].filter(Boolean))] as string[];
-      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: hp ? `PDF approved, hard proof next: ${job.jobNumber} (${job.order?.company?.name || ""})` : `Set the proof type: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved PDF proof v${proof.version} for job ${esc(job.jobNumber)}, ${esc(job.name)} (${esc(by.name)}, ${esc(by.via)}).</p><p>${hp ? `Next: ${esc(HARD_PROOF_LABEL[hp] || hp)}.` : "The ticket has no proof type. Set it: PDF only, hard proof to the customer, or hard proof internal check."} <a href="${BASE_URL}/dashboard/${hp ? "prepress" : `jobs/${job.id}`}">${hp ? "Open Pre-Press &amp; Proofs" : "Open the job"}</a></p></div>` });
+      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: tSubj(job, hp ? `PDF approved, hard proof next: ${job.jobNumber} (${job.order?.company?.name || ""})` : `Set the proof type: ${job.jobNumber} (${job.order?.company?.name || ""})`), body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved PDF proof v${proof.version} for job ${esc(job.jobNumber)}, ${esc(job.name)} (${esc(by.name)}, ${esc(by.via)}).</p><p>${hp ? `Next: ${esc(HARD_PROOF_LABEL[hp] || hp)}.` : "The ticket has no proof type. Set it: PDF only, hard proof to the customer, or hard proof internal check."} <a href="${BASE_URL}/dashboard/${hp ? "prepress" : `jobs/${job.id}`}">${hp ? "Open Pre-Press &amp; Proofs" : "Open the job"}</a></p></div>` });
     } catch (e) { console.error("pdf approved notice failed", e); }
     return proof;
   }
@@ -171,7 +172,7 @@ export async function finalizeProofs(prisma: any, proofId: string, by: { name: s
       const { sendEmail } = await import("@/lib/email/graph-client");
       const plant = await prisma.user.findMany({ where: { isActive: true, role: { in: ["PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER", "PREPRESS_MANAGER"] } }, select: { email: true } });
       const to = [...new Set([...plant.map((u: any) => u.email), job.csr?.email, job.salesRep?.email].filter(Boolean))] as string[];
-      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: `Proof approved: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved the final proof (${proof.kind === "hard" ? `hard proof v${proof.version}` : `PDF v${proof.version}, PDF only`}) for job ${esc(job.jobNumber)}, ${esc(job.name)}.</p><p>Approved by ${esc(by.name)} (${esc(by.via)})${by.comment ? `: "${esc(by.comment)}"` : ""}.</p><p>It schedules once the deposit is in. <a href="${BASE_URL}/dashboard/jobs/${job.id}">Open the job</a></p></div>` });
+      if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: tSubj(job, `Proof approved: ${job.jobNumber} (${job.order?.company?.name || ""})`), body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> approved the final proof (${proof.kind === "hard" ? `hard proof v${proof.version}` : `PDF v${proof.version}, PDF only`}) for job ${esc(job.jobNumber)}, ${esc(job.name)}.</p><p>Approved by ${esc(by.name)} (${esc(by.via)})${by.comment ? `: "${esc(by.comment)}"` : ""}.</p><p>It schedules once the deposit is in. <a href="${BASE_URL}/dashboard/jobs/${job.id}">Open the job</a></p></div>` });
       await prisma.proof.update({ where: { id: proofId }, data: { productionAlertSentAt: new Date() } });
     } catch (e) { console.error("proof approved alert failed", e); }
   }
@@ -189,7 +190,7 @@ export async function onProofChanges(prisma: any, proofId: string, by: { name: s
     const { sendEmail } = await import("@/lib/email/graph-client");
     const pre = await prisma.user.findMany({ where: { isActive: true, role: "PREPRESS_MANAGER" }, select: { email: true } });
     const to = [...new Set([...pre.map((u: any) => u.email), job.csr?.email, job.salesRep?.email].filter(Boolean))] as string[];
-    if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: `${proof.kind === "hard" ? "Hard proof" : "Proof"} changes requested: ${job.jobNumber} (${job.order?.company?.name || ""})`, body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> asked for changes to proof v${proof.version} on job ${esc(job.jobNumber)}, ${esc(job.name)}:</p><blockquote style="border-left:3px solid #b45309;margin:0;padding:4px 12px;">${esc(by.comment).replace(/\n/g, "<br>")}</blockquote><p>From ${esc(by.name)} (${esc(by.via)}). It's back in ${proof.kind === "hard" ? "Hard proof for another round" : "Make PDF proof"}. <a href="${BASE_URL}/dashboard/prepress">Open Pre-Press & Proofs</a></p></div>` });
+    if (to.length) await sendEmail({ from: by.fromEmail?.endsWith("@cndprinting.com") ? by.fromEmail : AR_FROM, to, subject: tSubj(job, `${proof.kind === "hard" ? "Hard proof" : "Proof"} changes requested: ${job.jobNumber} (${job.order?.company?.name || ""})`), body: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p><b>${esc(job.order?.company?.name)}</b> asked for changes to proof v${proof.version} on job ${esc(job.jobNumber)}, ${esc(job.name)}:</p><blockquote style="border-left:3px solid #b45309;margin:0;padding:4px 12px;">${esc(by.comment).replace(/\n/g, "<br>")}</blockquote><p>From ${esc(by.name)} (${esc(by.via)}). It's back in ${proof.kind === "hard" ? "Hard proof for another round" : "Make PDF proof"}. <a href="${BASE_URL}/dashboard/prepress">Open Pre-Press & Proofs</a></p></div>` });
   } catch (e) { console.error("proof changes alert failed", e); }
   return proof;
 }

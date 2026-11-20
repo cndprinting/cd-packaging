@@ -4,6 +4,7 @@
 // Here: the plant gets a notice when a job is entered, the job waits on his
 // "To route" list, and the routing panel on the job captures his review.
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
+import { tSubj } from "@/lib/test-mode";
 
 export const ROUTE_ROLES = ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER", "OWNER", "GM", "ADMIN"];
 // Status also moves with the CSRs: they send a signed-off job from PRE to KOM / DIG ... (Darrin 11/20).
@@ -51,7 +52,7 @@ export async function notifyPlantNewJob(prisma: any, jobId: string, by: { name: 
     ["Product", job.productType === "COMMERCIAL_PRINT" ? "Commercial print" : "Folding carton"],
     ["Artwork", esc(job.artworkStatus || "-")], ["CSR", esc(job.csr?.name || by.name)], ["Sales rep", esc(job.salesRep?.name || job.repName || "-")],
   ];
-  const subject = `New job to route: ${job.jobNumber} ${customer}`;
+  const subject = tSubj(job, `New job to route: ${job.jobNumber} ${customer}`);
   const body = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;"><p>New job entered by ${esc(by.name)}.</p><table style="border-collapse:collapse;">${rows.map(([k, v]) => `<tr><td style="padding:3px 16px 3px 0;color:#666;">${k}</td><td>${v}</td></tr>`).join("")}</table>${job.description ? `<p style="white-space:pre-wrap;">${esc(job.description)}</p>` : ""}<p><a href="${link}">Open the job to route it</a> (inks, foils, status, production boxes, machines).</p></div>`;
   try {
     const { sendEmail } = await import("@/lib/email/graph-client");

@@ -192,6 +192,7 @@ model Company {
   hardProofDefault String?
   cocRequired      Boolean  @default(false) // ships with a Certificate of Conformance (Shayla 11/19)
   customerNumber   String?  // FileMaker "Customer #" on the job ticket
+  isTest           Boolean  @default(false) // set up by a tester during December test mode
 }
 
 model Contact {
@@ -427,6 +428,7 @@ model JobHandoff {
   estimateRead      String?  // JSON of what AI pulled from the estimate
   source            String?  // form | email
   sourceMsgId       String?  @unique // the forwarded email it came from (de-dupe)
+  isTest            Boolean  @default(false) // sent by a tester during December test mode
   intakeNote        String?  // what's still missing, for the CSR
   jobId             String?
   returnedNote      String?
@@ -668,6 +670,7 @@ model Job {
   foils            String?   // foil(s) needed
   dieCutterCode    String?   // Machine.code for letterpress jobs (Yoco 85e/85t, Kluge, Heidelberg)
   gluerCode        String?   // Machine.code (Vega, Omni)
+  isTest           Boolean   @default(false) // December test mode: made by a tester, walled off from invoicing/shipping/customers (11/20/26)
   routeNote        String?   // Darrin's note when he routes it (reticulating / dry-trap varnish, inserter...) - prints on his schedules
   plantNotifiedAt  DateTime? // new-job notice sent to the plant
   handoffId        String?   // the sales-to-CSR handoff this job came from

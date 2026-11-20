@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 import { hardStep, proofsDone, stageFor } from "@/lib/proofs";
 import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES, STATUS_ROLES } from "@/lib/routing";
+import { isLiveUser, isTestJob, isTester, tSubj } from "@/lib/test-mode";
 
 // Jobs page tabs use Darrin's FileMaker WIP statuses (11/20): New until he
 // routes it, then the status he sets. Packed counts as COMP, shipped as DEL.
@@ -41,7 +42,9 @@ export async function GET() {
     const prisma = (await import("@/lib/prisma")).default;
     if (!prisma) return NextResponse.json({ jobs: [], source: "empty" });
 
+    // The live team (accounting, shipping) never sees TEST jobs.
     const jobs = await prisma.job.findMany({
+      where: isLiveUser(session) ? { isTest: false } : undefined,
       include: { order: { include: { company: true } }, csr: true, salesRep: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     });
@@ -84,13 +87,13 @@ export async function GET() {
         productionOwnerName: "", updatedAt: j.updatedAt?.toISOString() ?? "",
         isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
         isBlocked: false, paymentTerms: j.paymentTerms || null, press,
-        productType: j.productType, pay, routeStatus: j.routeStatus || null, pressAssignment: j.pressAssignment || null, routed: !!j.routedAt,
+        productType: j.productType, pay, isTest: isTestJob(j), routeStatus: j.routeStatus || null, pressAssignment: j.pressAssignment || null, routed: !!j.routedAt,
         test: j.createdAt < JOBS_LIVE_SINCE || /^QA-/i.test(j.jobNumber || ""), tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id, "pdf"), proofOf(j.id, "hard")),
       };
     });
     // Darrin edits Status + Press right on the list, like his FileMaker WIP screen (11/20).
     const wip = STATUS_ROLES.includes(session.role) ? { statuses: ROUTE_STATUSES, presses: ROUTE_PRESSES, canPress: ROUTE_ROLES.includes(session.role) } : null;
-    return NextResponse.json({ jobs: formatted, wip, source: "database" });
+    return NextResponse.json({ jobs: formatted, wip, testMode: isTester(session), source: "database" });
   } catch (error) {
     console.error("Jobs GET error:", error);
     return NextResponse.json({ jobs: [], source: "empty" });
@@ -122,6 +125,8 @@ export async function POST(request: NextRequest) {
     if (!name || !(quantity > 0)) return NextResponse.json({ error: "Job name and quantity are required" }, { status: 400 });
     let terms: string = TERMS[b.paymentTerms] ? b.paymentTerms : "";
 
+    // December test mode: a tester's jobs (and any customer they set up) are TEST ones.
+    const testing = isTester(session);
     // Customer: picked from the list, or a new one set up now.
     let companyId: string | null = b.companyId ? String(b.companyId) : null;
     if (companyId) {
@@ -139,7 +144,7 @@ export async function POST(request: NextRequest) {
       const last = lines.length > 1 ? lines[lines.length - 1] : "";
       const m = last.match(/^(.*?),\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
       const co = await prisma.company.create({ data: {
-        name: cname, slug, type: "customer", phone: t(nc.phone, 40) || null,
+        name: cname, slug, type: "customer", phone: t(nc.phone, 40) || null, isTest: testing,
         address: m ? lines.slice(0, -1).join(", ") : lines.join(", ") || null, city: m ? m[1] : null, state: m ? m[2].toUpperCase() : null, zip: m ? m[3] : null,
         contacts: nc.contact ? { create: [{ name: t(nc.contact, 120), email: t(nc.email, 200).toLowerCase() || null, phone: t(nc.phone, 40) || null, title: "Billing", isPrimary: true }] } : undefined,
       } });
@@ -181,6 +186,7 @@ export async function POST(request: NextRequest) {
         paymentTerms: terms, artworkStatus: ["ready", "coming", "design", "reprint"].includes(b.artworkStatus) ? b.artworkStatus : null,
         jobType: b.artworkStatus === "reprint" ? "EXACT_REPRINT" : "NEW_ORDER", handoffId: b.handoffId || null,
         hardProof: ["customer", "internal", "none"].includes(b.hardProof) ? b.hardProof : null,
+        isTest: testing,
       } as any,
       include: { order: { include: { company: true } } },
     });
@@ -194,14 +200,16 @@ export async function POST(request: NextRequest) {
     await prisma.purchaseFlag.createMany({ data: autoFlags }).catch(() => {});
 
     // Save the terms to the customer when asked (or when none were on file).
-    if (canSetTerms && TERMS[b.paymentTerms] && (b.saveTerms || !onFile?.paymentTerms)) {
+    // TEST jobs never change a customer's terms or email accounting (Denise is live).
+    if (testing) { /* terms stay on this TEST job only */ }
+    else if (canSetTerms && TERMS[b.paymentTerms] && (b.saveTerms || !onFile?.paymentTerms)) {
       try { await setCustomerTerms(prisma, companyId, terms, { name: session.name, role: session.role, email: session.email }, `while entering job ${jobNumber}`); } catch (e) { console.error("save terms failed", e); }
     } else if (onFile?.paymentTerms && terms !== onFile.paymentTerms && (terms === "net30" || terms === "cod") && !["OWNER", "GM", "ADMIN", "ACCOUNTING"].includes(session.role)) {
       await tellAccounting(prisma, `Job ${jobNumber} entered on ${TERMS[terms]}`, `<p>${session.name} entered job ${jobNumber} for <b>${onFile.name}</b> on <b>${TERMS[terms]}</b>, just for this job. The customer's terms on file are ${TERMS[onFile.paymentTerms]}.</p>`, session.email);
     }
 
     // Proof type: becomes the customer's default when asked, or when none is on file (Benjy 11/19).
-    if (["customer", "internal", "none"].includes(b.hardProof) && b.saveProof) await prisma.company.update({ where: { id: companyId }, data: { hardProofDefault: b.hardProof } as any }).catch(() => {});
+    if (!testing && ["customer", "internal", "none"].includes(b.hardProof) && b.saveProof) await prisma.company.update({ where: { id: companyId }, data: { hardProofDefault: b.hardProof } as any }).catch(() => {});
 
     // The approved prototype this job came from: link it and carry the die (Benjy 11/18).
     if (b.prototypeId) {
@@ -220,7 +228,7 @@ export async function POST(request: NextRequest) {
     // Carrie's step 5 without anyone forwarding anything: draft the deposit invoice for accounting.
     let depositInvoice: string | null = null;
     // Shipments Shayla keyed with this job # before the ticket existed get tied to it (Benjy 11/19).
-    try { const { linkShipmentsToJob } = await import("@/lib/shipping-server"); await linkShipmentsToJob(prisma, job.id); } catch (e) { console.error("shipment link failed", e); }
+    if (!testing) try { const { linkShipmentsToJob } = await import("@/lib/shipping-server"); await linkShipmentsToJob(prisma, job.id); } catch (e) { console.error("shipment link failed", e); }
     // Darrin gets every new ticket to route (11/18/26).
     try { const { notifyPlantNewJob } = await import("@/lib/routing"); await notifyPlantNewJob(prisma, job.id, { name: session.name, email: session.email }); } catch (e) { console.error("plant notice failed", e); }
     try { const inv = await draftDepositInvoice(prisma, job.id, { byName: session.name, byEmail: session.email, taxExempt: !!b.taxExempt, contactEmail: t(b.billingEmail, 200).toLowerCase() || null }); depositInvoice = inv?.invoiceNumber || null; } catch (e) { console.error("deposit draft failed", e); }

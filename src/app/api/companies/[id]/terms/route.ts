@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { TERMS, TERMS_SET_ROLES, setCustomerTerms } from "@/lib/press-gate";
 import { ARCHIVE_ROLES } from "@/lib/customer-archive";
+import { isTester } from "@/lib/test-mode";
 
 // A customer's payment terms (Benjy 11/18). Everyone on staff can see them;
 // accounting and Customer Service set them.
@@ -26,6 +27,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const b = await request.json().catch(() => ({}));
   if (!TERMS[b.terms]) return NextResponse.json({ error: "Unknown payment terms" }, { status: 400 });
   try {
+    // December test mode: a customer's terms feed Denise's live invoicing, so only accounting changes them for now.
+    if (isTester(session)) return NextResponse.json({ error: "During December testing, customer payment terms are changed by accounting (Denise or Jennifer)." }, { status: 403 });
     const co: any = await setCustomerTerms(prisma, id, b.terms, { name: session.name, role: session.role, email: session.email });
     return NextResponse.json({ terms: co.paymentTerms, by: co.paymentTermsBy, at: co.paymentTermsAt, options: TERMS, canEdit: true });
   } catch (e: any) {

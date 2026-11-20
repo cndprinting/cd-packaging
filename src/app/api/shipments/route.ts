@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   if (jq) {
     if (jq.length < 2) return NextResponse.json({ jobs: [] });
     const found = await prisma.job.findMany({
-      where: { createdAt: { gte: LIVE }, status: { notIn: ["DELIVERED", "INVOICED"] as any }, OR: [{ jobNumber: { contains: jq, mode: "insensitive" } }, { name: { contains: jq, mode: "insensitive" } }, { order: { company: { name: { contains: jq, mode: "insensitive" } } } }] },
+      where: { createdAt: { gte: LIVE }, isTest: false, status: { notIn: ["DELIVERED", "INVOICED"] as any }, OR: [{ jobNumber: { contains: jq, mode: "insensitive" } }, { name: { contains: jq, mode: "insensitive" } }, { order: { company: { name: { contains: jq, mode: "insensitive" } } } }] },
       select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
       orderBy: { createdAt: "desc" }, take: 8,
     });
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
   const invs = invIds.length ? await prisma.invoice.findMany({ where: { id: { in: invIds } }, select: { id: true, status: true, total: true, paidAmount: true } }) : [];
   const invMap = new Map(invs.map((i: any) => [i.id, i]));
   const ready = await prisma.job.findMany({
-    where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE } },
+    where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE }, isTest: false },
     // What Shayla reads off the job ticket (11/18): deliver-to, shipping instructions, contact, PO.
     select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
     orderBy: { dueDate: "asc" }, take: 100,
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
   // Also ready to go out (Benjy 11/19): hard proofs printed for the customer, and finished prototypes.
   const shippedProofs = new Set(shipments.map((s: any) => s.proofId).filter(Boolean));
   const hardWaiting = await prisma.proof.findMany({
-    where: { kind: "hard", status: "PENDING", sentToCustomerAt: null, job: { createdAt: { gte: JOBS_LIVE_SINCE } } } as any,
+    where: { kind: "hard", status: "PENDING", sentToCustomerAt: null, job: { createdAt: { gte: JOBS_LIVE_SINCE }, isTest: false } } as any,
     select: { id: true, version: true, job: { select: { id: true, jobNumber: true, name: true, hardProof: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, hardProofDefault: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } } } as any,
     orderBy: { createdAt: "asc" }, take: 50,
   }).catch(() => []);
@@ -129,7 +129,9 @@ export async function POST(request: NextRequest) {
   const isJob = kind === "job";
 
   let jobId: string | null = b.jobId || null, jobNumber: string | null = b.jobNumber ? String(b.jobNumber).trim() : null;
-  if (!jobId && jobNumber) { const j = await prisma.job.findFirst({ where: { jobNumber: { equals: jobNumber, mode: "insensitive" } }, select: { id: true, jobNumber: true } }); if (j) { jobId = j.id; jobNumber = j.jobNumber; } }
+  // A TEST job is never a shipment's job (December test mode).
+  if (jobId && (await prisma.job.findUnique({ where: { id: String(jobId) }, select: { isTest: true } as any }) as any)?.isTest) return NextResponse.json({ error: "That's a TEST job. Test jobs can't be shipped." }, { status: 400 });
+  if (!jobId && jobNumber) { const j = await prisma.job.findFirst({ where: { isTest: false, jobNumber: { equals: jobNumber, mode: "insensitive" } } as any, select: { id: true, jobNumber: true } }); if (j) { jobId = j.id; jobNumber = j.jobNumber; } }
   if (jobId && !jobNumber) { const j = await prisma.job.findUnique({ where: { id: jobId }, select: { jobNumber: true } }); jobNumber = j?.jobNumber || null; }
 
   let invoiceId: string | null = b.invoiceId || null, invoiceNumber: string | null = null;

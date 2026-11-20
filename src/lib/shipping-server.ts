@@ -84,8 +84,8 @@ export async function syncFreight(prisma: any, shipmentId: string, byName: strin
 /** Shayla's shipments that were keyed with a job # before the ticket was in Godzilla
  *  (Benjy 11/19): once a CSR enters that ticket, link them and fill in what was blank. */
 export async function linkShipmentsToJob(prisma: any, jobId: string) {
-  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, jobNumber: true, customerPO: true, order: { select: { companyId: true, poNumber: true } } } });
-  if (!job?.jobNumber) return 0;
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, jobNumber: true, customerPO: true, isTest: true, order: { select: { companyId: true, poNumber: true } } } as any }) as any;
+  if (!job?.jobNumber || job.isTest) return 0; // TEST jobs never pick up Shayla's shipments
   const ships = await prisma.shipment.findMany({ where: { jobId: null, jobNumber: { equals: job.jobNumber, mode: "insensitive" } } });
   const companyId = job.order?.companyId || null;
   let n = 0;

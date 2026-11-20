@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { PROOF_ACT_ROLES, PROOF_MAKE_ROLES, STAGES, PREFLIGHT_ISSUES, HARD_PROOF_LABEL, BASE_URL, addPrepressEvent, board, finalizeProofs, newApprovalToken, onProofApproved, onProofChanges, proofEmailHtml, proofLink } from "@/lib/proofs";
+import { isTestJob, tSubj } from "@/lib/test-mode";
 
 // Pre-Press & Proofs board (remade 11/17/26).
 // GET ?test=1 -> { stages, jobs }  (test jobs hidden unless asked)
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       const mode = ["customer", "internal", "none"].includes(b.mode) ? b.mode : null;
       if (!mode) return NextResponse.json({ error: "Pick PDF only, hard proof to customer, or internal check" }, { status: 400 });
       await prisma.job.update({ where: { id: job.id }, data: { hardProof: mode } as any });
-      if (b.always && job.order?.companyId) await prisma.company.update({ where: { id: job.order.companyId }, data: { hardProofDefault: mode } as any });
+      if (b.always && job.order?.companyId && !isTestJob(job)) await prisma.company.update({ where: { id: job.order.companyId }, data: { hardProofDefault: mode } as any });
       await log(job.orderId, `${job.jobNumber}: proof type ${HARD_PROOF_LABEL[mode]} set by ${session.name}${b.always ? " (customer default)" : ""}`);
       // PDF-only and the PDF is already approved: proofing is done now.
       const pdf = job.proofs?.[0];
@@ -77,7 +78,8 @@ export async function POST(request: NextRequest) {
       await log(job.orderId, `${job.jobNumber}: preflight ${result === "ok" ? "passed" : result === "fixed" ? "fixed by pre-press" : "needs new art"} (${session.name})${issues.length ? `: ${issues.join(", ")}` : ""}`);
       let told: string | null = null;
       if ((result !== "ok" || issues.length || note) && job.csr && !/^QA-/i.test(job.jobNumber || "")) {
-        const title = result === "new_art" ? `New art needed: ${job.jobNumber} (${job.order?.company?.name || ""})` : `Preflight report: ${job.jobNumber} (${job.order?.company?.name || ""})`;
+        const title0 = result === "new_art" ? `New art needed: ${job.jobNumber} (${job.order?.company?.name || ""})` : `Preflight report: ${job.jobNumber} (${job.order?.company?.name || ""})`;
+        const title = tSubj(job, title0);
         const e = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         try {
           const { sendEmail } = await import("@/lib/email/graph-client");
@@ -111,9 +113,10 @@ export async function POST(request: NextRequest) {
     const token = proof.approvalToken || newApprovalToken();
     const first = String(b.firstName || job.contactName || "").trim().split(/\s+/)[0] || null;
     const html = proofEmailHtml({ firstName: first, customer: job.order?.company?.name || "", jobNumber: job.jobNumber, jobName: job.name, version: proof.version, fileUrl: proof.fileUrl, link: proofLink(token), note: b.note ? String(b.note).slice(0, 2000) : undefined, senderName: session.name, reminder: !!b.reminder, kind: proof.kind });
-    const subject = `${b.reminder ? "Reminder: " : ""}${proof.kind === "hard" ? "Hard proof" : "Proof"} ready for approval: ${job.name} (job ${job.jobNumber}) | C&D Printing`;
+    const subject = `${isTestJob(job) ? "[TEST] " : ""}${b.reminder ? "Reminder: " : ""}${proof.kind === "hard" ? "Hard proof" : "Proof"} ready for approval: ${job.name} (job ${job.jobNumber}) | C&D Printing`;
     if (b.preview) return NextResponse.json({ to: to.join(", "), subject, html });
     if (!to.length || to.some((e) => !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(e))) return NextResponse.json({ error: "Add the customer's email" }, { status: 400 });
+    if (isTestJob(job) && !to.every((e) => /@cndprinting\.com$/i.test(e))) return NextResponse.json({ error: "This is a TEST job: send the proof to your own @cndprinting.com email. Customers never get test emails." }, { status: 400 });
     if (!proof.fileUrl) return NextResponse.json({ error: proof.kind === "hard" ? "No photo of this hard proof to email. Use \"Sent / handed over\" instead." : "This proof has no file to send" }, { status: 400 });
     const { sendEmail } = await import("@/lib/email/graph-client");
     const r = await sendEmail({ from: session.email, to, subject, body: html });

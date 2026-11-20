@@ -138,7 +138,7 @@ export default function PrepressPage() {
                 {shown.filter((c) => c.stage === s.key).map((c) => (
                   <div key={c.id} className={`rounded-md border bg-white p-2.5 text-sm shadow-sm ${c.slaLate ? "border-red-300" : "border-gray-200"}`}>
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/dashboard/jobs/${c.id}`} className="font-mono text-[11px] text-gray-500 hover:text-brand-600">{c.jobNumber}{c.test && " · test"}</Link>
+                      <Link href={`/dashboard/jobs/${c.id}`} className="font-mono text-[11px] text-gray-500 hover:text-brand-600">{c.jobNumber}{c.test && " · test"}</Link>{(c as any).isTest && <span className="ml-1 rounded bg-yellow-300 px-1 text-[10px] font-bold text-yellow-900" title="TEST job (December test mode): never reaches invoicing, shipping, customers or the live team">TEST</span>}
                       <span className={`inline-flex items-center gap-0.5 text-[11px] ${c.slaLate ? "font-semibold text-red-600" : "text-gray-400"}`}><Clock className="h-3 w-3" />{age(c.hours)}</span>
                     </div>
                     <div className="font-medium text-gray-900">{c.name}</div>

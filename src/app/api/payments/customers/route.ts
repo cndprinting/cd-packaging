@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { AR_STANDALONE, DEPARTMENTS } from "@/lib/ar";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
+import { isLiveUser } from "@/lib/test-mode";
 
 // Customer picker for New invoice (Benjy 11/7: every invoice must hang off the
 // same customer record the rest of Godzilla uses, never a retyped name).
@@ -12,16 +13,18 @@ export async function GET(request: NextRequest) {
   const q = (new URL(request.url).searchParams.get("q") || "").trim();
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ customers: [] });
+  // December test mode: customers a tester set up never show up for the live team.
+  const hideTest = isLiveUser(session) ? { isTest: false } : {};
   const companies = await prisma.company.findMany({
-    where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
+    where: { type: "customer", isActive: true, ...hideTest, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
     select: { id: true, name: true, address: true, city: true, state: true, zip: true, paymentTerms: true, paymentTermsBy: true, paymentTermsAt: true, hardProofDefault: true, contacts: { select: { name: true, email: true, isPrimary: true }, orderBy: { isPrimary: "desc" }, take: 3 } },
     orderBy: { name: "asc" }, take: 25,
   });
   // How many match, so the picker can say "showing 25 of 2,462, keep typing" (Benjy 11/17).
-  const total = await prisma.company.count({ where: { type: "customer", isActive: true, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) } });
+  const total = await prisma.company.count({ where: { type: "customer", isActive: true, ...hideTest, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) } });
   const ids = companies.map((c) => c.id);
   const jobs = ids.length ? await prisma.job.findMany({
-    where: { order: { companyId: { in: ids } }, status: { notIn: ["CANCELLED"] as any }, ...(AR_STANDALONE ? { createdAt: { gte: JOBS_LIVE_SINCE } } : {}) },
+    where: { order: { companyId: { in: ids } }, isTest: false, status: { notIn: ["CANCELLED"] as any }, ...(AR_STANDALONE ? { createdAt: { gte: JOBS_LIVE_SINCE } } : {}) },
     select: { id: true, order: { select: { companyId: true } }, jobNumber: true, name: true, quotedPrice: true, status: true, salesRep: { select: { name: true } }, createdAt: true },
     orderBy: { createdAt: "desc" }, take: 60,
   }).catch(() => []) : [];
