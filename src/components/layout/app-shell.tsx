@@ -18,8 +18,12 @@ export function AppShell({ children, isCustomer = false }: AppShellProps) {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => { if (d.user) setUser(d.user); }).catch(() => {});
   }, []);
 
+  // Laptop test copy (Benjy 11/20/26): impossible to mistake for the live site.
+  const localCopy = process.env.NEXT_PUBLIC_APP_ENV === "local";
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <>
+    {localCopy && <div className="fixed inset-x-0 top-0 z-[100] bg-red-600 py-1 text-center text-xs font-bold tracking-wide text-white" data-noprint>LOCAL TEST COPY on this laptop. Not the live site: nothing here reaches Denise, Shayla, Stripe or customers.</div>}
+    <div className={`flex h-screen overflow-hidden bg-gray-50 ${localCopy ? "pt-6" : ""}`}>
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar isCustomer={isCustomer} userRole={user?.role} pipelineAccess={user?.pipelineAccess} socialAccess={user?.socialAccess} />
@@ -51,5 +55,6 @@ export function AppShell({ children, isCustomer = false }: AppShellProps) {
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
+    </>
   );
 }
