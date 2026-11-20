@@ -16,7 +16,7 @@ export type IntakePrefill = Partial<{
   newCustomer: boolean; billingContact: string; billingEmail: string; billingPhone: string; billingAddress: string; taxExempt: boolean;
   estimateNumber: string; estimateFileName: string; jobName: string; specs: string; quantity: string; quotedPrice: string; productType: string;
   customerPO: string; dueDate: string; salesRepId: string; artworkStatus: string; artworkNotes: string; paymentTerms: string;
-  deliveryAddress: string; shippingNotes: string; specialNotes: string;
+  deliveryAddress: string; shippingNotes: string; specialNotes: string; jobNumber: string;
 }>;
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -29,7 +29,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
     quantity: prefill.quantity || "", quotedPrice: prefill.quotedPrice || "", productType: prefill.productType || "FOLDING_CARTON", customerPO: prefill.customerPO || "",
     dueDate: prefill.dueDate || "", salesRepId: prefill.salesRepId || "", artworkStatus: prefill.artworkStatus || "", artworkNotes: prefill.artworkNotes || "",
     paymentTerms: prefill.paymentTerms || "", saveTerms: false, deliveryAddress: prefill.deliveryAddress || prefill.customerAddress || "", shippingNotes: prefill.shippingNotes || "", specialNotes: prefill.specialNotes || "",
-    jobNumber: "", priority: "NORMAL", estimatedHours: "", hardProof: "", saveProof: false,
+    jobNumber: prefill.jobNumber || "", priority: "NORMAL", estimatedHours: "", hardProof: "", saveProof: false,
   });
   const [proofOnFile, setProofOnFile] = useState<string | null>(null);
   const [reps, setReps] = useState<Rep[]>([]);

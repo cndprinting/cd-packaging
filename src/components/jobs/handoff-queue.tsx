@@ -24,6 +24,8 @@ export function handoffToPrefill(h: Handoff): IntakePrefill {
     customerPO: h.customerPO || "", dueDate: h.dueDate ? String(h.dueDate).slice(0, 10) : "", salesRepId: h.salesRepId || "",
     artworkStatus: h.artworkStatus, artworkNotes: h.artworkNotes || "", paymentTerms: h.paymentTerms || "", deliveryAddress: h.deliveryAddress,
     shippingNotes: h.shippingNotes || "", specialNotes: h.specialNotes || "",
+    // Demo handoffs (walk-through tests) become QA- jobs, which never email staff.
+    ...(h.source === "demo" ? { jobNumber: `QA-FLOW-${String(h.id).slice(-4).toUpperCase()}` } : {}),
   };
 }
 
