@@ -30,8 +30,10 @@ export default function ProofPage({ params }: { params: Promise<{ token: string 
     setV(j);
   };
 
-  const isPdf = !!v?.fileUrl && /\.pdf($|\?)/i.test(v.fileUrl);
-  const isImg = !!v?.fileUrl && /\.(png|jpe?g|gif|webp)($|\?)/i.test(v.fileUrl);
+  // Uploaded files don't always keep their extension in the URL (11/20/26: preview missing), so check the name too.
+  const kindOf = `${v?.fileName || ""} ${v?.fileUrl || ""}`;
+  const isPdf = !!v?.fileUrl && /\.pdf($|\?|\s)/i.test(kindOf);
+  const isImg = !!v?.fileUrl && !isPdf && /\.(png|jpe?g|gif|webp)($|\?|\s)/i.test(kindOf);
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-8">
