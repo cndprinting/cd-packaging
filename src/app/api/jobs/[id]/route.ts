@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const job = await prisma.job.findUnique({
       where: { id },
-      include: { order: { include: { company: true } }, stages: true, proofs: true, lineItems: { orderBy: { sortOrder: "asc" } }, pressRuns: { orderBy: { sortOrder: "asc" } }, purchases: true },
+      include: { order: { include: { company: true } }, stages: true, proofs: true, lineItems: { orderBy: { sortOrder: "asc" } }, pressRuns: { orderBy: { sortOrder: "asc" } }, purchases: true, csr: { select: { name: true } }, salesRep: { select: { name: true } } },
     });
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
@@ -114,6 +114,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "imposition", "runningSize", "pressmanInitials", "binderyOther", "binderyNotes",
       "deliveryPackaging", "deliveryTo", "samplesTo", "vendorInfo", "pressNotes",
       "paymentNotes", "prepressNotes", "generalNotes", "plantLocation", "artworkStatus",
+      // FileMaker ticket fields (Darrin 11/20)
+      "repJobNumber", "dueTime", "proofsNote", "mailDate", "mailDropCity", "mailWeight", "mailPostage",
     ];
     const boolFields = [
       "fscCertified", "pressCheck", "ledInk", "binderyScore", "binderyPerf",
@@ -121,10 +123,38 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "binderyCollate", "binderyPockets", "binderyGlue", "binderyWrap",
       "samplesRequired", "samplesChecked", "softCover", "plusCover", "hasBleeds",
     ];
-    const intFields = ["numPages", "numberUp", "makeReadyCount", "firstPassCount", "finalPressCount", "deliveryQty"];
+    const intFields = ["numPages", "numberUp", "makeReadyCount", "firstPassCount", "finalPressCount", "deliveryQty", "partialQty", "mailQty", "samplesQty"];
     const floatFields = ["flatSizeWidth", "flatSizeHeight", "finishedWidth", "finishedHeight", "aaCharges"];
 
-    for (const f of stringFields) { if (updates[f] !== undefined) updateData[f] = updates[f]; }
+    // The job page sends "packaging"; the column is deliveryPackaging (it never saved before 11/20).
+    if (updates.packaging !== undefined && updates.deliveryPackaging === undefined) updates.deliveryPackaging = updates.packaging;
+    for (const f of stringFields) { if (updates[f] !== undefined) updateData[f] = typeof updates[f] === "boolean" ? null : updates[f] === null ? null : String(updates[f]).slice(0, 2000) || null; }
+    if (updates.partialDue !== undefined) updateData.partialDue = updates.partialDue ? new Date(updates.partialDue) : null;
+    // Bindery lines: text next to each box, like FileMaker ("Wrap: 100'S").
+    const BIND = ["score", "perf", "drill", "pad", "fold", "count", "stitch", "collate", "pockets", "glue", "wrap", "other"];
+    if (updates.binderyValues !== undefined) {
+      const bv: Record<string, string> = {};
+      for (const k of BIND) { const v = String(updates.binderyValues?.[k] ?? "").trim().slice(0, 120); if (v) bv[k] = v; }
+      updateData.binderyValues = bv;
+    }
+    // Stock rows: Size / Quantity / Stock Description (+ a second line, e.g. the price).
+    if (updates.stockLines !== undefined) {
+      const rows = Array.isArray(updates.stockLines) ? updates.stockLines : [];
+      updateData.stockLines = rows.slice(0, 6).map((r: any) => ({ size: String(r?.size ?? "").slice(0, 40), qty: String(r?.qty ?? "").slice(0, 20), description: String(r?.description ?? "").slice(0, 120), detail: String(r?.detail ?? "").slice(0, 120) })).filter((r: any) => r.size || r.qty || r.description || r.detail);
+    }
+    // CSR / Sales picked by name on the job page (they never saved before 11/20).
+    for (const [k, col] of [["csrName", "csrId"], ["salesRepName", "salesRepId"]] as const) {
+      if (updates[k] === undefined) continue;
+      const nm = String(updates[k] || "").trim();
+      if (!nm || nm === "Unassigned") { updateData[col] = null; continue; }
+      const u = await prisma.user.findFirst({ where: { name: nm, isActive: true }, select: { id: true } });
+      if (u) updateData[col] = u.id;
+    }
+    // Customer # lives on the customer (it prints on every ticket).
+    if (updates.customerNumber !== undefined) {
+      const j0 = await prisma.job.findUnique({ where: { id }, select: { order: { select: { companyId: true } } } });
+      if (j0?.order?.companyId) await prisma.company.update({ where: { id: j0.order.companyId }, data: { customerNumber: String(updates.customerNumber || "").trim().slice(0, 40) || null } as any });
+    }
     for (const f of boolFields) { if (updates[f] !== undefined) updateData[f] = Boolean(updates[f]); }
     for (const f of intFields) { if (updates[f] !== undefined) updateData[f] = parseInt(updates[f]) || null; }
     for (const f of floatFields) { if (updates[f] !== undefined) updateData[f] = parseFloat(updates[f]) || null; }

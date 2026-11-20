@@ -1,6 +1,7 @@
 "use client";
 
 import { RoutingPanel } from "@/components/jobs/routing-panel";
+import { TicketDetails, BinderyLines } from "@/components/jobs/ticket-details";
 import { useParams, useRouter } from "next/navigation";
 import { JobPaymentPanel } from "@/components/jobs/job-payment-panel";
 import { uploadFile as uploadToBlob } from "@/lib/upload-client";
@@ -365,7 +366,7 @@ export default function JobDetailPage() {
             binderyOther: j.binderyOther || false,
             binderyNotes: j.binderyNotes || "",
             deliveryQty: j.deliveryQty || j.quantity || 0,
-            packaging: j.packaging || "",
+            packaging: j.deliveryPackaging || j.packaging || "",
             deliveryTo: j.deliveryTo || "",
             samplesRequired: j.samplesRequired || false,
             samplesTo: j.samplesTo || "",
@@ -1277,6 +1278,9 @@ export default function JobDetailPage() {
         </CollapsibleCard>
       </div>
 
+      {/* The rest of the FileMaker ticket (Darrin's sample, 11/20/26) */}
+      <TicketDetails jobId={jobId} />
+
       {/* ================================================================= */}
       {/* 4. STOCK & SPECS                                                  */}
       {/* ================================================================= */}
@@ -1719,20 +1723,7 @@ export default function JobDetailPage() {
           <CardTitle className="flex items-center gap-2"><Scissors className="h-4 w-4" />Bindery Instructions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-6 gap-y-3">
-            <Checkbox label="Score" checked={job.binderyScore || false} onChange={(v) => updateJobField("binderyScore", v)} />
-            <Checkbox label="Perf" checked={job.binderyPerf || false} onChange={(v) => updateJobField("binderyPerf", v)} />
-            <Checkbox label="Drill" checked={job.binderyDrill || false} onChange={(v) => updateJobField("binderyDrill", v)} />
-            <Checkbox label="Pad" checked={job.binderyPad || false} onChange={(v) => updateJobField("binderyPad", v)} />
-            <Checkbox label="Fold" checked={job.binderyFold || false} onChange={(v) => updateJobField("binderyFold", v)} />
-            <Checkbox label="Count" checked={job.binderyCount || false} onChange={(v) => updateJobField("binderyCount", v)} />
-            <Checkbox label="Stitch" checked={job.binderyStitch || false} onChange={(v) => updateJobField("binderyStitch", v)} />
-            <Checkbox label="Collate" checked={job.binderyCollate || false} onChange={(v) => updateJobField("binderyCollate", v)} />
-            <Checkbox label="Pockets" checked={job.binderyPockets || false} onChange={(v) => updateJobField("binderyPockets", v)} />
-            <Checkbox label="Glue" checked={job.binderyGlue || false} onChange={(v) => updateJobField("binderyGlue", v)} />
-            <Checkbox label="Wrap" checked={job.binderyWrap || false} onChange={(v) => updateJobField("binderyWrap", v)} />
-            <Checkbox label="Other" checked={job.binderyOther || false} onChange={(v) => updateJobField("binderyOther", v)} />
-          </div>
+          <BinderyLines jobId={jobId} />
           <div className="mt-4 pt-4 border-t border-gray-100">
             <SectionLabel>Bindery Notes</SectionLabel>
             <Input
@@ -1891,10 +1882,12 @@ export default function JobDetailPage() {
             </div>
             <div>
               <SectionLabel>Delivery To</SectionLabel>
-              <Input
+              <textarea
                 defaultValue={job.deliveryTo || ""}
-                placeholder="Delivery address / instructions..."
+                rows={4}
+                placeholder="One line each: company, attn, street, city ST zip"
                 onBlur={(e) => updateJobField("deliveryTo", e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
           </div>
