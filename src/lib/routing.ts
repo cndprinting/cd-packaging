@@ -7,7 +7,18 @@ import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 
 export const ROUTE_ROLES = ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER", "OWNER", "GM", "ADMIN"];
 // One status per job; it changes as the job moves (Darrin 11/18).
-export const ROUTE_STATUSES: [string, string][] = [["PRE", "PRE · Prepress"], ["DIG", "DIG · Digital"], ["BND", "BND · Bindery"], ["OUT", "OUT · Outside vendor"], ["ASI", "ASI"]];
+// His FileMaker WIP Status drop-down, in his order (email 11/20/26).
+export const ROUTE_STATUSES: [string, string][] = [
+  ["PRE", "PRE · Prepress"], ["KOM", "KOM · Komori"], ["Ricoh", "Ricoh"], ["DIG", "DIG · Digital"], ["BND", "BND · Bindery"],
+  ["Diecut", "Diecut"], ["GLUE", "GLUE"], ["SeCap", "SeCap"], ["Inserter", "Inserter"], ["P/O", "P/O"], ["ASI", "ASI"],
+  ["OUT", "OUT · Outside vendor"], ["COMP", "COMP · Complete"], ["DEL", "DEL · Delivered"], ["HLD", "HLD · Hold"],
+];
+// His WIP Press drop-down (11/20). 29New / 29Old are the two Komori 29s, stored as
+// the machine codes so the Press 0172 / 0153 schedules and plating pick them up.
+export const ROUTE_PRESSES: [string, string][] = [
+  ["KOM", "KOM"], ["DIG", "DIG"], ["Ricoh", "Ricoh"], ["KOM-0153", "29Old (0153)"], ["KOM-0172", "29New (0172)"],
+  ["SeCap", "SeCap"], ["Ltr Press", "Ltr Press"], ["Glue", "Glue"],
+];
 export const ROUTE_TASKS: [string, string][] = [
   ["letterpress", "Letterpress"], ["folding", "Folding"], ["stitching", "Stitching"],
   ["inserter", "Inserter"], ["secap", "SeCap (inkjet)"], ["handBindery", "Hand Bindery"],

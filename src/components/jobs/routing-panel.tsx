@@ -12,7 +12,7 @@ type R = { routedAt: string | null; routedBy: string | null; routeStatus: string
 const sel = "mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm";
 
 export function RoutingPanel({ jobId }: { jobId: string }) {
-  const [d, setD] = useState<{ routing: R; machines: { presses: M[]; dieCutters: M[]; gluers: M[] }; statuses: [string, string][]; tasks: [string, string][]; canEdit: boolean } | null>(null);
+  const [d, setD] = useState<{ routing: R; machines: { presses: M[]; dieCutters: M[]; gluers: M[] }; statuses: [string, string][]; presses: [string, string][]; tasks: [string, string][]; canEdit: boolean } | null>(null);
   const [f, setF] = useState<R | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
@@ -42,7 +42,7 @@ export function RoutingPanel({ jobId }: { jobId: string }) {
         <label className="block"><span className="text-gray-600">Ink, front</span><Input disabled={ro} value={f.inkFront || ""} onChange={(e) => set("inkFront", e.target.value)} placeholder="e.g. 4 + PMS 186" /></label>
         <label className="block"><span className="text-gray-600">Ink, back</span><Input disabled={ro} value={f.inkBack || ""} onChange={(e) => set("inkBack", e.target.value)} /></label>
         <label className="block"><span className="text-gray-600">Foil(s)</span><Input disabled={ro} value={f.foils || ""} onChange={(e) => set("foils", e.target.value)} placeholder="None" /></label>
-        <label className="block"><span className="text-gray-600">Press</span><select disabled={ro} value={f.pressAssignment || ""} onChange={(e) => set("pressAssignment", e.target.value)} className={sel}><option value="">Not on press / not set</option>{d.machines.presses.map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}</select></label>
+        <label className="block"><span className="text-gray-600">Press</span><select disabled={ro} value={f.pressAssignment || ""} onChange={(e) => set("pressAssignment", e.target.value)} className={sel}><option value="">Not set</option>{d.presses.map(([k, l]) => <option key={k} value={k}>{l}</option>)}{f.pressAssignment && !d.presses.some(([k]) => k === f.pressAssignment) && <option value={f.pressAssignment}>{f.pressAssignment}</option>}</select></label>
       </div>
       <div className="mt-3">
         <div className="text-sm text-gray-600">Production</div>

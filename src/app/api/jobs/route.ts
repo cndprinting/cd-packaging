@@ -3,14 +3,14 @@ import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 import { hardStep, proofsDone, stageFor } from "@/lib/proofs";
 
-// Jobs page tabs use Darrin's FileMaker statuses (Benjy 11/18): New until he
-// routes it, then PRE / DIG / BND / OUT / ASI as he sets them, then shipping.
+// Jobs page tabs use Darrin's FileMaker WIP statuses (11/20): New until he
+// routes it, then the status he sets. Packed counts as COMP, shipped as DEL.
 const DONE = ["SHIPPED", "DELIVERED", "INVOICED"];
 const PRESS_ON = ["SCHEDULED", "PRINTING", "COATING_FINISHING", "DIE_CUTTING", "GLUING_FOLDING", "QA"];
 const STEP_LABEL: Record<string, string> = { SCHEDULED: "Scheduled for press", PRINTING: "Printing", COATING_FINISHING: "Coating / finishing", DIE_CUTTING: "Die cutting", GLUING_FOLDING: "Gluing / folding", QA: "QA" };
 function tabFor(j: any) {
-  if (DONE.includes(j.status)) return "done";
-  if (j.status === "PACKED") return "ready";
+  if (DONE.includes(j.status)) return "DEL";
+  if (j.status === "PACKED") return "COMP";
   if (!j.routedAt || !j.routeStatus) return "new";
   return j.routeStatus;
 }

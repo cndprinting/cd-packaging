@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { ROUTE_ROLES, ROUTE_STATUSES, ROUTE_TASKS, routingMachines, taskList } from "@/lib/routing";
+import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES, ROUTE_TASKS, routingMachines, taskList } from "@/lib/routing";
 
 // Darrin's routing review for one job (11/18/26).
 // GET  -> current routing + machine options
@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const job = await load(prisma, id);
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  return NextResponse.json({ routing: { ...job, routeTasks: taskList(job.routeTasks) }, machines: await routingMachines(prisma), statuses: ROUTE_STATUSES, tasks: ROUTE_TASKS, canEdit: ROUTE_ROLES.includes(session.role) });
+  return NextResponse.json({ routing: { ...job, routeTasks: taskList(job.routeTasks) }, machines: await routingMachines(prisma), statuses: ROUTE_STATUSES, presses: ROUTE_PRESSES, tasks: ROUTE_TASKS, canEdit: ROUTE_ROLES.includes(session.role) });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -31,14 +31,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const b = await request.json().catch(() => ({}));
   const t = (v: unknown, max = 200) => (v === null || v === undefined ? null : String(v).trim().slice(0, max) || null);
   const status = ROUTE_STATUSES.some(([k]) => k === b.routeStatus) ? b.routeStatus : null;
-  if (!status) return NextResponse.json({ error: "Pick the status (PRE, DIG, BND, OUT or ASI)" }, { status: 400 });
+  if (!status) return NextResponse.json({ error: "Pick the status" }, { status: 400 });
   const tasks = Array.isArray(b.routeTasks) ? b.routeTasks.filter((x: string) => ROUTE_TASKS.some(([k]) => k === x)) : [];
   const m = await routingMachines(prisma);
   const okCode = (code: unknown, list: { code: string }[]) => (code && list.some((x) => x.code === code) ? String(code) : null);
   const data: any = {
     routeStatus: status, routeTasks: JSON.stringify(tasks), foils: t(b.foils, 300),
     inkFront: t(b.inkFront, 60), inkBack: t(b.inkBack, 60),
-    pressAssignment: okCode(b.pressAssignment, m.presses) || t(b.pressAssignment, 60),
+    pressAssignment: ROUTE_PRESSES.some(([k]) => k === b.pressAssignment) ? b.pressAssignment : okCode(b.pressAssignment, m.presses) || t(b.pressAssignment, 60),
     dieCutterCode: tasks.includes("letterpress") ? okCode(b.dieCutterCode, m.dieCutters) : null,
     gluerCode: tasks.includes("letterpress") ? okCode(b.gluerCode, m.gluers) : null,
     routedAt: job.routedAt || new Date(), routedBy: job.routedBy || session.name,

@@ -24,13 +24,22 @@ interface Job {
 
 const TABS: { key: string; label: string; hint: string }[] = [
   { key: "new", label: "New", hint: "Entered, not routed by Darrin yet" },
+  // Darrin's FileMaker WIP Status list, in his order (11/20).
   { key: "PRE", label: "PRE", hint: "Prepress" },
+  { key: "KOM", label: "KOM", hint: "Komori" },
+  { key: "Ricoh", label: "Ricoh", hint: "Ricoh" },
   { key: "DIG", label: "DIG", hint: "Digital" },
   { key: "BND", label: "BND", hint: "Bindery" },
-  { key: "OUT", label: "OUT", hint: "Outside vendor" },
+  { key: "Diecut", label: "Diecut", hint: "Die cutting" },
+  { key: "GLUE", label: "GLUE", hint: "Gluing" },
+  { key: "SeCap", label: "SeCap", hint: "SeCap" },
+  { key: "Inserter", label: "Inserter", hint: "Inserter" },
+  { key: "P/O", label: "P/O", hint: "P/O" },
   { key: "ASI", label: "ASI", hint: "ASI" },
-  { key: "ready", label: "Ready to ship", hint: "Packed, on Shayla's list" },
-  { key: "done", label: "DEL / COMP", hint: "Shipped, delivered or invoiced" },
+  { key: "OUT", label: "OUT", hint: "Outside vendor" },
+  { key: "COMP", label: "COMP", hint: "Complete, includes packed jobs on Shayla's list" },
+  { key: "DEL", label: "DEL", hint: "Delivered, includes shipped and invoiced jobs" },
+  { key: "HLD", label: "HLD", hint: "On hold" },
   { key: "all", label: "All", hint: "" },
 ];
 type SortKey = "due" | "job" | "customer" | "qty";
