@@ -54,7 +54,8 @@ export default function PrintJobTicketPage() {
   // Stock: 4 slots of 2 lines each
   const stockRaw: any[] = Array.isArray(job.stockLines) && job.stockLines.length ? job.stockLines : job.stockDescription ? [{ size: job.runningSize || "", qty: "", description: job.stockDescription, detail: "" }] : [];
   const stock = [...stockRaw.slice(0, 4), ...Array(Math.max(0, 4 - stockRaw.length)).fill(null)];
-  const vendor = [job.vendorInfo, ...(job.purchases || []).map((p: any) => [p.description, p.vendor].filter(Boolean).join(" - "))].filter(Boolean);
+  // Vendor Information: what the CSR typed, plus purchases that name a vendor (not the auto-made checklist rows).
+  const vendor = [job.vendorInfo, ...(job.purchases || []).filter((p: any) => p.vendor).map((p: any) => [p.description, p.vendor].filter(Boolean).join(" - "))].filter(Boolean);
   // Press runs (or one row from the job's press fields)
   const runs: any[] = (job.pressRuns || []).length ? job.pressRuns : (job.pressAssignment || job.runningSize || job.imposition) ? [{
     press: job.pressAssignment, formNumber: job.pressFormat || "1", finishCount: job.finalPressCount, makeReady: job.makeReadyCount, runningSize: job.runningSize,
@@ -76,9 +77,10 @@ export default function PrintJobTicketPage() {
     <div className="tk">
       <style>{`
         @page { size: legal portrait; margin: 0.25in; }
+        @media print { html, body { margin: 0 !important; padding: 0 !important; } }
         @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         body { background: #fff; }
-        .tk { width: 8in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
+        .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
         .tk table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .l { font-size: 10px; color: #222; white-space: nowrap; }
         .v { font-weight: 700; font-size: 13px; border-bottom: 1px dotted #333; display: inline-block; min-height: 15px; vertical-align: bottom; }
@@ -101,10 +103,10 @@ export default function PrintJobTicketPage() {
       {/* ── Header ── */}
       <table><tbody><tr>
         <td style={{ width: "62%", verticalAlign: "top", paddingTop: 4 }}>
-          <div><span className="l">Job Ticket #</span> <span className="v" style={{ fontSize: 16, minWidth: 110 }}>{job.jobNumber}</span>
-            <span className="l" style={{ marginLeft: 10 }}>Last Job #</span> <span className="v" style={{ minWidth: 90 }}>{job.lastJobNumber || ""}</span>
-            <span className="l" style={{ marginLeft: 10 }}>Rep job #</span> <span style={{ display: "inline-block", border: "1px solid #999", minWidth: 110, height: 16, verticalAlign: "bottom", fontWeight: 700, paddingLeft: 3 }}>{job.repJobNumber || ""}</span></div>
-          <div style={{ marginTop: 5, fontSize: 12 }}>{JOB_TYPES.map(([k, l], i) => <span key={k}><span className={`rd ${(job.jobType || "NEW_ORDER") === k ? "on" : ""}`} style={i === 0 ? { marginLeft: 20 } : undefined} />{l}</span>)}</div>
+          <div><span className="l">Job Ticket #</span> <span className="v" style={{ fontSize: 16, minWidth: 80 }}>{job.jobNumber}</span>
+            <span className="l" style={{ marginLeft: 10 }}>Last Job #</span> <span className="v" style={{ minWidth: 60 }}>{job.lastJobNumber || ""}</span>
+            <span className="l" style={{ marginLeft: 10 }}>Rep job #</span> <span style={{ display: "inline-block", border: "1px solid #999", minWidth: 70, height: 16, verticalAlign: "bottom", fontWeight: 700, paddingLeft: 3 }}>{job.repJobNumber || ""}</span></div>
+          <div style={{ marginTop: 5, fontSize: 11, whiteSpace: "nowrap" }}>{JOB_TYPES.map(([k, l], i) => <span key={k}><span className={`rd ${(job.jobType || "NEW_ORDER") === k ? "on" : ""}`} style={i === 0 ? { marginLeft: 4 } : { marginLeft: 7 }} />{l}</span>)}</div>
         </td>
         <td style={{ width: "19%", verticalAlign: "top", textAlign: "center" }}>
           <table><tbody><tr><td className="l" style={{ textAlign: "center" }}>ENTERED</td><td className="l" style={{ textAlign: "center" }}>PROOF DATE</td></tr>
@@ -268,8 +270,8 @@ export default function PrintJobTicketPage() {
       </tbody></table>
 
       {/* ── Tear-offs: press tag + new-die stamp ── */}
-      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.85in" }}>
-        <div className="vt" style={{ display: "flex", gap: 6, fontSize: 11, height: "100%" }}>
+      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.85in", overflow: "hidden", breakInside: "avoid" }}>
+        <div className="vt" style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, height: "100%", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 19, fontWeight: 700, borderLeft: "3px solid #000", paddingLeft: 3 }}><span>{job.jobNumber}</span><span style={{ fontWeight: 400, marginLeft: 30 }}>{co.name}</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, borderLeft: "1px solid #000" }}><span><span className="box" />Press Check</span><span style={{ background: "#999", color: "#000", fontWeight: 700, padding: "3px 1px", display: "inline-flex", alignItems: "center", gap: 4 }}>PAPER<span style={{ display: "inline-block", width: 18, height: 18, borderRadius: "50%", background: "#fff", border: "1px solid #000" }} /></span><span style={{ fontWeight: 700 }}>Due: {d(job.dueDate)}</span></div>
           <div style={{ display: "flex", gap: 10, fontWeight: 700 }}><span>{job.name}</span><span style={{ fontWeight: 400 }}><span className="box">{job.ledInk ? "X" : ""}</span>LED INK</span><span style={{ fontWeight: 400, fontSize: 9 }}>{job.varnish || ""}</span></div>
@@ -278,7 +280,7 @@ export default function PrintJobTicketPage() {
           <div style={{ display: "flex", gap: 10 }}><b style={{ fontStyle: "italic", textDecoration: "underline" }}>Bindery:</b><span>{binderyShort}</span></div>
         </div>
         <div style={{ flex: 1 }} />
-        <div className="vt" style={{ border: "1.5px solid #000", height: "100%", display: "flex", gap: 8, padding: 6, color: "#777", fontSize: 13, textAlign: "center", width: 90 }}>
+        <div className="vt" style={{ border: "1.5px solid #000", height: "100%", display: "flex", flexDirection: "column", gap: 8, padding: 6, color: "#777", fontSize: 13, textAlign: "center", overflow: "hidden" }}>
           <div style={{ alignSelf: "center" }}>STAMP HERE FOR NEW DIE<br />TEAR OFF AND PUT ON<br />DARRIN&apos;S DESK AFTER<br />APPROVAL</div>
           <div style={{ color: "#000", fontWeight: 700, fontSize: 12, alignSelf: "center" }}>{job.jobNumber}&nbsp;&nbsp;&nbsp;&nbsp;{co.name}</div>
         </div>
