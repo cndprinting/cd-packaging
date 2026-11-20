@@ -43,7 +43,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const data: Record<string, unknown> = {};
   const str = (k: string, max = 200) => { if (k in b) data[k] = b[k] ? String(b[k]).trim().slice(0, max) : null; };
   const date = (k: string) => { if (k in b) data[k] = b[k] ? new Date(b[k]) : null; };
-  const num = (k: string, int = false) => { if (k in b) data[k] = b[k] === "" || b[k] === null || !Number.isFinite(Number(b[k])) ? null : (int ? Math.round(Number(b[k])) : Number(b[k])); };
+  // "$60", "1,200" and " 45.50 " all count (Shayla 11/20: a typed $ used to save a blank).
+  const bad: string[] = [];
+  const num = (k: string, int = false) => {
+    if (!(k in b)) return;
+    const raw = b[k] === null || b[k] === undefined ? "" : String(b[k]).replace(/[$,\s]/g, "");
+    if (raw === "") { data[k] = null; return; }
+    const n = Number(raw);
+    if (!Number.isFinite(n)) { bad.push(k); return; }
+    data[k] = int ? Math.round(n) : n;
+  };
   ["carrier", "trackingNumber", "poNumber", "contactName", "destination", "notes"].forEach((k) => str(k));
   str("shipTo", 500); str("jobNumber", 60);
   // Tie to the job ticket (Benjy 11/19): an explicit pick, or a typed number that matches one.
@@ -67,6 +76,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if ("contactEmail" in b) data.contactEmail = b.contactEmail ? String(b.contactEmail).trim().toLowerCase() : null;
   ["targetShipDate", "shipDate", "estimatedDelivery", "actualDelivery"].forEach(date);
   num("cartons", true); num("pallets", true); num("weight"); num("freightCost");
+  if (bad.length) return NextResponse.json({ error: `Not a number: ${bad.map((k) => ({ freightCost: "shipping cost", weight: "weight", cartons: "cartons", pallets: "pallets" } as Record<string, string>)[k] || k).join(", ")}` }, { status: 400 });
   if (Array.isArray(b.items)) {
     await prisma.shipmentItem.deleteMany({ where: { shipmentId: s.id } });
     const rows = b.items.filter((i: any) => i?.description).map((i: any) => ({ shipmentId: s.id, description: String(i.description).slice(0, 200), quantity: Number(i.quantity) || 0, boxes: i.boxes ? String(i.boxes).slice(0, 80) : null }));

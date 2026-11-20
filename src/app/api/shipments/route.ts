@@ -146,7 +146,8 @@ export async function POST(request: NextRequest) {
     invoiceNumber = inv.invoiceNumber;
   }
 
-  const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
+  const num = (v: unknown) => { const raw = v === null || v === undefined ? "" : String(v).replace(/[$,\s]/g, ""); return raw === "" || !Number.isFinite(Number(raw)) ? null : Number(raw); };
+  if (b.freightCost !== undefined && b.freightCost !== null && String(b.freightCost).replace(/[$,\s]/g, "") !== "" && num(b.freightCost) === null) return NextResponse.json({ error: "Shipping cost must be a number, e.g. 45.50" }, { status: 400 });
   const shipment = await prisma.shipment.create({
     data: {
       shipmentNumber: await nextShipmentNumber(prisma),
