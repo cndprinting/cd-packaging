@@ -7,7 +7,7 @@
 // with AA Charges and Vendor Information, the press table with the bindery
 // checklist beside it, Press + Bindery instructions, samples / COD / delivery,
 // and the two tear-offs (press tag, and the new-die stamp for Darrin's desk).
-// FileMaker prints it on legal paper. Quote-request extras go on page 2.
+// Printed on 11 x 17 ledger paper (Kelsey 11/20/26). Quote-request extras go on page 2.
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -76,8 +76,8 @@ export default function PrintJobTicketPage() {
   return (
     <div className="tk print-color">
       <style>{`
-        @page { size: legal portrait; margin: 0.25in; }
-        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 0.95; width: 8.2in; } }
+        @page { size: 11in 17in; margin: 0.25in; }
+        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 1.15; width: 8.2in; } }
         @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         body { background: #fff; }
         .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
@@ -96,7 +96,7 @@ export default function PrintJobTicketPage() {
 
       <div className="noprint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #ddd", marginBottom: 8 }}>
         <a href={`/dashboard/jobs/${jobId}`} style={{ color: "#15803d", fontSize: 14, textDecoration: "none" }}>&larr; Back to Job</a>
-        <span style={{ fontSize: 12, color: "#666" }}>Prints on legal paper, like FileMaker</span>
+        <span style={{ fontSize: 12, color: "#666" }}>Prints on 11 x 17 (ledger), like FileMaker</span>
         <button onClick={() => window.print()} style={{ background: "#15803d", color: "#fff", padding: "9px 22px", borderRadius: 8, fontSize: 14, fontWeight: 700, border: 0, cursor: "pointer" }}>Print Job Ticket</button>
       </div>
 
