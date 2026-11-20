@@ -10,7 +10,7 @@ export const ROUTE_ROLES = ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER", "OWNER
 // His FileMaker WIP Status drop-down, in his order (email 11/20/26).
 export const ROUTE_STATUSES: [string, string][] = [
   ["PRE", "PRE · Prepress"], ["KOM", "KOM · Komori"], ["Ricoh", "Ricoh"], ["DIG", "DIG · Digital"], ["BND", "BND · Bindery"],
-  ["Diecut", "Diecut"], ["GLUE", "GLUE"], ["SeCap", "SeCap"], ["Inserter", "Inserter"], ["P/O", "P/O"], ["ASI", "ASI"],
+  ["Diecut", "Diecut"], ["GLUE", "GLUE"], ["SeCap", "SeCap"], ["Inserter", "Inserter"], ["P/O", "P/O · Packout"], ["ASI", "ASI"],
   ["OUT", "OUT · Outside vendor"], ["COMP", "COMP · Complete"], ["DEL", "DEL · Delivered"], ["HLD", "HLD · Hold"],
 ];
 // His WIP Press drop-down (11/20). 29New / 29Old are the two Komori 29s, stored as

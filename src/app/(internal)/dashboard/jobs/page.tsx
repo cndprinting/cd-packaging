@@ -34,7 +34,7 @@ const TABS: { key: string; label: string; hint: string }[] = [
   { key: "GLUE", label: "GLUE", hint: "Gluing" },
   { key: "SeCap", label: "SeCap", hint: "SeCap" },
   { key: "Inserter", label: "Inserter", hint: "Inserter" },
-  { key: "P/O", label: "P/O", hint: "P/O" },
+  { key: "P/O", label: "P/O", hint: "Packout: hand-packing boxes to the customer's per-location list" },
   { key: "ASI", label: "ASI", hint: "ASI" },
   { key: "OUT", label: "OUT", hint: "Outside vendor" },
   { key: "COMP", label: "COMP", hint: "Complete, includes packed jobs on Shayla's list" },
