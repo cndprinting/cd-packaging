@@ -77,7 +77,7 @@ export default function PrintJobTicketPage() {
     <div className="tk print-color">
       <style>{`
         @page { size: legal portrait; margin: 0.25in; }
-        @media print { html, body { margin: 0 !important; padding: 0 !important; } }
+        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 0.95; width: 8.2in; } }
         @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         body { background: #fff; }
         .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
