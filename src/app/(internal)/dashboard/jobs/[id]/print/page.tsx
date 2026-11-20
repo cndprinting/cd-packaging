@@ -9,7 +9,7 @@
 // and the two tear-offs (press tag, and the new-die stamp for Darrin's desk).
 // Printed on 11 x 17 ledger paper (Kelsey 11/20/26). Quote-request extras go on page 2.
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -41,6 +41,14 @@ export default function PrintJobTicketPage() {
   // ?copies=3: Kelsey prints three (two for Darrin, one of those for paper ordering, one for entering the job).
   const [copies, setCopies] = useState(1);
   useEffect(() => { const c = Number(new URLSearchParams(window.location.search).get("copies")); if (c > 1 && c <= 5) setCopies(c); }, []);
+  // A crowded ticket shrinks to fit one 11 x 17 sheet so the tear-offs stay on it (like FileMaker crams it).
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(1.15);
+  useEffect(() => {
+    const el = sheetRef.current; if (!el) return;
+    const t = setTimeout(() => { const h = el.scrollHeight; const room = 16.4 * 96; setFit(Math.max(0.6, Math.min(1.15, room / Math.max(1, h)))); }, 300);
+    return () => clearTimeout(t);
+  });
   useEffect(() => {
     fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((x) => { if (x.job) { setJob(x.job); setQr(x.quoteRequest || null); } }).catch(() => {}).finally(() => setLoading(false));
   }, [jobId]);
@@ -281,7 +289,7 @@ export default function PrintJobTicketPage() {
     <div className="tk print-color">
       <style>{`
         @page { size: 11in 17in; margin: 0.25in; }
-        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 1.15; width: 8.2in; } }
+        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: ${fit.toFixed(3)}; width: 8.2in; } }
         @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         body { background: #fff; }
         .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
@@ -304,7 +312,7 @@ export default function PrintJobTicketPage() {
         <button onClick={() => window.print()} style={{ background: "#15803d", color: "#fff", padding: "9px 22px", borderRadius: 8, fontSize: 14, fontWeight: 700, border: 0, cursor: "pointer" }}>{copies > 1 ? `Print ${copies} copies` : "Print Job Ticket"}</button>
       </div>
 
-      {Array.from({ length: copies }, (_, n) => <div key={n} style={n < copies - 1 ? { breakAfter: "page", pageBreakAfter: "always" } : undefined}>{sheet}</div>)}
+      {Array.from({ length: copies }, (_, n) => <div key={n} ref={n === 0 ? sheetRef : undefined} style={n < copies - 1 ? { breakAfter: "page", pageBreakAfter: "always" } : undefined}>{sheet}</div>)}
 
       {/* ── Page 2: quote-request extras (not on the FileMaker ticket) ── */}
       {qr && (() => {
