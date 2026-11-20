@@ -2,7 +2,7 @@
 
 // Jobs & Job Tickets (relaid out 11/18/26, Benjy: "looks like a mess").
 // One compact row per job; tabs use Darrin's FileMaker statuses (New until he
-// routes it, PRE / DIG / BND / OUT / ASI, then Ready to ship and DEL / COMP);
+// routes it, then his WIP statuses; Darrin changes Status + Press in the row);
 // "Waiting on" says in plain words what's holding each job. Test jobs from
 // before go-live are hidden unless asked for.
 import { useState, useEffect, useMemo } from "react";
@@ -19,7 +19,7 @@ import { getStatusColor, getStatusLabel } from "@/lib/utils";
 interface Job {
   id: string; jobNumber: string; name: string; companyName: string; status: string; priority: string; quantity: number;
   dueDate: string; isLate: boolean; productType?: string; csrName: string; salesRepName: string;
-  routeStatus: string | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
+  routeStatus: string | null; pressAssignment?: string | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
 }
 
 const TABS: { key: string; label: string; hint: string }[] = [
@@ -64,7 +64,20 @@ export default function JobsPage() {
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
   const ENTER = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
-  const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => setJobs(d.jobs || [])).catch(() => setJobs([]));
+  const [wip, setWip] = useState<{ statuses: [string, string][]; presses: [string, string][] } | null>(null);
+  const [wipErr, setWipErr] = useState<string | null>(null);
+  const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setWip(d.wip || null); }).catch(() => setJobs([]));
+  // Darrin's WIP screen: change Status / Press right in the row (11/20).
+  const setRoute = async (j: Job, field: "routeStatus" | "pressAssignment", value: string) => {
+    setWipErr(null);
+    const before = jobs;
+    const derived = j.tab === "DEL" || (j.tab === "COMP" && j.routeStatus !== "COMP");
+    setJobs((js) => (js || []).map((x) => x.id !== j.id ? x : { ...x, [field]: value || null, ...(field === "routeStatus" ? { routed: true, tab: derived ? x.tab : value } : {}) }));
+    try {
+      const r = await fetch(`/api/jobs/${j.id}/routing`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [field]: value }) });
+      if (!r.ok) { const x = await r.json().catch(() => ({})); setJobs(before); setWipErr(`${j.jobNumber}: ${x.error || "Could not save"}`); }
+    } catch { setJobs(before); setWipErr(`${j.jobNumber}: Could not save`); }
+  };
   useEffect(() => {
     reloadJobs();
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setRole(d.user?.role || "")).catch(() => {});
@@ -160,12 +173,13 @@ export default function JobsPage() {
         </Card>
       )}
 
+      {wipErr && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{wipErr}</div>}
       {/* The table */}
       <Card className="overflow-x-auto p-0">
         {jobs === null ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> : (
           <table className="w-full text-sm">
             <thead className="border-b border-gray-100 bg-gray-50/60"><tr>
-              <Th k="job">Job #</Th><Th k="customer">Customer</Th><Th>Job</Th><Th k="qty" className="text-right">Qty</Th><Th k="due">Due</Th><Th>Status</Th><Th>Waiting on</Th><Th>CSR</Th><Th>Rep</Th>
+              <Th k="job">Job #</Th><Th k="customer">Customer</Th><Th>Job</Th><Th k="qty" className="text-right">Qty</Th><Th k="due">Due</Th><Th>Status</Th>{wip && <Th>Press</Th>}<Th>Waiting on</Th><Th>CSR</Th><Th>Rep</Th>
             </tr></thead>
             <tbody>
               {rows.map((j) => (
@@ -175,13 +189,25 @@ export default function JobsPage() {
                   <td className="max-w-[260px] truncate px-3 py-2"><Link href={`/dashboard/jobs/${j.id}`} className="text-gray-900 hover:underline">{j.name}</Link></td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">{(j.quantity || 0).toLocaleString()}</td>
                   <td className={`whitespace-nowrap px-3 py-2 ${j.isLate ? "font-semibold text-red-600" : "text-gray-700"}`}>{day(j.dueDate) || <span className="text-gray-300">-</span>}{j.isLate && " (late)"}</td>
-                  <td className="whitespace-nowrap px-3 py-2"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700">{TABS.find((t) => t.key === j.tab)?.label || j.tab}</span></td>
+                  <td className="whitespace-nowrap px-3 py-2">{wip && !j.test && (j.tab === j.routeStatus || j.tab === "new") ? (
+                    <select aria-label={`Status for ${j.jobNumber}`} value={j.routeStatus || ""} onChange={(e) => setRoute(j, "routeStatus", e.target.value)} className={`h-7 rounded border px-1 text-xs font-medium ${j.routeStatus ? "border-gray-300 text-gray-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>
+                      {!j.routeStatus && <option value="">New</option>}
+                      {wip.statuses.map(([k]) => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                  ) : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700">{TABS.find((t) => t.key === j.tab)?.label || j.tab}</span>}</td>
+                  {wip && <td className="whitespace-nowrap px-3 py-2">{!j.test && j.tab !== "DEL" ? (
+                    <select aria-label={`Press for ${j.jobNumber}`} value={j.pressAssignment || ""} onChange={(e) => setRoute(j, "pressAssignment", e.target.value)} className="h-7 rounded border border-gray-300 px-1 text-xs">
+                      <option value="">-</option>
+                      {wip.presses.map(([k, l]) => <option key={k} value={k}>{l.replace(/ \(\d+\)$/, "")}</option>)}
+                      {j.pressAssignment && !wip.presses.some(([k]) => k === j.pressAssignment) && <option value={j.pressAssignment}>{j.pressAssignment}</option>}
+                    </select>
+                  ) : <span className="text-xs text-gray-500">{wip.presses.find(([k]) => k === j.pressAssignment)?.[1].replace(/ \(\d+\)$/, "") || j.pressAssignment || "-"}</span>}</td>}
                   <td className="whitespace-nowrap px-3 py-2 text-gray-700">{j.waitingOn || <span className="text-gray-300">-</span>}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-600">{j.csrName || "-"}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-600">{j.salesRepName || "-"}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-gray-400">{visible.length === 0 ? (testCount ? "No real jobs yet. Tick \"Show test jobs\" to see the old test ones." : "No jobs yet.") : "No jobs match."}</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={wip ? 10 : 9} className="py-12 text-center text-gray-400">{visible.length === 0 ? (testCount ? "No real jobs yet. Tick \"Show test jobs\" to see the old test ones." : "No jobs yet.") : "No jobs match."}</td></tr>}
             </tbody>
           </table>
         )}
