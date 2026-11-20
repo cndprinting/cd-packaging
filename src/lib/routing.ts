@@ -6,6 +6,8 @@
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 
 export const ROUTE_ROLES = ["SENIOR_PLANT_MANAGER", "PRODUCTION_MANAGER", "OWNER", "GM", "ADMIN"];
+// Status also moves with the CSRs: they send a signed-off job from PRE to KOM / DIG ... (Darrin 11/20).
+export const STATUS_ROLES = [...ROUTE_ROLES, "CSR"];
 // One status per job; it changes as the job moves (Darrin 11/18).
 // His FileMaker WIP Status drop-down, in his order (email 11/20/26).
 export const ROUTE_STATUSES: [string, string][] = [

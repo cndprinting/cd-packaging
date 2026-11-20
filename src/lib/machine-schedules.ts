@@ -56,7 +56,7 @@ export async function machineSchedules(prisma: any, codes?: string[], opts: { pl
   if (list.some((m) => m.kind === "plating")) or.push({ pressAssignment: { in: PRESS_CODES } });
   const jobs = or.length ? await prisma.job.findMany({
     where: { createdAt: { gte: JOBS_LIVE_SINCE }, routedAt: { not: null }, OR: or },
-    select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, status: true, priority: true, inkFront: true, inkBack: true, foils: true, dieNumber: true, routeStatus: true, routeTasks: true, generalNotes: true, pressAssignment: true, dieCutterCode: true, gluerCode: true, order: { select: { company: { select: { name: true } } } } } as any,
+    select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, status: true, priority: true, inkFront: true, inkBack: true, foils: true, dieNumber: true, routeStatus: true, routeTasks: true, generalNotes: true, routeNote: true, pressAssignment: true, dieCutterCode: true, gluerCode: true, order: { select: { company: { select: { name: true } } } } } as any,
   }) : [];
   const orders = await prisma.scheduleOrder.findMany({ where: { machineCode: { in: [...list.map((m) => m.code), ...PRESS_CODES] } } });
   const posOf = (code: string) => new Map<string, number>(orders.filter((o: any) => o.machineCode === code).map((o: any) => [o.jobId as string, o.position as number]));
@@ -73,7 +73,7 @@ export async function machineSchedules(prisma: any, codes?: string[], opts: { pl
   const shape = (j: any, placed: boolean) => ({
     id: j.id, jobNumber: j.jobNumber, name: j.name, quantity: j.quantity, dueDate: j.dueDate, status: j.status, priority: j.priority,
     customer: j.order?.company?.name || "", inks: [j.inkFront, j.inkBack].filter(Boolean).join(" / ") || null, foils: j.foils || null,
-    dieNumber: j.dieNumber || null, routeStatus: j.routeStatus || null, notes: j.generalNotes || null, placed,
+    dieNumber: j.dieNumber || null, routeStatus: j.routeStatus || null, notes: [j.routeNote, j.generalNotes].filter(Boolean).join(" · ") || null, placed,
     press: j.pressAssignment || null, plate: picked.has(j.id),
   });
   return list.map((m) => {

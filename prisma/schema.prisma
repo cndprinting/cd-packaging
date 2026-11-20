@@ -668,6 +668,7 @@ model Job {
   foils            String?   // foil(s) needed
   dieCutterCode    String?   // Machine.code for letterpress jobs (Yoco 85e/85t, Kluge, Heidelberg)
   gluerCode        String?   // Machine.code (Vega, Omni)
+  routeNote        String?   // Darrin's note when he routes it (reticulating / dry-trap varnish, inserter...) - prints on his schedules
   plantNotifiedAt  DateTime? // new-job notice sent to the plant
   handoffId        String?   // the sales-to-CSR handoff this job came from
   repName          String?

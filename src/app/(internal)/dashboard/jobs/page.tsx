@@ -23,7 +23,9 @@ interface Job {
 }
 
 const TABS: { key: string; label: string; hint: string }[] = [
-  { key: "new", label: "New", hint: "Entered, not routed by Darrin yet" },
+  // Darrin's WIP: everything still in progress. Delivered jobs drop off but stay under DEL and in search (11/20).
+  { key: "wip", label: "WIP", hint: "Every job still in progress (not delivered)" },
+  { key: "new", label: "New", hint: "Entered, no status yet" },
   // Darrin's FileMaker WIP Status list, in his order (11/20).
   { key: "PRE", label: "PRE", hint: "Prepress" },
   { key: "KOM", label: "KOM", hint: "Komori" },
@@ -47,7 +49,7 @@ const day = (d: string) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("e
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = useState("wip");
   const [search, setSearch] = useState("");
   const [deepResults, setDeepResults] = useState<any[] | null>(null);
   const [deepSearching, setDeepSearching] = useState(false);
@@ -64,7 +66,7 @@ export default function JobsPage() {
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
   const ENTER = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
-  const [wip, setWip] = useState<{ statuses: [string, string][]; presses: [string, string][] } | null>(null);
+  const [wip, setWip] = useState<{ statuses: [string, string][]; presses: [string, string][]; canPress: boolean } | null>(null);
   const [wipErr, setWipErr] = useState<string | null>(null);
   const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setWip(d.wip || null); }).catch(() => setJobs([]));
   // Darrin's WIP screen: change Status / Press right in the row (11/20).
@@ -97,11 +99,11 @@ export default function JobsPage() {
   }, [search]);
 
   const visible = useMemo(() => (jobs || []).filter((j) => showTest || !j.test), [jobs, showTest]);
-  const counts = useMemo(() => { const c: Record<string, number> = { all: visible.length }; for (const j of visible) c[j.tab] = (c[j.tab] || 0) + 1; return c; }, [visible]);
+  const counts = useMemo(() => { const c: Record<string, number> = { all: visible.length, wip: visible.filter((j) => j.tab !== "DEL").length }; for (const j of visible) c[j.tab] = (c[j.tab] || 0) + 1; return c; }, [visible]);
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = visible.filter((j) => {
-      if (tab !== "all" && j.tab !== tab) return false;
+      if (tab === "wip" ? j.tab === "DEL" : tab !== "all" && j.tab !== tab) return false;
       if (q && ![j.name, j.jobNumber, j.companyName].some((v) => (v || "").toLowerCase().includes(q))) return false;
       if (priorityFilter && j.priority !== priorityFilter) return false;
       if (customerFilter && j.companyName !== customerFilter) return false;
@@ -195,7 +197,7 @@ export default function JobsPage() {
                       {wip.statuses.map(([k]) => <option key={k} value={k}>{k}</option>)}
                     </select>
                   ) : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700">{TABS.find((t) => t.key === j.tab)?.label || j.tab}</span>}</td>
-                  {wip && <td className="whitespace-nowrap px-3 py-2">{j.tab !== "DEL" ? (
+                  {wip && <td className="whitespace-nowrap px-3 py-2">{wip.canPress && j.tab !== "DEL" ? (
                     <select aria-label={`Press for ${j.jobNumber}`} value={j.pressAssignment || ""} onChange={(e) => setRoute(j, "pressAssignment", e.target.value)} className="h-7 rounded border border-gray-300 px-1 text-xs">
                       <option value="">-</option>
                       {wip.presses.map(([k, l]) => <option key={k} value={k}>{l.replace(/ \(\d+\)$/, "")}</option>)}

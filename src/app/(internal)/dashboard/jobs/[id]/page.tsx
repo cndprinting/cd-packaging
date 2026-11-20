@@ -1,6 +1,6 @@
 "use client";
 
-import { RoutingPanel } from "@/components/jobs/routing-panel";
+import { RoutingPanel, WipBar } from "@/components/jobs/routing-panel";
 import { TicketDetails, BinderyLines } from "@/components/jobs/ticket-details";
 import { useParams, useRouter } from "next/navigation";
 import { JobPaymentPanel } from "@/components/jobs/job-payment-panel";
@@ -245,6 +245,7 @@ export default function JobDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [coBusy, setCoBusy] = useState(false);
+  const [showStages, setShowStages] = useState(false);
   const [showStageDetail, setShowStageDetail] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", dueDate: "", priority: "NORMAL" });
@@ -765,53 +766,9 @@ export default function JobDetailPage() {
         </div>
       </div>
 
-      {/* ================================================================= */}
-      {/* PRODUCTION STATUS BANNER — Phase grouping per workflow review     */}
-      {/* Pre-press is its own phase, NOT part of production. Banner makes  */}
-      {/* the current phase + handoff state crystal clear on every ticket. */}
-      {/* ================================================================= */}
-      {(() => {
-        const meta = getStageGroupMeta(job.status);
-        return (
-          <div className={`rounded-xl border-2 ${meta.border} ${meta.bg} px-5 py-3 flex items-center justify-between gap-4 flex-wrap`}>
-            <div className="flex items-center gap-3">
-              <div className={`px-3 py-1.5 rounded-lg ${meta.color} ${meta.bg} border-2 ${meta.border} font-bold text-sm tracking-wider`}>
-                {meta.shortLabel}
-              </div>
-              <div>
-                <p className={`font-semibold ${meta.color}`}>
-                  {meta.label} — Stage: {getStatusLabel(job.status)}
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">{meta.helpText}</p>
-              </div>
-            </div>
-            {/* Sub-status — Mike Metroka 5/1/26: pre-press needs a finer
-                signal than the official stage. Shows even when the stage
-                pipeline isn't moving. */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Sub-status:</label>
-              <select
-                value={job.subStatus || ""}
-                onChange={(e) => updateJobField("subStatus", e.target.value)}
-                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="">— pick one —</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Working">Working</option>
-                <option value="Out on Proof">Out on Proof</option>
-                <option value="Awaiting Customer">Awaiting Customer</option>
-                <option value="Ready to Plate">Ready to Plate</option>
-                <option value="Plates Done">Plates Done</option>
-                <option value="Ready to Print">Ready to Print</option>
-                <option value="Waiting on Artwork">Waiting on Artwork</option>
-                <option value="Waiting on Paper">Waiting on Paper</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Done">Done</option>
-              </select>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Darrin's Status + Press up top (11/20/26: the old phase banner, stage steps and
+          sub-status confused everyone, so they sit behind "Show production stages"). */}
+      <WipBar jobId={job.id} onShowStages={() => setShowStages((v) => !v)} stagesOpen={showStages} />
 
       {/* Payment terms + press gate (Benjy 11/17) */}
       <JobPaymentPanel jobId={job.id} />
@@ -837,6 +794,7 @@ export default function JobDetailPage() {
         </Card>
       )}
 
+      {showStages && (<>
       {/* ================================================================= */}
       {/* 2. STAGE PROGRESS STEPPER                                         */}
       {/* ================================================================= */}
@@ -847,7 +805,29 @@ export default function JobDetailPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Stage Progress</CardTitle>
+            <CardTitle>Production stages</CardTitle>
+            <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Sub-status:</label>
+                <select
+                  value={job.subStatus || ""}
+                  onChange={(e) => updateJobField("subStatus", e.target.value)}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">— pick one —</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Working">Working</option>
+                  <option value="Out on Proof">Out on Proof</option>
+                  <option value="Awaiting Customer">Awaiting Customer</option>
+                  <option value="Ready to Plate">Ready to Plate</option>
+                  <option value="Plates Done">Plates Done</option>
+                  <option value="Ready to Print">Ready to Print</option>
+                  <option value="Waiting on Artwork">Waiting on Artwork</option>
+                  <option value="Waiting on Paper">Waiting on Paper</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+
             <button
               type="button"
               onClick={() => setShowStageDetail((v) => !v)}
@@ -964,6 +944,7 @@ export default function JobDetailPage() {
           )}
         </CardContent>
       </Card>
+      </>)}
 
       {/* ================================================================= */}
       {/* 2c. GENERAL NOTES — cross-department critical info                */}

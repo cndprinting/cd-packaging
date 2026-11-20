@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 import { hardStep, proofsDone, stageFor } from "@/lib/proofs";
-import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES } from "@/lib/routing";
+import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES, STATUS_ROLES } from "@/lib/routing";
 
 // Jobs page tabs use Darrin's FileMaker WIP statuses (11/20): New until he
 // routes it, then the status he sets. Packed counts as COMP, shipped as DEL.
@@ -12,7 +12,7 @@ const STEP_LABEL: Record<string, string> = { SCHEDULED: "Scheduled for press", P
 function tabFor(j: any) {
   if (DONE.includes(j.status)) return "DEL";
   if (j.status === "PACKED") return "COMP";
-  if (!j.routedAt || !j.routeStatus) return "new";
+  if (!j.routeStatus) return "new";
   return j.routeStatus;
 }
 /** One plain line: what this job is waiting on right now. */
@@ -76,11 +76,11 @@ export async function GET() {
         isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
         isBlocked: false, paymentTerms: j.paymentTerms || null, press,
         productType: j.productType, routeStatus: j.routeStatus || null, pressAssignment: j.pressAssignment || null, routed: !!j.routedAt,
-        test: j.createdAt < JOBS_LIVE_SINCE, tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id, "pdf"), proofOf(j.id, "hard")),
+        test: j.createdAt < JOBS_LIVE_SINCE || /^QA-/i.test(j.jobNumber || ""), tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id, "pdf"), proofOf(j.id, "hard")),
       };
     });
     // Darrin edits Status + Press right on the list, like his FileMaker WIP screen (11/20).
-    const wip = ROUTE_ROLES.includes(session.role) ? { statuses: ROUTE_STATUSES, presses: ROUTE_PRESSES } : null;
+    const wip = STATUS_ROLES.includes(session.role) ? { statuses: ROUTE_STATUSES, presses: ROUTE_PRESSES, canPress: ROUTE_ROLES.includes(session.role) } : null;
     return NextResponse.json({ jobs: formatted, wip, source: "database" });
   } catch (error) {
     console.error("Jobs GET error:", error);
