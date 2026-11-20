@@ -189,13 +189,13 @@ export default function JobsPage() {
                   <td className="max-w-[260px] truncate px-3 py-2"><Link href={`/dashboard/jobs/${j.id}`} className="text-gray-900 hover:underline">{j.name}</Link></td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">{(j.quantity || 0).toLocaleString()}</td>
                   <td className={`whitespace-nowrap px-3 py-2 ${j.isLate ? "font-semibold text-red-600" : "text-gray-700"}`}>{day(j.dueDate) || <span className="text-gray-300">-</span>}{j.isLate && " (late)"}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{wip && !j.test && (j.tab === j.routeStatus || j.tab === "new") ? (
+                  <td className="whitespace-nowrap px-3 py-2">{wip && (j.tab === j.routeStatus || j.tab === "new") ? (
                     <select aria-label={`Status for ${j.jobNumber}`} value={j.routeStatus || ""} onChange={(e) => setRoute(j, "routeStatus", e.target.value)} className={`h-7 rounded border px-1 text-xs font-medium ${j.routeStatus ? "border-gray-300 text-gray-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>
                       {!j.routeStatus && <option value="">New</option>}
                       {wip.statuses.map(([k]) => <option key={k} value={k}>{k}</option>)}
                     </select>
                   ) : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700">{TABS.find((t) => t.key === j.tab)?.label || j.tab}</span>}</td>
-                  {wip && <td className="whitespace-nowrap px-3 py-2">{!j.test && j.tab !== "DEL" ? (
+                  {wip && <td className="whitespace-nowrap px-3 py-2">{j.tab !== "DEL" ? (
                     <select aria-label={`Press for ${j.jobNumber}`} value={j.pressAssignment || ""} onChange={(e) => setRoute(j, "pressAssignment", e.target.value)} className="h-7 rounded border border-gray-300 px-1 text-xs">
                       <option value="">-</option>
                       {wip.presses.map(([k, l]) => <option key={k} value={k}>{l.replace(/ \(\d+\)$/, "")}</option>)}
