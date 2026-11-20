@@ -38,6 +38,11 @@
     box-shadow: none !important;
   }
   nav, aside, header, [data-noprint] { display: none !important; }
+  /* The app shell is h-screen + overflow hidden: when printing, let the page grow so
+     long tickets and multi-copy prints aren't cut off after page one (11/20/26). */
+  html:has(.print-color), body:has(.print-color), *:has(> .print-color), *:has(.print-color) {
+    height: auto !important; max-height: none !important; overflow: visible !important; display: block !important; padding: 0 !important;
+  }
   a { text-decoration: none !important; }
   input, select, textarea {
     border: 1px solid #999 !important;
