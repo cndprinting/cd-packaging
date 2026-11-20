@@ -85,8 +85,8 @@ export default function PrintJobTicketPage() {
         .l { font-size: 10px; color: #222; white-space: nowrap; }
         .v { font-weight: 700; font-size: 13px; border-bottom: 1px dotted #333; display: inline-block; min-height: 15px; vertical-align: bottom; }
         .hd { background: #d9d9d9; font-size: 11px; text-align: center; border: 1px solid #fff; padding: 1px 2px; line-height: 1.05; }
-        .g td { border: 1px solid #fff; background: #ececec; height: 17px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
-        .w td { border: 1px solid #ccc; height: 17px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .g td { border: 1px solid #fff; background: #ececec; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .w td { border: 1px solid #ccc; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
         .dot { border-bottom: 1px dotted #333; height: 17px; font-weight: 700; font-size: 12px; padding-left: 2px; white-space: nowrap; overflow: hidden; }
         .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 10px; font-size: 10px; margin-right: 3px; vertical-align: -1px; }
         .rd { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; border-radius: 50%; margin: 0 3px 0 10px; vertical-align: -1px; position: relative; }
@@ -249,8 +249,8 @@ export default function PrintJobTicketPage() {
       <table style={{ marginTop: 6 }}><tbody><tr>
         <td style={{ width: "40%", verticalAlign: "top" }}>
           {samples !== null && <div style={{ fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: 17, textAlign: "center", lineHeight: 1.2 }}>MUST PUT <span style={{ fontSize: 26, WebkitTextStroke: "1px #000", color: "#bbb" }}>{samples || "__"}</span> SAMPLES<br />IN THIS JOB TICKET</div>}
-          {cod && <div style={{ color: "#e00000", fontWeight: 900, fontStyle: "italic", fontSize: 76, lineHeight: 1, marginTop: 4 }}>COD</div>}
-          <div className="dot" style={{ marginTop: 6 }} /><div className="dot" />
+          {cod && <div style={{ color: "#e00000", fontWeight: 900, fontStyle: "italic", fontSize: 64, lineHeight: 1, marginTop: 2 }}>COD</div>}
+          <div className="dot" style={{ marginTop: 4 }} />
         </td>
         <td style={{ width: "21%", verticalAlign: "top", paddingLeft: 4 }}>
           <div style={{ display: "flex", fontSize: 10, color: "#555", textAlign: "center" }}><span style={{ width: "40%" }}>Delivery<br />QTY</span><span style={{ flex: 1, paddingTop: 11 }}>Packaging</span></div>
@@ -260,7 +260,7 @@ export default function PrintJobTicketPage() {
         </td>
         <td style={{ verticalAlign: "top", paddingLeft: 6 }}>
           <div className="l" style={{ fontSize: 11 }}>Delivery To:</div>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <div key={i} style={{ borderBottom: "1px solid #000", minHeight: 16, fontWeight: 700, fontSize: 12, textDecoration: deliveryTo[i] ? "underline" : undefined }}>{deliveryTo[i] || ""}</div>)}
+          {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} style={{ borderBottom: "1px solid #000", minHeight: 16, fontWeight: 700, fontSize: 12, textDecoration: deliveryTo[i] ? "underline" : undefined }}>{deliveryTo[i] || ""}</div>)}
         </td>
       </tr>
       <tr><td colSpan={3} style={{ paddingTop: 4 }}><div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
@@ -270,9 +270,9 @@ export default function PrintJobTicketPage() {
       </tbody></table>
 
       {/* ── Tear-offs: press tag + new-die stamp ── */}
-      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.55in", overflow: "hidden", breakInside: "avoid" }}>
+      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.2in", overflow: "hidden", breakInside: "avoid" }}>
         <div className="vt" style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, height: "100%", overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 19, fontWeight: 700, borderLeft: "3px solid #000", paddingLeft: 3 }}><span>{job.jobNumber}</span><span style={{ fontWeight: 400, marginLeft: 30 }}>{co.name}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700, borderLeft: "3px solid #000", paddingLeft: 3 }}><span>{job.jobNumber}</span><span style={{ fontWeight: 400, marginLeft: 30 }}>{co.name}</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, borderLeft: "1px solid #000" }}><span><span className="box" />Press Check</span><span style={{ background: "#999", color: "#000", fontWeight: 700, padding: "3px 1px", display: "inline-flex", alignItems: "center", gap: 4 }}>PAPER<span style={{ display: "inline-block", width: 18, height: 18, borderRadius: "50%", background: "#fff", border: "1px solid #000" }} /></span><span style={{ fontWeight: 700 }}>Due: {d(job.dueDate)}</span></div>
           <div style={{ display: "flex", gap: 10, fontWeight: 700 }}><span>{job.name}</span><span style={{ fontWeight: 400 }}><span className="box">{job.ledInk ? "X" : ""}</span>LED INK</span><span style={{ fontWeight: 400, fontSize: 9 }}>{job.varnish || ""}</span></div>
           <div style={{ display: "flex", gap: 10 }}><b style={{ fontSize: 14, fontStyle: "italic", textDecoration: "underline" }}>Press:</b>{first ? <span>{first.formNumber || ""}&nbsp;&nbsp;{num(first.finishCount)}&nbsp;&nbsp;{first.runningSize || ""}&nbsp;&nbsp;{first.imposition || ""}&nbsp;&nbsp;{first.numberUp || ""}&nbsp;&nbsp;{first.inkSpec || ""}</span> : null}</div>
