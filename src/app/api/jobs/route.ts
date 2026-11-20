@@ -60,6 +60,7 @@ export async function GET() {
 
     const formatted = jobs.map((j: any) => {
       let press: { cleared: boolean; waitingOn: string[] } | null = null;
+      let pay: { label: string; tone: string } | null = null;
       if (j.createdAt >= JOBS_LIVE_SINCE) {
         const terms = j.paymentTerms || DEFAULT_TERMS;
         const mine = (invs as any[]).filter((i) => i.jobId === j.id && i.status !== "draft");
@@ -67,6 +68,14 @@ export async function GET() {
         const paid = !needs ? true : terms === "prepaid" ? mine.length > 0 && mine.every((i) => i.status === "paid" || i.total - (i.paidAmount || 0) <= 0.01) : mine.some((i) => i.depositPaid || i.status === "paid" || i.status === "deposit_paid");
         const waitingOn = [...(approved.has(j.id) ? [] : ["proof"]), ...(paid ? [] : [terms === "prepaid" ? "payment" : "deposit"])];
         press = { cleared: !!j.pressOverride || waitingOn.length === 0, waitingOn };
+        // What the CSR and Shayla need to see before it ships (Kelsey 11/20).
+        const bal = mine.reduce((t: number, i: any) => t + Math.max(0, (i.total || 0) - (i.paidAmount || 0)), 0);
+        const allPaid = mine.length > 0 && bal <= 0.01;
+        pay = allPaid ? { label: "Paid", tone: "ok" }
+          : terms === "cod" ? { label: "COD", tone: "warn" }
+          : terms === "prepaid" ? { label: "Prepay due", tone: "warn" }
+          : terms === "deposit50" ? (paid ? { label: mine.length && bal > 0.01 ? "Deposit paid, balance due" : "Deposit paid", tone: "ok" } : { label: "Deposit due", tone: "warn" })
+          : { label: mine.length ? `Net 30, $${Math.round(bal).toLocaleString()} open` : "Net 30", tone: "neutral" };
       }
       return {
         id: j.id, jobNumber: j.jobNumber, orderId: j.orderId, orderNumber: j.order.orderNumber, name: j.name, description: j.description,
@@ -75,7 +84,7 @@ export async function GET() {
         productionOwnerName: "", updatedAt: j.updatedAt?.toISOString() ?? "",
         isLate: j.dueDate ? j.dueDate < new Date() && !["SHIPPED", "DELIVERED", "INVOICED"].includes(j.status) : false,
         isBlocked: false, paymentTerms: j.paymentTerms || null, press,
-        productType: j.productType, routeStatus: j.routeStatus || null, pressAssignment: j.pressAssignment || null, routed: !!j.routedAt,
+        productType: j.productType, pay, routeStatus: j.routeStatus || null, pressAssignment: j.pressAssignment || null, routed: !!j.routedAt,
         test: j.createdAt < JOBS_LIVE_SINCE || /^QA-/i.test(j.jobNumber || ""), tab: tabFor(j), waitingOn: waitingFor(j, press, proofOf(j.id, "pdf"), proofOf(j.id, "hard")),
       };
     });

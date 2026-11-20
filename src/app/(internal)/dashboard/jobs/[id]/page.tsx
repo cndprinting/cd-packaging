@@ -2,6 +2,7 @@
 
 import { RoutingPanel, WipBar } from "@/components/jobs/routing-panel";
 import { TicketDetails, BinderyLines } from "@/components/jobs/ticket-details";
+import { ReorderDialog } from "@/components/jobs/reorder-dialog";
 import { useParams, useRouter } from "next/navigation";
 import { JobPaymentPanel } from "@/components/jobs/job-payment-panel";
 import { uploadFile as uploadToBlob } from "@/lib/upload-client";
@@ -245,6 +246,7 @@ export default function JobDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [coBusy, setCoBusy] = useState(false);
+  const [reorderOpen, setReorderOpen] = useState(false);
   const [showStages, setShowStages] = useState(false);
   const [showStageDetail, setShowStageDetail] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -630,6 +632,11 @@ export default function JobDetailPage() {
                   <Printer className="h-4 w-4" />Print Ticket
                 </Button>
               </a>
+              <a href={`/dashboard/jobs/${jobId}/print?copies=3`} target="_blank" title="Two for Darrin (one for paper ordering), one for entering the job">
+                <Button variant="outline" className="gap-1.5">
+                  <Printer className="h-4 w-4" />Print 3 copies
+                </Button>
+              </a>
               {/* Change order (Mary 5/18) — reopen the source quote as a new
                   revision; converting it re-syncs this job in place. */}
               <Button
@@ -726,21 +733,9 @@ export default function JobDetailPage() {
               <Button
                 variant="outline"
                 className="gap-1.5"
-                onClick={async () => {
-                  if (!confirm(`Duplicate ${job.jobNumber} as an exact reprint? All ticket notes and specs will be copied to a new job number.`)) return;
-                  try {
-                    const res = await fetch(`/api/jobs/${jobId}/duplicate`, { method: "POST" });
-                    const data = await res.json();
-                    if (res.ok && data.job) {
-                      flash(`Duplicated → ${data.job.jobNumber}`);
-                      router.push(`/dashboard/jobs/${data.job.id}`);
-                    } else {
-                      alert(data.error || "Failed to duplicate");
-                    }
-                  } catch { alert("Failed to duplicate job"); }
-                }}
+                onClick={() => setReorderOpen(true)}
               >
-                <Copy className="h-4 w-4" />Duplicate (Reprint)
+                <Copy className="h-4 w-4" />Duplicate / Reorder
               </Button>
               <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" />Delete
@@ -769,6 +764,7 @@ export default function JobDetailPage() {
       {/* Darrin's Status + Press up top (11/20/26: the old phase banner, stage steps and
           sub-status confused everyone, so they sit behind "Show production stages"). */}
       <WipBar jobId={job.id} onShowStages={() => setShowStages((v) => !v)} stagesOpen={showStages} />
+      {reorderOpen && <ReorderDialog source={{ id: job.id, jobNumber: job.jobNumber, name: job.name, companyName: job.companyName, quantity: job.quantity }} onClose={() => setReorderOpen(false)} />}
 
       {/* Payment terms + press gate (Benjy 11/17) */}
       <JobPaymentPanel jobId={job.id} />
@@ -962,7 +958,7 @@ export default function JobDetailPage() {
         <CardContent>
           <textarea
             defaultValue={job.generalNotes || ""}
-            placeholder="Critical info everyone on this job needs to see: deadlines, mask pin #s, customer quirks, quality warnings, cross-department coordination..."
+            placeholder="Critical info everyone on this job needs to see: deadlines, mask pin #s, customer quirks, quality warnings, cross-department coordination... Start a line with ** to print it in red."
             rows={3}
             className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             onBlur={(e) => updateJobField("generalNotes", e.target.value)}
@@ -1439,7 +1435,7 @@ export default function JobDetailPage() {
           <CardContent>
             <textarea
               defaultValue={job.prepressNotes || ""}
-              placeholder="Notes for Michael/Kevin — proof rounds, structural design, plate requirements, trapping..."
+              placeholder="Notes for Michael/Kevin — proof rounds, structural design, plate requirements, trapping... Start a line with ** to print it in red."
               rows={3}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               onBlur={(e) => updateJobField("prepressNotes", e.target.value)}
@@ -1687,7 +1683,7 @@ export default function JobDetailPage() {
             <SectionLabel>Press Notes</SectionLabel>
             <textarea
               defaultValue={job.pressNotes || ""}
-              placeholder="Press notes, special instructions..."
+              placeholder="Press notes, special instructions... Start a line with ** to print it in red."
               rows={3}
               className="flex w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-y"
               onBlur={(e) => updateJobField("pressNotes", e.target.value)}
@@ -1706,10 +1702,12 @@ export default function JobDetailPage() {
         <CardContent>
           <BinderyLines jobId={jobId} />
           <div className="mt-4 pt-4 border-t border-gray-100">
-            <SectionLabel>Bindery Notes</SectionLabel>
-            <Input
+            <SectionLabel>Bindery Instructions</SectionLabel>
+            <textarea
               defaultValue={job.binderyNotes || ""}
-              placeholder="Special bindery instructions..."
+              rows={3}
+              placeholder="Special bindery instructions... Start a line with ** to print it in red."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               onBlur={(e) => updateJobField("binderyNotes", e.target.value)}
             />
           </div>
@@ -1922,7 +1920,7 @@ export default function JobDetailPage() {
               <SectionLabel>Vendor Information</SectionLabel>
               <textarea
                 defaultValue={job.vendorInfo || ""}
-                placeholder="Vendor notes, contact info..."
+                placeholder="Vendor notes, contact info... Start a line with ** to print it in red."
                 rows={3}
                 className="flex w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-y"
                 onBlur={(e) => updateJobField("vendorInfo", e.target.value)}

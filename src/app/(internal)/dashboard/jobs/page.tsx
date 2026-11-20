@@ -7,7 +7,8 @@
 // before go-live are hidden unless asked for.
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Search, Plus, Loader2, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Loader2, ArrowUpDown, Copy } from "lucide-react";
+import { ReorderDialog } from "@/components/jobs/reorder-dialog";
 import { JobIntake, type IntakePrefill } from "@/components/jobs/job-intake";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import { getStatusColor, getStatusLabel } from "@/lib/utils";
 interface Job {
   id: string; jobNumber: string; name: string; companyName: string; status: string; priority: string; quantity: number;
   dueDate: string; isLate: boolean; productType?: string; csrName: string; salesRepName: string;
-  routeStatus: string | null; pressAssignment?: string | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
+  routeStatus: string | null; pressAssignment?: string | null; pay?: { label: string; tone: string } | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
 }
 
 const TABS: { key: string; label: string; hint: string }[] = [
@@ -62,6 +63,7 @@ export default function JobsPage() {
   // Sales handoff + new job forms (Benjy 11/17)
   const [intake, setIntake] = useState<{ mode: "handoff" | "job"; prefill: IntakePrefill } | null>(null);
   const [role, setRole] = useState("");
+  const [reorder, setReorder] = useState(false);
   const [queueKey, setQueueKey] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
@@ -133,6 +135,7 @@ export default function JobsPage() {
         </div>
         <div className="flex gap-2">
           {/* Send won job to CSR lives on the sales side (Benjy 11/18): this page is the job ticket board. */}
+          {(ENTER.includes(role) || !role) && <Button variant="outline" onClick={() => setReorder(true)} className="gap-2"><Copy className="h-4 w-4" /> Reorder a past job</Button>}
           {(ENTER.includes(role) || !role) && <Button onClick={() => setIntake({ mode: "job", prefill: {} })} className="gap-2"><Plus className="h-4 w-4" /> New Job</Button>}
         </div>
       </div>
@@ -181,7 +184,7 @@ export default function JobsPage() {
         {jobs === null ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> : (
           <table className="w-full text-sm">
             <thead className="border-b border-gray-100 bg-gray-50/60"><tr>
-              <Th k="job">Job #</Th><Th k="customer">Customer</Th><Th>Job</Th><Th k="qty" className="text-right">Qty</Th><Th k="due">Due</Th><Th>Status</Th>{wip && <Th>Press</Th>}<Th>Waiting on</Th><Th>CSR</Th><Th>Rep</Th>
+              <Th k="job">Job #</Th><Th k="customer">Customer</Th><Th>Job</Th><Th k="qty" className="text-right">Qty</Th><Th k="due">Due</Th><Th>Status</Th>{wip && <Th>Press</Th>}<Th>Waiting on</Th><Th>Payment</Th><Th>CSR</Th><Th>Rep</Th>
             </tr></thead>
             <tbody>
               {rows.map((j) => (
@@ -205,16 +208,18 @@ export default function JobsPage() {
                     </select>
                   ) : <span className="text-xs text-gray-500">{wip.presses.find(([k]) => k === j.pressAssignment)?.[1].replace(/ \(\d+\)$/, "") || j.pressAssignment || "-"}</span>}</td>}
                   <td className="whitespace-nowrap px-3 py-2 text-gray-700">{j.waitingOn || <span className="text-gray-300">-</span>}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{j.pay ? <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${j.pay.tone === "ok" ? "bg-emerald-50 text-emerald-800" : j.pay.tone === "warn" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{j.pay.label}</span> : <span className="text-gray-300">-</span>}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-600">{j.csrName || "-"}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-600">{j.salesRepName || "-"}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={wip ? 10 : 9} className="py-12 text-center text-gray-400">{visible.length === 0 ? (testCount ? "No real jobs yet. Tick \"Show test jobs\" to see the old test ones." : "No jobs yet.") : "No jobs match."}</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={wip ? 11 : 10} className="py-12 text-center text-gray-400">{visible.length === 0 ? (testCount ? "No real jobs yet. Tick \"Show test jobs\" to see the old test ones." : "No jobs yet.") : "No jobs match."}</td></tr>}
             </tbody>
           </table>
         )}
       </Card>
 
+      {reorder && <ReorderDialog onClose={() => setReorder(false)} />}
       {intake && <JobIntake mode={intake.mode} prefill={intake.prefill} onClose={() => setIntake(null)} onDone={(m) => { setIntake(null); flash(m); setQueueKey((k) => k + 1); reloadJobs(); }} />}
     </div>
   );

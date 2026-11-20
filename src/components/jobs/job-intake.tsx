@@ -29,7 +29,7 @@ export function JobIntake({ mode, prefill = {}, onClose, onDone }: { mode: "hand
     quantity: prefill.quantity || "", quotedPrice: prefill.quotedPrice || "", productType: prefill.productType || "FOLDING_CARTON", customerPO: prefill.customerPO || "",
     dueDate: prefill.dueDate || "", salesRepId: prefill.salesRepId || "", artworkStatus: prefill.artworkStatus || "", artworkNotes: prefill.artworkNotes || "",
     paymentTerms: prefill.paymentTerms || "", saveTerms: false, deliveryAddress: prefill.deliveryAddress || prefill.customerAddress || "", shippingNotes: prefill.shippingNotes || "", specialNotes: prefill.specialNotes || "",
-    jobNumber: prefill.jobNumber || "", priority: "NORMAL", estimatedHours: "", hardProof: "", saveProof: false,
+    jobNumber: prefill.jobNumber || "", priority: "NORMAL", estimatedHours: "", hardProof: "internal", saveProof: false, // Kelsey 11/20: hard proofs are checked internally unless the customer wants to see them
   });
   const [proofOnFile, setProofOnFile] = useState<string | null>(null);
   const [reps, setReps] = useState<Rep[]>([]);

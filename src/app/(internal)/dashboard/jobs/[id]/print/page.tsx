@@ -25,11 +25,22 @@ const BINDERY: [string, string, string][] = [
 ];
 const JOB_TYPES: [string, string][] = [["NEW_ORDER", "New Order"], ["EXACT_REPRINT", "Exact Reprint"], ["REPRINT_WITH_CHANGES", "Reprint With Changes"], ["REPRINT_NEW_FILE", "Reprint New File Supplied"]];
 
+// Notes anywhere: every line prints and wraps (nothing cut off); a line that starts with ** prints red.
+function Lines({ text, min = 0, lineStyle, upper = true }: { text?: string | null; min?: number; lineStyle?: React.CSSProperties; upper?: boolean }) {
+  const lines = String(text || "").split(/\r?\n/);
+  while (lines.length < min) lines.push("");
+  return <>{lines.map((l, i) => <div key={i} style={{ borderBottom: "1px dotted #333", minHeight: 17, fontWeight: 700, fontSize: 12, paddingLeft: 2, whiteSpace: "pre-wrap", wordBreak: "break-word", textTransform: upper ? "uppercase" : undefined, color: /^\s*\*\*/.test(l) ? "#d00000" : undefined, ...lineStyle }}>{l}</div>)}</>;
+}
+const red = (t: any) => (/^\s*\*\*/.test(String(t || "")) ? { color: "#d00000" } : {});
+
 export default function PrintJobTicketPage() {
   const { id: jobId } = useParams<{ id: string }>();
   const [job, setJob] = useState<any>(null);
   const [qr, setQr] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // ?copies=3: Kelsey prints three (two for Darrin, one of those for paper ordering, one for entering the job).
+  const [copies, setCopies] = useState(1);
+  useEffect(() => { const c = Number(new URLSearchParams(window.location.search).get("copies")); if (c > 1 && c <= 5) setCopies(c); }, []);
   useEffect(() => {
     fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((x) => { if (x.job) { setJob(x.job); setQr(x.quoteRequest || null); } }).catch(() => {}).finally(() => setLoading(false));
   }, [jobId]);
@@ -50,10 +61,10 @@ export default function PrintJobTicketPage() {
   // Proofs box
   const proofs = (job.proofsNote || "").split(/\r?\n/).filter(Boolean);
   if (!proofs.length) { proofs.push("PDF"); if (job.hardProof === "customer" || job.hardProof === "internal") proofs.push("Hard proof"); }
-  const notes = [job.prepressNotes, job.generalNotes ? `NOTE: ${job.generalNotes}` : ""].filter(Boolean).join("\n");
+  const notes = job.prepressNotes || "";
   // Stock: 4 slots of 2 lines each
   const stockRaw: any[] = Array.isArray(job.stockLines) && job.stockLines.length ? job.stockLines : job.stockDescription ? [{ size: job.runningSize || "", qty: "", description: job.stockDescription, detail: "" }] : [];
-  const stock = [...stockRaw.slice(0, 4), ...Array(Math.max(0, 4 - stockRaw.length)).fill(null)];
+  const stock = [...stockRaw.slice(0, 10), ...Array(Math.max(0, 4 - stockRaw.length)).fill(null)];
   // Vendor Information: what the CSR typed, plus purchases that name a vendor (not the auto-made checklist rows).
   const vendor = [job.vendorInfo, ...(job.purchases || []).filter((p: any) => p.vendor).map((p: any) => [p.description, p.vendor].filter(Boolean).join(" - "))].filter(Boolean);
   // Press runs (or one row from the job's press fields)
@@ -73,33 +84,8 @@ export default function PrintJobTicketPage() {
   const csr = job.csr?.name?.split(" ")[0] || "";
   const sales = job.salesRep?.name?.split(" ")[0] || job.repName || "";
 
-  return (
-    <div className="tk print-color">
-      <style>{`
-        @page { size: 11in 17in; margin: 0.25in; }
-        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 1.15; width: 8.2in; } }
-        @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-        body { background: #fff; }
-        .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
-        .tk table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .l { font-size: 10px; color: #222; white-space: nowrap; }
-        .v { font-weight: 700; font-size: 13px; border-bottom: 1px dotted #333; display: inline-block; min-height: 15px; vertical-align: bottom; }
-        .hd { background: #d9d9d9; font-size: 11px; text-align: center; border: 1px solid #fff; padding: 1px 2px; line-height: 1.05; }
-        .g td { border: 1px solid #fff; background: #ececec; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
-        .w td { border: 1px solid #ccc; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
-        .dot { border-bottom: 1px dotted #333; height: 17px; font-weight: 700; font-size: 12px; padding-left: 2px; white-space: nowrap; overflow: hidden; }
-        .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 10px; font-size: 10px; margin-right: 3px; vertical-align: -1px; }
-        .rd { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; border-radius: 50%; margin: 0 3px 0 10px; vertical-align: -1px; position: relative; }
-        .rd.on::after { content: ""; position: absolute; inset: 2px; background: #000; border-radius: 50%; }
-        .vt { writing-mode: vertical-rl; transform: rotate(180deg); }
-      `}</style>
-
-      <div className="noprint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #ddd", marginBottom: 8 }}>
-        <a href={`/dashboard/jobs/${jobId}`} style={{ color: "#15803d", fontSize: 14, textDecoration: "none" }}>&larr; Back to Job</a>
-        <span style={{ fontSize: 12, color: "#666" }}>Prints on 11 x 17 (ledger), like FileMaker</span>
-        <button onClick={() => window.print()} style={{ background: "#15803d", color: "#fff", padding: "9px 22px", borderRadius: 8, fontSize: 14, fontWeight: 700, border: 0, cursor: "pointer" }}>Print Job Ticket</button>
-      </div>
-
+  const sheet = (
+    <>
       {/* ── Header ── */}
       <table><tbody><tr>
         <td style={{ width: "62%", verticalAlign: "top", paddingTop: 4 }}>
@@ -165,7 +151,7 @@ export default function PrintJobTicketPage() {
           </tr>
           {descRows.map((r, i) => (
             <tr key={i} className="g">
-              <td style={{ textAlign: "center" }}>{r ? num(r.qty) : ""}</td><td>{r?.desc || ""}</td>
+              <td style={{ textAlign: "center" }}>{r ? num(r.qty) : ""}</td><td style={{ whiteSpace: "normal", height: "auto", wordBreak: "break-word", ...red(r?.desc) }}>{r?.desc || ""}</td>
               <td style={{ textAlign: "center" }}>{r?.flat || "x"}</td><td style={{ textAlign: "center" }}>{r?.fin || "X"}</td>
               <td>{r?.ink || <span style={{ fontWeight: 400 }}>&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;-</span>}</td><td style={{ background: "#fff" }} />
             </tr>
@@ -188,7 +174,7 @@ export default function PrintJobTicketPage() {
           <div style={{ display: "flex", border: "1px solid #999", height: 32 }}><span className="vt l" style={{ fontWeight: 700, fontSize: 9, borderLeft: "1px solid #999", padding: "0 1px" }}>DIE#</span><span style={{ fontWeight: 700, fontSize: 12, padding: 2 }}>{job.dieNumber || ""}</span></div>
           <div style={{ border: "1px solid #999", marginTop: 2, height: 30, fontSize: 12, fontWeight: 700, padding: 2 }}><div className="l" style={{ fontSize: 8, textAlign: "center" }}>Blanket No.</div>{job.blanketNumber || ""}</div>
         </td>
-        <td style={{ verticalAlign: "top" }}>{[0, 1, 2, 3].map((i) => <div key={i} className="dot" style={{ fontSize: 12, textTransform: "uppercase", textDecoration: i === 0 && notes ? "underline" : undefined }}>{notes.split("\n")[i] || ""}</div>)}</td>
+        <td style={{ verticalAlign: "top" }}><Lines text={notes} min={4} /></td>
       </tr></tbody></table>
 
       {/* ── Stock / AA Charges / Vendor Information ── */}
@@ -207,9 +193,9 @@ export default function PrintJobTicketPage() {
               <tr key={row} className="w">
                 <td style={{ textAlign: "center" }}>{k === 0 ? s?.size || "" : ""}</td>
                 <td style={{ textAlign: "center" }}>{k === 0 ? num(s?.qty) : ""}</td>
-                <td>{k === 0 ? s?.description || "" : s?.detail || ""}</td>
-                <td style={{ background: "#ececec", fontSize: 10, fontWeight: 400, borderBottom: k === 1 ? "2px solid #fff" : undefined }}>{k === 0 ? "Date:" : "Time:"}</td>
-                {row % 3 === 0 && row < 8 && <td rowSpan={row === 6 ? 2 : 3} style={{ borderLeft: "1px solid #ccc", whiteSpace: "normal", verticalAlign: "top", fontSize: 11 }}>{vendor[row / 3] || ""}</td>}
+                <td style={{ whiteSpace: "normal", height: "auto", wordBreak: "break-word", ...red(k === 0 ? s?.description : s?.detail) }}>{k === 0 ? s?.description || "" : s?.detail || ""}</td>
+                <td style={{ background: "#ececec", fontSize: 10, fontWeight: 400, borderBottom: k === 1 ? "2px solid #fff" : undefined }}>{i < 4 ? (k === 0 ? "Date:" : "Time:") : ""}</td>
+                {row === 0 && <td rowSpan={stock.length * 2} style={{ borderLeft: "1px solid #ccc", whiteSpace: "normal", verticalAlign: "top", fontSize: 11, padding: "2px 4px" }}>{vendor.join("\n").split(/\r?\n/).map((l, x) => <div key={x} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", ...red(l) }}>{l}</div>)}</td>}
               </tr>
             );
           }))}
@@ -231,7 +217,7 @@ export default function PrintJobTicketPage() {
               <td style={{ textAlign: "center" }}>{r?.runningSize || ""}</td><td style={{ textAlign: "center" }}>{r?.imposition || ""}</td>
               <td style={{ textAlign: "center" }}>{r?.numberUp || ""}</td><td style={{ textAlign: "center" }}>{r?.inkSpec || ""}</td>
               <td style={{ textAlign: "center" }}>{r ? num(r.firstPassCount) : ""}</td><td style={{ textAlign: "center" }}>{r ? num(r.finalPressCount) : ""}</td><td style={{ textAlign: "center" }}>{r?.pressmanInitials || ""}</td>
-              <td style={{ border: 0, paddingLeft: 8, fontWeight: 400 }}>{BINDERY[i] && (() => { const [k, l, c] = BINDERY[i]; return <span style={{ display: "flex", alignItems: "center" }}><span className="box">{bOn(k, c) ? "X" : ""}</span><span style={{ width: 46, fontSize: 11.5 }}>{l}</span><span style={{ flex: 1, borderBottom: "1px solid #000", fontWeight: 700, fontSize: 10, textDecoration: bv[k] ? "underline" : undefined, overflow: "hidden" }}>{bv[k] || ""}</span></span>; })()}</td>
+              <td style={{ border: 0, paddingLeft: 8, fontWeight: 400 }}>{BINDERY[i] && (() => { const [k, l, c] = BINDERY[i]; return <span style={{ display: "flex", alignItems: "center" }}><span className="box">{bOn(k, c) ? "X" : ""}</span><span style={{ width: 46, fontSize: 11.5 }}>{l}</span><span style={{ flex: 1, borderBottom: "1px solid #000", fontWeight: 700, fontSize: 10, textDecoration: bv[k] ? "underline" : undefined, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.1, ...red(bv[k]) }}>{bv[k] || ""}</span></span>; })()}</td>
             </tr>
           ))}
         </tbody>
@@ -240,9 +226,9 @@ export default function PrintJobTicketPage() {
       {/* ── Press + Bindery instructions ── */}
       <table style={{ marginTop: 6 }}><tbody><tr>
         <td style={{ width: "48%", verticalAlign: "top" }}><div className="l" style={{ fontSize: 11 }}>Press Instructions</div>
-          <div style={{ background: "#ffffc8", border: "1.5px solid #000", minHeight: 70 }}>{[0, 1, 2, 3].map((i) => <div key={i} style={{ borderBottom: "1px dotted #333", minHeight: 17, fontWeight: 700, fontSize: 12, paddingLeft: 2, textTransform: "uppercase" }}>{(job.pressNotes || "").split(/\r?\n/)[i] || ""}</div>)}</div></td>
+          <div style={{ background: "#ffffc8", border: "1.5px solid #000", minHeight: 70 }}><Lines text={job.pressNotes} min={4} /></div></td>
         <td style={{ verticalAlign: "top", paddingLeft: 4 }}><div className="l" style={{ fontSize: 11 }}>Bindery Instructions</div>
-          {[0, 1, 2, 3].map((i) => <div key={i} className="dot" style={{ textTransform: "uppercase" }}>{(job.binderyNotes || "").split(/\r?\n/)[i] || ""}</div>)}</td>
+          <Lines text={job.binderyNotes} min={4} /></td>
       </tr></tbody></table>
 
       {/* ── Samples / COD / Delivery ── */}
@@ -250,7 +236,7 @@ export default function PrintJobTicketPage() {
         <td style={{ width: "40%", verticalAlign: "top" }}>
           {samples !== null && <div style={{ fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: 17, textAlign: "center", lineHeight: 1.2 }}>MUST PUT <span style={{ fontSize: 26, WebkitTextStroke: "1px #000", color: "#bbb" }}>{samples || "__"}</span> SAMPLES<br />IN THIS JOB TICKET</div>}
           {cod && <div style={{ color: "#e00000", fontWeight: 900, fontStyle: "italic", fontSize: 64, lineHeight: 1, marginTop: 2 }}>COD</div>}
-          <div className="dot" style={{ marginTop: 4 }} />
+          <div style={{ marginTop: 4 }}><Lines text={job.generalNotes} min={2} upper={false} lineStyle={{ fontSize: 10.5, minHeight: 14 }} /></div>
         </td>
         <td style={{ width: "21%", verticalAlign: "top", paddingLeft: 4 }}>
           <div style={{ display: "flex", fontSize: 10, color: "#555", textAlign: "center" }}><span style={{ width: "40%" }}>Delivery<br />QTY</span><span style={{ flex: 1, paddingTop: 11 }}>Packaging</span></div>
@@ -260,7 +246,7 @@ export default function PrintJobTicketPage() {
         </td>
         <td style={{ verticalAlign: "top", paddingLeft: 6 }}>
           <div className="l" style={{ fontSize: 11 }}>Delivery To:</div>
-          {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} style={{ borderBottom: "1px solid #000", minHeight: 16, fontWeight: 700, fontSize: 12, textDecoration: deliveryTo[i] ? "underline" : undefined }}>{deliveryTo[i] || ""}</div>)}
+          {[...deliveryTo, ...Array(Math.max(0, 6 - deliveryTo.length)).fill("")].map((l: string, i: number) => <div key={i} style={{ borderBottom: "1px solid #000", minHeight: 16, fontWeight: 700, fontSize: 12, textDecoration: l ? "underline" : undefined, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{l}</div>)}
         </td>
       </tr>
       <tr><td colSpan={3} style={{ paddingTop: 4 }}><div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
@@ -287,6 +273,38 @@ export default function PrintJobTicketPage() {
         <div style={{ width: 30, border: "1px solid #000", background: "#ddd", height: "100%" }} />
         <div style={{ flex: 1 }} />
       </div>
+
+    </>
+  );
+
+  return (
+    <div className="tk print-color">
+      <style>{`
+        @page { size: 11in 17in; margin: 0.25in; }
+        @media print { html, body { margin: 0 !important; padding: 0 !important; } .tk { zoom: 1.15; width: 8.2in; } }
+        @media print { .noprint { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        body { background: #fff; }
+        .tk { width: 7.85in; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11px; }
+        .tk table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .l { font-size: 10px; color: #222; white-space: nowrap; }
+        .v { font-weight: 700; font-size: 13px; border-bottom: 1px dotted #333; display: inline-block; min-height: 15px; vertical-align: bottom; }
+        .hd { background: #d9d9d9; font-size: 11px; text-align: center; border: 1px solid #fff; padding: 1px 2px; line-height: 1.05; }
+        .g td { border: 1px solid #fff; background: #ececec; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .w td { border: 1px solid #ccc; height: 16px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .dot { border-bottom: 1px dotted #333; height: 17px; font-weight: 700; font-size: 12px; padding-left: 2px; white-space: nowrap; overflow: hidden; }
+        .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 10px; font-size: 10px; margin-right: 3px; vertical-align: -1px; }
+        .rd { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; border-radius: 50%; margin: 0 3px 0 10px; vertical-align: -1px; position: relative; }
+        .rd.on::after { content: ""; position: absolute; inset: 2px; background: #000; border-radius: 50%; }
+        .vt { writing-mode: vertical-rl; transform: rotate(180deg); }
+      `}</style>
+
+      <div className="noprint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #ddd", marginBottom: 8 }}>
+        <a href={`/dashboard/jobs/${jobId}`} style={{ color: "#15803d", fontSize: 14, textDecoration: "none" }}>&larr; Back to Job</a>
+        <span style={{ fontSize: 12, color: "#666" }}>Prints on 11 x 17 (ledger) · {copies === 1 ? <a href="?copies=3" style={{ color: "#15803d" }}>switch to 3 copies</a> : <>{copies} copies · <a href="?" style={{ color: "#15803d" }}>just 1</a></>}</span>
+        <button onClick={() => window.print()} style={{ background: "#15803d", color: "#fff", padding: "9px 22px", borderRadius: 8, fontSize: 14, fontWeight: 700, border: 0, cursor: "pointer" }}>{copies > 1 ? `Print ${copies} copies` : "Print Job Ticket"}</button>
+      </div>
+
+      {Array.from({ length: copies }, (_, n) => <div key={n} style={n < copies - 1 ? { breakAfter: "page", pageBreakAfter: "always" } : undefined}>{sheet}</div>)}
 
       {/* ── Page 2: quote-request extras (not on the FileMaker ticket) ── */}
       {qr && (() => {

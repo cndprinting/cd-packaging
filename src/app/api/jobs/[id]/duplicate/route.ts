@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession();
     if (!session || session.role === "CUSTOMER") {
@@ -28,6 +28,13 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    // Kelsey 11/20/26: most jobs start as a copy of the customer's last one. The CSR gives
+    // the new FileMaker job #, quantity and due date; everything else on the ticket carries over.
+    const body = await request.json().catch(() => ({}));
+    const wanted = String(body.jobNumber || "").trim().slice(0, 40);
+    if (wanted && await prisma.job.findUnique({ where: { jobNumber: wanted } })) return NextResponse.json({ error: `Job ${wanted} already exists` }, { status: 409 });
+    const newQty = Math.round(Number(String(body.quantity ?? "").replace(/,/g, ""))) || sourceJob.quantity;
+    const newDue = body.dueDate ? new Date(body.dueDate) : null;
     // Generate new order and job numbers with collision fallback.
     const ts = Date.now().toString().slice(-6);
     const orderCount = await prisma.order.count();
@@ -38,7 +45,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const jobCount = await prisma.job.count();
     const candidateJob = `PKG-2026-${String(jobCount + 100).padStart(3, "0")}`;
     const existingJobCollision = await prisma.job.findUnique({ where: { jobNumber: candidateJob } });
-    const jobNumber = existingJobCollision ? `PKG-2026-${ts}` : candidateJob;
+    const jobNumber = wanted || (existingJobCollision ? `PKG-2026-${ts}` : candidateJob);
 
     // Create new order linked to the same company
     const newOrder = await prisma.order.create({
@@ -47,7 +54,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         companyId: sourceJob.order.companyId,
         status: "ARTWORK_RECEIVED",
         priority: sourceJob.priority,
-        dueDate: sourceJob.dueDate,
+        dueDate: newDue,
       },
     });
 
@@ -59,13 +66,23 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         name: sourceJob.name,
         description: sourceJob.description,
         priority: sourceJob.priority,
-        quantity: sourceJob.quantity,
-        dueDate: sourceJob.dueDate,
+        quantity: newQty,
+        dueDate: newDue,
         productType: sourceJob.productType,
         status: "ARTWORK_RECEIVED",
+        csrId: session.role === "CSR" ? session.id : sourceJob.csrId,
+        salesRepId: sourceJob.salesRepId,
+        paymentTerms: (sourceJob as any).paymentTerms,
+        hardProof: (sourceJob as any).hardProof,
+        artworkStatus: "reprint",
+        // FileMaker ticket fields (11/20)
+        proofsNote: (sourceJob as any).proofsNote, mailDate: null, mailQty: null, mailDropCity: (sourceJob as any).mailDropCity,
+        mailWeight: (sourceJob as any).mailWeight, mailPostage: null, samplesQty: (sourceJob as any).samplesQty,
+        binderyValues: (sourceJob as any).binderyValues ?? undefined, stockLines: (sourceJob as any).stockLines ?? undefined,
+        dueTime: null, partialQty: null, partialDue: null, repJobNumber: null,
 
         // Reprint linkage
-        jobType: "EXACT_REPRINT",
+        jobType: body.jobType && ["EXACT_REPRINT", "REPRINT_WITH_CHANGES", "REPRINT_NEW_FILE"].includes(body.jobType) ? body.jobType : "EXACT_REPRINT",
         lastJobNumber: sourceJob.jobNumber,
 
         // Contact / reference
@@ -121,7 +138,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         binderyNotes: sourceJob.binderyNotes,
 
         // Delivery
-        deliveryQty: sourceJob.quantity, // copy quantity
+        deliveryQty: newQty,
         deliveryPackaging: sourceJob.deliveryPackaging,
         deliveryTo: sourceJob.deliveryTo,
 
@@ -145,7 +162,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         proofDate: null,
         enteredDate: null,
         paymentNotes: null,
-        quotedPrice: null,
+        quotedPrice: Number(String(body.quotedPrice ?? "").replace(/[$,\s]/g, "")) || null, // new sell price (drives the deposit invoice)
         estimatedCost: null,
         actualCost: null,
         actualHours: null,
@@ -180,6 +197,10 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         details: `Duplicated job ${sourceJob.jobNumber} as reprint → ${jobNumber}`,
       },
     }).catch(() => {});
+
+    // Same as entering a new job: Darrin's notice + the deposit invoice when the terms need one.
+    try { const { notifyPlantNewJob } = await import("@/lib/routing"); await notifyPlantNewJob(prisma, newJob.id, { name: session.name, email: session.email }); } catch (e) { console.error("plant notice failed", e); }
+    try { const { draftDepositInvoice } = await import("@/lib/press-gate"); await draftDepositInvoice(prisma, newJob.id, { byName: session.name, byEmail: session.email }); } catch (e) { console.error("deposit draft failed", e); }
 
     return NextResponse.json({ job: { id: newJob.id, jobNumber: newJob.jobNumber } });
   } catch (error) {

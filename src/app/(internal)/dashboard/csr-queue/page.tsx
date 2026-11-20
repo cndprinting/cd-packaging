@@ -7,7 +7,8 @@
 // Salespeople see what they sent and anything sent back to them.
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Circle, Inbox, Upload, Send, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Inbox, Upload, Send, Loader2, Copy } from "lucide-react";
+import { ReorderDialog } from "@/components/jobs/reorder-dialog";
 import { Button } from "@/components/ui/button";
 import { JobIntake, type IntakePrefill } from "@/components/jobs/job-intake";
 import { handoffToPrefill } from "@/components/jobs/handoff-queue";
@@ -45,6 +46,7 @@ function Queue() {
   const [tab, setTab] = useState("submitted");
   const [open, setOpen] = useState<string | null>(null);
   const [intake, setIntake] = useState<{ mode: "handoff" | "job"; prefill: IntakePrefill } | null>(null);
+  const [reorder, setReorder] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
   const load = () => fetch("/api/handoffs").then((r) => r.json()).then((d) => { setRows(d.handoffs || []); setCanEnter(!!d.canEnter); }).catch(() => setRows([]));
@@ -72,6 +74,7 @@ function Queue() {
           <p className="text-sm text-gray-500">{canEnter ? "Won jobs and estimates waiting to become job tickets." : "The won jobs you sent to Customer Service, and anything sent back to you."}</p>
         </div>
         <div className="flex gap-2">
+          {canEnter && <Button variant="outline" onClick={() => setReorder(true)} className="gap-2"><Copy className="h-4 w-4" />Reorder a past job</Button>}
           {canEnter && <Button onClick={() => setIntake({ mode: "job", prefill: {} })} className="gap-2"><Upload className="h-4 w-4" />Upload an estimate</Button>}
           {!canEnter && <Button onClick={() => setIntake({ mode: "handoff", prefill: {} })} className="gap-2"><Send className="h-4 w-4" />Send a won job</Button>}
         </div>
@@ -137,6 +140,7 @@ function Queue() {
         </div>
       )}
 
+      {reorder && <ReorderDialog onClose={() => setReorder(false)} />}
       {intake && <JobIntake mode={intake.mode} prefill={intake.prefill} onClose={() => setIntake(null)} onDone={(m) => { setIntake(null); flash(m); load(); }} />}
     </div>
   );

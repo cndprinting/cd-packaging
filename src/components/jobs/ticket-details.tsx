@@ -73,7 +73,7 @@ export function TicketDetails({ jobId }: { jobId: string }) {
       <div className="mt-4">
         <div className="flex items-center justify-between">
           <span className={lab}>Stock (Size / Quantity / Stock description)</span>
-          {stock.length < 6 && <button type="button" onClick={() => setStock([...stock, { size: "", qty: "", description: "", detail: "" }])} className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"><Plus className="h-3 w-3" />Add stock row</button>}
+          {stock.length < 10 && <button type="button" onClick={() => setStock([...stock, { size: "", qty: "", description: "", detail: "" }])} className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"><Plus className="h-3 w-3" />Add stock row</button>}
         </div>
         <div className="mt-1 space-y-2">
           {stock.map((r, i) => (
@@ -86,7 +86,7 @@ export function TicketDetails({ jobId }: { jobId: string }) {
             </div>
           ))}
         </div>
-        <p className="mt-1 text-xs text-gray-400">Add a row for boxes or anything else pulled or bought for the job (e.g. 15 x 12 x 10&quot; | 77 | 32 ECT corrugated boxes | ULINE S-20464).</p>
+        <p className="mt-1 text-xs text-gray-400">Use the rows for notes too, like FileMaker. Start a line with ** to print it in red. Add a row for boxes or anything else pulled or bought for the job (e.g. 15 x 12 x 10&quot; | 77 | 32 ECT corrugated boxes | ULINE S-20464).</p>
       </div>
     </div>
   );

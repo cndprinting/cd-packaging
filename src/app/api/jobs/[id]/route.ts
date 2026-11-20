@@ -134,13 +134,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const BIND = ["score", "perf", "drill", "pad", "fold", "count", "stitch", "collate", "pockets", "glue", "wrap", "other"];
     if (updates.binderyValues !== undefined) {
       const bv: Record<string, string> = {};
-      for (const k of BIND) { const v = String(updates.binderyValues?.[k] ?? "").trim().slice(0, 120); if (v) bv[k] = v; }
+      for (const k of BIND) { const v = String(updates.binderyValues?.[k] ?? "").trim().slice(0, 400); if (v) bv[k] = v; }
       updateData.binderyValues = bv;
     }
     // Stock rows: Size / Quantity / Stock Description (+ a second line, e.g. the price).
     if (updates.stockLines !== undefined) {
       const rows = Array.isArray(updates.stockLines) ? updates.stockLines : [];
-      updateData.stockLines = rows.slice(0, 6).map((r: any) => ({ size: String(r?.size ?? "").slice(0, 40), qty: String(r?.qty ?? "").slice(0, 20), description: String(r?.description ?? "").slice(0, 120), detail: String(r?.detail ?? "").slice(0, 120) })).filter((r: any) => r.size || r.qty || r.description || r.detail);
+      updateData.stockLines = rows.slice(0, 10).map((r: any) => ({ size: String(r?.size ?? "").slice(0, 40), qty: String(r?.qty ?? "").slice(0, 20), description: String(r?.description ?? "").slice(0, 300), detail: String(r?.detail ?? "").slice(0, 300) })).filter((r: any) => r.size || r.qty || r.description || r.detail);
     }
     // CSR / Sales picked by name on the job page (they never saved before 11/20).
     for (const [k, col] of [["csrName", "csrId"], ["salesRepName", "salesRepId"]] as const) {
