@@ -74,7 +74,7 @@ export default function PrintJobTicketPage() {
   const sales = job.salesRep?.name?.split(" ")[0] || job.repName || "";
 
   return (
-    <div className="tk">
+    <div className="tk print-color">
       <style>{`
         @page { size: legal portrait; margin: 0.25in; }
         @media print { html, body { margin: 0 !important; padding: 0 !important; } }
@@ -85,8 +85,8 @@ export default function PrintJobTicketPage() {
         .l { font-size: 10px; color: #222; white-space: nowrap; }
         .v { font-weight: 700; font-size: 13px; border-bottom: 1px dotted #333; display: inline-block; min-height: 15px; vertical-align: bottom; }
         .hd { background: #d9d9d9; font-size: 11px; text-align: center; border: 1px solid #fff; padding: 1px 2px; line-height: 1.05; }
-        .g td { border: 1px solid #fff; background: #ececec; height: 19px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
-        .w td { border: 1px solid #ccc; height: 19px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .g td { border: 1px solid #fff; background: #ececec; height: 17px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
+        .w td { border: 1px solid #ccc; height: 17px; padding: 0 4px; font-weight: 700; font-size: 11.5px; overflow: hidden; white-space: nowrap; }
         .dot { border-bottom: 1px dotted #333; height: 17px; font-weight: 700; font-size: 12px; padding-left: 2px; white-space: nowrap; overflow: hidden; }
         .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 10px; font-size: 10px; margin-right: 3px; vertical-align: -1px; }
         .rd { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; border-radius: 50%; margin: 0 3px 0 10px; vertical-align: -1px; position: relative; }
@@ -155,13 +155,13 @@ export default function PrintJobTicketPage() {
 
       {/* ── Job description rows ── */}
       <table style={{ marginTop: 6 }}>
-        <colgroup><col style={{ width: "7%" }} /><col style={{ width: "38%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "16%" }} /><col style={{ width: "13%" }} /></colgroup>
+        <colgroup><col style={{ width: "7%" }} /><col style={{ width: "35%" }} /><col style={{ width: "12%" }} /><col style={{ width: "13%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /></colgroup>
         <tbody>
           <tr>
             <td className="hd" style={{ textAlign: "left" }}>Quantity</td><td className="hd" style={{ textAlign: "left" }}>Job Description</td>
             <td className="hd" style={{ fontSize: 13 }}>Flat Size</td><td className="hd"><span style={{ fontSize: 9 }}>Finished Size</span><br /><span style={{ fontSize: 10 }}>Width&nbsp;&nbsp;&nbsp;&nbsp;Height</span></td>
             <td className="hd" style={{ textAlign: "left" }}>X / X &nbsp; Ink &nbsp;- Varnish</td>
-            <td style={{ background: "#fff", verticalAlign: "middle" }}><span style={{ border: "1px solid #999", display: "block", padding: "1px 4px", fontSize: 13 }}><span className="box">{job.pressCheck ? "X" : ""}</span>Press Check</span></td>
+            <td style={{ background: "#fff", verticalAlign: "middle" }}><span style={{ border: "1px solid #999", display: "block", padding: "1px 4px", fontSize: 13, whiteSpace: "nowrap" }}><span className="box">{job.pressCheck ? "X" : ""}</span>Press Check</span></td>
           </tr>
           {descRows.map((r, i) => (
             <tr key={i} className="g">
@@ -270,7 +270,7 @@ export default function PrintJobTicketPage() {
       </tbody></table>
 
       {/* ── Tear-offs: press tag + new-die stamp ── */}
-      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.85in", overflow: "hidden", breakInside: "avoid" }}>
+      <div style={{ display: "flex", gap: 24, marginTop: 12, borderTop: "1px dashed #999", paddingTop: 10, height: "2.55in", overflow: "hidden", breakInside: "avoid" }}>
         <div className="vt" style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, height: "100%", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 19, fontWeight: 700, borderLeft: "3px solid #000", paddingLeft: 3 }}><span>{job.jobNumber}</span><span style={{ fontWeight: 400, marginLeft: 30 }}>{co.name}</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, borderLeft: "1px solid #000" }}><span><span className="box" />Press Check</span><span style={{ background: "#999", color: "#000", fontWeight: 700, padding: "3px 1px", display: "inline-flex", alignItems: "center", gap: 4 }}>PAPER<span style={{ display: "inline-block", width: 18, height: 18, borderRadius: "50%", background: "#fff", border: "1px solid #000" }} /></span><span style={{ fontWeight: 700 }}>Due: {d(job.dueDate)}</span></div>

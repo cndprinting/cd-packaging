@@ -30,7 +30,8 @@
    black-on-white for paper, hide the app chrome, keep borders so tables
    still read. */
 @media print {
-  * {
+  /* .print-color pages (the FileMaker-style job ticket) keep their shading and red COD */
+  *:not(.print-color):not(.print-color *) {
     color: #000 !important;
     background: #fff !important;
     text-shadow: none !important;
