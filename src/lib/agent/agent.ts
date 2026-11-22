@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { acceptLine } from "@/lib/quote-accept";
 import { sendEmail } from "@/lib/email/graph-client";
 import { AGENT_MAILBOX, AGENT_NAME, leadMailbox, leadAgentName, leadAgentFirst } from "@/lib/agent/identity";
 
@@ -461,7 +462,7 @@ export async function sendCustomerQuote(prisma: any, lead: any): Promise<void> {
       <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${(lead.agentQuote || "").replace(/</g, "&lt;")}</pre>
       <p>Happy to adjust quantities or specs — just reply and we'll take care of it.</p>
       <p>Best regards,<br>${leadAgentName(lead)}</p>`);
-    await agentCustomerSend(prisma, lead, { body });
+    await agentCustomerSend(prisma, lead, { body: body + acceptLine(lead) } /* 11/22/26: accept-this-quote link */);
   }
   await prisma.lead.update({
     where: { id: lead.id },
@@ -512,7 +513,7 @@ export async function sendQuotePdfToCustomer(prisma: any, lead: any): Promise<vo
     <pre style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;font-family:inherit;">${priceText.replace(/</g, "&lt;")}</pre>
     <p>Happy to adjust quantities or specs, just reply and we'll take care of it. As a note on timing, our standard lead time is 2 to 3 weeks after payment and final approval, and we can prioritize when you have a deadline.</p>
     <p>Best regards,<br>${leadAgentName(lead)}</p>`);
-  await agentCustomerSend(prisma, lead, { body, copyAttachmentsFrom: lead.agentQuoteMsgId });
+  await agentCustomerSend(prisma, lead, { body: body + acceptLine(lead), copyAttachmentsFrom: lead.agentQuoteMsgId }); // 11/22/26: accept-this-quote link
   // Benjy 10/6: quotes under $500 go out, then the lead moves to Lost with no
   // follow-up chase. Not worth the pipeline space; the customer can still reply
   // and the inbox poller will surface it.

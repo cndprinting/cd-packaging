@@ -117,7 +117,7 @@ export async function notifyIfCleared(prisma: any, jobId: string) {
   return true;
 }
 
-async function nextInvoiceNumber(prisma: any) {
+export async function nextInvoiceNumber(prisma: any) {
   const last = await prisma.invoice.findFirst({ where: { invoiceNumber: { startsWith: "INV-" } }, orderBy: { invoiceNumber: "desc" }, select: { invoiceNumber: true } });
   const n = last ? parseInt(String(last.invoiceNumber).replace(/\D/g, ""), 10) : 999;
   return `INV-${String((Number.isFinite(n) ? n : 999) + 1).padStart(5, "0")}`;
