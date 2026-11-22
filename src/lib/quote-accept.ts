@@ -14,9 +14,10 @@ import { nextInvoiceNumber } from "@/lib/press-gate";
  *   4. accounting checks it and sends it, and the customer pays on the existing /pay page.
  * Nothing is sent to the customer and nothing can be paid until accounting approves the draft.
  *
- * QUOTE_ACCEPT=0 removes the link from the emails (the page then has nothing pointing at it).
+ * OFF by default (Benjy 11/22/26: not until the new website launches and accounting has been told).
+ * Set QUOTE_ACCEPT=1 to add the link to the quote emails. While off, no email points at the page.
  */
-export const ACCEPT_ON = process.env.QUOTE_ACCEPT !== "0";
+export const ACCEPT_ON = process.env.QUOTE_ACCEPT === "1";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
