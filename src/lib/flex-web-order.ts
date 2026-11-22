@@ -101,7 +101,7 @@ export function priceFlex(spec: FlexSpec, quantity?: number): CustomerFlexQuote 
 /** What to tell a customer when the estimator refuses a job. Press details stay inside. */
 export function friendly(e: FlexQuoteError): string {
   if (e.route === "bad_input") return e.message;
-  if (/press|does not fit/i.test(e.message)) return "This size is larger than what we price online. Send it as a quote request and a C&D specialist will price it.";
+  if (/press|does not fit/i.test(e.message)) return "This size is larger than what we price online. A C&D specialist will quote it.";
   return e.message;
 }
 

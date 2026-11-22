@@ -12,8 +12,8 @@ import { clientIp, fromOurSite, preflight, reply, throttle } from "@/lib/site-pu
  * charges. Cost, margin and press data stay in src/lib/flex-online-estimator.ts.
  *
  * Answers:
- *   { ok: true, quote, breaks: [{ quantity, price_total, price_per_unit } | { quantity, message }] }
- *   { ok: false, route: "quote_request" | "bad_input", message }   (a job for a person, or a missing field)
+ *   { ok: true, quote, breaks: [{ quantity, price_total, price_per_unit, one_time } | { quantity, message, route }], pay }
+ *   { ok: false, route: "quote_request" | "bad_input", message, breaks? }   (a job for a person, or a missing field)
  */
 const tooMany = throttle(240);   // a customer dragging a size slider asks often
 
@@ -28,16 +28,20 @@ export async function POST(req: NextRequest) {
   try { b = await req.json(); } catch { return reply(req, { error: "Could not read the request" }, 400); }
   if (!b || typeof b !== "object") return reply(req, { error: "Could not read the request" }, 400);
 
+  // What the checkout offers right now, so the page shows the right buttons.
+  const pay = { open: process.env.SITE_CHECKOUT === "1", ach: !!process.env.STRIPE_ACH_ENABLED, cardSurchargePct: 3 };
   try {
     const spec = parseFlexSpec(b);
-    const quote = priceFlex(spec);
-    // The same job at other quantities, for the price table.
-    const asked: number[] = Array.isArray(b.breaks) ? b.breaks.slice(0, 8).map(Number).filter((q: number) => Number.isInteger(q) && q > 0 && q <= 10_000_000) : [];
+    let quote = null, refused: FlexQuoteError | null = null;
+    try { quote = priceFlex(spec); } catch (e) { if (e instanceof FlexQuoteError) refused = e; else throw e; }
+    // The same job at other quantities, for the price table. Sent even when the asked quantity is refused.
+    const asked: number[] = Array.isArray(b.breaks) ? b.breaks.slice(0, 12).map(Number).filter((q: number) => Number.isInteger(q) && q > 0 && q <= 10_000_000) : [];
     const breaks = asked.map((quantity) => {
-      try { const q = priceFlex(spec, quantity); return { quantity, price_total: q.price_total, price_per_unit: q.price_per_unit }; }
+      try { const q = priceFlex(spec, quantity); return { quantity, price_total: q.price_total, price_per_unit: q.price_per_unit, one_time: q.one_time.reduce((t, x) => t + x.amount, 0) }; }
       catch (e) { if (e instanceof FlexQuoteError) return { quantity, message: friendly(e), route: e.route }; throw e; }
     });
-    return reply(req, { ok: true, quote, breaks, limits: ONLINE_LIMITS });
+    if (refused) return reply(req, { ok: false, route: refused.route, message: friendly(refused), breaks, limits: ONLINE_LIMITS, pay });
+    return reply(req, { ok: true, quote, breaks, limits: ONLINE_LIMITS, pay });
   } catch (e) {
     if (e instanceof FlexQuoteError) return reply(req, { ok: false, route: e.route, message: friendly(e), limits: ONLINE_LIMITS });
     console.error("[Godzilla FLEX PRICE]", e);

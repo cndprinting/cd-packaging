@@ -509,7 +509,7 @@ export function checkOnline(product: string, args: { quantity?: unknown; skus?: 
     if (each < L.minPerSku) throw new FlexQuoteError(`Online pouch orders start at ${L.minPerSku.toLocaleString("en-US")} per design.`, "bad_input");
     if (each > L.maxPerSku) throw new FlexQuoteError(`Over ${L.maxPerSku.toLocaleString("en-US")} per design is quoted by a C&D specialist.`);
   } else if (product === "rollstock") {
-    if (quantity < ONLINE_LIMITS.rollstock.minTotal) throw new FlexQuoteError(`Rollstock orders start at ${ONLINE_LIMITS.rollstock.minTotal.toLocaleString("en-US")} impressions.`, "bad_input");
+    if (quantity < ONLINE_LIMITS.rollstock.minTotal) throw new FlexQuoteError(`Rollstock orders start at ${ONLINE_LIMITS.rollstock.minTotal.toLocaleString("en-US")} packs.`, "bad_input");
   } else if (product === "roll_label") {
     if (quantity / skus < ONLINE_LIMITS.roll_label.minPerSku) throw new FlexQuoteError(`Label orders start at ${ONLINE_LIMITS.roll_label.minPerSku} per design.`, "bad_input");
   }
