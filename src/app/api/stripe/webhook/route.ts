@@ -24,6 +24,12 @@ export async function POST(request: NextRequest) {
 
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const s = event.data.object;
+    // An order paid at checkout on the website (11/22/26). It has no invoice yet: the paid invoice,
+    // the payment and the lead are created now. Invoices sent by accounting are untouched by this.
+    if (s.metadata?.webOrder === "flex" && !s.metadata?.invoiceId) {
+      const { completeWebOrder } = await import("@/lib/flex-web-order");
+      return NextResponse.json({ ok: true, webOrder: await completeWebOrder(prisma, s) });
+    }
     // ACH shows up as completed with payment_status "unpaid" first, then async_payment_succeeded when the bank settles.
     if (s.payment_status !== "paid") return NextResponse.json({ ok: true, waiting: s.payment_status });
     const invoiceId = s.metadata?.invoiceId;
@@ -36,6 +42,7 @@ export async function POST(request: NextRequest) {
   }
   if (event.type === "checkout.session.async_payment_failed") {
     const s = event.data.object;
+    if (s.metadata?.webOrder === "flex" && !s.metadata?.invoiceId) { const { failWebOrder } = await import("@/lib/flex-web-order"); await failWebOrder(prisma, s); }
     if (s.metadata?.invoiceId) await prisma.invoice.update({ where: { id: s.metadata.invoiceId }, data: { notes: `ACH payment failed in Stripe on ${new Date().toLocaleDateString("en-US")}` } }).catch(() => {});
   }
   return NextResponse.json({ ok: true });
