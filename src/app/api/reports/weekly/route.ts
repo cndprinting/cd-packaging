@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { staffSession, denied } from "@/lib/api-guard";
 
 function getReportData() {
   const now = new Date();
@@ -197,6 +198,7 @@ function toTSV(data: ReturnType<typeof getReportData>): string {
 }
 
 export async function GET(request: NextRequest) {
+  if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   const { searchParams } = new URL(request.url);
   const format = searchParams.get("format") || "json";
 

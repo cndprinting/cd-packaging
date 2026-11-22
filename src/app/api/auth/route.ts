@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "signup") {
+      // 11/22/26 lock-down: public self-signup let anyone on the internet create a login.
+      // Accounts are created by invite. Set ALLOW_PUBLIC_SIGNUP=1 to turn open signup back on.
+      if (process.env.ALLOW_PUBLIC_SIGNUP !== "1") {
+        return NextResponse.json({ error: "Accounts are created by invitation. Call 727-572-9999 or ask your C&D contact." }, { status: 403 });
+      }
       return handleSignup(body);
     }
 

@@ -28,23 +28,32 @@ export async function POST(request: NextRequest) {
       const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
       const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
-      // Try sending email via Resend
+      // 11/22/26 security fix: this route used to hand the reset link back in its answer whenever
+      // RESEND_API_KEY was not set (it is not set in production), so anyone who knew a staff email
+      // could reset that person's password. The link now only ever goes to the account's own inbox.
+      const html = `<p>Hi ${user.name},</p><p>Click the link below to reset your password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 1 hour. If you did not ask for it, ignore this email.</p><p>C&amp;D Printing &amp; Packaging</p>`;
+      let sent = false;
       if (process.env.RESEND_API_KEY) {
         try {
           const { Resend } = await import("resend");
           const resend = new Resend(process.env.RESEND_API_KEY);
-          await resend.emails.send({
-            from: process.env.EMAIL_FROM || "C&D Packaging <noreply@cndprinting.com>",
-            to: email,
-            subject: "Reset your C&D Packaging password",
-            html: `<p>Hi ${user.name},</p><p>Click the link below to reset your password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 1 hour.</p><p>— C&D Packaging</p>`,
-          });
+          await resend.emails.send({ from: process.env.EMAIL_FROM || "C&D Packaging <noreply@cndprinting.com>", to: email, subject: "Reset your C&D Packaging password", html });
+          sent = true;
+        } catch (e) {
+          console.error("Failed to send reset email:", e);
+        }
+      }
+      if (!sent) {
+        try {
+          const { sendEmail } = await import("@/lib/email/graph-client");
+          const r = await sendEmail({ from: process.env.DEFAULT_EMAIL_FROM || process.env.INVOICE_FROM || "bwaxman@cndprinting.com", to: email, subject: "Reset your C&D Packaging password", body: html });
+          if (!r.success) console.error("Reset email not sent:", r.error);
         } catch (e) {
           console.error("Failed to send reset email:", e);
         }
       }
 
-      return NextResponse.json({ ok: true, message: "If this email exists, a reset link has been sent.", resetUrl: process.env.RESEND_API_KEY ? undefined : resetUrl });
+      return NextResponse.json({ ok: true, message: "If this email exists, a reset link has been sent." });
     }
 
     // Step 2: Reset password (token + newPassword provided)

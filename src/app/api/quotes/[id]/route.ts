@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    // 11/22/26 lock-down: this used to answer anyone with no login.
+    const viewer = await getSession();
+    if (!viewer) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+
     const { id } = await params;
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
@@ -9,6 +14,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const quote = await prisma.quote.findUnique({ where: { id } });
     if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+    // Staff see any quote; a vendor only its own sourcing requests; a customer only its own company's.
+    if (viewer.role === "VENDOR" && quote.sourcingVendor !== (viewer as any).vendorName) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+    if (viewer.role === "CUSTOMER" && (!viewer.companyId || quote.companyId !== viewer.companyId)) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
 
     return NextResponse.json({
       quote: {

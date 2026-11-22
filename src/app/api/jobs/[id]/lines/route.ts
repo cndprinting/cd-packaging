@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   try {
     const { id } = await params;
     const prismaModule = await import("@/lib/prisma");

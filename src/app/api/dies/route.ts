@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET(request: NextRequest) {
+  if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   try {
     const { searchParams } = new URL(request.url);
     const customer = searchParams.get("customer");

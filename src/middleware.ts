@@ -15,6 +15,10 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, SECRET);
     // Estimating lab (Benjy 11/17): quoting pages are closed to everyone but
     // owners and estimating, even by typed-in URL.
+    // 11/22/26 lock-down: customer and vendor logins belong in the portal, never the staff dashboard.
+    if (pathname.startsWith("/dashboard") && (payload.role === "CUSTOMER" || payload.role === "VENDOR")) {
+      return NextResponse.redirect(new URL(payload.role === "VENDOR" ? "/portal/sourcing" : "/portal", request.url));
+    }
     if (isEstimatingPath(pathname) && !canSeeEstimating(String(payload.role || ""))) {
       return NextResponse.redirect(new URL("/dashboard/jobs", request.url));
     }

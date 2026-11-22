@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { demoJobs, demoCompanies } from "@/lib/demo-data";
+import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET(request: NextRequest) {
+  if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").toLowerCase().trim();
   if (!q || q.length < 2) return NextResponse.json({ results: [] });

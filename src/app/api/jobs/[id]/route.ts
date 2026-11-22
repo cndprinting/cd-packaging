@@ -25,6 +25,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     });
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+    // 11/22/26 lock-down: this used to answer anyone with no login. Staff see any job;
+    // a customer login sees only its own company's jobs; vendors and visitors see none.
+    const viewer = await getSession();
+    if (!viewer) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    if (viewer.role === "VENDOR" || (viewer.role === "CUSTOMER" && (!viewer.companyId || job.order.companyId !== viewer.companyId))) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
     // Lazy-load the originating quote request so the job ticket can render
     // the full QR menu (proofs, foil, mailing, etc.) as a read-only card.
     const quoteRequest = job.quoteRequestId
