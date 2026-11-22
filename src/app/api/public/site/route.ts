@@ -89,6 +89,13 @@ export async function POST(req: NextRequest) {
   const company = clean(b.company, 160), name = clean(b.name, 120), email = clean(b.email, 200).toLowerCase(), phone = clean(b.phone, 40);
   const what = clean(b.what, 160), qty = clean(b.qty, 60), details = clean(b.details, 4000), page = clean(b.page, 300), fileName = clean(b.fileName, 200);
 
+  // A file the visitor uploaded through /api/public/site/upload. Only our own storage is accepted.
+  let fileUrl = "";
+  try {
+    const u = new URL(clean(b.fileUrl, 600));
+    if (u.protocol === "https:" && u.hostname.endsWith(".public.blob.vercel-storage.com") && u.pathname.startsWith("/website-uploads/")) fileUrl = u.href;
+  } catch { /* no file, or not ours */ }
+
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply(req, { error: "Please add a valid email address" }, 400);
   if (!company && !name) return reply(req, { error: "Please add your name or company" }, 400);
 
@@ -109,7 +116,7 @@ export async function POST(req: NextRequest) {
     details,
     spec.length ? "Specification:\n" + spec.join("\n") : "",
     shown ? `Price shown on the site: ${shown}. This is an online estimate, not a quote. Confirm before quoting it back.` : "",
-    fileName ? `The customer has a file ready (${fileName}) but it was not sent with the form. Ask them to email it.` : "",
+    fileUrl ? `Artwork uploaded with the request${fileName ? ` (${fileName})` : ""}.` : fileName ? `The customer has a file ready (${fileName}) but it was not sent with the form. Ask them to email it.` : "",
   ].filter(Boolean);
 
   // Hand off to the same intake the current website form uses. Field labels match what it looks for.
@@ -124,6 +131,8 @@ export async function POST(req: NextRequest) {
     "Page URL": page || origin,
     "Website Reference": ref,
   };
+  // Only when a real file came with it. Without this field Jessica asks the customer for artwork.
+  if (fileUrl) payload.Artwork = fileUrl;
   try {
     const secret = process.env.INTAKE_SECRET;
     const url = new URL("/api/intake" + (secret ? `?key=${encodeURIComponent(secret)}` : ""), req.nextUrl.origin);
