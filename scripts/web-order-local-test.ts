@@ -17,7 +17,7 @@ async function main() {
 
   const post = async (type: string, session: any) => {
     const payload = JSON.stringify({ id: "evt_local_" + stamp, type, data: { object: session } });
-    const header = Stripe.webhooks.generateTestHeaderString({ payload, secret: env.STRIPE_WEBHOOK_SECRET });
+    const header = Stripe.webhooks.generateTestHeaderString({ payload, secret: env.STRIPE_WEBHOOK_SECRET } as any);
     const r = await fetch(BASE + "/api/stripe/webhook", { method: "POST", headers: { "stripe-signature": header, "content-type": "application/json" }, body: payload });
     return `${r.status} ${JSON.stringify(await r.json())}`;
   };
