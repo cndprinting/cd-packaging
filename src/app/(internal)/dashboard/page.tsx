@@ -1,373 +1,149 @@
 "use client";
 
+// Dashboard rebuilt on real data only (Benjy 11/23/26). Every number comes from the same
+// /api/jobs feed the Jobs list uses (role-scoped, test-aware). No typed-in trends, no
+// placeholder zeros, no canned insights. Old pre-go-live jobs never count.
 import { ToRouteList } from "@/components/jobs/routing-panel";
-import { useState, useEffect } from "react";
-import {
-  Package,
-  Factory,
-  Calendar,
-  AlertTriangle,
-  ShieldCheck,
-  FileCheck,
-  Warehouse,
-  Truck,
-  Target,
-  Clock,
-  TrendingUp,
-  TrendingDown,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-// No sample data on the Dashboard (Benjy 11/19): it showed made-up jobs and alerts.
-const EMPTY_KPIS = { openJobs: 0, inProduction: 0, dueThisWeek: 0, lateJobs: 0, blockedJobs: 0, proofsPending: 0, materialShortages: 0, readyToShip: 0, onTimeShipmentPct: null as number | null, avgCycleTimeDays: null as number | null };
-import { getStatusColor, getStatusLabel, getPriorityColor, formatDate } from "@/lib/utils";
-import type { LucideIcon } from "lucide-react";
-import { FileImage, Send } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AlertTriangle, Calendar, Clock, Inbox, Package, Truck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-/** Compact proof queue widget — renders when there are items pending. */
-function ProofQueueWidget() {
-  const [counts, setCounts] = useState<{ prepressToDo: number; salesToSend: number; awaitingCustomer: number; role: string } | null>(null);
-  useEffect(() => {
-    fetch("/api/proofs/queue").then(r => r.json()).then(d => {
-      if (d?.prepressToDo !== undefined) {
-        setCounts({
-          prepressToDo: d.prepressToDo.length,
-          salesToSend: d.salesToSend.length,
-          awaitingCustomer: d.awaitingCustomer.length,
-          role: d.currentUser?.role || "",
-        });
-      }
-    }).catch(() => {});
-  }, []);
-  if (!counts) return null;
-  const total = counts.prepressToDo + counts.salesToSend + counts.awaitingCustomer;
-  if (total === 0) return null;
-  const isSales = ["SALES", "CSR", "OWNER", "GM", "ADMIN"].includes(counts.role);
-  const isPrepress = ["PREPRESS", "OWNER", "GM", "ADMIN", "ESTIMATOR"].includes(counts.role);
+type Job = {
+  id: string; jobNumber: string; name: string; companyName: string; dueDate: string; isLate: boolean;
+  tab: string; waitingOn: string; test: boolean; isTest?: boolean;
+};
+
+function Stat({ icon: Icon, tone, value, label, hint }: { icon: LucideIcon; tone: string; value: number; label: string; hint: string }) {
   return (
-    <Link href="/dashboard/proofing">
-      <Card className="border-l-4 border-l-purple-500 bg-purple-50/50 hover:shadow-md transition-shadow cursor-pointer">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FileImage className="h-5 w-5 text-purple-600" />
-              <div>
-                <p className="text-sm font-semibold text-purple-900">Proofing queue</p>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  {isPrepress && counts.prepressToDo > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.prepressToDo}</strong> need proof upload</span>}
-                  {isSales && counts.salesToSend > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.salesToSend}</strong> to send to customer</span>}
-                  {isSales && counts.awaitingCustomer > 0 && <span className="mr-3"><strong className="text-purple-900">{counts.awaitingCustomer}</strong> awaiting customer</span>}
-                </p>
-              </div>
-            </div>
-            <Send className="h-4 w-4 text-purple-500" />
+    <Link href="/dashboard/jobs" title={hint}>
+      <Card className="h-full transition-shadow hover:shadow-md">
+        <CardContent className="flex items-start justify-between p-5">
+          <div>
+            <p className="text-sm font-medium text-gray-500">{label}</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+            <p className="mt-1 text-xs text-gray-400">{hint}</p>
           </div>
+          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${tone}`}><Icon className="h-5 w-5" /></div>
         </CardContent>
       </Card>
     </Link>
   );
 }
 
-interface KPICardProps {
-  icon: LucideIcon;
-  iconBg: string;
-  iconColor: string;
-  value: string | number;
-  label: string;
-  delta?: { value: string; trend: "up" | "down" | "neutral" };
-}
-
-function KPICard({ icon: Icon, iconBg, iconColor, value, label, delta }: KPICardProps) {
-  return (
-    <Card className="relative overflow-hidden">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-500">{label}</p>
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
-            {delta && (
-              <div className="flex items-center gap-1">
-                {delta.trend === "up" ? (
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                ) : delta.trend === "down" ? (
-                  <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                ) : null}
-                <span
-                  className={`text-xs font-medium ${
-                    delta.trend === "up"
-                      ? "text-emerald-600"
-                      : delta.trend === "down"
-                      ? "text-red-600"
-                      : "text-gray-500"
-                  }`}
-                >
-                  {delta.value}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${iconBg}`}>
-            <Icon className={`h-5 w-5 ${iconColor}`} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function getSeverityBadge(severity: string) {
-  switch (severity) {
-    case "CRITICAL":
-      return <Badge className="bg-red-100 text-red-700 border-red-200">Critical</Badge>;
-    case "WARNING":
-      return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Warning</Badge>;
-    case "INFO":
-      return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Info</Badge>;
-    default:
-      return <Badge variant="secondary">{severity}</Badge>;
-  }
-}
+const day = (d: string) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 
 export default function DashboardPage() {
-  const [kpis, setKpis] = useState(EMPTY_KPIS);
-  const [recentJobs, setRecentJobs] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-
-  const [insights, setInsights] = useState<{ type: string; icon: string; title: string; description: string; action?: string; actionHref?: string }[]>([]);
+  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [testMode, setTestMode] = useState(false);
+  const [withTest, setWithTest] = useState(true);
+  const [alerts, setAlerts] = useState<{ id: string; severity: string; message: string; createdAt: string }[]>([]);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
-      .then(d => {
-        if (d.kpis) setKpis(d.kpis);
-        setRecentJobs(d.recentJobs || []);
-        setAlerts(d.alerts || []);
-      })
-      .catch(() => {});
-    fetch("/api/insights")
-      .then(r => r.json())
-      .then(d => { if (d.insights?.length) setInsights(d.insights); })
-      .catch(() => {});
+    fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setTestMode(!!d.testMode); }).catch(() => setJobs([]));
+    // Real alerts only (QA failures write these); hidden when there are none.
+    fetch("/api/dashboard").then((r) => r.json()).then((d) => setAlerts(d.alerts || [])).catch(() => {});
   }, []);
 
+  // Old jobs from before go-live never count. Test jobs count only for testers, only when ticked.
+  const all = jobs || [];
+  // j.test = before go-live OR a QA- number; only the QA- ones are current test jobs.
+  const preLive = (j: Job) => j.test && !/^QA-/i.test(j.jobNumber);
+  const testCount = all.filter((j) => !preLive(j) && (j.isTest || j.test)).length;
+  const real = useMemo(() => all.filter((j) => !preLive(j) && (j.isTest || j.test ? withTest : true)), [all, withTest]);
+  const wip = real.filter((j) => j.tab !== "DEL");
+  const today = new Date().toISOString().slice(0, 10);
+  const week = new Date(Date.now() + 7 * 86400e3).toISOString().slice(0, 10);
+  const late = wip.filter((j) => j.isLate);
+  const dueSoon = wip.filter((j) => !j.isLate && j.dueDate && j.dueDate >= today && j.dueDate <= week);
+  const ready = wip.filter((j) => j.tab === "COMP");
+  const newJobs = wip.filter((j) => j.tab === "new");
+
+  // What every open job is waiting on, biggest pile first.
+  const waiting = useMemo(() => {
+    const m = new Map<string, Job[]>();
+    for (const j of wip) { const k = j.waitingOn || "Not tracked"; m.set(k, [...(m.get(k) || []), j]); }
+    return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
+  }, [wip]);
+  const urgent = [...late, ...dueSoon].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999")).slice(0, 12);
+
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">Plant overview and production status</p>
+        <p className="mt-1 text-sm text-gray-500">Live from the job tickets. Click anything to open it.</p>
+        {testCount > 0 && (
+          <label className="mt-2 inline-flex items-center gap-2 rounded-md bg-yellow-100 px-2 py-1 text-xs text-yellow-900">
+            <input type="checkbox" checked={withTest} onChange={(e) => setWithTest(e.target.checked)} />
+            <span><b>{testMode ? "December test mode: " : ""}</b>Counting {testCount} test job{testCount === 1 ? "" : "s"}. Untick to see real jobs only.</span>
+          </label>
+        )}
       </div>
 
-      {/* Darrin's new jobs to route (shows only when there are some) */}
       <ToRouteList />
 
-      {/* Proofing queue snapshot (shows only when items pending) */}
-      <ProofQueueWidget />
+      {alerts.length > 0 && (
+        <Card className="border-l-4 border-l-red-500">
+          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="h-5 w-5 text-red-500" />Alerts</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {alerts.map((a) => <p key={a.id} className="text-sm text-gray-700"><b className="mr-2 text-xs uppercase text-red-600">{a.severity}</b>{a.message} <span className="text-xs text-gray-400">{a.createdAt}</span></p>)}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Smart Insights */}
-      {insights.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {insights.map((insight, i) => (
-            <Card key={i} className={`border-l-4 ${insight.type === "warning" ? "border-l-amber-500 bg-amber-50/50" : insight.type === "success" ? "border-l-emerald-500 bg-emerald-50/50" : "border-l-blue-500 bg-blue-50/50"}`}>
-              <CardContent className="p-4">
-                <p className={`text-sm font-semibold ${insight.type === "warning" ? "text-amber-800" : insight.type === "success" ? "text-emerald-800" : "text-blue-800"}`}>{insight.title}</p>
-                <p className="text-xs text-gray-600 mt-1">{insight.description}</p>
-                {insight.actionHref && (
-                  <a href={insight.actionHref} className="text-xs font-medium text-brand-600 hover:underline mt-2 inline-block">{insight.action} &rarr;</a>
+      {jobs === null ? <p className="text-sm text-gray-400">Loading...</p> : (
+        <>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <Stat icon={Package} tone="bg-blue-100 text-blue-600" value={wip.length} label="In progress" hint="Every job not yet delivered" />
+            <Stat icon={Inbox} tone="bg-gray-100 text-gray-600" value={newJobs.length} label="New, not routed" hint="Waiting on a WIP status" />
+            <Stat icon={AlertTriangle} tone="bg-red-100 text-red-600" value={late.length} label="Late" hint="Past due, not shipped" />
+            <Stat icon={Calendar} tone="bg-amber-100 text-amber-600" value={dueSoon.length} label="Due in 7 days" hint="Not late yet" />
+            <Stat icon={Truck} tone="bg-teal-100 text-teal-600" value={ready.length} label="Ready to ship" hint="Packed (COMP)" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock className="h-5 w-5 text-brand-600" />Waiting on</CardTitle></CardHeader>
+              <CardContent>
+                {waiting.length === 0 ? <p className="py-6 text-center text-sm text-gray-400">No open jobs.</p> : (
+                  <ul className="divide-y divide-gray-100">
+                    {waiting.map(([k, js]) => (
+                      <li key={k} className="py-2">
+                        <div className="flex items-center justify-between text-sm"><span className="font-medium text-gray-800">{k}</span><span className="rounded-full bg-gray-100 px-2 text-xs font-semibold text-gray-700">{js.length}</span></div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {js.slice(0, 8).map((j) => <Link key={j.id} href={`/dashboard/jobs/${j.id}`} title={`${j.companyName}: ${j.name}`} className="font-mono text-xs text-brand-700 hover:underline">{j.jobNumber}</Link>)}
+                          {js.length > 8 && <Link href="/dashboard/jobs" className="text-xs text-gray-500 hover:underline">+{js.length - 8} more</Link>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </CardContent>
             </Card>
-          ))}
-        </div>
+
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Calendar className="h-5 w-5 text-amber-500" />Late and due this week</CardTitle></CardHeader>
+              <CardContent>
+                {urgent.length === 0 ? <p className="py-6 text-center text-sm text-gray-400">Nothing late or due in the next 7 days.</p> : (
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-gray-100">
+                      {urgent.map((j) => (
+                        <tr key={j.id} className="hover:bg-gray-50">
+                          <td className="py-2 pr-2"><Link href={`/dashboard/jobs/${j.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">{j.jobNumber}</Link>{j.isTest && <span className="ml-1 rounded bg-yellow-300 px-1 text-[10px] font-bold text-yellow-900">TEST</span>}</td>
+                          <td className="max-w-[180px] truncate py-2 pr-2 text-gray-700">{j.companyName}</td>
+                          <td className="py-2 pr-2 text-xs text-gray-500">{j.waitingOn}</td>
+                          <td className={`whitespace-nowrap py-2 text-right ${j.isLate ? "font-semibold text-red-600" : "text-gray-700"}`}>{day(j.dueDate)}{j.isLate && " (late)"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
       )}
-
-      {/* KPI Cards - Row 1 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPICard
-          icon={Package}
-          iconBg="bg-blue-100"
-          iconColor="text-blue-600"
-          value={kpis.openJobs}
-          label="Open Jobs"
-          delta={{ value: "+3 this week", trend: "up" }}
-        />
-        <KPICard
-          icon={Factory}
-          iconBg="bg-green-100"
-          iconColor="text-green-600"
-          value={kpis.inProduction}
-          label="In Production"
-        />
-        <KPICard
-          icon={Calendar}
-          iconBg="bg-amber-100"
-          iconColor="text-amber-600"
-          value={kpis.dueThisWeek}
-          label="Due This Week"
-        />
-        <KPICard
-          icon={AlertTriangle}
-          iconBg="bg-red-100"
-          iconColor="text-red-600"
-          value={kpis.lateJobs}
-          label="Late Jobs"
-          delta={{ value: "+1 since yesterday", trend: "down" }}
-        />
-        <KPICard
-          icon={ShieldCheck}
-          iconBg="bg-orange-100"
-          iconColor="text-orange-600"
-          value={kpis.blockedJobs}
-          label="Blocked Jobs"
-        />
-      </div>
-
-      {/* KPI Cards - Row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPICard
-          icon={FileCheck}
-          iconBg="bg-purple-100"
-          iconColor="text-purple-600"
-          value={kpis.proofsPending}
-          label="Proofs Pending"
-        />
-        <KPICard
-          icon={Warehouse}
-          iconBg="bg-red-100"
-          iconColor="text-red-600"
-          value={kpis.materialShortages}
-          label="Material Shortages"
-          delta={{ value: "2 critical", trend: "down" }}
-        />
-        <KPICard
-          icon={Truck}
-          iconBg="bg-teal-100"
-          iconColor="text-teal-600"
-          value={kpis.readyToShip}
-          label="Ready to Ship"
-        />
-        <KPICard
-          icon={Target}
-          iconBg="bg-emerald-100"
-          iconColor="text-emerald-600"
-          value={kpis.onTimeShipmentPct == null ? "—" : `${kpis.onTimeShipmentPct}%`}
-          label="On-Time Ship %"
-          delta={{ value: "+2.1% vs last month", trend: "up" }}
-        />
-        <KPICard
-          icon={Clock}
-          iconBg="bg-indigo-100"
-          iconColor="text-indigo-600"
-          value={kpis.avgCycleTimeDays == null ? "—" : `${kpis.avgCycleTimeDays}d`}
-          label="Avg Cycle Time"
-          delta={{ value: "-0.8d improvement", trend: "up" }}
-        />
-      </div>
-
-      {/* Recent Alerts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Recent Alerts
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {alerts.map((alert) => (
-              <div
-                key={alert.id}
-                className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex-shrink-0 mt-0.5">
-                  {getSeverityBadge(alert.severity)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-700">{alert.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {formatDate(alert.createdAt)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Jobs Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-brand-600" />
-            Recent Jobs
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Job #</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Name</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Customer</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Status</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Priority</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Due Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {recentJobs.map((job) => (
-                  <tr
-                    key={job.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-3 px-3">
-                      <span className="font-mono text-xs font-medium text-gray-900">
-                        {job.jobNumber}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="font-medium text-gray-900">{job.name}</span>
-                    </td>
-                    <td className="py-3 px-3 text-gray-600">{job.companyName}</td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(
-                          job.status
-                        )}`}
-                      >
-                        {getStatusLabel(job.status)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityColor(
-                          job.priority
-                        )}`}
-                      >
-                        {job.priority}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2">
-                        <span className={job.isLate ? "text-red-600 font-medium" : "text-gray-600"}>
-                          {formatDate(job.dueDate)}
-                        </span>
-                        {job.isLate && (
-                          <span className="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-                            LATE
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
