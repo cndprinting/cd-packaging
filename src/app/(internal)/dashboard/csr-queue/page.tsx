@@ -43,13 +43,14 @@ function Queue() {
   const sp = useSearchParams();
   const [rows, setRows] = useState<H[] | null>(null);
   const [canEnter, setCanEnter] = useState(false);
+  const [viewOnly, setViewOnly] = useState(false);
   const [tab, setTab] = useState("submitted");
   const [open, setOpen] = useState<string | null>(null);
   const [intake, setIntake] = useState<{ mode: "handoff" | "job"; prefill: IntakePrefill } | null>(null);
   const [reorder, setReorder] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const flash = (t: string) => { setNote(t); setTimeout(() => setNote(null), 8000); };
-  const load = () => fetch("/api/handoffs").then((r) => r.json()).then((d) => { setRows(d.handoffs || []); setCanEnter(!!d.canEnter); }).catch(() => setRows([]));
+  const load = () => fetch("/api/handoffs").then((r) => r.json()).then((d) => { setRows(d.handoffs || []); setCanEnter(!!d.canEnter); setViewOnly(!!d.viewOnly); }).catch(() => setRows([]));
   useEffect(() => {
     load();
     // Opened from a won lead in the Sales Pipeline: start the handoff pre-filled.
@@ -71,12 +72,12 @@ function Queue() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900"><Inbox className="h-6 w-6 text-brand-600" />CSR Job Queue</h1>
-          <p className="text-sm text-gray-500">{canEnter ? "Won jobs and estimates waiting to become job tickets." : "The won jobs you sent to Customer Service, and anything sent back to you."}</p>
+          <p className="text-sm text-gray-500">{canEnter || viewOnly ? "Won jobs and estimates waiting to become job tickets." : "The won jobs you sent to Customer Service, and anything sent back to you."}</p>
         </div>
         <div className="flex gap-2">
           {canEnter && <Button variant="outline" onClick={() => setReorder(true)} className="gap-2"><Copy className="h-4 w-4" />Reorder a past job</Button>}
           {canEnter && <Button onClick={() => setIntake({ mode: "job", prefill: {} })} className="gap-2"><Upload className="h-4 w-4" />Upload an estimate</Button>}
-          {!canEnter && <Button onClick={() => setIntake({ mode: "handoff", prefill: {} })} className="gap-2"><Send className="h-4 w-4" />Send a won job</Button>}
+          {!canEnter && !viewOnly && <Button onClick={() => setIntake({ mode: "handoff", prefill: {} })} className="gap-2"><Send className="h-4 w-4" />Send a won job</Button>}
         </div>
       </div>
       {note && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}

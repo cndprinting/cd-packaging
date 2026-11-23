@@ -12,7 +12,7 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   "/dashboard/quotes":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
   // FlexPack — owners drive it, Mary can use it (Benjy 8/20)
   "/dashboard/flexpack":  [...FULL_ACCESS, "ESTIMATOR"],
-  "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS"],
+  "/dashboard/jobs":      [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "DIGITAL_PRESS", "PREPRESS_MANAGER"],
   "/dashboard/job-board":  [...FULL_ACCESS, "CSR"],
   "/dashboard/orders":    [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
   "/dashboard/schedule":  [...FULL_ACCESS, "CSR", "DIGITAL_PRESS", "FINISHING_MANAGER"],
@@ -20,13 +20,13 @@ export const PAGE_ACCESS: Record<string, AppRole[]> = {
   // Dieline module (Sep 2026): reps size boxes on a call, Mary needs the flat size, prepress reviews
   "/dashboard/dielines":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "PREPRESS_MANAGER", "FINISHING_MANAGER"],
   "/dashboard/production": [...FULL_ACCESS, "CSR", "DIGITAL_PRESS", "FINISHING_MANAGER"],
-  "/dashboard/prototypes": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "FINISHING_MANAGER"],
-  "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS"],
-  "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER"],
+  "/dashboard/prototypes": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "ESTIMATOR", "FINISHING_MANAGER", "PREPRESS_MANAGER"],
+  "/dashboard/shipping":  [...FULL_ACCESS, "CSR", "SHIPPING", "DIGITAL_PRESS", "PREPRESS_MANAGER"],
+  "/dashboard/customers": [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "PREPRESS_MANAGER"],
   "/dashboard/vendors":   [...FULL_ACCESS, "CSR"],
   "/dashboard/reports":   [...FULL_ACCESS],
   "/dashboard/plant-floor": [...FULL_ACCESS, "CSR", "OPERATOR", "FINISHING_MANAGER"],
-  "/dashboard/settings":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "SHIPPING", "OPERATOR", "FINISHING_MANAGER"],
+  "/dashboard/settings":  [...FULL_ACCESS, "CSR", "SALES_REP", "SALES_MANAGER", "SHIPPING", "OPERATOR", "FINISHING_MANAGER", "PREPRESS_MANAGER"],
   "/dashboard/admin":     ["OWNER", "GM", "ADMIN"],
 };
 

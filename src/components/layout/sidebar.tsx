@@ -134,21 +134,6 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
       return allowed.map((h) => internalNav.find((i) => i.href === h)).filter(Boolean) as typeof internalNav;
     }
 
-    // Pre-Press Manager (Michael Metroka) — pre-press scope only.
-    // Sees Pre-Press, Proofing, Production (visibility), Plant Floor (visibility),
-    // Shipping (visibility). No quotes, no admin, no estimating, no settings.
-    if (role === "PREPRESS_MANAGER") {
-      const allowed = [
-        "/dashboard/prepress",
-        "/dashboard/proofing",
-        "/dashboard/production",
-        "/dashboard/plant-floor",
-        "/dashboard/shipping",
-        "/dashboard/security", // 2FA setup
-      ];
-      return internalNav.filter(item => allowed.includes(item.href));
-    }
-
     // Digital Press (Randy Schulz) — quoting + job tickets + the pre-press/
     // production floor he runs. No financials, customers, vendors, or admin.
     if (role === "DIGITAL_PRESS") {
@@ -169,7 +154,8 @@ export function Sidebar({ isCustomer = false, userRole, pipelineAccess = false, 
     }
 
     // CSRs and Sales Reps — limited view, no estimating data
-    if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER") {
+    // Pre-press (Mike Metroka) sees everything the CSRs see (Benjy 11/23/26).
+    if (role === "CSR" || role === "SALES_REP" || role === "SALES_MANAGER" || role === "PREPRESS_MANAGER") {
       return [
         { label: "Quote Requests", href: "/dashboard/quote-requests", icon: FileCheck },
         { label: "My Quotes", href: "/dashboard/my-quotes", icon: Calculator },

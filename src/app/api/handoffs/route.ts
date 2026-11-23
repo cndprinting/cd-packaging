@@ -14,14 +14,16 @@ import { isTester } from "@/lib/test-mode";
 
 const SUBMIT_ROLES = ["SALES_REP", "SALES_MANAGER", "OWNER", "ADMIN", "GM", "CSR"];
 const ENTER_ROLES = ["CSR", "OWNER", "ADMIN", "GM", "PRODUCTION_MANAGER", "SENIOR_PLANT_MANAGER"];
+// Mike (pre-press) sees the CSR queue too, read-only (Benjy 11/23/26).
+const VIEW_ROLES = ["PREPRESS_MANAGER"];
 const ARTWORK = ["ready", "coming", "design", "reprint"];
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
-  if (!session || !(SUBMIT_ROLES.includes(session.role) || ENTER_ROLES.includes(session.role))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || !(SUBMIT_ROLES.includes(session.role) || ENTER_ROLES.includes(session.role) || VIEW_ROLES.includes(session.role))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ handoffs: [] });
-  const csr = ENTER_ROLES.includes(session.role);
+  const csr = ENTER_ROLES.includes(session.role) || VIEW_ROLES.includes(session.role);
   if (request.nextUrl.searchParams.get("count") === "1") {
     const n = await (prisma as any).jobHandoff.count({ where: csr ? { status: { in: ["submitted", "gathering"] } } : { submittedById: session.id, status: "returned" } });
     return NextResponse.json({ count: n });
@@ -31,7 +33,7 @@ export async function GET(request: NextRequest) {
     where: csr ? { OR: [{ status: { in: ["submitted", "gathering"] } }, { updatedAt: { gte: since } }] } : { submittedById: session.id },
     orderBy: { createdAt: "desc" }, take: 100,
   });
-  return NextResponse.json({ handoffs, canEnter: csr });
+  return NextResponse.json({ handoffs, canEnter: ENTER_ROLES.includes(session.role), viewOnly: VIEW_ROLES.includes(session.role) });
 }
 
 export async function POST(request: NextRequest) {
