@@ -60,6 +60,16 @@ export async function GET() {
     // Latest proof per live job, for the "Waiting on" column (Benjy 11/18).
     const latestProofs = liveIds.length ? await prisma.proof.findMany({ where: { jobId: { in: liveIds } }, orderBy: { version: "desc" }, select: { jobId: true, status: true, sentToCustomerAt: true, kind: true } }) : [];
     const proofOf = (id: string, kind: string) => (latestProofs as any[]).find((p) => p.jobId === id && (p.kind || "pdf") === kind) || null;
+    // Status board (Mike 11/23/26): paper / die purchase lines and each job's last activity.
+    const flags: any[] = liveIds.length ? await prisma.purchaseFlag.findMany({ where: { jobId: { in: liveIds }, category: { in: ["paper", "cutting_die"] } }, select: { jobId: true, category: true, status: true } }) : [];
+    const orderIds = jobs.filter((j) => j.createdAt >= JOBS_LIVE_SINCE).map((j) => j.orderId);
+    const acts: any[] = orderIds.length ? await (prisma as any).activityLog.groupBy({ by: ["orderId"], where: { orderId: { in: orderIds } }, _max: { createdAt: true } }).catch(() => []) : [];
+    const lastAct = new Map(acts.map((a: any) => [a.orderId, a._max?.createdAt || null]));
+    const flagStep = (jobId: string, cat: string) => {
+      const mine = flags.filter((f) => f.jobId === jobId && f.category === cat).map((f) => String(f.status || "").toLowerCase());
+      if (!mine.length) return "d";
+      return mine.every((s) => s === "received") ? "y" : mine.some((s) => s === "ordered" || s === "received") ? "w" : "n";
+    };
 
     const formatted = jobs.map((j: any) => {
       let press: { cleared: boolean; waitingOn: string[] } | null = null;
@@ -80,7 +90,28 @@ export async function GET() {
           : terms === "deposit50" ? (paid ? { label: mine.length && bal > 0.01 ? "Deposit paid, balance due" : "Deposit paid", tone: "ok" } : { label: "Deposit due", tone: "warn" })
           : { label: mine.length ? `Net 30, $${Math.round(bal).toLocaleString()} open` : "Net 30", tone: "neutral" };
       }
+      // y = done, w = in progress, n = not yet, d = not needed
+      let board: Record<string, string | null> | null = null;
+      if (j.createdAt >= JOBS_LIVE_SINCE) {
+        const pdf = proofOf(j.id, "pdf"), hard = proofOf(j.id, "hard");
+        const hm = j.hardProof || j.order?.company?.hardProofDefault || null;
+        const shipped = DONE.includes(j.status);
+        const dieOnHand = j.dieNumber && !/new/i.test(String(j.dieNumber));
+        board = {
+          art: j.artInAt || j.artworkStatus === "ready" || j.artworkStatus === "reprint" ? "y" : "n",
+          preflight: j.preflightAt ? "y" : "n",
+          pdf: !pdf ? "n" : pdf.status === "APPROVED" ? "y" : "w",
+          hard: hm === "none" ? "d" : !hard ? "n" : hard.status === "APPROVED" ? "y" : "w",
+          paper: j.paperSource === "on_hand" && flagStep(j.id, "paper") !== "y" ? "y" : flagStep(j.id, "paper"),
+          die: j.productType === "COMMERCIAL_PRINT" && flagStep(j.id, "cutting_die") === "d" ? "d" : dieOnHand ? "y" : flagStep(j.id, "cutting_die"),
+          deposit: !press ? null : !["deposit50", "prepaid"].includes(j.paymentTerms || DEFAULT_TERMS) ? "d" : press.waitingOn.some((w) => w === "deposit" || w === "payment") ? "n" : "y",
+          press: (ROUTE_PRESSES.find(([k]) => k === j.pressAssignment)?.[1] || j.pressAssignment || "").replace(/ \(\d+\)$/, "") || null,
+          shipped: shipped ? "y" : j.status === "PACKED" ? "w" : "n",
+          last: lastAct.get(j.orderId) ? new Date(lastAct.get(j.orderId)).toISOString() : null,
+        };
+      }
       return {
+        board,
         id: j.id, jobNumber: j.jobNumber, orderId: j.orderId, orderNumber: j.order.orderNumber, name: j.name, description: j.description,
         companyId: j.order.companyId, companyName: j.order.company.name, status: j.status, priority: j.priority, quantity: j.quantity,
         dueDate: j.dueDate?.toISOString().split("T")[0] || "", csrName: j.csr?.name ?? "", salesRepName: j.salesRep?.name || j.repName || "",

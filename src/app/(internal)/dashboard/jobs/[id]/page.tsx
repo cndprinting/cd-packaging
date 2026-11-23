@@ -1507,26 +1507,26 @@ export default function JobDetailPage() {
                       <td className="py-2.5 pr-3 text-gray-700">{p.estCost ? `$${Number(p.estCost).toFixed(2)}` : "--"}</td>
                       <td className="py-2.5 pr-3">
                         <Badge className={
-                          p.status === "RECEIVED" ? "bg-green-100 text-green-700" :
-                          p.status === "ORDERED" ? "bg-amber-100 text-amber-700" :
+                          String(p.status).toLowerCase() === "received" ? "bg-green-100 text-green-700" :
+                          String(p.status).toLowerCase() === "ordered" ? "bg-amber-100 text-amber-700" :
                           "bg-red-100 text-red-700"
                         }>
-                          {p.status === "RECEIVED" ? "Received" : p.status === "ORDERED" ? "Ordered" : "Needed"}
+                          {String(p.status).toLowerCase() === "received" ? "Received" : String(p.status).toLowerCase() === "ordered" ? "Ordered" : "Needed"}
                         </Badge>
                       </td>
                       <td className="py-2.5">
                         <div className="flex gap-1">
-                          {p.status === "NEEDED" && (
-                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => handleUpdatePurchaseStatus(p.id, "ORDERED")}>
+                          {String(p.status).toLowerCase() === "needed" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => handleUpdatePurchaseStatus(p.id, "ordered")}>
                               Mark Ordered
                             </Button>
                           )}
-                          {p.status === "ORDERED" && (
-                            <Button size="sm" variant="outline" className="text-xs h-7 px-2 text-green-700" onClick={() => handleUpdatePurchaseStatus(p.id, "RECEIVED")}>
+                          {String(p.status).toLowerCase() === "ordered" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2 text-green-700" onClick={() => handleUpdatePurchaseStatus(p.id, "received")}>
                               Mark Received
                             </Button>
                           )}
-                          {p.status === "RECEIVED" && (
+                          {String(p.status).toLowerCase() === "received" && (
                             <span className="text-xs text-gray-400 py-1">Complete</span>
                           )}
                         </div>

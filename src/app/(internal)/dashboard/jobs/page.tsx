@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Search, Plus, Loader2, ArrowUpDown, Copy } from "lucide-react";
 import { ReorderDialog } from "@/components/jobs/reorder-dialog";
+import { StatusBoard } from "@/components/jobs/status-board";
 import { JobIntake, type IntakePrefill } from "@/components/jobs/job-intake";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -20,7 +21,7 @@ import { getStatusColor, getStatusLabel } from "@/lib/utils";
 interface Job {
   id: string; jobNumber: string; name: string; companyName: string; status: string; priority: string; quantity: number;
   dueDate: string; isLate: boolean; productType?: string; csrName: string; salesRepName: string;
-  routeStatus: string | null; pressAssignment?: string | null; isTest?: boolean; pay?: { label: string; tone: string } | null; routed: boolean; test: boolean; tab: string; waitingOn: string;
+  routeStatus: string | null; pressAssignment?: string | null; isTest?: boolean; pay?: { label: string; tone: string } | null; board?: any; routed: boolean; test: boolean; tab: string; waitingOn: string;
 }
 
 const TABS: { key: string; label: string; hint: string }[] = [
@@ -71,6 +72,10 @@ export default function JobsPage() {
   const [wip, setWip] = useState<{ statuses: [string, string][]; presses: [string, string][]; canPress: boolean } | null>(null);
   const [wipErr, setWipErr] = useState<string | null>(null);
   const [testMode, setTestMode] = useState(false);
+  // List or Status board (Mike 11/23/26), remembered per person on this computer.
+  const [view, setView] = useState<"list" | "board">("list");
+  useEffect(() => { try { if (localStorage.getItem("gz-jobs-view") === "board") setView("board"); } catch {} }, []);
+  const pickView = (v: "list" | "board") => { setView(v); try { localStorage.setItem("gz-jobs-view", v); } catch {} };
   const reloadJobs = () => fetch("/api/jobs").then((r) => r.json()).then((d) => { setJobs(d.jobs || []); setWip(d.wip || null); setTestMode(!!d.testMode); }).catch(() => setJobs([]));
   // Darrin's WIP screen: change Status / Press right in the row (11/20).
   const setRoute = async (j: Job, field: "routeStatus" | "pressAssignment", value: string) => {
@@ -181,9 +186,14 @@ export default function JobsPage() {
       )}
 
       {wipErr && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{wipErr}</div>}
+      {/* List or Status board */}
+      <div className="flex items-center gap-1 text-sm" role="group" aria-label="View">
+        <span className="mr-1 text-gray-500">View</span>
+        {([["list", "List"], ["board", "Status board"]] as const).map(([k, l]) => <button key={k} type="button" aria-pressed={view === k} onClick={() => pickView(k)} className={`rounded-md border px-3 py-1 ${view === k ? "border-brand-600 bg-brand-50 font-medium text-brand-700" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>{l}</button>)}
+      </div>
       {/* The table */}
       <Card className="overflow-x-auto p-0">
-        {jobs === null ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> : (
+        {jobs === null ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> : view === "board" ? <StatusBoard rows={rows as any} /> : (
           <table className="w-full text-sm">
             <thead className="border-b border-gray-100 bg-gray-50/60"><tr>
               <Th k="job">Job #</Th><Th k="customer">Customer</Th><Th>Job</Th><Th k="qty" className="text-right">Qty</Th><Th k="due">Due</Th><Th>Status</Th>{wip && <Th>Press</Th>}<Th>Waiting on</Th><Th>Payment</Th><Th>CSR</Th><Th>Rep</Th>
