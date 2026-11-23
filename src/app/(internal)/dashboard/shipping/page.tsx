@@ -201,7 +201,6 @@ export default function ShippingPage() {
               </tr></thead>
               <tbody>
                 {shown.map((s) => {
-                  const url = trackingUrl(s.carrier, s.trackingNumber);
                   const late = s.status === "PREPARING" && s.targetShipDate && d10(s.targetShipDate) < today();
                   return (
                     <Fragment key={s.id}>
@@ -217,7 +216,7 @@ export default function ShippingPage() {
                         <td className={`px-2 py-2 text-xs ${late ? "font-semibold text-red-600" : ""}`}>{fmt(s.targetShipDate) || "-"}{late && <AlertTriangle className="ml-1 inline h-3 w-3" />}</td>
                         <td className="px-2 py-2 text-xs" onClick={(e) => e.stopPropagation()}>
                           <div>{s.carrier || "-"}</div>
-                          {s.trackingNumber && (url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-blue-600 hover:underline">{s.trackingNumber}<ExternalLink className="h-3 w-3" /></a> : <span className="font-mono">{s.trackingNumber}</span>)}
+                          {s.trackingNumber && <Tracking carrier={s.carrier} value={s.trackingNumber} />}
                         </td>
                         <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           <select value={s.status} onChange={(e) => put(s, { status: e.target.value }, `${s.shipmentNumber} is now ${STATUS[e.target.value]?.label || e.target.value}`)} className={`rounded-md border-0 px-2 py-1 text-xs font-medium ${STATUS[s.status]?.cls || ""}`}>
@@ -481,6 +480,21 @@ function CocForm({ s, onClose, onError }: { s: Shipment; onClose: () => void; on
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Several boxes = several tracking numbers (Benjy 11/23/26): show the first and "+5 more"
+ *  instead of one long line that stretches the table; each number links to the carrier. */
+function Tracking({ carrier, value }: { carrier: string | null; value: string }) {
+  const [open, setOpen] = useState(false);
+  const nums = value.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+  const one = (n: string) => { const u = trackingUrl(carrier, n); return u ? <a key={n} href={u} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-blue-600 hover:underline">{n}<ExternalLink className="h-3 w-3" /></a> : <span key={n} className="font-mono">{n}</span>; };
+  if (nums.length <= 1) return one(nums[0] || value);
+  return (
+    <div className="space-y-0.5">
+      {(open ? nums : nums.slice(0, 1)).map((n) => <div key={n}>{one(n)}</div>)}
+      <button type="button" onClick={() => setOpen(!open)} className="text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:underline">{open ? "Show less" : `+${nums.length - 1} more (${nums.length} boxes)`}</button>
     </div>
   );
 }
