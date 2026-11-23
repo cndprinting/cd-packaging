@@ -29,7 +29,10 @@ export type NotifyKind = "shipdate" | "tracking";
 export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; email: string }, note?: string) {
   const first = String(s.contactName || "").trim().split(/\s+/)[0];
   const ref = [s.poNumber ? `PO ${s.poNumber}` : null, s.jobNumber ? `job ${s.jobNumber}` : null].filter(Boolean).join(", ");
-  const url = trackingUrl(s.carrier, s.trackingNumber);
+  // Several boxes = several tracking numbers (11/23/26): one link per box, never one link for all.
+  const nums = String(s.trackingNumber || "").split(/[\s,;]+/).map((x: string) => x.trim()).filter(Boolean);
+  const url = nums.length ? trackingUrl(s.carrier, nums[0]) : null;
+  const trackCell = nums.map((n: string) => { const u = trackingUrl(s.carrier, n); return u ? `<a href="${u}">${esc(n)}</a>` : esc(n); }).join("<br>");
   const noun = NOUN[s.kind || "job"] || "order", are = noun === "samples" ? "are" : "is", have = noun === "samples" ? "have" : "has";
   const Noun = noun[0].toUpperCase() + noun.slice(1);
   const items = (s.items || []).map((i: any) => `<li>${esc(i.quantity)} x ${esc(i.description)}</li>`).join("");
@@ -41,7 +44,7 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
   } else {
     row("Shipped", esc(day(s.shipDate || new Date(), "America/New_York")));
     row("Carrier", esc(s.carrier));
-    row("Tracking", url ? `<a href="${url}">${esc(s.trackingNumber)}</a>` : esc(s.trackingNumber));
+    row(nums.length > 1 ? `Tracking (${nums.length} boxes)` : "Tracking", trackCell);
     row("Expected delivery", esc(day(s.estimatedDelivery)));
   }
   row("Cartons", s.cartons ? esc(s.cartons) : null);
@@ -53,14 +56,14 @@ export function shipmentEmail(s: any, kind: NotifyKind, sender: { name: string; 
     : `Your ${noun}${ref ? ` (${esc(ref)})` : ""} ${have} shipped${s.isPartial ? " (this is a partial shipment, the rest will follow)" : ""}.`;
   const subject = kind === "shipdate"
     ? `Your ${noun} ship${noun === "samples" ? "" : "s"} ${new Date(s.targetShipDate).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}${ref ? ` (${ref})` : ""} | C&D Printing`
-    : `${Noun} shipped${s.trackingNumber ? `: tracking ${s.trackingNumber}` : ""}${ref ? ` (${ref})` : ""} | C&D Printing`;
+    : `${Noun} shipped${nums.length ? `: tracking ${nums[0]}${nums.length > 1 ? ` + ${nums.length - 1} more` : ""}` : ""}${ref ? ` (${ref})` : ""} | C&D Printing`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a;max-width:600px;">
 <p>Hi${first ? ` ${esc(first)}` : ""},</p>
 <p>${lead}</p>
 ${note ? `<p>${esc(note).replace(/\n/g, "<br>")}</p>` : ""}
 <table style="border-collapse:collapse;margin:12px 0;">${rows.join("")}</table>
 ${items ? `<p style="margin-bottom:4px;">In this shipment:</p><ul style="margin-top:0;">${items}</ul>` : ""}
-${url && kind === "tracking" ? `<p><a href="${url}" style="display:inline-block;background:#ED1C24;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;">Track your shipment</a></p>` : ""}
+${url && kind === "tracking" ? `<p><a href="${url}" style="display:inline-block;background:#ED1C24;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;">${nums.length > 1 ? "Track box 1" : "Track your shipment"}</a></p>${nums.length > 1 ? `<p style="font-size:13px;color:#555;">Each box has its own tracking number, listed above.</p>` : ""}` : ""}
 <p>Any questions, just reply to this email.</p>
 <p>Thanks,<br>${esc(sender.name)}<br>C&amp;D Printing &amp; Packaging<br>(727) 572-9999</p>
 </div>`;
