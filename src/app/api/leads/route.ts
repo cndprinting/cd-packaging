@@ -65,8 +65,11 @@ export async function GET(request: NextRequest) {
   // Presentation layer computed SERVER-SIDE (Benjy 8/2) so the UI never has to
   // re-derive it and every screen agrees. See src/lib/lead-view.ts.
   const now = new Date();
+  // ASI accounts (Benjy 11/24/26): badge on the linked customer.
+  const asiIds = new Set((await prisma.company.findMany({ where: { asiAccount: true }, select: { id: true } })).map((c: any) => c.id));
   const leads = rows.map((l) => ({
     ...l,
+    asi: !!l.companyId && asiIds.has(l.companyId),
     notes: undefined,
     intakeRaw: undefined, // used above for type derivation; never sent to the client
     lastNote: l.notes?.[0]

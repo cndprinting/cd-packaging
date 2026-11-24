@@ -11,6 +11,7 @@ import { AttachmentPanel } from "@/components/attachments/attachment-panel";
 import { CustomerTerms } from "@/components/customers/customer-terms";
 import { CustomerArchive } from "@/components/customers/customer-archive";
 import { CocSwitch } from "@/components/customers/coc-switch";
+import { AsiSwitch } from "@/components/customers/asi-switch";
 import { canSeeEstimating } from "@/lib/estimating-lab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export default function CustomerDetailPage() {
     <div className="space-y-6">
       <CustomerArchive companyId={String(params.id)} />
       <CocSwitch companyId={String(params.id)} />
+      <AsiSwitch companyId={String(params.id)} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

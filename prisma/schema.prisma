@@ -191,6 +191,7 @@ model Company {
   // Mike 11/19/26: some customers always get a hard proof, some never. customer | internal | none
   hardProofDefault String?
   cocRequired      Boolean  @default(false) // ships with a Certificate of Conformance (Shayla 11/19)
+  asiAccount       Boolean  @default(false) // ASI (promotional products) account: Denise quotes and handles it (Benjy 11/24/26)
   customerNumber   String?  // FileMaker "Customer #" on the job ticket
   isTest           Boolean  @default(false) // set up by a tester during December test mode
 }

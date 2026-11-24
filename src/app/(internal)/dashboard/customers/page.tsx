@@ -86,7 +86,7 @@ export default function CustomersPage() {
           <TableBody>
             {filtered.map((c) => (
               <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.location.href = `/dashboard/customers/${c.id}`}>
-                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p>{showArchived && <span className="text-xs text-gray-500">Archived{c.archivedReason ? `: ${c.archivedReason}` : ""}</span>}</div></TableCell>
+                <TableCell><div className="flex items-center gap-3"><div className="rounded-lg bg-gray-100 p-2"><Building2 className="h-4 w-4 text-gray-600" /></div><p className="font-medium text-brand-600 hover:underline">{c.name}</p>{c.asiAccount && <span className="rounded bg-violet-100 px-1.5 text-[10px] font-semibold text-violet-800" title="ASI account: Denise handles it">ASI</span>}{showArchived && <span className="text-xs text-gray-500">Archived{c.archivedReason ? `: ${c.archivedReason}` : ""}</span>}</div></TableCell>
                 <TableCell className="text-sm text-gray-600">{c.phone || "—"}</TableCell>
                 <TableCell><Badge className="bg-gray-100 text-gray-600">{c.industry || "—"}</Badge></TableCell>
                 <TableCell className="text-right"><span className={`font-medium ${c.activeJobs > 0 ? "text-green-700" : "text-gray-400"}`}>{c.activeJobs}</span></TableCell>

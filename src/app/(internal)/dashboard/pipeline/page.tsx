@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { US_STATES, REGIONS, TYPE_LABELS, ownerFirstName, type LeadMode, type LeadType, type LeadOrigin, type Region } from "@/lib/lead-view";
 
 type Lead = {
-  id: string; companyName: string; endMarket: string | null; productCategory: string | null;
+  id: string; companyName: string; endMarket: string | null; productCategory: string | null; asi?: boolean;
   website: string | null; city: string | null; state: string | null; contactName: string | null; contactEmail: string | null; contactName2: string | null; contactEmail2: string | null; contactPhone: string | null;
   contacts?: LeadContact[];
   tier?: number | null;
@@ -782,6 +782,7 @@ The lead stays open in the pipeline — you're just telling Godzilla a human has
                       <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expanded === l.id ? "rotate-90" : ""}`} />
                       <span>
                         <span className="font-medium text-gray-900 group-hover:text-brand-700">{l.companyName}</span>
+                        {l.asi && <span className="ml-1.5 rounded bg-violet-100 px-1 text-[10px] font-semibold text-violet-800" title="ASI account: Denise handles it">ASI</span>}
                         {l.tier && <span className={`ml-1.5 rounded px-1 text-[10px] font-semibold ${l.tier === 1 ? "bg-emerald-100 text-emerald-800" : l.tier === 2 ? "bg-sky-100 text-sky-800" : "bg-gray-100 text-gray-600"}`} title="Account tier">T{l.tier}</span>}
                         {/inc\s*5/i.test(l.tags || "") && <span className="ml-1.5 rounded bg-indigo-100 px-1 text-[10px] font-semibold text-indigo-800" title="Inc. 5000 honoree">Inc 5000</span>}
                         {isNewLead(l) && <span className="ml-1.5 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={`Added ${fmtDay(l.createdAt!)}. New for 7 days: get a number on it.`}>New</span>}
