@@ -288,7 +288,7 @@ const isNewLead = (l: { createdAt?: string }) => !!l.createdAt && Date.now() - n
 const PRODUCTS = ["Folding Carton", "Commercial Print", "Flexible Packaging", "Pouches", "Sachets", "Stick Packs", "Labels", "Packaging", "Mailers", "MailerCity"];
 // "House" = house account (Benjy 9/22): no mailbox of its own, Benjy and Nitay
 // share it and both get its follow-up reminders.
-const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Jessica", "House", "TBD"];
+const OWNERS = ["Benjy", "Albert", "Nitay", "Lee", "Shimmie", "Kelsey", "Suzanne", "Denise", "Jessica", "House", "TBD"]; // Denise = ASI accounts (Benjy 11/24/26)
 // Industry filter (Benjy 9/17): search by Skincare / Nutra / Co-Manufacturer...
 // Matches the free-text End market so older rows classify too; a lead can be
 // in more than one (a nutra CDMO is Nutra AND Co-Manufacturer).
