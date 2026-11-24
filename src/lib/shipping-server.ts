@@ -45,7 +45,7 @@ export async function syncFreight(prisma: any, shipmentId: string, byName: strin
     if (!editable(inv)) return false;
     const shipping = r2(Math.max(0, (inv.shipping || 0) + delta));
     const total = r2(inv.subtotal + inv.taxAmount + shipping);
-    await prisma.invoice.update({ where: { id: invId }, data: { shipping, total, depositAmount: r2(total * (inv.depositPercent || 0) / 100), notes: `${inv.notes ? inv.notes + "\n" : ""}Freight ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} from shipment ${s.shipmentNumber} (${byName})`.slice(-4000) } });
+    await prisma.invoice.update({ where: { id: invId }, data: { shipping, total, depositAmount: (await import("@/lib/invoice-lines")).depositFor(inv, total), notes: `${inv.notes ? inv.notes + "\n" : ""}Freight ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} from shipment ${s.shipmentNumber} (${byName})`.slice(-4000) } });
     try { const { applyPayments } = await import("@/lib/ar"); await applyPayments(prisma, invId); } catch { /* totals saved either way */ }
     return true;
   };

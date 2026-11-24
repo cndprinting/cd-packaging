@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Loader2, X, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DepositInput, LinesEditor, draftSubtotal, draftsOut, emptyLine, type LineDraft } from "@/components/invoices/lines-editor";
 
 type Job = { id: string; jobNumber: string; name: string | null; quotedPrice: number | null; status: string; rep: string | null };
 type Cust = { id: string; name: string; where: string; email: string | null; contact: string | null; jobs: Job[] };
@@ -32,8 +33,8 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   const [newName, setNewName] = useState("");
   const [jobId, setJobId] = useState("");
   const [kind, setKind] = useState("final");
-  const [description, setDescription] = useState("");
-  const [subtotal, setSubtotal] = useState("");
+  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]); // quantity + description + amount (Denise 11/24)
+  const [depMode, setDepMode] = useState<"pct" | "flat">("pct");
   const [taxExempt, setTaxExempt] = useState(false);
   const [depositPercent, setDepositPercent] = useState("50");
   const [dueDate, setDueDate] = useState("");
@@ -54,11 +55,11 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   // The customer's payment terms set the deposit (Benjy 11/18): net 30 / COD = none.
   const TERM_DEPOSIT: Record<string, string> = { deposit50: "50", prepaid: "100", net30: "0", cod: "0" };
   const TERM_LABEL: Record<string, string> = { deposit50: "50% down", prepaid: "Prepaid", net30: "Net 30", cod: "COD" };
-  const pick = (c: Cust) => { setCust(c); setEmail(c.email || ""); setJobId(""); const t = (c as any).terms; if (t && TERM_DEPOSIT[t] !== undefined) setDepositPercent(TERM_DEPOSIT[t]); };
+  const pick = (c: Cust) => { setCust(c); setEmail(c.email || ""); setJobId(""); const t = (c as any).terms; if (t && TERM_DEPOSIT[t] !== undefined) { setDepMode("pct"); setDepositPercent(TERM_DEPOSIT[t]); } };
   const pickJob = (id: string) => {
     setJobId(id);
     const j = cust?.jobs.find((x) => x.id === id);
-    if (j) { if (j.quotedPrice && !subtotal) setSubtotal(String(j.quotedPrice)); if (!description) setDescription(`Job ${j.jobNumber}${j.name ? ` · ${j.name}` : ""}`); const rep = reps.find((r) => r.name === j.rep); if (rep) setRepId(rep.id); }
+    if (j) { if (!lines[0].description && !lines[0].amount) setLines([{ qty: "", description: `Job ${j.jobNumber}${j.name ? ` · ${j.name}` : ""}`, amount: j.quotedPrice ? String(j.quotedPrice) : "" }, ...lines.slice(1)]); const rep = reps.find((r) => r.name === j.rep); if (rep) setRepId(rep.id); }
   };
   const createCustomer = async () => {
     if (!newName.trim()) return;
@@ -74,11 +75,12 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
   };
   const submit = async () => {
     if (!cust) { setErr("Pick a customer first"); return; }
-    const sub = Number(subtotal);
-    if (!(sub > 0)) { setErr("Amount is required"); return; }
+    const sub = draftSubtotal(lines);
+    if (!(sub > 0)) { setErr("Add at least one line with an amount"); return; }
+    if (!lines.some((l) => l.description.trim())) { setErr("Add a description"); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", poNumber: poNumber || null, department: department || null, invoiceNumber: invoiceNumber || null, companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, description, subtotal: sub, taxExempt, depositPercent: Number(depositPercent) || 0, dueDate: dueDate || null, shipping: Number(shipping) || 0, salesRepId: repId || null, commissionAmount: repId ? Number(commission) || 0 : undefined }) });
+      const r = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_invoice", via: "invoices", poNumber: poNumber || null, department: department || null, invoiceNumber: invoiceNumber || null, companyId: cust.id, customerName: cust.name, contactEmail: email || null, jobId: jobId || null, kind, lines: draftsOut(lines), subtotal: sub, taxExempt, ...(depMode === "flat" && kind !== "deposit" ? { depositFlat: Number(String(depositPercent).replace(/[$,]/g, "")) || 0 } : { depositPercent: Number(depositPercent) || 0 }), dueDate: dueDate || null, shipping: Number(shipping) || 0, salesRepId: repId || null, commissionAmount: repId ? Number(commission) || 0 : undefined }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "Could not create the invoice"); return; }
       onCreated(d.invoice);
@@ -86,7 +88,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
     finally { setBusy(false); }
   };
   // Florida: 6% on everything + 1% Pinellas surtax on the first $5,000 only.
-  const sub = Number(subtotal) || 0, tax = taxExempt ? 0 : Math.round((sub * 6 + Math.min(sub, 5000) * 1)) / 100, ship = Number(shipping) || 0, total = Math.round((sub + tax + ship) * 100) / 100;
+  const sub = draftSubtotal(lines), tax = taxExempt ? 0 : Math.round((sub * 6 + Math.min(sub, 5000) * 1)) / 100, ship = Number(shipping) || 0, total = Math.round((sub + tax + ship) * 100) / 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
@@ -125,6 +127,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <div><span className="font-medium text-gray-900">{cust.name}</span>{cust.where && <span className="text-gray-400"> · {cust.where}</span>}<div className="text-xs text-gray-500">Linked to the customer record. <a href={`/dashboard/customers/${cust.id}`} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">Open customer</a></div></div>
               <button type="button" onClick={() => setCust(null)} className="text-xs text-brand-600 hover:underline">Change</button>
             </div>
+            <div className="rounded-md border border-gray-200 p-3"><LinesEditor lines={lines} onChange={setLines} /></div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               {!standalone && <label className="col-span-2 block"><span className="text-gray-600">Job (optional, prefills the amount and the rep's commission)</span>
                 <select value={jobId} onChange={(e) => pickJob(e.target.value)} className={inputCls}>
@@ -132,17 +135,15 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
                   {cust.jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber} · {j.name || "untitled"}{j.quotedPrice ? ` · $${j.quotedPrice.toLocaleString()}` : ""}{j.rep ? ` · ${j.rep}` : ""} ({j.status.toLowerCase().replace(/_/g, " ")})</option>)}
                 </select></label>}
               <label className="block"><span className="text-gray-600">Type</span>
-                <select value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === "deposit") setDepositPercent("100"); }} className={inputCls}>
+                <select value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === "deposit") { setDepMode("pct"); setDepositPercent("100"); } }} className={inputCls}>
                   <option value="final">Final invoice</option><option value="prebill">Prebill (job not complete)</option><option value="deposit">Deposit request</option>
                 </select></label>
               <label className="block"><span className="text-gray-600">Send to (billing email)</span><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ap@customer.com" /></label>
               <label className="block"><span className="text-gray-600">Invoice #</span><Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Next in sequence" autoComplete="off" /><span className="text-[11px] text-gray-400">Leave blank for the next number.</span></label>
               <label className="block"><span className="text-gray-600">Customer PO #</span><Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} autoComplete="off" /></label>
               <label className="block"><span className="text-gray-600">Department</span><Input list="gz-departments" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Komori, Digital, ASI..." autoComplete="off" /><datalist id="gz-departments">{departments.map((d) => <option key={d} value={d} />)}</datalist></label>
-              <label className="block"><span className="text-gray-600">Description</span><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this bills for" autoComplete="off" /></label>
-              <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={subtotal} onChange={(e) => setSubtotal(e.target.value)} inputMode="decimal" placeholder="0.00" /></label>
               <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={shipping} onChange={(e) => setShipping(e.target.value)} inputMode="decimal" placeholder="0.00" /><span className="text-[11px] text-gray-400">Stated separately, not taxed.</span></label>
-              <label className="block"><span className="text-gray-600">Deposit %</span><Input value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" /><span className="text-[11px] text-gray-400">{(cust as any)?.terms ? `Customer terms: ${TERM_LABEL[(cust as any).terms]}` : "No terms on file for this customer"}</span></label>
+              <DepositInput mode={depMode} value={depositPercent} onMode={(m) => { setDepMode(m); setDepositPercent(m === "pct" ? "50" : ""); }} onValue={setDepositPercent} hint={(cust as any)?.terms ? `Customer terms: ${TERM_LABEL[(cust as any).terms]}` : "No terms on file for this customer"} />
               <label className="block"><span className="text-gray-600">Sales rep (from the estimate)</span>
                 <select value={repId} onChange={(e) => setRepId(e.target.value)} className={inputCls}>
                   <option value="">No rep / house account</option>
@@ -152,7 +153,7 @@ export function NewInvoice({ onClose, onCreated }: { onClose: () => void; onCrea
               <label className="block"><span className="text-gray-600">Due date</span><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /><span className="text-[11px] text-gray-400">Blank = Net 30 (7 days for deposits and prebills)</span></label>
               <label className="flex items-center gap-2 self-end pb-2"><input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} /> <span className="text-gray-600">Tax exempt (resale certificate on file)</span></label>
             </div>
-            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)}{sub > 5000 && !taxExempt ? " (7% to $5,000, 6% above)" : ""} · ${ship > 0 ? `postage/freight $${ship.toFixed(2)} · ` : ""}<span className="font-medium">total ${total.toFixed(2)}</span>{Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commission) > 0 ? ` · commission $${Number(commission).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
+            <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">Subtotal ${sub.toFixed(2)} · tax ${tax.toFixed(2)}{sub > 5000 && !taxExempt ? " (7% to $5,000, 6% above)" : ""} · {ship > 0 ? `postage/freight $${ship.toFixed(2)} · ` : ""}<span className="font-medium">total ${total.toFixed(2)}</span>{depMode === "flat" && kind !== "deposit" ? (Number(depositPercent) > 0 ? ` · deposit $${Math.min(Number(String(depositPercent).replace(/[$,]/g, "")) || 0, total).toFixed(2)}` : "") : Number(depositPercent) > 0 && Number(depositPercent) < 100 ? ` · deposit $${(total * Number(depositPercent) / 100).toFixed(2)}` : ""}{repId && Number(commission) > 0 ? ` · commission $${Number(commission).toFixed(2)} to ${reps.find((r) => r.id === repId)?.name || "rep"}` : ""}</div>
             {err && <div className="text-sm text-red-600">{err}</div>}
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create invoice"}</Button></div>
             <div className="text-[11px] text-gray-400">Creating does not email anyone. Use the send button on the invoice when it is ready.</div>

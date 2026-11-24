@@ -5,6 +5,8 @@
 // general ledger, payables and bank rec stay in Sage; invoices export monthly.
 import { randomBytes } from "crypto";
 import { sendEmail } from "@/lib/email/graph-client";
+import { depositLabel, invoiceLines } from "@/lib/invoice-lines";
+const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // Rollout gate (Benjy 11/10/26): Godzilla rolls out sales funnel -> invoicing
 // -> jobs (from FileMaker) -> Mary's estimating. While invoicing is live but
@@ -112,7 +114,7 @@ export function invoiceEmailHtml(inv: any) {
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
       <tr><td style="padding:8px 0;color:#888;">Invoice #</td><td style="padding:8px 0;font-weight:bold;">${inv.invoiceNumber}</td></tr>
       ${inv.poNumber ? `<tr><td style="padding:8px 0;color:#888;">Your PO #</td><td style="padding:8px 0;">${String(inv.poNumber).replace(/</g, "&lt;")}</td></tr>` : ""}
-      <tr><td style="padding:8px 0;color:#888;">Description</td><td style="padding:8px 0;">${inv.description || "C&amp;D Printing services"}</td></tr>
+      ${invoiceLines(inv).length ? invoiceLines(inv).map((l) => `<tr><td style="padding:6px 0;color:#444;">${l.qty ? `${l.qty.toLocaleString("en-US")} x ` : ""}${esc(l.description)}</td><td style="padding:6px 0;">${l.amount ? money(l.amount) : ""}</td></tr>`).join("") : `<tr><td style="padding:8px 0;color:#888;">Description</td><td style="padding:8px 0;">${inv.description ? esc(inv.description) : "C&amp;D Printing services"}</td></tr>`}
       <tr><td style="padding:8px 0;color:#888;">Subtotal</td><td style="padding:8px 0;">${money(inv.subtotal)}</td></tr>
       <tr><td style="padding:8px 0;color:#888;">${taxLabel(inv)}</td><td style="padding:8px 0;">${money(inv.taxAmount)}</td></tr>
       ${inv.shipping > 0 ? `<tr><td style="padding:8px 0;color:#888;">Postage / freight</td><td style="padding:8px 0;">${money(inv.shipping)}</td></tr>` : ""}
@@ -120,7 +122,7 @@ export function invoiceEmailHtml(inv: any) {
       ${inv.paidAmount > 0 ? `<tr><td style="padding:8px 0;color:#888;">Paid so far</td><td style="padding:8px 0;">${money(inv.paidAmount)}</td></tr><tr><td style="padding:8px 0;color:#888;">Balance</td><td style="padding:8px 0;font-weight:bold;">${money(bal)}</td></tr>` : ""}
       <tr><td style="padding:8px 0;color:#888;">Due</td><td style="padding:8px 0;">${dueLabel(inv)}</td></tr>
     </table>
-    ${inv.depositAmount > 0 && !inv.depositPaid ? `<p style="color:#666;font-size:14px;"><strong>${inv.depositPercent}% deposit (${money(inv.depositAmount)}) due before production.</strong> Balance due on delivery.</p>` : ""}
+    ${inv.depositAmount > 0 && !inv.depositPaid ? `<p style="color:#666;font-size:14px;"><strong>${depositLabel(inv)} (${money(inv.depositAmount)}) due before production.</strong> Balance due on delivery.</p>` : ""}
     <p style="color:#666;font-size:14px;">Bank transfer (ACH) has no fee. Card payments carry a 3% surcharge.</p>
     <a href="${payUrl(inv)}" style="display:inline-block;background:#ED1C24;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:16px;">Pay online</a>`);
 }

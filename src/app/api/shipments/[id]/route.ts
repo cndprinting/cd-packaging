@@ -139,6 +139,30 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json({ shipment });
 }
 
+// Ship-date / tracking emails (Shayla 11/24/26): several addresses allowed, and the
+// salesperson is copied automatically so she stops writing sales a separate email.
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
+const emailList = (v: unknown) => [...new Set(String(v || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean))];
+/** Who sells this: the job's rep; for a prototype / samples to a prospect, the lead's owner. Jessica (Benjy's AI assistant) and House go to Benjy. */
+async function salesCopy(prisma: any, s: any): Promise<{ name: string; email: string }[]> {
+  const out: { name: string; email: string }[] = [];
+  const add = (u: any) => { const e = String(u?.email || "").toLowerCase(); if (/@cndprinting\.com$/.test(e) && !out.some((o) => o.email === e)) out.push({ name: u.name || e, email: e }); };
+  if (s.jobId) { const j = await prisma.job.findUnique({ where: { id: s.jobId }, select: { salesRep: { select: { name: true, email: true } } } }).catch(() => null); add(j?.salesRep); }
+  let leadId = s.leadId || null;
+  if (!leadId && s.prototypeId) { const p = await prisma.prototype.findUnique({ where: { id: s.prototypeId }, select: { leadId: true } }).catch(() => null); leadId = p?.leadId || null; }
+  if (!out.length && leadId) {
+    const l = await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerName: true } }).catch(() => null);
+    const o = String(l?.ownerName || "").trim().toLowerCase();
+    if (o && o !== "tbd") {
+      const u = ["jessica", "house"].includes(o)
+        ? await prisma.user.findFirst({ where: { email: { equals: "bwaxman@cndprinting.com", mode: "insensitive" } }, select: { name: true, email: true } })
+        : await prisma.user.findFirst({ where: { isActive: true, name: { startsWith: o, mode: "insensitive" }, email: { endsWith: "@cndprinting.com" } }, select: { name: true, email: true } });
+      add(u);
+    }
+  }
+  return out;
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const c = await ctx(params); if ("error" in c) return c.error;
   const { session, prisma, s } = c;
@@ -148,15 +172,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const kind: NotifyKind = b.kind === "tracking" ? "tracking" : "shipdate";
   if (kind === "shipdate" && !s.targetShipDate) return NextResponse.json({ error: "Set a target ship date first" }, { status: 400 });
   if (kind === "tracking" && !s.trackingNumber && !/local|pickup/i.test(s.carrier || "")) return NextResponse.json({ error: "Add the tracking number first" }, { status: 400 });
-  const to = String(b.to || s.contactEmail || "").trim().toLowerCase();
+  const toList = emailList(b.to || s.contactEmail);
+  const sales = await salesCopy(prisma, s);
+  const me = String(session.email || "").toLowerCase();
+  const ccList = (b.cc !== undefined ? emailList(b.cc) : sales.map((x) => x.email)).filter((e) => !toList.includes(e) && e !== me);
+  const to = toList.join(", "), cc = ccList.join(", ");
   const { subject, html } = shipmentEmail(s, kind, { name: session.name, email: session.email }, b.note ? String(b.note).slice(0, 2000) : undefined);
-  if (b.preview) return NextResponse.json({ to, subject, html });
-  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(to)) return NextResponse.json({ error: "Add the customer's email first" }, { status: 400 });
+  if (b.preview) return NextResponse.json({ to, cc, sales, subject, html });
+  if (!toList.length) return NextResponse.json({ error: "Add the customer's email first" }, { status: 400 });
+  const bad = [...toList, ...ccList].find((e) => !EMAIL_RE.test(e));
+  if (bad) return NextResponse.json({ error: `"${bad}" isn't a valid email address. Separate several with commas.` }, { status: 400 });
   const { sendEmail } = await import("@/lib/email/graph-client");
   // From the sender's own mailbox, so customer replies come back to her.
-  const r = await sendEmail({ from: session.email, to, subject, body: html });
+  const r = await sendEmail({ from: session.email, to: toList, cc: ccList.length ? ccList : undefined, subject, body: html });
   if (!r.success) return NextResponse.json({ error: r.error || "Email failed" }, { status: 502 });
-  const line = `${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}: ${kind === "tracking" ? "tracking" : "ship date"} email to ${to} by ${session.name}`;
+  const line = `${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}: ${kind === "tracking" ? "tracking" : "ship date"} email to ${to}${cc ? ` (copy: ${cc})` : ""} by ${session.name}`;
   const shipment = await prisma.shipment.update({ where: { id: s.id }, data: { notifiedAt: new Date(), notifyLog: `${s.notifyLog ? s.notifyLog + "\n" : ""}${line}`.slice(-4000), contactEmail: s.contactEmail || to }, include: { items: true } });
   return NextResponse.json({ ok: true, to, shipment });
 }

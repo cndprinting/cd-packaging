@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewInvoice } from "@/components/invoices/new-invoice";
+import { DepositInput, LinesEditor, draftSubtotal, draftsFrom, draftsOut, type LineDraft } from "@/components/invoices/lines-editor";
 
 interface Payment { id: string; amount: number; method: string; reference: string | null; receivedAt: string; recordedBy: string | null; note: string | null }
 interface Invoice {
@@ -20,6 +21,7 @@ interface Invoice {
   jobId: string | null; companyId: string | null; dueDate: string | null; createdAt: string; paidAmount: number; remaining: number; payUrl?: string;
   remindedAt: string | null; remindCount: number; salesRepName: string | null; commissionAmount: number | null; commissionPct: number | null; commissionStatus: string; notes: string | null;
   payments: Payment[];
+  lines?: { qty: number | null; description: string; amount: number }[] | null; depositFlat?: boolean; depositPercent?: number;
 }
 
 const statusColors: Record<string, string> = { draft: "bg-sky-100 text-sky-800", pending: "bg-amber-100 text-amber-700", partial: "bg-amber-100 text-amber-700", deposit_paid: "bg-blue-100 text-blue-700", paid: "bg-emerald-100 text-emerald-700", overdue: "bg-red-100 text-red-700", cancelled: "bg-gray-100 text-gray-400" };
@@ -39,14 +41,14 @@ export default function InvoicesPage() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [edit, setEdit] = useState<{ inv: Invoice; invoiceNumber: string; poNumber: string; department: string; subtotal: string; taxAmount: string; taxExempt: boolean; shipping: string; description: string; contactEmail: string; dueDate: string; commissionAmount: string } | null>(null);
+  const [edit, setEdit] = useState<{ inv: Invoice; invoiceNumber: string; poNumber: string; department: string; subtotal: string; taxAmount: string; taxExempt: boolean; shipping: string; description: string; contactEmail: string; dueDate: string; commissionAmount: string; lines: LineDraft[]; depMode: "pct" | "flat"; dep: string } | null>(null);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [report, setReport] = useState<any | null>(null);
-  const openEdit = (inv: Invoice) => setEdit({ inv, invoiceNumber: inv.invoiceNumber, poNumber: (inv as any).poNumber || "", department: (inv as any).department || "", subtotal: String(inv.subtotal), taxAmount: String(inv.taxAmount), taxExempt: !(inv as any).taxRate, shipping: String(inv.shipping || 0), description: (inv as any).description || "", contactEmail: (inv as any).contactEmail || "", dueDate: inv.dueDate ? inv.dueDate.slice(0, 10) : "", commissionAmount: String(inv.commissionAmount || 0) });
+  const openEdit = (inv: Invoice) => setEdit({ inv, invoiceNumber: inv.invoiceNumber, poNumber: (inv as any).poNumber || "", department: (inv as any).department || "", subtotal: String(inv.subtotal), taxAmount: String(inv.taxAmount), taxExempt: !(inv as any).taxRate, shipping: String(inv.shipping || 0), description: (inv as any).description || "", contactEmail: (inv as any).contactEmail || "", dueDate: inv.dueDate ? inv.dueDate.slice(0, 10) : "", commissionAmount: String(inv.commissionAmount || 0), lines: draftsFrom(inv.lines, { description: inv.description, subtotal: inv.subtotal }), depMode: inv.depositFlat ? "flat" : "pct", dep: inv.depositFlat ? String(inv.depositAmount) : String(inv.depositPercent ?? 0) });
   const flTax = (sub: number, exempt: boolean) => (exempt ? 0 : Math.round(sub * 6 + Math.min(sub, 5000)) / 100);
   const submitEdit = async () => {
     if (!edit) return;
-    const ok = await act(edit.inv, { action: "edit", invoiceNumber: edit.invoiceNumber, poNumber: edit.poNumber, department: edit.department, subtotal: Number(edit.subtotal) || 0, taxAmount: edit.taxAmount === "" ? undefined : Number(edit.taxAmount) || 0, taxExempt: edit.taxExempt, shipping: Number(edit.shipping) || 0, description: edit.description, contactEmail: edit.contactEmail, dueDate: edit.dueDate || null, commissionAmount: Number(edit.commissionAmount) || 0 }, `${edit.inv.invoiceNumber} updated`);
+    const ok = await act(edit.inv, { action: "edit", invoiceNumber: edit.invoiceNumber, poNumber: edit.poNumber, department: edit.department, lines: draftsOut(edit.lines), subtotal: draftSubtotal(edit.lines), taxAmount: edit.taxAmount === "" ? undefined : Number(edit.taxAmount) || 0, taxExempt: edit.taxExempt, shipping: Number(edit.shipping) || 0, description: "", ...(edit.inv.kind === "deposit" ? {} : edit.depMode === "flat" ? { depositFlat: Number(edit.dep.replace(/[$,]/g, "")) || 0 } : { depositPercent: Number(edit.dep) || 0 }), contactEmail: edit.contactEmail, dueDate: edit.dueDate || null, commissionAmount: Number(edit.commissionAmount) || 0 }, `${edit.inv.invoiceNumber} updated`);
     if (ok !== false) setEdit(null);
   };
   const loadReport = async () => { try { const r = await fetch(`/api/payments/report?year=${year}`); setReport(await r.json()); } catch { setMsg("Could not load the report"); } };
@@ -179,7 +181,9 @@ export default function InvoicesPage() {
                         </div>
                         <div>
                           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Details</div>
-                          <div>{inv.description || "—"}</div>
+                          {inv.lines && inv.lines.length ? (
+                            <table className="mb-1 w-full text-sm"><tbody>{inv.lines.map((l, i) => <tr key={i}><td className="w-16 py-0.5 text-right text-gray-500">{l.qty ? l.qty.toLocaleString("en-US") : ""}</td><td className="px-2 py-0.5">{l.description}</td><td className="py-0.5 text-right">{l.amount ? formatCurrency(l.amount) : ""}</td></tr>)}</tbody></table>
+                          ) : <div>{inv.description || "—"}</div>}
                           {((inv as any).poNumber || (inv as any).department) && <div className="text-xs text-gray-500">{(inv as any).poNumber ? `PO ${(inv as any).poNumber}` : ""}{(inv as any).poNumber && (inv as any).department ? " · " : ""}{(inv as any).department || ""}</div>}
                           <div className="text-xs text-gray-500">Subtotal {formatCurrency(inv.subtotal)} · tax {formatCurrency(inv.taxAmount)}{(inv.shipping || 0) > 0 ? ` · postage/freight ${formatCurrency(inv.shipping || 0)}` : ""}</div>
                           {inv.payUrl && <div className="mt-1 truncate text-xs"><a href={inv.payUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">{inv.payUrl}</a></div>}
@@ -232,14 +236,14 @@ export default function InvoicesPage() {
       )}
       {edit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEdit(null)}>
-          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">Edit {edit.inv.invoiceNumber} · {edit.inv.customerName}</h2><button onClick={() => setEdit(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
+            <div className="mt-3 rounded-md border border-gray-200 p-3"><LinesEditor lines={edit.lines} onChange={(lines) => setEdit({ ...edit, lines, subtotal: String(draftSubtotal(lines)), taxAmount: String(flTax(draftSubtotal(lines), edit.taxExempt)) })} /></div>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
               <label className="block"><span className="text-gray-600">Invoice #</span><Input value={edit.invoiceNumber} onChange={(e) => setEdit({ ...edit, invoiceNumber: e.target.value })} autoComplete="off" /></label>
               <label className="block"><span className="text-gray-600">Customer PO #</span><Input value={edit.poNumber} onChange={(e) => setEdit({ ...edit, poNumber: e.target.value })} autoComplete="off" /></label>
               <label className="block"><span className="text-gray-600">Department</span><Input value={edit.department} onChange={(e) => setEdit({ ...edit, department: e.target.value })} placeholder="Komori, Digital, ASI..." autoComplete="off" /></label>
-              <label className="block"><span className="text-gray-600">Description</span><Input value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} autoComplete="off" /></label>
-              <label className="block"><span className="text-gray-600">Amount before tax</span><Input value={edit.subtotal} onChange={(e) => { const sub = Number(e.target.value) || 0; setEdit({ ...edit, subtotal: e.target.value, taxAmount: String(flTax(sub, edit.taxExempt)) }); }} inputMode="decimal" /></label>
+              {edit.inv.kind !== "deposit" && <DepositInput mode={edit.depMode} value={edit.dep} onMode={(m) => setEdit({ ...edit, depMode: m, dep: m === "pct" ? "50" : "" })} onValue={(v) => setEdit({ ...edit, dep: v })} />}
               <label className="block"><span className="text-gray-600">Tax</span><Input value={edit.taxAmount} onChange={(e) => setEdit({ ...edit, taxAmount: e.target.value })} inputMode="decimal" disabled={edit.taxExempt} /><span className="text-[11px] text-gray-400">Auto: 7% to $5,000, 6% above. Type over it if needed.</span></label>
               <label className="block"><span className="text-gray-600">Postage / freight</span><Input value={edit.shipping} onChange={(e) => setEdit({ ...edit, shipping: e.target.value })} inputMode="decimal" /></label>
               <label className="block"><span className="text-gray-600">Commission ($)</span><Input value={edit.commissionAmount} onChange={(e) => setEdit({ ...edit, commissionAmount: e.target.value })} inputMode="decimal" /></label>

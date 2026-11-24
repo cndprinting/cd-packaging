@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
-type Inv = { invoiceNumber: string; customerName: string; description: string | null; subtotal: number; taxRate: number; taxAmount: number; total: number; depositAmount: number; depositPercent: number; depositPaid: boolean; paidAmount: number; remaining: number; status: string; dueDate: string | null; kind: string };
+type Inv = { invoiceNumber: string; customerName: string; description: string | null; subtotal: number; taxRate: number; taxAmount: number; total: number; depositAmount: number; depositPercent: number; depositFlat?: boolean; lines?: { qty: number | null; description: string; amount: number }[]; shipping?: number; depositPaid: boolean; paidAmount: number; remaining: number; status: string; dueDate: string | null; kind: string };
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
 
 export default function PayPage() {
@@ -66,9 +66,12 @@ export default function PayPage() {
             </div>
             <table className="mt-4 w-full text-sm">
               <tbody>
-                {inv.description && <tr><td className="py-1 text-gray-500">Description</td><td className="py-1 text-right">{inv.description}</td></tr>}
+                {inv.lines && inv.lines.length ? inv.lines.map((l, i) => (
+                  <tr key={i}><td className="py-1 text-gray-700">{l.qty ? <span className="mr-2 text-gray-500">{l.qty.toLocaleString("en-US")} x</span> : null}{l.description}</td><td className="py-1 text-right">{l.amount ? money(l.amount) : ""}</td></tr>
+                )) : inv.description && <tr><td className="py-1 text-gray-500">Description</td><td className="py-1 text-right">{inv.description}</td></tr>}
                 <tr><td className="py-1 text-gray-500">Subtotal</td><td className="py-1 text-right">{money(inv.subtotal)}</td></tr>
                 <tr><td className="py-1 text-gray-500">Tax ({inv.taxRate}%)</td><td className="py-1 text-right">{money(inv.taxAmount)}</td></tr>
+                {(inv.shipping || 0) > 0 && <tr><td className="py-1 text-gray-500">Postage / freight</td><td className="py-1 text-right">{money(inv.shipping || 0)}</td></tr>}
                 <tr className="border-t"><td className="py-1 font-medium">Total</td><td className="py-1 text-right font-medium">{money(inv.total)}</td></tr>
                 {inv.paidAmount > 0 && <tr><td className="py-1 text-gray-500">Paid</td><td className="py-1 text-right">{money(inv.paidAmount)}</td></tr>}
               </tbody>
@@ -76,7 +79,7 @@ export default function PayPage() {
             {inv.remaining > 0 && (
               <div className="mt-6 space-y-2">
                 {showDeposit && <>
-                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{inv.depositPercent}% deposit · {money(inv.depositAmount)}</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{inv.depositFlat ? "Deposit" : `${inv.depositPercent}% deposit`} · {money(inv.depositAmount)}</div>
                   <Btn method="ach" part="deposit" label={`Pay deposit by bank transfer · ${money(inv.depositAmount)} · no fee`} />
                   <Btn method="card" part="deposit" label={`Pay deposit by card · ${money(inv.depositAmount * 1.03)} incl. 3%`} />
                   <div className="pt-2 text-xs font-medium uppercase tracking-wide text-gray-500">Or the full balance</div>

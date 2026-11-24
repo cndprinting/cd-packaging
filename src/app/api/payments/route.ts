@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/email/graph-client";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 import { AR_FROM, AR_STANDALONE, STANDALONE_MSG, CARD_SURCHARGE, DEFAULT_COMMISSION_PCT, NET_DAYS, floridaTax, applyPayments, commissionFor, invoiceEmailHtml, newPayToken, payUrl, recordPayment, remaining, round2 } from "@/lib/ar";
 import { isTestJob } from "@/lib/test-mode";
+import { cleanLines, depositFor, depositFromForm, depositLabel, linesSubtotal, linesText } from "@/lib/invoice-lines";
 // A picked due date ("2026-12-18") is stored at noon UTC so it reads as the
 // same day in Florida and everywhere else (midnight UTC showed a day early).
 const dayDate = (v: string) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? `${v}T12:00:00.000Z` : v);
@@ -79,15 +80,19 @@ export async function POST(request: NextRequest) {
         customerName = co.name;
       } else if (!body.allowUnlinked) return NextResponse.json({ error: "Pick a customer from the Customers module" }, { status: 400 });
       if (!customerName) return NextResponse.json({ error: "Customer required" }, { status: 400 });
-      const subtotal = round2(Number(body.subtotal) || 0);
+      // Line items (Denise 11/24): quantity + description + amount per line; the subtotal is their sum.
+      const lines = cleanLines(body.lines);
+      const subtotal = lines.length ? linesSubtotal(lines) : round2(Number(body.subtotal) || 0);
+      if (lines.length && !String(description || "").trim()) description = linesText(lines);
       const kind = ["final", "prebill", "deposit"].includes(body.kind) ? body.kind : "final";
       const taxRate = body.taxExempt ? 0 : 7; // label only; the amount follows the Florida rule (7% to $5,000, 6% above)
       const taxAmount = floridaTax(subtotal, !!body.taxExempt);
       // Postage / freight is stated separately and not taxed (Denise 11/10).
       const shipping = round2(Math.max(0, Number(body.shipping) || 0));
       const total = round2(subtotal + taxAmount + shipping);
-      const depositPercent = kind === "deposit" ? 100 : Number.isFinite(Number(body.depositPercent)) ? Number(body.depositPercent) : 50;
-      const depositAmount = round2(total * depositPercent / 100);
+      // Deposit as a % or a flat $ amount (Denise 11/24).
+      const dep = depositFromForm({ kind, depositFlat: body.depositFlat, depositPercent: body.depositPercent }, total);
+      const depositPercent = dep.depositPercent, depositAmount = dep.depositAmount;
       // Their own invoice number is allowed (Jennifer 11/12); otherwise the next in sequence.
       let invoiceNumber = await nextInvoiceNumber(prisma);
       if (body.invoiceNumber && String(body.invoiceNumber).trim()) {
@@ -117,7 +122,8 @@ export async function POST(request: NextRequest) {
       const invoice = await prisma.invoice.create({ data: {
         invoiceNumber, customerName, contactEmail: contactEmail || null, companyId: companyId || null, description, poNumber, department, subtotal, taxRate, taxAmount, shipping, total,
         depositPercent, depositAmount, jobId: jobId || null, orderId: orderId || null, notes, createdBy: session.id, kind, payToken: newPayToken(), dueDate, ...comm,
-      } });
+        depositFlat: dep.depositFlat, ...(lines.length ? { lines } : {}),
+      } as any });
       return NextResponse.json({ invoice: { ...invoice, payUrl: payUrl(invoice) } });
     }
 
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest) {
       const { origin } = new URL(request.url);
       const checkoutSession = await stripe.checkout.sessions.create({
         payment_method_types: method === "ach" ? ["us_bank_account"] : ["card"],
-        line_items: [{ price_data: { currency: "usd", product_data: { name: `${invoice.invoiceNumber} - ${body.paymentType === "deposit" ? `${invoice.depositPercent}% Deposit` : "Balance Due"} - ${invoice.customerName}` }, unit_amount: Math.round((base + surcharge) * 100) }, quantity: 1 }],
+        line_items: [{ price_data: { currency: "usd", product_data: { name: `${invoice.invoiceNumber} - ${body.paymentType === "deposit" ? depositLabel(invoice as any) : "Balance Due"} - ${invoice.customerName}` }, unit_amount: Math.round((base + surcharge) * 100) }, quantity: 1 }],
         mode: "payment",
         success_url: `${origin}/portal/payments?success=true&invoice=${invoice.invoiceNumber}`,
         cancel_url: `${origin}/portal/payments?cancelled=true`,
@@ -209,14 +215,19 @@ export async function POST(request: NextRequest) {
     if (action === "edit") {
       if (!MONEY_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
       if (inv!.status === "cancelled") return NextResponse.json({ error: "Cancelled invoices can't be edited" }, { status: 400 });
-      const subtotal = body.subtotal !== undefined ? round2(Math.max(0, Number(body.subtotal) || 0)) : inv!.subtotal;
+      const lines = body.lines !== undefined ? cleanLines(body.lines) : [];
+      const subtotal = lines.length ? linesSubtotal(lines) : body.subtotal !== undefined ? round2(Math.max(0, Number(body.subtotal) || 0)) : inv!.subtotal;
       const taxExempt = body.taxExempt !== undefined ? !!body.taxExempt : inv!.taxRate === 0;
       const taxAmount = body.taxAmount !== undefined && body.taxAmount !== "" && body.taxAmount !== null ? round2(Math.max(0, Number(body.taxAmount) || 0)) : floridaTax(subtotal, taxExempt);
       const shipping = body.shipping !== undefined ? round2(Math.max(0, Number(body.shipping) || 0)) : (inv!.shipping || 0);
       const total = round2(subtotal + taxAmount + shipping);
-      const depositPercent = inv!.kind === "deposit" ? 100 : inv!.depositPercent;
-      const data: Record<string, unknown> = { subtotal, taxRate: taxExempt ? 0 : 7, taxAmount, shipping, total, depositAmount: round2(total * depositPercent / 100) };
+      // Deposit: a newly picked % or flat $ (Denise 11/24), else the invoice's own rule applied to the new total.
+      const dep = body.depositFlat !== undefined || body.depositPercent !== undefined
+        ? depositFromForm({ kind: inv!.kind, depositFlat: body.depositFlat, depositPercent: body.depositPercent ?? inv!.depositPercent }, total)
+        : { depositFlat: !!(inv as any).depositFlat, depositPercent: inv!.depositPercent, depositAmount: depositFor(inv as any, total) };
+      const data: Record<string, unknown> = { subtotal, taxRate: taxExempt ? 0 : 7, taxAmount, shipping, total, depositAmount: dep.depositAmount, depositPercent: dep.depositPercent, depositFlat: dep.depositFlat };
       if (body.description !== undefined) data.description = String(body.description || "");
+      if (lines.length) { data.lines = lines; if (!String(body.description || "").trim()) data.description = linesText(lines); }
       if (body.poNumber !== undefined) data.poNumber = String(body.poNumber || "").trim().slice(0, 60) || null;
       if (body.department !== undefined) data.department = String(body.department || "").trim().slice(0, 40) || null;
       if (body.invoiceNumber !== undefined && String(body.invoiceNumber).trim() && String(body.invoiceNumber).trim().toUpperCase() !== inv!.invoiceNumber) {

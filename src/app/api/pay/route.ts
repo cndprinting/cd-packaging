@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CARD_SURCHARGE, remaining, round2 } from "@/lib/ar";
+import { depositLabel, invoiceLines } from "@/lib/invoice-lines";
 
 // Public pay page API, keyed by the invoice's unguessable payToken (no login,
 // the thing PrintReach links did badly). GET = invoice summary, POST = Stripe
 // Checkout for card (3% surcharge) or ACH bank transfer (no fee).
-const pick = (inv: any) => ({ invoiceNumber: inv.invoiceNumber, customerName: inv.customerName, description: inv.description, subtotal: inv.subtotal, taxRate: inv.taxRate, taxAmount: inv.taxAmount, total: inv.total, depositAmount: inv.depositAmount, depositPercent: inv.depositPercent, depositPaid: inv.depositPaid, paidAmount: inv.paidAmount, remaining: remaining(inv), status: inv.status, dueDate: inv.dueDate, kind: inv.kind });
+const pick = (inv: any) => ({ invoiceNumber: inv.invoiceNumber, customerName: inv.customerName, description: inv.description, subtotal: inv.subtotal, taxRate: inv.taxRate, taxAmount: inv.taxAmount, total: inv.total, depositAmount: inv.depositAmount, depositPercent: inv.depositPercent, depositFlat: !!inv.depositFlat, lines: invoiceLines(inv), shipping: inv.shipping || 0, depositPaid: inv.depositPaid, paidAmount: inv.paidAmount, remaining: remaining(inv), status: inv.status, dueDate: inv.dueDate, kind: inv.kind });
 
 export async function GET(request: NextRequest) {
   const token = new URL(request.url).searchParams.get("t") || "";
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: method === "ach" ? ["us_bank_account"] : ["card"],
-      line_items: [{ price_data: { currency: "usd", product_data: { name: `${inv.invoiceNumber} · ${part === "deposit" ? `${inv.depositPercent}% deposit` : "Balance"} · ${inv.customerName}`, description: method === "card" ? `${base.toFixed(2)} + 3% card surcharge` : "Bank transfer, no fee" }, unit_amount: Math.round((base + surcharge) * 100) }, quantity: 1 }],
+      line_items: [{ price_data: { currency: "usd", product_data: { name: `${inv.invoiceNumber} · ${part === "deposit" ? depositLabel(inv) : "Balance"} · ${inv.customerName}`, description: method === "card" ? `${base.toFixed(2)} + 3% card surcharge` : "Bank transfer, no fee" }, unit_amount: Math.round((base + surcharge) * 100) }, quantity: 1 }],
       mode: "payment",
       customer_email: inv.contactEmail || undefined,
       success_url: `${origin}/pay/${token}?paid=1`,

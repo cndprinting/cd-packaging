@@ -76,7 +76,7 @@ export default function ShippingPage() {
     flash(true, action === "cod_request" ? `Asked accounting to release ${s.shipmentNumber}${d.emailed?.length ? ` (emailed ${d.emailed.length})` : ""}` : `${s.shipmentNumber} is OK to release`);
     load();
   };
-  const [notify, setNotify] = useState<{ s: Shipment; kind: "shipdate" | "tracking"; to: string; note: string; html: string; subject: string; busy: boolean } | null>(null);
+  const [notify, setNotify] = useState<{ s: Shipment; kind: "shipdate" | "tracking"; to: string; cc: string; sales: { name: string; email: string }[]; note: string; html: string; subject: string; busy: boolean } | null>(null);
 
   const load = async () => {
     try { const r = await fetch("/api/shipments"); const d = await r.json(); setRows(d.shipments || []); setReady(d.ready || []); setOther(d.other || []); } catch { /* ignore */ }
@@ -122,7 +122,7 @@ export default function ShippingPage() {
     const r = await fetch(`/api/shipments/${s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "notify", kind, preview: true }) });
     const d = await r.json();
     if (!r.ok) { flash(false, d.error || "Could not build the email"); return; }
-    setNotify({ s, kind, to: d.to || "", note: "", html: d.html, subject: d.subject, busy: false });
+    setNotify({ s, kind, to: d.to || "", cc: d.cc || "", sales: d.sales || [], note: "", html: d.html, subject: d.subject, busy: false });
   };
   const refreshPreview = async (n: NonNullable<typeof notify>) => {
     const r = await fetch(`/api/shipments/${n.s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "notify", kind: n.kind, note: n.note, preview: true }) });
@@ -131,10 +131,10 @@ export default function ShippingPage() {
   const sendNotify = async () => {
     if (!notify) return;
     setNotify({ ...notify, busy: true });
-    const r = await fetch(`/api/shipments/${notify.s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "notify", kind: notify.kind, to: notify.to, note: notify.note }) });
+    const r = await fetch(`/api/shipments/${notify.s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "notify", kind: notify.kind, to: notify.to, cc: notify.cc, note: notify.note }) });
     const d = await r.json();
     if (!r.ok) { flash(false, d.error || "Email failed"); setNotify({ ...notify, busy: false }); return; }
-    flash(true, `Emailed ${d.to}`); setNotify(null); load();
+    flash(true, `Emailed ${d.to}${notify.cc.trim() ? ` (copy to ${notify.cc})` : ""}`); setNotify(null); load();
   };
 
   return (
@@ -274,7 +274,8 @@ export default function ShippingPage() {
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between"><h2 className="font-semibold text-gray-900">{notify.kind === "tracking" ? "Email tracking" : "Email ship date"} · {notify.s.customerName}</h2><button onClick={() => setNotify(null)}><X className="h-4 w-4 text-gray-400" /></button></div>
             <div className="mt-3 grid gap-3 text-sm">
-              <label className="block"><span className="text-gray-600">To</span><Input value={notify.to} onChange={(e) => setNotify({ ...notify, to: e.target.value })} placeholder="customer@company.com" /></label>
+              <label className="block"><span className="text-gray-600">To</span> <span className="text-xs text-gray-400">(several? separate with commas)</span><Input value={notify.to} onChange={(e) => setNotify({ ...notify, to: e.target.value })} placeholder="customer@company.com, buyer@company.com" /></label>
+              <label className="block"><span className="text-gray-600">Copy</span> <span className="text-xs text-gray-400">{notify.sales.length ? `salesperson: ${notify.sales.map((x) => x.name).join(", ")}` : "no salesperson found for this shipment; add anyone"}</span><Input value={notify.cc} onChange={(e) => setNotify({ ...notify, cc: e.target.value })} placeholder="sales@cndprinting.com" /></label>
               <label className="block"><span className="text-gray-600">Add a note (optional)</span><textarea value={notify.note} onChange={(e) => setNotify({ ...notify, note: e.target.value })} onBlur={() => refreshPreview(notify)} rows={2} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" /></label>
               <div className="text-xs text-gray-500">Subject: {notify.subject}</div>
             </div>
