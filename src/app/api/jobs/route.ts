@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, jobWhere } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { DEFAULT_TERMS, JOBS_LIVE_SINCE, TERMS, TERMS_SET_ROLES, draftDepositInvoice, setCustomerTerms, tellAccounting } from "@/lib/press-gate";
 import { hardStep, proofsDone, stageFor } from "@/lib/proofs";
@@ -43,8 +44,9 @@ export async function GET() {
     if (!prisma) return NextResponse.json({ jobs: [], source: "empty" });
 
     // The live team (accounting, shipping) never sees TEST jobs.
+    const sc = await repScope(prisma, session);
     const jobs = await prisma.job.findMany({
-      where: isLiveUser(session) ? { isTest: false } : undefined,
+      where: { ...(isLiveUser(session) ? { isTest: false } : {}), ...jobWhere(sc) },
       include: { order: { include: { company: true } }, csr: true, salesRep: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     });

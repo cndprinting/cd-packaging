@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { demoJobs, demoCompanies } from "@/lib/demo-data";
 import { staffSession, denied } from "@/lib/api-guard";
 
@@ -13,19 +14,20 @@ export async function GET(request: NextRequest) {
     const prisma = prismaModule.default;
 
     if (prisma) {
+      const sc = await currentRepScope(); // sales reps: own accounts only (11/24/26)
       const [jobs, orders, companies] = await Promise.all([
         prisma.job.findMany({
-          where: { OR: [{ name: { contains: q, mode: "insensitive" } }, { jobNumber: { contains: q, mode: "insensitive" } }] },
+          where: { ...(sc ? { id: { in: sc.jobIds } } : {}), OR: [{ name: { contains: q, mode: "insensitive" } }, { jobNumber: { contains: q, mode: "insensitive" } }] },
           include: { order: { include: { company: true } } },
           take: 10,
         }),
         prisma.order.findMany({
-          where: { OR: [{ orderNumber: { contains: q, mode: "insensitive" } }] },
+          where: { ...(sc ? { companyId: { in: sc.companyIds } } : {}), OR: [{ orderNumber: { contains: q, mode: "insensitive" } }] },
           include: { company: true },
           take: 5,
         }),
         prisma.company.findMany({
-          where: { name: { contains: q, mode: "insensitive" } },
+          where: { ...(sc ? { id: { in: sc.companyIds } } : {}), name: { contains: q, mode: "insensitive" } },
           take: 5,
         }),
       ]);

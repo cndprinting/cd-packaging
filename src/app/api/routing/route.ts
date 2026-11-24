@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
 import { ROUTE_ROLES } from "@/lib/routing";
@@ -10,7 +11,7 @@ export async function GET() {
   const prisma: any = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ jobs: [] });
   const jobs = await prisma.job.findMany({
-    where: { routedAt: null, createdAt: { gte: JOBS_LIVE_SINCE }, status: { notIn: ["SHIPPED", "DELIVERED", "INVOICED"] } },
+    where: { routedAt: null, createdAt: { gte: JOBS_LIVE_SINCE }, status: { notIn: ["SHIPPED", "DELIVERED", "INVOICED"] }, ...((sc => sc ? { id: { in: sc.jobIds } } : {})(await currentRepScope())) },
     select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, createdAt: true, productType: true, order: { select: { company: { select: { name: true } } } }, csr: { select: { name: true } } },
     orderBy: { createdAt: "asc" }, take: 200,
   });

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { isScopedRep } from "@/lib/rep-scope";
 import { analyzeReorders, generateInsights } from "@/lib/smart-features";
 import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET() {
-  if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
+  { const s = await staffSession(); if (!s || isScopedRep(s)) return denied(); } // staff only; not sales reps (own accounts only, 11/24/26)
   try {
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;

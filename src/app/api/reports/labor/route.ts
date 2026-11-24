@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isScopedRep } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!session || session.role === "CUSTOMER" || isScopedRep(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 }); // reps: own accounts only (11/24/26)
 
     const { searchParams } = new URL(request.url);
     const format = searchParams.get("format") || "json";

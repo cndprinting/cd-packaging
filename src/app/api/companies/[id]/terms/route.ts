@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repCompanyGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { TERMS, TERMS_SET_ROLES, setCustomerTerms } from "@/lib/press-gate";
 import { ARCHIVE_ROLES } from "@/lib/customer-archive";
@@ -11,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!session || session.role === "CUSTOMER" || session.role === "VENDOR") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
-  const { id } = await params;
+  const { id } = await params; { const g = await repCompanyGuard(id); if (g) return g; } // sales reps: own accounts only (11/24/26)
   const co = await prisma.company.findUnique({ where: { id }, select: { paymentTerms: true, paymentTermsBy: true, paymentTermsAt: true, isActive: true, archivedAt: true, archivedBy: true, archivedReason: true } as any }) as any;
   if (!co) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ terms: co.paymentTerms || null, by: co.paymentTermsBy || null, at: co.paymentTermsAt || null, options: TERMS, canEdit: TERMS_SET_ROLES.includes(session.role),
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!session || !TERMS_SET_ROLES.includes(session.role)) return NextResponse.json({ error: "Payment terms are set by accounting or Customer Service" }, { status: 403 });
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
-  const { id } = await params;
+  const { id } = await params; { const g = await repCompanyGuard(id); if (g) return g; } // sales reps: own accounts only (11/24/26)
   const b = await request.json().catch(() => ({}));
   if (!TERMS[b.terms]) return NextResponse.json({ error: "Unknown payment terms" }, { status: 400 });
   try {

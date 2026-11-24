@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { ROUTE_PRESSES, ROUTE_ROLES, ROUTE_STATUSES, ROUTE_TASKS, STATUS_ROLES, routingMachines, taskList } from "@/lib/routing";
 
@@ -16,6 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const prisma: any = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
+  { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
   const job = await load(prisma, id);
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   return NextResponse.json({ routing: { ...job, routeTasks: taskList(job.routeTasks) }, machines: await routingMachines(prisma), statuses: ROUTE_STATUSES, presses: ROUTE_PRESSES, tasks: ROUTE_TASKS, canEdit: ROUTE_ROLES.includes(session.role), canStatus: STATUS_ROLES.includes(session.role) });
@@ -27,6 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const prisma: any = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
+  { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
   const job = await load(prisma, id);
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   const b = await request.json().catch(() => ({}));
@@ -58,6 +61,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const prisma: any = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
+  { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
   const job = await load(prisma, id);
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   const b = await request.json().catch(() => ({}));

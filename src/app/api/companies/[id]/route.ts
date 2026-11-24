@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repCompanyGuard } from "@/lib/rep-scope";
 import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   try {
-    const { id } = await params;
+    const { id } = await params; { const g = await repCompanyGuard(id); if (g) return g; } // sales reps: own accounts only (11/24/26)
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });

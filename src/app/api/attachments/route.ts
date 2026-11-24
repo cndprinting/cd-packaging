@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, repSeesQuote } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 // Attachments that follow the work (Benjy 8/5) — artwork, dielines, specs and
@@ -37,6 +38,16 @@ export async function GET(request: NextRequest) {
     if (v) or.push({ [k]: v });
   }
   if (!or.length) return NextResponse.json({ error: "A scope id is required" }, { status: 400 });
+  // Sales reps: files on their own jobs, accounts, leads and quotes only (11/24/26).
+  const sc = await repScope(c.prisma, c.session);
+  if (sc) {
+    const qid = sp.get("quoteId"), rid = sp.get("quoteRequestId");
+    const q = qid ? await c.prisma.quote.findUnique({ where: { id: qid }, select: { companyId: true, createdBy: true } }) : null;
+    const r = rid ? await c.prisma.quoteRequest.findUnique({ where: { id: rid }, select: { companyId: true, submittedBy: true } }) : null;
+    const ok = (!sp.get("leadId") || sc.leadIds.includes(sp.get("leadId")!)) && (!sp.get("companyId") || sc.companyIds.includes(sp.get("companyId")!))
+      && (!sp.get("jobId") || sc.jobIds.includes(sp.get("jobId")!)) && (!qid || repSeesQuote(sc, q || {})) && (!rid || repSeesQuote(sc, r || {}));
+    if (!ok) return NextResponse.json({ error: "That account isn't assigned to you." }, { status: 403 });
+  }
   const attachments = await c.prisma.attachment.findMany({ where: { OR: or }, orderBy: { createdAt: "desc" } });
   return NextResponse.json({ attachments });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email/graph-client";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
@@ -32,7 +33,9 @@ export async function GET() {
     const prisma = (await import("@/lib/prisma")).default;
     if (!prisma) return NextResponse.json({ invoices: [] });
     // Customers never see drafts (auto-drafted deposit invoices awaiting accounting).
-    const where = session.role === "CUSTOMER" ? { companyId: session.companyId || undefined, status: { not: "draft" } } : {};
+    const sc = await currentRepScope(); // sales reps: their own invoices only (11/24/26)
+    const where = session.role === "CUSTOMER" ? { companyId: session.companyId || undefined, status: { not: "draft" } }
+      : sc ? { OR: [{ salesRepId: sc.userId }, { jobId: { in: sc.jobIds } }] } : {};
     const invoices = await prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, include: { payments: { orderBy: { receivedAt: "desc" } } } });
     const out = invoices.map((i) => ({ ...i, remaining: remaining(i), payUrl: session.role === "CUSTOMER" ? undefined : payUrl(i) }));
     return NextResponse.json({ invoices: out });

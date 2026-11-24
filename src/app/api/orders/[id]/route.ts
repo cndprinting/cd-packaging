@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repOrderGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { staffSession, denied } from "@/lib/api-guard";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   try {
-    const { id } = await params;
+    const { id } = await params; { const g = await repOrderGuard(id); if (g) return g; } // sales reps: own accounts only (11/24/26)
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
 
@@ -30,7 +31,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const session = await getSession();
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
-    const { id } = await params;
+    const { id } = await params; { const g = await repOrderGuard(id); if (g) return g; } // sales reps: own accounts only (11/24/26)
     const body = await request.json();
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;

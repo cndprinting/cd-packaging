@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 // Full-field job search — lets CSRs find old jobs by any field Carrie listed:
@@ -18,8 +19,10 @@ export async function GET(request: NextRequest) {
 
     // Build OR conditions across every searchable field
     const contains = { contains: q, mode: "insensitive" as const };
+    const sc = await currentRepScope(); // sales reps: own jobs only (11/24/26)
     const jobs = await prisma.job.findMany({
       where: {
+        ...(sc ? { id: { in: sc.jobIds } } : {}),
         OR: [
           { jobNumber: contains },
           { name: contains },

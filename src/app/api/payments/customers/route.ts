@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { AR_STANDALONE, DEPARTMENTS } from "@/lib/ar";
 import { JOBS_LIVE_SINCE } from "@/lib/press-gate";
@@ -22,13 +23,16 @@ export async function GET(request: NextRequest) {
   });
   // How many match, so the picker can say "showing 25 of 2,462, keep typing" (Benjy 11/17).
   const total = await prisma.company.count({ where: { type: "customer", isActive: true, ...hideTest, ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) } });
-  const ids = companies.map((c) => c.id);
+  // Sales reps (11/24/26): any customer can still be picked by name for a new hand-off,
+  // but contacts, terms and jobs show only on the rep's own accounts.
+  const sc = await currentRepScope();
+  const ids = companies.map((c) => c.id).filter((id) => !sc || sc.companyIds.includes(id));
   const jobs = ids.length ? await prisma.job.findMany({
     where: { order: { companyId: { in: ids } }, isTest: false, status: { notIn: ["CANCELLED"] as any }, ...(AR_STANDALONE ? { createdAt: { gte: JOBS_LIVE_SINCE } } : {}) },
     select: { id: true, order: { select: { companyId: true } }, jobNumber: true, name: true, quotedPrice: true, status: true, salesRep: { select: { name: true } }, createdAt: true },
     orderBy: { createdAt: "desc" }, take: 60,
   }).catch(() => []) : [];
-  const out = companies.map((c) => ({
+  const out = companies.map((c) => sc && !sc.companyIds.includes(c.id) ? { id: c.id, name: c.name, where: [c.city, c.state].filter(Boolean).join(", "), address: null, email: null, contact: null, terms: null, termsBy: null, termsAt: null, proof: null, jobs: [] } : ({
     id: c.id, name: c.name, where: [c.city, c.state].filter(Boolean).join(", "),
     // Full mailing address for the shipping form (Benjy 11/17).
     address: [c.address, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join("\n") || null,

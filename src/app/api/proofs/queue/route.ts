@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 /**
@@ -28,8 +29,11 @@ export async function GET() {
 
     // 1. Pre-press "to do": jobs in proof-prep stages with no PENDING proof yet.
     const proofPrepStages = ["ARTWORK_RECEIVED", "STRUCTURAL_DESIGN", "PREPRESS"];
+    const sc = await repScope(prisma, session); // sales reps: own jobs only (11/24/26)
+    const mineOnly: any = sc ? { jobId: { in: sc.jobIds } } : {};
     const prepressJobs = await prisma.job.findMany({
       where: {
+        ...(sc ? { id: { in: sc.jobIds } } : {}),
         status: { in: proofPrepStages as any },
         // No existing PENDING proof for this job
         proofs: { none: { status: "PENDING" } },
@@ -47,6 +51,7 @@ export async function GET() {
       where: {
         status: "PENDING",
         sentToCustomerAt: null,
+        ...mineOnly,
       },
       include: {
         job: {
@@ -66,6 +71,7 @@ export async function GET() {
       where: {
         status: "PENDING",
         sentToCustomerAt: { not: null },
+        ...mineOnly,
       },
       include: {
         job: {
@@ -82,7 +88,7 @@ export async function GET() {
 
     // 4. Recently approved — context for production scheduling
     const recentlyApproved = await prisma.proof.findMany({
-      where: { status: "APPROVED" },
+      where: { status: "APPROVED", ...mineOnly },
       include: {
         job: {
           include: { order: { include: { company: true } } },

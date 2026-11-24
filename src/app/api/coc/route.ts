@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isScopedRep } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { COC_ROLES_BLOCKED, cleanCoc, cocDraft, cocNumber, nextCocNumber } from "@/lib/coc";
 
@@ -14,7 +15,8 @@ const CO_SELECT = { id: true, name: true, address: true, city: true, state: true
 
 async function ctx() {
   const session = await getSession();
-  if (!session || COC_ROLES_BLOCKED.includes(session.role)) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 403 }) };
+  // Sales reps (11/24/26): COCs are Shayla's shipping paperwork, not on a rep's own-accounts view.
+  if (!session || COC_ROLES_BLOCKED.includes(session.role) || isScopedRep(session)) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 403 }) };
   const prisma: any = (await import("@/lib/prisma")).default;
   if (!prisma) return { error: NextResponse.json({ error: "Database not available" }, { status: 500 }) };
   return { session, prisma };

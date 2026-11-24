@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, jobWhere, shipmentWhere } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { jobTallies, syncFreight } from "@/lib/shipping-server";
 import { JOBS_LIVE_SINCE as LIVE } from "@/lib/press-gate";
@@ -29,13 +30,15 @@ export async function GET(request: NextRequest) {
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ shipments: [], ready: [] });
   const sp = new URL(request.url).searchParams;
+  // Sales reps: own jobs, accounts and prospects only (11/24/26).
+  const sc = await repScope(prisma, session);
 
   // Job # lookup for the shipment form (Benjy 11/19): pick the ticket, everything fills in.
   const jq = (sp.get("jobs") || "").trim();
   if (jq) {
     if (jq.length < 2) return NextResponse.json({ jobs: [] });
     const found = await prisma.job.findMany({
-      where: { createdAt: { gte: LIVE }, isTest: false, status: { notIn: ["DELIVERED", "INVOICED"] as any }, OR: [{ jobNumber: { contains: jq, mode: "insensitive" } }, { name: { contains: jq, mode: "insensitive" } }, { order: { company: { name: { contains: jq, mode: "insensitive" } } } }] },
+      where: { createdAt: { gte: LIVE }, isTest: false, status: { notIn: ["DELIVERED", "INVOICED"] as any }, ...jobWhere(sc), OR: [{ jobNumber: { contains: jq, mode: "insensitive" } }, { name: { contains: jq, mode: "insensitive" } }, { order: { company: { name: { contains: jq, mode: "insensitive" } } } }] },
       select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
       orderBy: { createdAt: "desc" }, take: 8,
     });
@@ -48,21 +51,22 @@ export async function GET(request: NextRequest) {
   const lq = (sp.get("leads") || "").trim();
   if (lq) {
     if (lq.length < 2) return NextResponse.json({ leads: [] });
-    const leads = await (prisma as any).lead.findMany({ where: { companyName: { contains: lq, mode: "insensitive" } }, select: { id: true, companyName: true, contactName: true, contactEmail: true, city: true, state: true, companyId: true }, orderBy: { companyName: "asc" }, take: 8 });
+    const leads = await (prisma as any).lead.findMany({ where: { companyName: { contains: lq, mode: "insensitive" }, ...(sc ? { id: { in: sc.leadIds } } : {}) }, select: { id: true, companyName: true, contactName: true, contactEmail: true, city: true, state: true, companyId: true }, orderBy: { companyName: "asc" }, take: 8 });
     return NextResponse.json({ leads });
   }
   const invoicesFor = sp.get("invoicesFor");
   if (invoicesFor) {
+    if (sc && !sc.companyIds.includes(invoicesFor)) return NextResponse.json({ invoices: [] });
     const invs = await prisma.invoice.findMany({ where: { companyId: invoicesFor, status: { not: "cancelled" } }, orderBy: { createdAt: "desc" }, take: 25, select: { id: true, invoiceNumber: true, status: true, total: true, paidAmount: true, description: true, poNumber: true } as any });
     return NextResponse.json({ invoices: invs.map((i: any) => ({ ...i, remaining: remaining(i) })) });
   }
 
-  const shipments = await prisma.shipment.findMany({ include: { items: true }, orderBy: [{ createdAt: "desc" }], take: 300 });
+  const shipments = await prisma.shipment.findMany({ where: shipmentWhere(sc), include: { items: true }, orderBy: [{ createdAt: "desc" }], take: 300 });
   const invIds = [...new Set(shipments.map((s: any) => s.invoiceId).filter(Boolean))] as string[];
   const invs = invIds.length ? await prisma.invoice.findMany({ where: { id: { in: invIds } }, select: { id: true, status: true, total: true, paidAmount: true } }) : [];
   const invMap = new Map(invs.map((i: any) => [i.id, i]));
   const ready = await prisma.job.findMany({
-    where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE }, isTest: false },
+    where: { status: "PACKED" as any, createdAt: { gte: JOBS_LIVE_SINCE }, isTest: false, ...jobWhere(sc) },
     // What Shayla reads off the job ticket (11/18): deliver-to, shipping instructions, contact, PO.
     select: { id: true, jobNumber: true, name: true, quantity: true, dueDate: true, deliveryTo: true, generalNotes: true, contactName: true, customerPO: true, order: { select: { companyId: true, poNumber: true, company: { select: { name: true, address: true, city: true, state: true, zip: true, contacts: { select: { name: true, email: true }, orderBy: { isPrimary: "desc" }, take: 3 } } } } } } as any,
     orderBy: { dueDate: "asc" }, take: 100,

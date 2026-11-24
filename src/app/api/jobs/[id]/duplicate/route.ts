@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { isTester } from "@/lib/test-mode";
 
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const { id } = await params;
+    { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
 
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, repSeesQuote } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     // Staff see any quote; a vendor only its own sourcing requests; a customer only its own company's.
     if (viewer.role === "VENDOR" && quote.sourcingVendor !== (viewer as any).vendorName) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
     if (viewer.role === "CUSTOMER" && (!viewer.companyId || quote.companyId !== viewer.companyId)) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+    if (!repSeesQuote(await repScope(prisma, viewer), quote)) return NextResponse.json({ error: "That account isn't assigned to you." }, { status: 403 });
 
     return NextResponse.json({
       quote: {

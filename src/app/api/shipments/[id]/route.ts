@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, repSeesShipment } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { shipmentEmail, type NotifyKind } from "@/lib/shipping";
 import { deliveryLabel, jobTallies, onShipmentOut, syncFreight } from "@/lib/shipping-server";
@@ -24,6 +25,9 @@ async function ctx(params: Promise<{ id: string }>) {
   const { id } = await params;
   const s = await prisma.shipment.findUnique({ where: { id }, include: { items: true } });
   if (!s) return { error: NextResponse.json({ error: "Shipment not found" }, { status: 404 }) };
+  // Sales reps: only shipments on their own jobs, accounts and prospects (11/24/26).
+  const sc = await repScope(prisma, session);
+  if (!repSeesShipment(sc, s as any)) return { error: NextResponse.json({ error: "That account isn't assigned to you." }, { status: 403 }) };
   return { session, prisma, s };
 }
 

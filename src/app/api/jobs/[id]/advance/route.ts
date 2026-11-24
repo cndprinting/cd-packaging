@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { checkPressGate } from "@/lib/press-gate";
 
@@ -8,6 +9,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const { id } = await params;
+    { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
     const { status } = await request.json();
     if (!status) return NextResponse.json({ error: "Status required" }, { status: 400 });
 

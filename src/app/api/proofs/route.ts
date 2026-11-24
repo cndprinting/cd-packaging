@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { tSubj } from "@/lib/test-mode";
 
@@ -14,7 +15,9 @@ export async function GET(request: NextRequest) {
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ proofs: [], source: "demo" });
 
-    const where = jobId ? { jobId } : {};
+    const sc = await repScope(prisma, viewer); // sales reps: own jobs only (11/24/26)
+    const where: any = jobId ? { jobId } : {};
+    if (sc) where.AND = [{ jobId: { in: sc.jobIds } }];
     const proofs = await prisma.proof.findMany({
       where,
       include: {

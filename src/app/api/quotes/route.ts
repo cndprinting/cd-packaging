@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope, repSeesQuote } from "@/lib/rep-scope";
 import { AR_STANDALONE } from "@/lib/ar";
 import { getSession } from "@/lib/session";
 
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
         if (!q) return NextResponse.json({ quotes: [] });
         if (session.role === "VENDOR" && q.sourcingVendor !== (session as any).vendorName) return NextResponse.json({ quotes: [] });
         if (session.role === "CUSTOMER" && (!session.companyId || q.companyId !== session.companyId)) return NextResponse.json({ quotes: [] });
+        if (!repSeesQuote(await repScope(prisma, session), q)) return NextResponse.json({ quotes: [] });
         return NextResponse.json({ quotes: [{
           id: q.id, quoteNumber: q.quoteNumber, customerName: q.customerName,
           contactName: q.contactName, contactEmail: q.contactEmail,
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
         ? { sourcingVendor: (session as any).vendorName || " none" }
         : session.role === "CUSTOMER"
           ? { companyId: session.companyId || " none" }
-          : undefined;
+          : await (async () => { const sc = await repScope(prisma, session); return sc ? { OR: [{ createdBy: sc.userId }, { companyId: { in: sc.companyIds } }] } : undefined; })();
       const quotes = await prisma.quote.findMany({ where, orderBy: { createdAt: "desc" } });
       if (quotes.length > 0) {
         return NextResponse.json({ quotes: quotes.map(q => ({

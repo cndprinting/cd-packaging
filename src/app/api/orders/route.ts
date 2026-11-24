@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { staffSession, denied } from "@/lib/api-guard";
 
@@ -11,7 +12,9 @@ export async function GET() {
       return NextResponse.json({ orders: [], source: "empty" });
     }
 
+    const sc = await currentRepScope(); // sales reps: own accounts only (11/24/26)
     const orders = await prisma.order.findMany({
+      where: sc ? { companyId: { in: sc.companyIds } } : undefined,
       include: { company: true, items: true, jobs: true },
       orderBy: { createdAt: "desc" },
     });

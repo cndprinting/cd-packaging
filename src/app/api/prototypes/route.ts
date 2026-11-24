@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { BASE_URL, MAKER_ROLES, REQUEST_ROLES, VIEW_ROLES, addLog, dieCheck, esc, mail, makers, nextNumber, noteOnLead, sizeText } from "@/lib/prototypes";
 
@@ -22,12 +23,14 @@ export async function GET(request: NextRequest) {
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ prototypes: [] });
   const sp = request.nextUrl.searchParams;
+  // Sales reps (11/24/26): no funnel leads but their own, and only their own prototypes.
+  const sc = await repScope(prisma, session);
   // Customer search for a new request (Benjy 11/18): existing leads and customers only, no typed names.
   const find = (sp.get("find") || "").trim();
   if (find) {
     if (find.length < 2) return NextResponse.json({ results: [] });
     const [leads, cos] = await Promise.all([
-      (prisma as any).lead.findMany({ where: { companyName: { contains: find, mode: "insensitive" }, pipelineStage: { not: "LOST" } }, select: { id: true, companyName: true, pipelineStage: true, companyId: true, city: true, state: true, ownerName: true }, orderBy: { companyName: "asc" }, take: 12 }),
+      (prisma as any).lead.findMany({ where: { companyName: { contains: find, mode: "insensitive" }, pipelineStage: { not: "LOST" }, ...(sc ? { id: { in: sc.leadIds } } : {}) }, select: { id: true, companyName: true, pipelineStage: true, companyId: true, city: true, state: true, ownerName: true }, orderBy: { companyName: "asc" }, take: 12 }),
       (prisma as any).company.findMany({ where: { type: "customer", isActive: true, name: { contains: find, mode: "insensitive" } }, select: { id: true, name: true, city: true, state: true }, orderBy: { name: "asc" }, take: 12 }),
     ]);
     const leadCos = new Set(leads.map((l: any) => l.companyId).filter(Boolean));
@@ -44,6 +47,7 @@ export async function GET(request: NextRequest) {
   if (sp.get("mine") === "1") where.requestedById = session.id;
   // The board: everything open, plus what was approved or dropped in the last 30 days.
   if (!sp.get("leadId") && !sp.get("companyId") && !sp.get("status")) where.OR = [{ status: { in: ["requested", "making", "ready", "with_customer"] } }, { updatedAt: { gte: new Date(Date.now() - 30 * 86400e3) } }];
+  if (sc) where.AND = [{ OR: [{ requestedById: sc.userId }, { leadId: { in: sc.leadIds } }, { companyId: { in: sc.companyIds } }, { jobId: { in: sc.jobIds } }] }];
   const rows = await (prisma as any).prototype.findMany({ where, orderBy: [{ neededBy: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }], take: 300 });
   // Todd's line (Benjy 11/18): what he's making first, then requests by needed-by date, then oldest.
   const line = await (prisma as any).prototype.findMany({ where: { status: { in: ["making", "requested"] } }, select: { id: true, status: true }, orderBy: [{ neededBy: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }] });

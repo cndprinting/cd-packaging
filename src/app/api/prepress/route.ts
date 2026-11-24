@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { PROOF_ACT_ROLES, PROOF_MAKE_ROLES, STAGES, PREFLIGHT_ISSUES, HARD_PROOF_LABEL, BASE_URL, addPrepressEvent, board, finalizeProofs, newApprovalToken, onProofApproved, onProofChanges, proofEmailHtml, proofLink } from "@/lib/proofs";
 import { isTestJob, tSubj } from "@/lib/test-mode";
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!prisma) return NextResponse.json({ stages: STAGES, jobs: [] });
   const includeTest = new URL(request.url).searchParams.get("test") === "1";
   return NextResponse.json({
-    stages: STAGES, jobs: await board(prisma, { includeTest }), preflightIssues: PREFLIGHT_ISSUES, hardLabels: HARD_PROOF_LABEL,
+    stages: STAGES, jobs: await (async () => { const sc = await repScope(prisma, session); const all: any[] = await board(prisma, { includeTest }); return sc ? all.filter((j) => sc.jobIds.includes(j.id)) : all; })(), // sales reps: own jobs (11/24/26) preflightIssues: PREFLIGHT_ISSUES, hardLabels: HARD_PROOF_LABEL,
     me: { role: session.role, canAct: PROOF_ACT_ROLES.includes(session.role), canMake: PROOF_MAKE_ROLES.includes(session.role) },
   });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { OVERRIDE_ROLES, TERMS, TERMS_SET_ROLES, draftDepositInvoice, paymentState } from "@/lib/press-gate";
 
@@ -14,6 +15,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
+  { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
   const st = await paymentState(prisma, id);
   if (!st) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   return NextResponse.json({ ...st, canOverride: OVERRIDE_ROLES.includes(session.role), terms_options: TERMS });
@@ -25,6 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const prisma = (await import("@/lib/prisma")).default;
   if (!prisma) return NextResponse.json({ error: "Database not available" }, { status: 500 });
   const { id } = await params;
+  { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
   const b = await request.json().catch(() => ({}));
   const job = await prisma.job.findUnique({ where: { id }, select: { id: true, jobNumber: true, orderId: true, paymentNotes: true } });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });

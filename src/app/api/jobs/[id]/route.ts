@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { checkPressGate } from "@/lib/press-gate";
 
@@ -32,6 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (viewer.role === "VENDOR" || (viewer.role === "CUSTOMER" && (!viewer.companyId || job.order.companyId !== viewer.companyId))) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
+    { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
 
     // Lazy-load the originating quote request so the job ticket can render
     // the full QR menu (proofs, foil, mailing, etc.) as a read-only card.
@@ -57,6 +59,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
+    { const g = await repJobGuard(id); if (g) return g; }
     const body = await request.json();
     const { action, ...updates } = body;
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { currentRepScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { archivedMessage, findCompanyByName } from "@/lib/lead-company";
 import { staffSession, denied } from "@/lib/api-guard";
@@ -15,8 +16,9 @@ export async function GET(request: NextRequest) {
     if (!prisma) {
       return NextResponse.json({ companies: [], source: "empty" });
     }
+    const sc = await currentRepScope(); // sales reps: own accounts only (11/24/26)
     const companies = await prisma.company.findMany({
-      where: { type, isActive: !archived },
+      where: { type, isActive: !archived, ...(sc ? { id: { in: sc.companyIds } } : {}) },
       include: { contacts: { take: 1 } },
       orderBy: { name: "asc" },
     });

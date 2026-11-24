@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 const DONE = ["DELIVERED", "INVOICED"];
@@ -32,11 +33,12 @@ export async function GET() {
     const isCustomer = session?.role === "CUSTOMER";
     // Real jobs only (Benjy 11/19): test jobs from before go-live don't count.
     const { JOBS_LIVE_SINCE } = await import("@/lib/press-gate");
-    const jobWhere = isCustomer && session.companyId ? { order: { companyId: session.companyId } } : { createdAt: { gte: JOBS_LIVE_SINCE } };
+    const sc = await repScope(prisma, session); // sales reps: own jobs only (11/24/26)
+    const jobWhere = isCustomer && session.companyId ? { order: { companyId: session.companyId } } : { createdAt: { gte: JOBS_LIVE_SINCE }, ...(sc ? { id: { in: sc.jobIds } } : {}) };
 
     const [allJobs, alerts] = await Promise.all([
       prisma.job.findMany({ where: jobWhere, include: { order: { include: { company: true } } }, orderBy: { createdAt: "desc" } }),
-      prisma.alert.findMany({ where: { resolvedAt: null }, orderBy: { createdAt: "desc" }, take: 10 }),
+      sc ? Promise.resolve([] as any[]) : prisma.alert.findMany({ where: { resolvedAt: null }, orderBy: { createdAt: "desc" }, take: 10 }),
     ]);
 
     const productionStatuses = ["PRINTING", "COATING_FINISHING", "DIE_CUTTING", "GLUING_FOLDING"];

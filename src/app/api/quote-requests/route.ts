@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repScope } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 
 // Helpers to coerce loose JSON input into our typed columns.
@@ -24,7 +25,12 @@ export async function GET() {
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ requests: [] });
 
+    // Internal list only (customers and vendors were never meant to read it).
+    if (session.role === "CUSTOMER" || session.role === "VENDOR") return NextResponse.json({ requests: [] });
+    // Sales reps: their own requests and their own accounts' (11/24/26).
+    const sc = await repScope(prisma, session);
     const requests = await prisma.quoteRequest.findMany({
+      where: sc ? { OR: [{ submittedBy: sc.userId }, { companyId: { in: sc.companyIds } }] } : undefined,
       include: { lineItems: { orderBy: { sortOrder: "asc" } } },
       orderBy: { createdAt: "desc" },
     });

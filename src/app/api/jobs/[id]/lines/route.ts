@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { repJobGuard } from "@/lib/rep-scope";
 import { getSession } from "@/lib/session";
 import { staffSession, denied } from "@/lib/api-guard";
 
@@ -6,6 +7,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (!(await staffSession())) return denied(); // 11/22/26 lock-down: staff login required
   try {
     const { id } = await params;
+    { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
     const prismaModule = await import("@/lib/prisma");
     const prisma = prismaModule.default;
     if (!prisma) return NextResponse.json({ lineItems: [], pressRuns: [] });
@@ -27,6 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!session || session.role === "CUSTOMER") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const { id } = await params;
+    { const g = await repJobGuard(id); if (g) return g; } // sales reps: own jobs only (11/24/26)
     const body = await request.json();
     const { type, ...data } = body; // type: "lineItem" or "pressRun"
 
